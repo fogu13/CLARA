@@ -3,10 +3,15 @@
 // contacts scores, correlated signals, timeline, Run Rules, suggested actions, Close the
 // Loop panel (Measure now / Record manually) with closure chips.
 
-export default function InsightDetailPage({ params }: { params: { id: string } }) {
+export default async function InsightDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-semibold">Insight {params.id}</h1>
+      <h1 className="text-2xl font-semibold">Insight {id}</h1>
       <p className="text-muted-foreground">TODO: port from reference/elvis/src/pages/InsightDetail.tsx</p>
     </div>
   );

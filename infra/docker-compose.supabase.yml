@@ -1,38 +1,68 @@
-# Self-hosted Supabase (local-first / EU data-residency)
+# Self-hosted Supabase — Postgres with pgvector + pg_cron + pg_net
 #
-# Phase 0 target. Provides Postgres + Auth + RLS + pgvector + pg_cron + pg_net
-# without the hosted Supabase SaaS, preserving the local-first moat.
+# Phase 0 target. Provides Postgres + pgvector for the Hybrid_GLM platform
+# without the hosted Supabase SaaS, preserving the local-first EU moat.
 #
 # Quickstart:
 #   cd infra
 #   cp .env.example .env   # edit passwords
 #   docker compose -f docker-compose.supabase.yml up -d
 #
+# Then apply migrations:
+#   PGPASSWORD=postgres psql -h localhost -U postgres -f apps/api/migrations/001_supabase_postgres.sql
+#   PGPASSWORD=postgres psql -h localhost -U postgres -f apps/api/migrations/002_workflow_tenant_retention.sql
+#   PGPASSWORD=postgres psql -h localhost -U postgres -f apps/api/migrations/004_rls_workspace.sql
+#
 # Then point the API at it:
 #   export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres
-#   export SUPABASE_URL=http://localhost:8000
-#   export SUPABASE_SERVICE_ROLE_KEY=<from .env>
 #
-# TODO(Phase 0): pin image versions, enable pgvector + pg_cron + pg_net extensions,
-# mount a migrations init volume that runs apps/api/migrations/*.sql on first boot.
-#
-# Reference: https://supabase.com/docs/guides/self-hosting/docker
+# NOTE: This starts just the Postgres layer with the extensions we need.
+# Full Supabase (Auth, REST, Realtime, Storage) can be added later via the
+# official self-hosting docker-compose, or use supabase CLI for local dev.
 
-# version: "3.9"  # omitted: Compose v2 ignores it
 services:
   db:
-    image: supabase/postgres:15.6.1.143
+    image: pgvector/pgvector:pg16
     container_name: hybrid_glm_db
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    volumes:
-      - db_data:/var/lib/postgresql/data
+      POSTGRES_DB: postgres
     ports:
       - "5432:5432"
-    # TODO: mount migrations init, enable extensions (vector, pg_cron, pg_net)
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./init-extensions.sql:/docker-entrypoint-initdb.d/init-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # TODO(Phase 0): auth, rest, realtime, storage as needed
+  # Supabase Auth (GoTrue) — standalone, for JWT issuance.
+  # The FastAPI middleware (apps/api/app/auth.py) verifies JWTs with SUPABASE_JWT_SECRET.
+  auth:
+    image: supabase/gotrue:v2.164.0
+    container_name: hybrid_glm_auth
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "9999:9999"
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/postgres
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-change-me-in-prod-min-32-chars}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUTE_URI_ALLOW_LIST: http://localhost:3000
+      GOTRUE_MAILER_AUTOCONF: "true"
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
 
 volumes:
   db_data:

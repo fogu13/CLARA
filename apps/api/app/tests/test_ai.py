@@ -1,0 +1,295 @@
+from __future__ import annotations
+
+import json
+from typing import Any
+
+import pytest
+
+_TEST_TOOL = {"type": "function", "function": {"name": "t"}}
+
+
+def _call(ai, **kw):
+    """Shorthand to call_tool with the default test tool."""
+    defaults = dict(system="s", user="u", tool=_TEST_TOOL, tool_name="t")
+    defaults.update(kw)
+    return ai.call_tool(**defaults)
+
+
+def _ai_response(tool_arguments: dict[str, Any], model: str = "test-model") -> dict[str, Any]:
+    return {
+        "choices": [
+            {
+                "message": {
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "test_tool",
+                                "arguments": json.dumps(tool_arguments),
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+    }
+
+
+def _embeddings_response(vectors: list[list[float]]) -> dict[str, Any]:
+    return {
+        "data": [{"embedding": v, "index": i} for i, v in enumerate(vectors)],
+        "usage": {"prompt_tokens": 8, "total_tokens": 8},
+    }
+
+
+@pytest.fixture
+def _clean_ai_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure predictable AI config + no Langfuse tracing during tests."""
+    monkeypatch.setenv("AI_BASE_URL", "http://test-ai.local/v1")
+    monkeypatch.setenv("AI_API_KEY", "")
+    monkeypatch.setenv("AI_MODEL", "test-model")
+    monkeypatch.setenv("AI_EMBED_MODEL", "test-embed")
+    monkeypatch.setenv("AI_EMBED_DIM", "768")
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
+    import importlib
+
+    import app.services.ai as ai_mod
+
+    importlib.reload(ai_mod)
+
+
+class TestCallTool:
+    def test_returns_parsed_tool_arguments(self, _clean_ai_env: None, httpx_mock: Any) -> None:
+        from app.services import ai
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json=_ai_response({"sentiment": "negative", "urgency": "high"}),
+        )
+
+        result = ai.call_tool(
+            system="You are a classifier.",
+            user="The app crashed again.",
+            tool={
+                "type": "function",
+                "function": {
+                    "name": "test_tool",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            },
+            tool_name="test_tool",
+        )
+
+        assert result == {"sentiment": "negative", "urgency": "high"}
+
+    def test_sends_forced_tool_choice(self, _clean_ai_env: None, httpx_mock: Any) -> None:
+        from app.services import ai
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json=_ai_response({"result": "ok"}),
+        )
+
+        _call(ai)
+
+        request = httpx_mock.get_requests()[-1]
+        body = json.loads(request.read())
+        assert body["tool_choice"] == {"type": "function", "function": {"name": "t"}}
+        assert body["tools"] == [{"type": "function", "function": {"name": "t"}}]
+        assert body["model"] == "test-model"
+
+    def test_raises_no_structured_response_when_missing(self, _clean_ai_env: None, httpx_mock: Any) -> None:
+        from app.services import ai
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json={"choices": [{"message": {"tool_calls": []}}]},
+        )
+
+        with pytest.raises(ai.NoStructuredResponseError):
+            _call(ai)
+
+    def test_rate_limit_error_on_429(self, _clean_ai_env: None, httpx_mock: Any) -> None:
+        from app.services import ai
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            status_code=429,
+            text="rate limited",
+        )
+
+        with pytest.raises(ai.RateLimitError) as exc_info:
+            _call(ai)
+
+        assert exc_info.value.status == 429
+
+    def test_quota_error_on_402(self, _clean_ai_env: None, httpx_mock: Any) -> None:
+        from app.services import ai
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            status_code=402,
+            text="payment required",
+        )
+
+        with pytest.raises(ai.QuotaError) as exc_info:
+            _call(ai)
+
+        assert exc_info.value.status == 402
+
+    def test_generic_error_on_500(self, _clean_ai_env: None, httpx_mock: Any) -> None:
+        from app.services import ai
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            status_code=500,
+            text="internal server error",
+        )
+
+        with pytest.raises(ai.AIProviderError) as exc_info:
+            _call(ai)
+
+        assert exc_info.value.status == 500
+        assert not isinstance(exc_info.value, (ai.RateLimitError, ai.QuotaError))
+
+
+class TestEmbed:
+    def test_returns_embeddings_for_single_string(self, _clean_ai_env: None, httpx_mock: Any) -> None:
+        from app.services import ai
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/embeddings",
+            method="POST",
+            json=_embeddings_response([[0.1, 0.2, 0.3]]),
+        )
+
+        result = ai.embed("hello world")
+
+        assert len(result) == 1
+        assert result[0] == [0.1, 0.2, 0.3]
+
+    def test_returns_embeddings_for_multiple_strings(self, _clean_ai_env: None, httpx_mock: Any) -> None:
+        from app.services import ai
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/embeddings",
+            method="POST",
+            json=_embeddings_response([[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]]),
+        )
+
+        result = ai.embed(["a", "b", "c"])
+
+        assert len(result) == 3
+        assert result[1] == [0.3, 0.4]
+
+    def test_sends_dimensions_param(self, _clean_ai_env: None, httpx_mock: Any) -> None:
+        from app.services import ai
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/embeddings",
+            method="POST",
+            json=_embeddings_response([[0.1]]),
+        )
+
+        ai.embed("test")
+
+        request = httpx_mock.get_requests()[-1]
+        body = json.loads(request.read())
+        assert body["dimensions"] == 768
+        assert body["model"] == "test-embed"
+
+
+class TestLocalFirstKeyless:
+    """Local-first is a hard requirement: Ollama/vLLM must work without an API key."""
+
+    def test_no_authorization_header_when_key_empty(self, _clean_ai_env: None, httpx_mock: Any) -> None:
+        from app.services import ai
+
+        assert ai.AI_API_KEY == ""
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json=_ai_response({"ok": True}),
+        )
+
+        _call(ai)
+
+        request = httpx_mock.get_requests()[-1]
+        assert "authorization" not in {k.lower() for k in request.headers.keys()}
+
+    def test_authorization_header_when_key_set(self, monkeypatch: pytest.MonkeyPatch, httpx_mock: Any) -> None:
+        monkeypatch.setenv("AI_BASE_URL", "http://test-ai.local/v1")
+        monkeypatch.setenv("AI_API_KEY", "sk-test-key-123")
+        monkeypatch.setenv("AI_MODEL", "gpt-4o-mini")
+        monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+        monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
+
+        import importlib
+
+        import app.services.ai as ai_mod
+
+        importlib.reload(ai_mod)
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json=_ai_mod_response(),
+        )
+
+        ai_mod.call_tool(system="s", user="u", tool={"type": "function", "function": {"name": "t"}}, tool_name="t")
+
+        request = httpx_mock.get_requests()[-1]
+        assert request.headers.get("authorization") == "Bearer sk-test-key-123"
+
+
+def _ai_mod_response() -> dict[str, Any]:
+    return {
+        "choices": [
+            {"message": {"tool_calls": [{"function": {"name": "t", "arguments": '{"ok": true}'}}]}}
+        ],
+        "usage": {},
+    }
+
+
+class TestVectorLiteral:
+    def test_formats_for_pgvector(self, _clean_ai_env: None) -> None:
+        from app.services import ai
+
+        result = ai.to_vector_literal([0.1, 0.2, 0.3])
+        assert result == "[0.1,0.2,0.3]"
+
+    def test_empty_vector(self, _clean_ai_env: None) -> None:
+        from app.services import ai
+
+        assert ai.to_vector_literal([]) == "[]"
+
+
+class TestLangfuseGracefulDegradation:
+    """Langfuse must be optional: no crash when unconfigured."""
+
+    def test_get_langfuse_returns_none_when_unconfigured(self, _clean_ai_env: None) -> None:
+        from app.services import ai
+
+        assert ai._get_langfuse() is None
+
+    def test_call_tool_works_without_langfuse(self, _clean_ai_env: None, httpx_mock: Any) -> None:
+        from app.services import ai
+
+        assert ai._get_langfuse() is None
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json=_ai_response({"ok": True}),
+        )
+
+        result =             _call(ai)
+        assert result == {"ok": True}
