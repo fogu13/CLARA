@@ -199,7 +199,8 @@ class TestTriageGraphApproval:
         assert len(result.get("approved_insights", [])) == 1
         assert len(result.get("action_results", [])) == 1
         assert result["action_results"][0]["action_type"] == "create_ticket"
-        assert result["action_results"][0]["status"] == "pending_implementation"
+        # Without connector configs, the action is recorded as no_config
+        assert result["action_results"][0]["status"] == "no_config"
 
     def test_resume_with_rejection_skips_action(self, _mock_ai_env: None) -> None:
         from app.agents.triage_graph import build_triage_graph
@@ -233,8 +234,9 @@ class TestTriageGraphApproval:
 
         action = result["action_results"][0]
         assert "audit" in action
-        assert action["audit"]["source"] == "connector_stub"
-        assert "stubbed" in action["audit"]["limitations"][0].lower()
+        # Without connector configs, the audit records the no_config state
+        assert action["audit"]["source"] == "action_node"
+        assert "not configured" in action["audit"]["limitations"][0].lower()
 
 
 class TestTriageGraphGovernance:

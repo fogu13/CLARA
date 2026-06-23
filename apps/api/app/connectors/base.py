@@ -1,6 +1,6 @@
 """Connector interface — sources (pull) and destinations (push).
 
-Phase 2 target. First connectors to prove the brief's headline
+First connectors to prove the brief's headline
 ("connects to sources ... pushes insights to other platforms"):
   - Zendesk source (pull): tickets/search -> signals via field map
   - Jira destination (push): create issue behind governance gate
@@ -24,10 +24,12 @@ class SourceConnector(Protocol):
     connector_type: str  # e.g. "zendesk"
 
     def pull(self, config: dict[str, Any]) -> list[dict[str, Any]]:
-        """Fetch new items and map them to canonical signal records.
+        """Fetch new items and map them to canonical signal dicts.
 
-        TODO(Phase 2): define the canonical signal dict shape (align with
-        apps/api/app/domain/models.py SignalRecord).
+        Returns a list of signal dicts aligned with SignalRecord fields
+        (signal_id, customer_id, account_id, source, journey, journey_stage,
+        feedback_text, language, timestamp) plus a metadata block for
+        deduplication (external_id, source_id).
         """
         ...
 
@@ -39,9 +41,17 @@ class DestinationConnector(Protocol):
     connector_type: str  # e.g. "jira", "slack"
 
     def push(self, action: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-        """Execute the action externally and return a result record with at
-        minimum {external_id, status, raw}. Called only after governance approval.
-
-        TODO(Phase 2): agree result schema with workflow.execute_action.
+        """Execute the action externally and return a result record:
+        {external_id, status, raw, audit}.
+        Called only after governance approval.
         """
         ...
+
+
+class ConnectorError(RuntimeError):
+    """Base error for connector failures. Non-fatal — logged, not raised."""
+
+    def __init__(self, message: str, connector: str = "", status: int | None = None) -> None:
+        super().__init__(message)
+        self.connector = connector
+        self.status = status

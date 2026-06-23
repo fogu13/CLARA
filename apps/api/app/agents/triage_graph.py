@@ -265,33 +265,107 @@ def approval_node(state: TriageState) -> dict[str, Any]:
 
 
 def action_node(state: TriageState) -> dict[str, Any]:
-    """Execute approved actions via connectors.
+    """Execute approved actions via real connectors.
 
-    Phase 2 target: calls Connector.push() for Jira/Slack/etc.
-    Currently a stub that records what would be pushed.
+    Calls Connector.push() for Jira (create_ticket), Slack (notify), etc.
+    Connector configs are looked up from the connector config store. If no
+    connector is configured for an action type, the action is recorded as
+    'no_connector' (non-fatal — the insight is still approved, just not pushed).
     """
+    from app.connectors import get_destination_for_action
+    from app.connectors.base import ConnectorError
+
     approved = state.get("approved_insights", [])
     if not approved:
         return {"action_results": [], "status": "acted"}
 
+    # Connector configs are passed via state (injected by the FastAPI route
+    # when it invokes the graph). Falls back to empty dict = no connectors.
+    connector_configs: dict[str, dict[str, Any]] = state.get("connector_configs", {})
+
     results: list[dict[str, Any]] = []
+    errors = list(state.get("errors", []))
+
     for insight in approved:
         for action in insight.get("suggested_actions", []):
-            results.append({
-                "insight_id": insight.get("title", ""),
-                "action_type": action.get("type", "unknown"),
-                "title": action.get("title", ""),
-                "external_id": None,  # Phase 2: real connector returns this
-                "status": "pending_implementation",  # Phase 2: "pushed" / "failed"
-                "audit": {
-                    "source": "connector_stub",
-                    "limitations": [
-                        "Action execution is stubbed — Phase 2 implements real connectors",
-                    ],
-                },
-            })
+            action_type = action.get("type", "unknown")
+            insight_ctx = {
+                "insight_title": insight.get("title", ""),
+                "insight_summary": insight.get("summary", ""),
+                "insight_severity": insight.get("severity", ""),
+                "insight_signal_ids": insight.get("signal_ids", []),
+            }
+            full_action = {**action, **insight_ctx}
 
-    return {"action_results": results, "status": "acted"}
+            # Look up the destination connector for this action type
+            dest = get_destination_for_action(action_type)
+            if dest is None:
+                results.append({
+                    "insight_id": insight.get("title", ""),
+                    "action_type": action_type,
+                    "title": action.get("title", ""),
+                    "external_id": None,
+                    "status": "no_connector",
+                    "audit": {
+                        "source": "action_node",
+                        "limitations": [
+                            f"No connector registered for action type '{action_type}'",
+                        ],
+                    },
+                })
+                continue
+
+            dest_type = dest.connector_type
+            config = connector_configs.get(dest_type, {})
+
+            if not config:
+                results.append({
+                    "insight_id": insight.get("title", ""),
+                    "action_type": action_type,
+                    "title": action.get("title", ""),
+                    "external_id": None,
+                    "status": "no_config",
+                    "audit": {
+                        "source": "action_node",
+                        "connector": dest_type,
+                        "limitations": [
+                            f"Connector '{dest_type}' not configured — "
+                            "configure via PUT /connectors/" + dest_type,
+                        ],
+                    },
+                })
+                continue
+
+            try:
+                result = dest.push(full_action, config)
+                results.append({
+                    "insight_id": insight.get("title", ""),
+                    "action_type": action_type,
+                    "title": action.get("title", ""),
+                    "external_id": result.get("external_id"),
+                    "status": result.get("status", "pushed"),
+                    "audit": result.get("audit", {}),
+                })
+            except ConnectorError as exc:
+                results.append({
+                    "insight_id": insight.get("title", ""),
+                    "action_type": action_type,
+                    "title": action.get("title", ""),
+                    "external_id": None,
+                    "status": "failed",
+                    "audit": {
+                        "source": "action_node",
+                        "connector": dest_type,
+                        "error": str(exc),
+                        "limitations": [f"Connector push failed: {exc}"],
+                    },
+                })
+                errors.append(
+                    f"Connector '{dest_type}' failed for action "
+                    f"'{action.get('title', '')}': {exc}"
+                )
+
+    return {"action_results": results, "status": "acted", "errors": errors}
 
 
 def measure_node(state: TriageState) -> dict[str, Any]:

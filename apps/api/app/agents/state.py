@@ -42,6 +42,7 @@ class TriageState(TypedDict, total=False):
 
     # --- After action ---
     action_results: list[dict[str, Any]]  # {insight_id, action_type, external_id, status}
+    connector_configs: dict[str, dict[str, Any]]  # connector_type -> config (for push)
 
     # --- After measure ---
     outcome: dict[str, Any] | None  # {metric, baseline, measured, resolution_score}
