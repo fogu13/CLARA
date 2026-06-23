@@ -1,0 +1,43 @@
+# Self-hosted Langfuse (tracing + evals)
+#
+# Phase 0 target. Every apps/api/app/services/ai.py call is traced here; the
+# thesis eval harness (Phase 5) scores classification precision/recall against
+# a golden set via the Langfuse API. Self-hosted to preserve local-first.
+#
+# Quickstart:
+#   cd infra
+#   docker compose -f docker-compose.langfuse.yml up -d
+#   open http://localhost:3000  # first-run signup creates the project + keys
+#
+# Then point the API at it:
+#   export LANGFUSE_BASE_URL=http://localhost:3000
+#   export LANGFUSE_PUBLIC_KEY=pk-lf-...
+#   export LANGFUSE_SECRET_KEY=sk-lf-...
+#
+# Reference: https://langfuse.com/self-hosting/docker-compose
+
+services:
+  langfuse-web:
+    image: langfuse/langfuse:2
+    container_name: hybrid_glm_langfuse
+    restart: unless-stopped
+    depends_on:
+      - langfuse-db
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@langfuse-db:5432/langfuse
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change-me-in-prod}
+      SALT: ${SALT:-change-me-in-prod}
+      # TODO(Phase 0): redis, clickhouse for scale
+
+  langfuse-db:
+    image: postgres:15
+    container_name: hybrid_glm_langfuse_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - langfuse_db_data:/var/lib/postgresql/data

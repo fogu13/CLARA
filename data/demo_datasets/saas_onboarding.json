@@ -1,0 +1,94 @@
+{
+  "dataset_id": "saas_onboarding",
+  "title": "SaaS onboarding verification",
+  "description": "B2B SaaS customers struggle to complete identity and workspace verification during onboarding.",
+  "industry": "saas",
+  "signals": [
+    {
+      "signal_id": "DEMO-SAAS-001",
+      "customer_id": "C-SAAS-101",
+      "account_id": "A-SAAS-10",
+      "source": "zendesk",
+      "journey": "customer_onboarding",
+      "journey_stage": "workspace_verification",
+      "campaign_exposure": ["verification_nudge_v1"],
+      "product_events": ["workspace_created", "verification_started", "document_rejected"],
+      "feedback_text": "The verification page rejected our certificate twice and did not explain what format you need.",
+      "language": "en",
+      "timestamp": "2026-06-18T09:30:00Z"
+    },
+    {
+      "signal_id": "DEMO-SAAS-002",
+      "customer_id": "C-SAAS-102",
+      "account_id": "A-SAAS-11",
+      "source": "intercom",
+      "journey": "customer_onboarding",
+      "journey_stage": "workspace_verification",
+      "campaign_exposure": ["verification_nudge_v1"],
+      "product_events": ["workspace_created", "verification_started", "support_contacted"],
+      "feedback_text": "We are blocked inviting finance users because verification is stuck in review.",
+      "language": "en",
+      "timestamp": "2026-06-18T10:05:00Z"
+    },
+    {
+      "signal_id": "DEMO-SAAS-003",
+      "customer_id": "C-SAAS-103",
+      "account_id": "A-SAAS-10",
+      "source": "survey",
+      "journey": "customer_onboarding",
+      "journey_stage": "workspace_verification",
+      "campaign_exposure": ["verification_nudge_v1"],
+      "product_events": ["workspace_created", "document_rejected", "help_center_viewed"],
+      "feedback_text": "The help article says upload company proof but does not list accepted documents for Germany.",
+      "language": "en",
+      "timestamp": "2026-06-18T11:20:00Z"
+    }
+  ],
+  "customer_context": [
+    {
+      "customer_id": "C-SAAS-101",
+      "account_id": "A-SAAS-10",
+      "account_name": "Rhein Analytics",
+      "segment": "mid_market",
+      "lifecycle_stage": "implementation",
+      "plan_tier": "enterprise",
+      "account_value": 98000,
+      "renewal_date": "2027-03-31",
+      "consent_status": "granted",
+      "health_score": 0.58,
+      "owner": "cs_dach",
+      "product_owner": "onboarding_product",
+      "region": "DACH"
+    },
+    {
+      "customer_id": "C-SAAS-102",
+      "account_id": "A-SAAS-11",
+      "account_name": "Atlas Ops",
+      "segment": "growth",
+      "lifecycle_stage": "onboarding",
+      "plan_tier": "pro",
+      "account_value": 42000,
+      "renewal_date": "2027-01-15",
+      "consent_status": "granted",
+      "health_score": 0.64,
+      "owner": "cs_eu",
+      "product_owner": "onboarding_product",
+      "region": "EU"
+    },
+    {
+      "customer_id": "C-SAAS-103",
+      "account_id": "A-SAAS-10",
+      "account_name": "Rhein Analytics",
+      "segment": "mid_market",
+      "lifecycle_stage": "implementation",
+      "plan_tier": "enterprise",
+      "account_value": 98000,
+      "renewal_date": "2027-03-31",
+      "consent_status": "missing",
+      "health_score": 0.52,
+      "owner": "cs_dach",
+      "product_owner": "identity_product",
+      "region": "DACH"
+    }
+  ]
+}

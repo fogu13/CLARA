@@ -1,0 +1,23 @@
+-- 003 — pgvector + semantic taxonomy (port of Elvis migrations)
+-- Source: reference/elvis/supabase/migrations/20260621170000_taxonomy.sql
+--         reference/elvis/supabase/migrations/20260622120000_taxonomy_discovery.sql
+--         reference/elvis/supabase/migrations/20260622140000_taxonomy_governance.sql
+--
+-- Phase 1 target. Replaces Odradek_2's substring/term-matching classification
+-- (apps/api/app/services/taxonomies.py:364-425) with embedding-based semantic
+-- mapping + adaptive discovery + graduated-authority governance.
+--
+-- TODO(Phase 1):
+--   - CREATE EXTENSION IF NOT EXISTS vector;
+--   - taxonomy_nodes table (self-referential 3-level tree, embedding vector(N),
+--     status active/candidate/merged/archived, origin uploaded/seeded/discovered,
+--     confidence, times_matched, evidence JSONB)
+--   - signal_node_map (multi-label, mapped_by provenance)
+--   - match_taxonomy_nodes RPC (cosine similarity via pgvector, threshold-gated)
+--   - unmapped_signals RPC
+--   - merge_taxonomy_node RPC
+--   - HNSW index on embedding
+--   - apply_taxonomy_governance() with auto-promote/merge/decay (audited to events)
+
+-- Placeholder so the migration is idempotent and safe to apply during scaffolding.
+SELECT 1;

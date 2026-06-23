@@ -1,0 +1,7 @@
+category,theme,subtheme,description
+Billing,Checkout,checkout_failure,Payment fails or errors at checkout
+Billing,Pricing,pricing_unclear,Pricing or tier inclusions unclear
+Delivery,Tracking,late_delivery,Order arrives late or tracking is wrong
+Onboarding,Setup,onboarding_friction,Hard to connect a source or set up
+Product,Dashboard,positive_dashboard,Positive feedback about the dashboard
+Support,Response,support_delay,Slow or unresolved support responses

@@ -1,0 +1,38 @@
+# Self-hosted Supabase (local-first / EU data-residency)
+#
+# Phase 0 target. Provides Postgres + Auth + RLS + pgvector + pg_cron + pg_net
+# without the hosted Supabase SaaS, preserving the local-first moat.
+#
+# Quickstart:
+#   cd infra
+#   cp .env.example .env   # edit passwords
+#   docker compose -f docker-compose.supabase.yml up -d
+#
+# Then point the API at it:
+#   export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres
+#   export SUPABASE_URL=http://localhost:8000
+#   export SUPABASE_SERVICE_ROLE_KEY=<from .env>
+#
+# TODO(Phase 0): pin image versions, enable pgvector + pg_cron + pg_net extensions,
+# mount a migrations init volume that runs apps/api/migrations/*.sql on first boot.
+#
+# Reference: https://supabase.com/docs/guides/self-hosting/docker
+
+# version: "3.9"  # omitted: Compose v2 ignores it
+services:
+  db:
+    image: supabase/postgres:15.6.1.143
+    container_name: hybrid_glm_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    # TODO: mount migrations init, enable extensions (vector, pg_cron, pg_net)
+
+  # TODO(Phase 0): auth, rest, realtime, storage as needed
+
+volumes:
+  db_data:

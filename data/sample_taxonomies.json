@@ -1,0 +1,146 @@
+[
+  {
+    "taxonomy_type": "product",
+    "version": "product-2026.06",
+    "locale_support": ["en", "de"],
+    "known_limitations": [
+      "Product classification is keyword based until labeled evaluation feedback is available."
+    ],
+    "categories": [
+      {
+        "category_id": "account_opening",
+        "label": "Account opening",
+        "description": "Onboarding, identity verification and account activation journeys.",
+        "terms": ["onboarding", "identity verification", "verification", "document", "passport", "company proof", "accepted documents", "unterlagen", "dokumente", "kontoeroeffnung", "kontoeröffnung"],
+        "locked": true,
+        "change_history": [
+          {
+            "change_id": "CHG-PROD-001",
+            "operation": "lock",
+            "description": "Locked core onboarding category used by Phase 1 and Phase 2 demos.",
+            "actor": "taxonomy_owner",
+            "changed_at": "2026-06-01T00:00:00Z"
+          }
+        ]
+      },
+      {
+        "category_id": "payments",
+        "label": "Payments",
+        "description": "Checkout, payment authorization and failed transaction experiences.",
+        "terms": ["checkout", "payment", "card", "transaction", "declined", "authorization", "zahlung", "karte", "transaktion"]
+      },
+      {
+        "category_id": "subscriptions",
+        "label": "Subscriptions",
+        "description": "Retention, cancellation and renewal journeys.",
+        "terms": ["cancel", "cancellation", "subscription", "renewal", "retention", "kuendigung", "kündigung", "abo", "verlängerung"]
+      }
+    ]
+  },
+  {
+    "taxonomy_type": "journey",
+    "version": "journey-2026.06",
+    "locale_support": ["en", "de"],
+    "known_limitations": [
+      "Journey taxonomy currently reflects demo journeys and should be extended with production routing labels."
+    ],
+    "categories": [
+      {
+        "category_id": "onboarding",
+        "label": "Onboarding",
+        "description": "First-run setup and activation journey.",
+        "terms": ["onboarding", "activation", "identity verification", "company proof", "setup", "kontoeroeffnung", "kontoeröffnung"]
+      },
+      {
+        "category_id": "purchase_checkout",
+        "label": "Purchase checkout",
+        "description": "Cart, checkout and payment completion journey.",
+        "terms": ["checkout", "payment", "cart", "purchase", "kasse", "zahlung"]
+      },
+      {
+        "category_id": "retention",
+        "label": "Retention",
+        "description": "Cancellation, save and renewal journey.",
+        "terms": ["retention", "cancel", "cancellation", "renewal", "save offer", "kuendigung", "kündigung"]
+      }
+    ]
+  },
+  {
+    "taxonomy_type": "contact_reason",
+    "version": "contact-reason-2026.06",
+    "locale_support": ["en", "de"],
+    "known_limitations": [
+      "Contact reason matches do not yet distinguish support ticket intent from product telemetry."
+    ],
+    "categories": [
+      {
+        "category_id": "document_requirements",
+        "label": "Document requirements",
+        "description": "Customers cannot identify or provide required verification documents.",
+        "terms": ["document", "accepted documents", "company proof", "passport", "requirements", "unterlagen", "dokumente", "nachweis"]
+      },
+      {
+        "category_id": "payment_failure",
+        "label": "Payment failure",
+        "description": "Card, authorization or checkout failures.",
+        "terms": ["payment failed", "declined", "authorization", "card", "transaction failed", "zahlung fehlgeschlagen"]
+      },
+      {
+        "category_id": "cancellation_status",
+        "label": "Cancellation status",
+        "description": "Confusion or delay around cancellation status and renewal communications.",
+        "terms": ["cancel", "cancelled", "cancellation", "renewal", "kuendigung", "gekündigt"]
+      }
+    ]
+  },
+  {
+    "taxonomy_type": "marketing",
+    "version": "marketing-2026.06",
+    "locale_support": ["en", "de"],
+    "known_limitations": [
+      "Campaign names are normalized by token matching; full campaign lineage is not modeled yet."
+    ],
+    "categories": [
+      {
+        "category_id": "verification_reminder",
+        "label": "Verification reminder",
+        "description": "Lifecycle reminders related to identity or document verification.",
+        "terms": ["verification_reminder", "verification reminder", "reminder", "document reminder", "erinnerung"]
+      },
+      {
+        "category_id": "retention_offer",
+        "label": "Retention offer",
+        "description": "Win-back, save and renewal campaigns.",
+        "terms": ["retention", "save offer", "renewal", "winback", "verlängerung"]
+      }
+    ]
+  },
+  {
+    "taxonomy_type": "compliance",
+    "version": "compliance-2026.06",
+    "locale_support": ["en", "de"],
+    "known_limitations": [
+      "Compliance labels identify review themes, not legal conclusions."
+    ],
+    "categories": [
+      {
+        "category_id": "kyc_aml",
+        "label": "KYC/AML",
+        "description": "Identity, business verification and AML review requirements.",
+        "terms": ["identity verification", "kyc", "aml", "passport", "company proof", "business verification", "identitätsprüfung"]
+      },
+      {
+        "category_id": "consent_marketing",
+        "label": "Marketing consent",
+        "description": "Consent-sensitive messages, opt-outs and retention communication risks.",
+        "terms": ["consent", "opt-out", "marketing", "unsubscribe", "einwilligung", "abmelden"]
+      },
+      {
+        "category_id": "disclosure_clarity",
+        "label": "Disclosure clarity",
+        "description": "Missing or unclear disclosures, requirements or customer-facing instructions.",
+        "terms": ["requirements", "accepted documents", "does not list", "unclear", "fehlt", "unklar"]
+      }
+    ]
+  }
+]

@@ -1,0 +1,110 @@
+[
+  {
+    "term_id": "accepted_documents",
+    "canonical_term": "accepted documents",
+    "aliases": [
+      "welches dokument",
+      "dokument akzeptiert",
+      "dokumente",
+      "documents accepted",
+      "what to upload",
+      "was fehlt"
+    ],
+    "languages": ["de", "en"],
+    "taxonomy_type": "contact_reason",
+    "category_ids": ["document_requirements"],
+    "definition": "Customer language about missing, unclear or rejected verification document requirements.",
+    "usage_notes": [
+      "Use for onboarding evidence where customers cannot identify the required document."
+    ]
+  },
+  {
+    "term_id": "verification_reminder",
+    "canonical_term": "verification reminder",
+    "aliases": [
+      "verification_reminder_v2",
+      "reminder",
+      "erinnerung",
+      "generic page"
+    ],
+    "languages": ["de", "en"],
+    "taxonomy_type": "marketing",
+    "category_ids": ["verification_reminder"],
+    "definition": "Lifecycle messaging that asks customers to finish identity or document verification.",
+    "usage_notes": [
+      "Use for routing campaign feedback to lifecycle marketing and onboarding owners."
+    ]
+  },
+  {
+    "term_id": "identity_verification",
+    "canonical_term": "identity verification",
+    "aliases": [
+      "identity_verification",
+      "identity verification",
+      "identitaetspruefung",
+      "identitätsprüfung",
+      "verification_started"
+    ],
+    "languages": ["de", "en"],
+    "taxonomy_type": "compliance",
+    "category_ids": ["kyc_aml"],
+    "definition": "Identity or business verification work that can carry KYC/AML review requirements.",
+    "usage_notes": [
+      "Use as compliance routing evidence, not as a legal conclusion."
+    ]
+  },
+  {
+    "term_id": "document_rejection",
+    "canonical_term": "document rejection",
+    "aliases": [
+      "document_rejected",
+      "document rejected",
+      "zweite versuch",
+      "zweiter versuch",
+      "rejected document"
+    ],
+    "languages": ["de", "en"],
+    "taxonomy_type": "product",
+    "category_ids": ["account_opening"],
+    "definition": "Product event or customer phrase indicating repeated rejection of uploaded verification material.",
+    "usage_notes": [
+      "Use to distinguish requirement clarity issues from generic onboarding confusion."
+    ]
+  },
+  {
+    "term_id": "checkout_payment_failure",
+    "canonical_term": "checkout payment failure",
+    "aliases": [
+      "payment failed",
+      "declined",
+      "authorization",
+      "zahlung fehlgeschlagen",
+      "transaction failed"
+    ],
+    "languages": ["de", "en"],
+    "taxonomy_type": "contact_reason",
+    "category_ids": ["payment_failure"],
+    "definition": "Customer or event language about failed checkout authorization, card or transaction flows.",
+    "usage_notes": [
+      "Use for ecommerce and payment reliability routing."
+    ]
+  },
+  {
+    "term_id": "cancellation_status",
+    "canonical_term": "cancellation status",
+    "aliases": [
+      "cancelled",
+      "cancellation",
+      "kuendigung",
+      "kündigung",
+      "gekündigt"
+    ],
+    "languages": ["de", "en"],
+    "taxonomy_type": "contact_reason",
+    "category_ids": ["cancellation_status"],
+    "definition": "Customer language about uncertainty or errors in cancellation and renewal state.",
+    "usage_notes": [
+      "Use for retention and renewal-risk routing."
+    ]
+  }
+]

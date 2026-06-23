@@ -1,0 +1,217 @@
+[
+  {
+    "problem_id": "PRB-108",
+    "title": "Verification instructions are unclear after document rejection",
+    "statement": "Customers who fail identity verification are being sent back to a generic onboarding page instead of a document-specific guidance page.",
+    "journey": "Customer onboarding",
+    "journey_stage": "Identity verification",
+    "owner": "onboarding_product",
+    "status": "approval_needed",
+    "impact_factors": {
+      "customer_reach": 0.72,
+      "severity": 0.82,
+      "recurrence": 0.76,
+      "journey_criticality": 0.92,
+      "account_exposure": 0.62,
+      "financial_exposure": 0.52,
+      "regulatory_risk": 0.35,
+      "evidence_confidence": 0.88
+    },
+    "evidence_confidence": 0.88,
+    "affected_cohort": {
+      "customers": 184,
+      "accounts": 39,
+      "high_value_accounts": 7,
+      "date_range": "2026-06-01 to 2026-06-20"
+    },
+    "root_cause_hypothesis": "The increase is concentrated among mobile applicants exposed to verification_reminder_v2 after their first document rejection. The reminder appears to route them to a generic onboarding page rather than document-specific requirements.",
+    "known_limitations": [
+      "Product-event coverage is missing for 18 percent of affected customers.",
+      "Session replay is not connected yet, so page-level confusion is inferred from events and text evidence."
+    ],
+    "evidence": [
+      {
+        "signal_id": "SIG-20492",
+        "source": "zendesk",
+        "language": "de",
+        "excerpt": "Ich verstehe nicht, welches Dokument akzeptiert wird.",
+        "customer_id": "C-294",
+        "account_id": "A-52",
+        "timestamp": "2026-06-20T11:45:00Z"
+      },
+      {
+        "signal_id": "SIG-20493",
+        "source": "survey",
+        "language": "en",
+        "excerpt": "The reminder sends me back to the same generic page.",
+        "customer_id": "C-301",
+        "account_id": "A-77",
+        "timestamp": "2026-06-20T12:10:00Z"
+      }
+    ],
+    "action_proposals": [
+      {
+        "action_id": "ACT-501",
+        "class": "structural",
+        "owner": "onboarding_product",
+        "destination": "jira",
+        "proposal": "Create a Jira issue to route rejected-document users to a document-specific guidance page and update rejection copy.",
+        "risk_level": "medium",
+        "approval_state": "needs_product_approval"
+      },
+      {
+        "action_id": "ACT-502",
+        "class": "customer_recovery",
+        "owner": "cx_operations",
+        "destination": "zendesk",
+        "proposal": "Create a recovery task for currently blocked customers with approved support copy and callback option after 48 hours.",
+        "risk_level": "medium",
+        "approval_state": "needs_cx_approval"
+      },
+      {
+        "action_id": "ACT-503",
+        "class": "journey_intervention",
+        "owner": "lifecycle_marketing",
+        "destination": "hubspot",
+        "proposal": "Draft an audience of customers with two verification failures in seven days, valid consent, and no fraud-review flag.",
+        "risk_level": "high",
+        "approval_state": "needs_marketing_and_privacy_approval"
+      },
+      {
+        "action_id": "ACT-504",
+        "class": "research",
+        "owner": "ux_research",
+        "destination": "research_panel",
+        "proposal": "Recruit eight affected customers for a 30-minute validation study on document guidance clarity.",
+        "risk_level": "low",
+        "approval_state": "ready_to_create"
+      }
+    ],
+    "governance_checks": [
+      {
+        "check_id": "GOV-701",
+        "rule": "customer_contact_requires_valid_consent",
+        "status": "pass",
+        "reason": "Audience definition excludes customers without valid communication consent.",
+        "blocking": true
+      },
+      {
+        "check_id": "GOV-702",
+        "rule": "audience_activation_requires_privacy_review",
+        "status": "review_required",
+        "reason": "The proposal creates a behavior-derived intervention audience.",
+        "blocking": true
+      },
+      {
+        "check_id": "GOV-703",
+        "rule": "sensitive_attribute_inference_prohibited",
+        "status": "pass",
+        "reason": "No sensitive categories are used in inclusion criteria.",
+        "blocking": true
+      }
+    ],
+    "outcome_contract": {
+      "primary_metric": "verification_completion_7d",
+      "baseline": 0.61,
+      "success_threshold": 0.70,
+      "measurement_window_days": 28,
+      "comparison_method": "randomized_holdout",
+      "guardrail_metrics": [
+        "complaint_rate",
+        "support_contact_rate",
+        "unsubscribe_rate"
+      ],
+      "responsible_owner": "onboarding_product"
+    }
+  },
+  {
+    "problem_id": "PRB-109",
+    "title": "Cancellation campaign reaches already-cancelled customers",
+    "statement": "Customers who have completed cancellation are still receiving retention offers, creating complaints and avoidable support contacts.",
+    "journey": "Retention",
+    "journey_stage": "Cancellation",
+    "owner": "lifecycle_marketing",
+    "status": "blocked_by_policy",
+    "impact_factors": {
+      "customer_reach": 0.44,
+      "severity": 0.76,
+      "recurrence": 0.69,
+      "journey_criticality": 0.74,
+      "account_exposure": 0.32,
+      "financial_exposure": 0.46,
+      "regulatory_risk": 0.82,
+      "evidence_confidence": 0.96
+    },
+    "evidence_confidence": 0.96,
+    "affected_cohort": {
+      "customers": 91,
+      "accounts": 91,
+      "high_value_accounts": 3,
+      "date_range": "2026-06-05 to 2026-06-20"
+    },
+    "root_cause_hypothesis": "The retention journey appears to lag cancellation status updates by one batch cycle, so cancelled customers remain eligible for one additional send.",
+    "known_limitations": [
+      "Campaign platform export includes send status but not final suppression reason."
+    ],
+    "evidence": [
+      {
+        "signal_id": "SIG-20510",
+        "source": "zendesk",
+        "language": "de",
+        "excerpt": "Ich habe bereits gekuendigt. Warum bekomme ich weiter Werbung?",
+        "customer_id": "C-331",
+        "account_id": "A-331",
+        "timestamp": "2026-06-19T09:08:00Z"
+      }
+    ],
+    "action_proposals": [
+      {
+        "action_id": "ACT-510",
+        "class": "journey_intervention",
+        "owner": "lifecycle_marketing",
+        "destination": "hubspot",
+        "proposal": "Block activation until cancellation status is available as a hard suppression rule.",
+        "risk_level": "high",
+        "approval_state": "blocked_by_policy"
+      },
+      {
+        "action_id": "ACT-511",
+        "class": "structural",
+        "owner": "data_platform",
+        "destination": "jira",
+        "proposal": "Create a data sync issue to reduce cancellation-status propagation delay below 15 minutes.",
+        "risk_level": "medium",
+        "approval_state": "needs_data_owner_approval"
+      }
+    ],
+    "governance_checks": [
+      {
+        "check_id": "GOV-710",
+        "rule": "customer_contact_requires_valid_consent",
+        "status": "fail",
+        "reason": "Some affected profiles have no valid marketing consent after cancellation.",
+        "blocking": true
+      },
+      {
+        "check_id": "GOV-711",
+        "rule": "high_risk_marketing_change_requires_privacy_review",
+        "status": "review_required",
+        "reason": "The action modifies eligibility for post-cancellation communication.",
+        "blocking": true
+      }
+    ],
+    "outcome_contract": {
+      "primary_metric": "post_cancellation_complaint_rate",
+      "baseline": 0.043,
+      "success_threshold": 0.015,
+      "measurement_window_days": 21,
+      "comparison_method": "before_after",
+      "guardrail_metrics": [
+        "retention_reactivation_rate",
+        "unsubscribe_rate"
+      ],
+      "responsible_owner": "lifecycle_marketing"
+    }
+  }
+]
+

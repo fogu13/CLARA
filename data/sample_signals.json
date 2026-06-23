@@ -1,0 +1,42 @@
+[
+  {
+    "signal_id": "SIG-20492",
+    "customer_id": "C-294",
+    "account_id": "A-52",
+    "source": "zendesk",
+    "journey": "customer_onboarding",
+    "journey_stage": "identity_verification",
+    "campaign_exposure": ["verification_reminder_v2"],
+    "product_events": ["verification_started", "document_rejected"],
+    "feedback_text": "Ich verstehe nicht, welches Dokument akzeptiert wird.",
+    "language": "de",
+    "timestamp": "2026-06-20T11:45:00Z"
+  },
+  {
+    "signal_id": "SIG-20493",
+    "customer_id": "C-301",
+    "account_id": "A-77",
+    "source": "survey",
+    "journey": "customer_onboarding",
+    "journey_stage": "identity_verification",
+    "campaign_exposure": ["verification_reminder_v2"],
+    "product_events": ["verification_started", "document_rejected", "help_center_viewed"],
+    "feedback_text": "The reminder sends me back to the same generic page. I still do not know what to upload.",
+    "language": "en",
+    "timestamp": "2026-06-20T12:10:00Z"
+  },
+  {
+    "signal_id": "SIG-20494",
+    "customer_id": "C-318",
+    "account_id": "A-52",
+    "source": "intercom",
+    "journey": "customer_onboarding",
+    "journey_stage": "identity_verification",
+    "campaign_exposure": ["verification_reminder_v2"],
+    "product_events": ["verification_started", "document_rejected", "support_contacted"],
+    "feedback_text": "Das ist jetzt der zweite Versuch. Bitte sagen Sie mir konkret, was fehlt.",
+    "language": "de",
+    "timestamp": "2026-06-20T14:25:00Z"
+  }
+]
+

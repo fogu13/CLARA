@@ -1,0 +1,94 @@
+{
+  "dataset_id": "retention_cancellation",
+  "title": "Retention cancellation complaints",
+  "description": "Cancelled customers continue receiving winback messages and complain across support channels.",
+  "industry": "subscription",
+  "signals": [
+    {
+      "signal_id": "DEMO-RET-001",
+      "customer_id": "C-RET-301",
+      "account_id": "A-RET-30",
+      "source": "zendesk",
+      "journey": "retention",
+      "journey_stage": "cancellation_followup",
+      "campaign_exposure": ["winback_q3"],
+      "product_events": ["subscription_cancelled", "email_clicked"],
+      "feedback_text": "I cancelled last month. Why am I still getting winback emails every week?",
+      "language": "en",
+      "timestamp": "2026-06-20T08:15:00Z"
+    },
+    {
+      "signal_id": "DEMO-RET-002",
+      "customer_id": "C-RET-302",
+      "account_id": "A-RET-31",
+      "source": "trustpilot",
+      "journey": "retention",
+      "journey_stage": "cancellation_followup",
+      "campaign_exposure": ["winback_q3"],
+      "product_events": ["subscription_cancelled", "email_clicked", "unsubscribe_clicked"],
+      "feedback_text": "Unsubscribed twice after cancelling, but the comeback offer keeps arriving.",
+      "language": "en",
+      "timestamp": "2026-06-20T09:10:00Z"
+    },
+    {
+      "signal_id": "DEMO-RET-003",
+      "customer_id": "C-RET-303",
+      "account_id": "A-RET-32",
+      "source": "intercom",
+      "journey": "retention",
+      "journey_stage": "cancellation_followup",
+      "campaign_exposure": ["winback_q3"],
+      "product_events": ["subscription_cancelled", "support_contacted"],
+      "feedback_text": "Please stop contacting me about renewal. The cancellation confirmation said my account was closed.",
+      "language": "en",
+      "timestamp": "2026-06-20T10:25:00Z"
+    }
+  ],
+  "customer_context": [
+    {
+      "customer_id": "C-RET-301",
+      "account_id": "A-RET-30",
+      "account_name": "Orion Studio",
+      "segment": "small_business",
+      "lifecycle_stage": "cancelled",
+      "plan_tier": "pro",
+      "account_value": 3200,
+      "renewal_date": "2026-05-31",
+      "consent_status": "withdrawn",
+      "health_score": 0.2,
+      "owner": "lifecycle_marketing",
+      "product_owner": "subscriptions_product",
+      "region": "NA"
+    },
+    {
+      "customer_id": "C-RET-302",
+      "account_id": "A-RET-31",
+      "account_name": "Bakker Design",
+      "segment": "small_business",
+      "lifecycle_stage": "cancelled",
+      "plan_tier": "basic",
+      "account_value": 900,
+      "renewal_date": "2026-06-01",
+      "consent_status": "withdrawn",
+      "health_score": 0.18,
+      "owner": "lifecycle_marketing",
+      "product_owner": "subscriptions_product",
+      "region": "EU"
+    },
+    {
+      "customer_id": "C-RET-303",
+      "account_id": "A-RET-32",
+      "account_name": "Noble Fitness",
+      "segment": "mid_market",
+      "lifecycle_stage": "cancelled",
+      "plan_tier": "enterprise",
+      "account_value": 28000,
+      "renewal_date": "2026-06-05",
+      "consent_status": "withdrawn",
+      "health_score": 0.16,
+      "owner": "lifecycle_marketing",
+      "product_owner": "retention_product",
+      "region": "UK"
+    }
+  ]
+}

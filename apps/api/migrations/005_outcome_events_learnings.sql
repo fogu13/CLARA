@@ -1,0 +1,24 @@
+-- 005 — Outcome contract + events telemetry + learning decay (port of Elvis)
+-- Source: reference/elvis/supabase/migrations/20260619130000_outcome_contract.sql
+--         reference/elvis/supabase/migrations/20260619140000_events_telemetry.sql
+--         reference/elvis/supabase/migrations/20260619160000_learning_decay.sql
+--         reference/elvis/supabase/migrations/20260619120000_add_rule_priority.sql
+--         reference/elvis/supabase/migrations/20260315120000_evaluate_rules_trigger.sql
+--
+-- Phase 3 target. Merges Elvis's outcome-contract loop closure with Odradek_2's
+-- direction-aware outcome_status (apps/api/app/services/workflow.py:63-87):
+--   - outcome_metric, outcome_baseline, outcome_target, outcome_measured
+--   - measurement_window_days, measured_at, resolution_score
+--   - events table (event_type, entity, entity_id, user_id, duration_ms, metadata)
+--   - ab_learnings half_life_days + last_validated_at (confidence decay)
+--   - feedback_rules.priority (conflict resolution)
+--   - DB trigger -> edge function / agent service via pg_net (async automation)
+--
+-- TODO(Phase 3):
+--   - add outcome-contract columns to odradek_problems / odradek_workflow_records
+--   - create odradek_events table
+--   - add learning decay columns
+--   - port evaluate-rules trigger to invoke the LangGraph action node
+
+-- Placeholder so the migration is idempotent and safe to apply during scaffolding.
+SELECT 1;

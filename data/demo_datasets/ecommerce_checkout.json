@@ -1,0 +1,94 @@
+{
+  "dataset_id": "ecommerce_checkout",
+  "title": "Ecommerce checkout failures",
+  "description": "High-intent shoppers report payment failures after a cart recovery campaign.",
+  "industry": "ecommerce",
+  "signals": [
+    {
+      "signal_id": "DEMO-ECOM-001",
+      "customer_id": "C-ECOM-201",
+      "account_id": "A-ECOM-20",
+      "source": "review",
+      "journey": "checkout",
+      "journey_stage": "payment",
+      "campaign_exposure": ["cart_recovery_summer"],
+      "product_events": ["cart_recovered", "payment_started", "payment_failed"],
+      "feedback_text": "The discount email brought me back, but card payment failed three times at checkout.",
+      "language": "en",
+      "timestamp": "2026-06-19T08:45:00Z"
+    },
+    {
+      "signal_id": "DEMO-ECOM-002",
+      "customer_id": "C-ECOM-202",
+      "account_id": "A-ECOM-21",
+      "source": "zendesk",
+      "journey": "checkout",
+      "journey_stage": "payment",
+      "campaign_exposure": ["cart_recovery_summer"],
+      "product_events": ["cart_recovered", "payment_started", "payment_failed", "support_contacted"],
+      "feedback_text": "Apple Pay showed success, then the order disappeared and support could not find it.",
+      "language": "en",
+      "timestamp": "2026-06-19T09:05:00Z"
+    },
+    {
+      "signal_id": "DEMO-ECOM-003",
+      "customer_id": "C-ECOM-203",
+      "account_id": "A-ECOM-22",
+      "source": "survey",
+      "journey": "checkout",
+      "journey_stage": "payment",
+      "campaign_exposure": ["cart_recovery_summer"],
+      "product_events": ["cart_recovered", "payment_started", "payment_failed"],
+      "feedback_text": "I wanted to buy before the offer expired, but every payment method returned a generic error.",
+      "language": "en",
+      "timestamp": "2026-06-19T09:40:00Z"
+    }
+  ],
+  "customer_context": [
+    {
+      "customer_id": "C-ECOM-201",
+      "account_id": "A-ECOM-20",
+      "account_name": "Lina Torres",
+      "segment": "consumer",
+      "lifecycle_stage": "repeat_buyer",
+      "plan_tier": "standard",
+      "account_value": 420,
+      "renewal_date": null,
+      "consent_status": "granted",
+      "health_score": 0.48,
+      "owner": "commerce_ops",
+      "product_owner": "checkout_product",
+      "region": "NA"
+    },
+    {
+      "customer_id": "C-ECOM-202",
+      "account_id": "A-ECOM-21",
+      "account_name": "Mika Weber",
+      "segment": "consumer",
+      "lifecycle_stage": "first_purchase",
+      "plan_tier": "standard",
+      "account_value": 180,
+      "renewal_date": null,
+      "consent_status": "granted",
+      "health_score": 0.42,
+      "owner": "commerce_ops",
+      "product_owner": "checkout_product",
+      "region": "EU"
+    },
+    {
+      "customer_id": "C-ECOM-203",
+      "account_id": "A-ECOM-22",
+      "account_name": "Ravi Patel",
+      "segment": "consumer",
+      "lifecycle_stage": "repeat_buyer",
+      "plan_tier": "standard",
+      "account_value": 610,
+      "renewal_date": null,
+      "consent_status": "granted",
+      "health_score": 0.45,
+      "owner": "commerce_ops",
+      "product_owner": "payments_product",
+      "region": "UK"
+    }
+  ]
+}
