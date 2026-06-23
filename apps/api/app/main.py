@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,8 +14,8 @@ from app.domain.models import (
     CandidateDecisionStatus,
     CandidateReviewRequest,
     CandidateReviewStatus,
-    CustomerContextCsvImportRequest,
     CustomerContextCompletenessReport,
+    CustomerContextCsvImportRequest,
     CustomerContextImportRequest,
     CustomerContextImportResult,
     CustomerContextRecord,
@@ -46,25 +45,25 @@ from app.domain.models import (
     SignalImportResult,
     SignalRecord,
     SignalValidationReport,
-    TerminologyDictionaryEntry,
     TaxonomyCatalog,
     TaxonomyLockRequest,
     TaxonomyMergeRequest,
     TaxonomyRenameRequest,
     TaxonomySplitRequest,
     TaxonomyType,
+    TerminologyDictionaryEntry,
     WorkflowState,
     pseudonymized_identifier,
+)
+from app.services.context_impact import (
+    build_affected_context_explorer,
+    enrich_problem_with_context,
 )
 from app.services.contexts import (
     SQLiteCustomerContextStore,
     context_completeness_report,
     parse_context_csv,
     validate_context_csv,
-)
-from app.services.context_impact import (
-    build_affected_context_explorer,
-    enrich_problem_with_context,
 )
 from app.services.emerging import build_emerging_problem_report
 from app.services.policies import PolicyRuleStore
@@ -77,22 +76,22 @@ from app.services.postgres import (
     PostgresWorkflowStore,
     database_url,
 )
+from app.services.problems import ProblemStore, SQLiteProblemStore
 from app.services.seed import (
-    load_seed_customer_context,
     load_demo_datasets,
+    load_seed_customer_context,
     load_seed_policy_rules,
     load_seed_problems,
     load_seed_signals,
     to_demo_dataset_summary,
 )
-from app.services.problems import ProblemStore, SQLiteProblemStore
 from app.services.signals import (
     SQLiteSignalStore,
     parse_signal_csv,
     promote_candidate,
     validate_signal_csv,
 )
-from app.services.taxonomies import TerminologyStore, TaxonomyStore, classify_candidate
+from app.services.taxonomies import TaxonomyStore, TerminologyStore, classify_candidate
 from app.services.workflow import SQLiteWorkflowStore
 
 
@@ -321,7 +320,7 @@ def enrich_candidate(
 
 def create_app(
     *,
-    problems: Optional[dict[str, ProblemRecord]] = None,
+    problems: dict[str, ProblemRecord] | None = None,
     problem_store=None,
     workflows=None,
     signals=None,

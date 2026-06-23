@@ -8,7 +8,6 @@ from app.domain.models import (
 )
 from app.services.signals import utc_now
 
-
 ACTION_THRESHOLD = 0.68
 WATCH_THRESHOLD = 0.48
 

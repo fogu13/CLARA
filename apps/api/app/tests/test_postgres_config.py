@@ -1,7 +1,11 @@
 from pathlib import Path
 
 from app import main
-from app.domain.models import LearningConclusionRequest, LearningConclusionRecord, OutcomeMeasurement
+from app.domain.models import (
+    LearningConclusionRecord,
+    LearningConclusionRequest,
+    OutcomeMeasurement,
+)
 from app.services.postgres import SCHEMA_SQL, PostgresWorkflowStore, normalize_database_url
 from app.services.seed import load_seed_problems
 from app.services.workflow import WorkflowStore

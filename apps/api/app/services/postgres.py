@@ -22,8 +22,8 @@ from app.domain.models import (
     ProblemTransitionRecord,
     SignalImportResult,
     SignalRecord,
-    TerminologyDictionaryEntry,
     TaxonomyCatalog,
+    TerminologyDictionaryEntry,
 )
 from app.services.contexts import CustomerContextStore
 from app.services.problems import (
@@ -39,7 +39,6 @@ from app.services.taxonomies import (
     load_seed_terminology,
 )
 from app.services.workflow import WorkflowStore
-
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS odradek_problems (

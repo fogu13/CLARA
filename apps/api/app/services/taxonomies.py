@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.domain.models import (
@@ -9,7 +9,6 @@ from app.domain.models import (
     RootCauseAnalysis,
     RootCauseEvidenceFactor,
     SignalRecord,
-    TerminologyDictionaryEntry,
     TaxonomyCatalog,
     TaxonomyCategory,
     TaxonomyChange,
@@ -17,8 +16,8 @@ from app.domain.models import (
     TaxonomyOperation,
     TaxonomySplitCategoryRequest,
     TaxonomyType,
+    TerminologyDictionaryEntry,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
@@ -283,7 +282,7 @@ class TaxonomyStore:
             operation=operation,
             description=description,
             actor=actor,
-            changed_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            changed_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         )
 
     def _change_count(self) -> int:

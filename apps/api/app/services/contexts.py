@@ -7,13 +7,12 @@ from pathlib import Path
 
 from app.domain.models import (
     ContextCompletenessMetric,
-    CustomerContextImportResult,
     CustomerContextCompletenessReport,
+    CustomerContextImportResult,
     CustomerContextRecord,
     CustomerContextValidationReport,
     SignalValidationIssue,
 )
-
 
 REQUIRED_CONTEXT_FIELDS = ["customer_id", "account_id"]
 

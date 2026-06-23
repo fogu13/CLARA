@@ -5,7 +5,6 @@ from app.services.problems import ProblemStore
 from app.services.seed import load_seed_problems
 from app.services.workflow import WorkflowStore
 
-
 client = TestClient(
     create_app(
         problem_store=ProblemStore(load_seed_problems()),

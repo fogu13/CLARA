@@ -10,7 +10,6 @@ from app.services.seed import load_seed_customer_context, load_seed_problems
 from app.services.signals import SignalStore
 from app.services.workflow import WorkflowStore
 
-
 VALID_CONTEXT_CSV = """customer_id,account_id,account_name,parent_account_id,parent_account_name,segment,lifecycle_stage,plan_tier,contact_role,account_value,renewal_date,consent_status,health_score,owner,product_owner,region
 C-999,A-999,Acme GmbH,PA-1,Acme Holdings,mid_market,onboarding,enterprise,admin,88000,2026-12-31,granted,0.76,cs_dach,onboarding_product,DACH
 """

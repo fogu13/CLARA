@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from itertools import count
 from pathlib import Path
 from uuid import uuid4
@@ -29,7 +29,7 @@ from app.domain.models import (
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def find_action(problem: ProblemRecord, action_id: str):

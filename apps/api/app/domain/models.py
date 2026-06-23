@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Literal
 
@@ -396,7 +396,7 @@ LEARNING_RETENTION_DAYS = 730
 
 def retention_expires_at(created_at: str, days: int = LEARNING_RETENTION_DAYS) -> str:
     created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-    expires_at = (created + timedelta(days=days)).astimezone(timezone.utc)
+    expires_at = (created + timedelta(days=days)).astimezone(UTC)
     return expires_at.isoformat().replace("+00:00", "Z")
 
 

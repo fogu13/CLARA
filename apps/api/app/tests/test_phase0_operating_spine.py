@@ -7,7 +7,6 @@ from app.services.seed import load_seed_problems
 from app.services.signals import SignalStore
 from app.services.workflow import WorkflowStore
 
-
 SIGNAL_CSV = """signal_id,customer_id,account_id,source,journey,journey_stage,campaign_exposure,product_events,feedback_text,language,timestamp
 SIG-P0-1,C-900,A-900,zendesk,checkout,payment,cart_recovery_v1,payment_started;payment_failed,Payment failed twice and support could not explain why.,en,2026-06-21T10:00:00Z
 SIG-P0-2,C-901,A-901,intercom,checkout,payment,cart_recovery_v1,payment_started;payment_failed,Die Zahlung bricht immer wieder ab.,de,2026-06-21T10:05:00Z

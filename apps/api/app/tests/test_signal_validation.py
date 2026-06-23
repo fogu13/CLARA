@@ -6,7 +6,6 @@ from app.services.seed import load_seed_problems
 from app.services.signals import SignalStore
 from app.services.workflow import WorkflowStore
 
-
 VALID_CSV = """signal_id,customer_id,account_id,source,journey,journey_stage,campaign_exposure,product_events,feedback_text,language,timestamp
 SIG-VAL-1,C-1,A-1,csv_upload,onboarding,verification,reminder_v1,verification_started,The instructions are unclear.,en,2026-06-21T10:00:00Z
 """
