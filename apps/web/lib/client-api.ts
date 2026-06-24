@@ -10,6 +10,7 @@ import type {
   CustomerContextValidationReport,
   DemoDatasetImportResult,
   DemoDatasetSummary,
+  ExecutionRecord,
   JiraIssueDraft,
   LearningConclusionRecord,
   LearningConclusionRequest,
@@ -19,12 +20,15 @@ import type {
   PolicyRule,
   ProblemCandidate,
   ProblemRecord,
+  ProblemSummary,
   ProblemTransitionRecord,
   ProblemTransitionRequest,
   ProblemUpdateRequest,
   SignalImportResult,
   SignalRecord,
   SignalValidationReport,
+  TaxonomyCatalog,
+  TerminologyDictionaryEntry,
   WorkflowState
 } from "./types";
 
@@ -71,8 +75,20 @@ export async function getWorkflowState(problemId: string): Promise<WorkflowState
   return requestJson<WorkflowState>(`${apiBaseUrl()}/problems/${problemId}/workflow`);
 }
 
+export async function getProblems(): Promise<ProblemSummary[]> {
+  return requestJson<ProblemSummary[]>(`${apiBaseUrl()}/problems`);
+}
+
+export async function getProblem(problemId: string): Promise<ProblemRecord> {
+  return requestJson<ProblemRecord>(`${apiBaseUrl()}/problems/${problemId}`);
+}
+
 export async function getJiraDrafts(): Promise<JiraIssueDraft[]> {
   return requestJson<JiraIssueDraft[]>(`${apiBaseUrl()}/jira-drafts`);
+}
+
+export async function getExecutions(): Promise<ExecutionRecord[]> {
+  return requestJson<ExecutionRecord[]>(`${apiBaseUrl()}/executions`);
 }
 
 export async function updateProblem(
@@ -156,6 +172,14 @@ export async function getAffectedContext(problemId: string): Promise<AffectedCon
 
 export async function getPolicyRules(): Promise<PolicyRule[]> {
   return requestJson<PolicyRule[]>(`${apiBaseUrl()}/policy-rules`);
+}
+
+export async function getTaxonomies(): Promise<TaxonomyCatalog[]> {
+  return requestJson<TaxonomyCatalog[]>(`${apiBaseUrl()}/taxonomies`);
+}
+
+export async function getTerminologyDictionary(): Promise<TerminologyDictionaryEntry[]> {
+  return requestJson<TerminologyDictionaryEntry[]>(`${apiBaseUrl()}/terminology-dictionary`);
 }
 
 export async function getDemoDatasets(): Promise<DemoDatasetSummary[]> {

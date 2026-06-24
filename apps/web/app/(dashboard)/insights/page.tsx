@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Lightbulb, AlertCircle } from "lucide-react";
 
@@ -25,7 +26,7 @@ export default function InsightsPage() {
   if (loading) return <div className="text-muted-foreground">Loading insights...</div>;
 
   const columns = [
-    { key: "open", label: "Open", statuses: ["open"] },
+    { key: "validation_required", label: "Validation", statuses: ["validation_required"] },
     { key: "approval_needed", label: "Needs Approval", statuses: ["approval_needed"] },
     { key: "in_progress", label: "In Progress", statuses: ["in_progress", "blocked_by_policy"] },
     { key: "resolved", label: "Resolved", statuses: ["resolved"] },
@@ -58,25 +59,27 @@ export default function InsightsPage() {
                   <Badge variant="secondary">{items.length}</Badge>
                 </div>
                 {items.map(p => (
-                  <Card key={p.problem_id} className="cursor-pointer hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <p className="text-sm font-medium line-clamp-2">{p.title}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant="secondary" className="text-xs">{p.journey}</Badge>
-                        {p.status === "blocked_by_policy" && (
-                          <Badge variant="destructive" className="text-xs">
-                            <AlertCircle className="h-3 w-3 mr-1" />
-                            Blocked
-                          </Badge>
-                        )}
-                      </div>
-                      {p.impact_score !== undefined && (
-                        <div className="mt-2 text-xs text-muted-foreground">
-                          Impact: {Math.round(p.impact_score * 100)}%
+                  <Link key={p.problem_id} href={`/insights/${p.problem_id}`} className="block">
+                    <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                      <CardContent className="p-4">
+                        <p className="text-sm font-medium line-clamp-2">{p.title}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge variant="secondary" className="text-xs">{p.journey}</Badge>
+                          {p.status === "blocked_by_policy" && (
+                            <Badge variant="destructive" className="text-xs">
+                              <AlertCircle className="h-3 w-3 mr-1" />
+                              Blocked
+                            </Badge>
+                          )}
                         </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                        {p.impact_score !== undefined && (
+                          <div className="mt-2 text-xs text-muted-foreground">
+                            Impact: {Math.round(p.impact_score * 100)}%
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Link>
                 ))}
               </div>
             );
