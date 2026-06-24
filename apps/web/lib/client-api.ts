@@ -12,6 +12,8 @@ import type {
   DemoDatasetSummary,
   ExecutionRecord,
   JiraIssueDraft,
+  JourneyEventImportResult,
+  JourneyEventRecord,
   LanguageQualityReport,
   LearningConclusionRecord,
   LearningConclusionRequest,
@@ -175,6 +177,24 @@ export async function recordLearningConclusion(
 
 export async function getSignals(): Promise<SignalRecord[]> {
   return requestJson<SignalRecord[]>(`${apiBaseUrl()}/signals`);
+}
+
+export async function getJourneyEvents(): Promise<JourneyEventRecord[]> {
+  return requestJson<JourneyEventRecord[]>(`${apiBaseUrl()}/journey-events`);
+}
+
+export async function importJourneyEvents(events: JourneyEventRecord[]): Promise<JourneyEventImportResult> {
+  return requestJson<JourneyEventImportResult>(`${apiBaseUrl()}/journey-events/import`, {
+    method: "POST",
+    body: JSON.stringify({ events })
+  });
+}
+
+export async function importJourneyEventCsv(csvText: string): Promise<JourneyEventImportResult> {
+  return requestJson<JourneyEventImportResult>(`${apiBaseUrl()}/journey-events/import-csv`, {
+    method: "POST",
+    body: JSON.stringify({ csv_text: csvText })
+  });
 }
 
 export async function getCustomerContext(): Promise<CustomerContextRecord[]> {

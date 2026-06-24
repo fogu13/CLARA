@@ -19,6 +19,54 @@ function label(value: string): string {
   return value.replaceAll("_", " ");
 }
 
+
+function JourneyImpactCard({ problem }: { problem: Awaited<ReturnType<typeof getActionQueueProblems>>[number] }) {
+  const impact = problem.journey_impact;
+  if (!impact) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Journey Intelligence</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-4">
+          <div>
+            <div className="text-2xl font-bold">{impact.matched_events}</div>
+            <p className="text-xs text-muted-foreground">matched events</p>
+          </div>
+          <div>
+            <div className="text-2xl font-bold">{impact.friction_events}</div>
+            <p className="text-xs text-muted-foreground">friction events</p>
+          </div>
+          <div>
+            <div className="text-2xl font-bold">{percent(impact.deviation_score)}</div>
+            <p className="text-xs text-muted-foreground">deviation score</p>
+          </div>
+          <div>
+            <div className="text-2xl font-bold">{impact.matched_accounts}</div>
+            <p className="text-xs text-muted-foreground">accounts</p>
+          </div>
+        </div>
+        {impact.top_event_names.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {impact.top_event_names.map((eventName) => (
+              <Badge key={eventName} variant="outline">{label(eventName)}</Badge>
+            ))}
+          </div>
+        ) : null}
+        {impact.drivers.length > 0 ? (
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            {impact.drivers.map((driver) => (
+              <li key={driver}>{driver}</li>
+            ))}
+          </ul>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default async function InsightDetailPage({
   params
 }: {
@@ -120,6 +168,7 @@ export default async function InsightDetailPage({
       />
 
       <AffectedContextPanel problemId={problem.problem_id} />
+      <JourneyImpactCard problem={problem} />
 
       <Card>
         <CardHeader>

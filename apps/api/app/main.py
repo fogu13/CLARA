@@ -26,6 +26,10 @@ from app.domain.models import (
     EmergingProblemReport,
     ExecutionRecord,
     JiraIssueDraft,
+    JourneyEventCsvImportRequest,
+    JourneyEventImportRequest,
+    JourneyEventImportResult,
+    JourneyEventRecord,
     LearningConclusionRecord,
     LearningConclusionRequest,
     LearningStatus,
@@ -67,9 +71,15 @@ from app.services.contexts import (
     validate_context_csv,
 )
 from app.services.emerging import build_emerging_problem_report
+from app.services.journeys import (
+    SQLiteJourneyEventStore,
+    enrich_problem_with_journey,
+    parse_journey_event_csv,
+)
 from app.services.policies import PolicyRuleStore
 from app.services.postgres import (
     PostgresCustomerContextStore,
+    PostgresJourneyEventStore,
     PostgresProblemStore,
     PostgresSignalStore,
     PostgresTaxonomyStore,
@@ -126,6 +136,13 @@ def default_context_store() -> SQLiteCustomerContextStore:
     return SQLiteCustomerContextStore(default_db_path())
 
 
+def default_journey_event_store() -> SQLiteJourneyEventStore:
+    url = database_url()
+    if url:
+        return PostgresJourneyEventStore(url)
+    return SQLiteJourneyEventStore(default_db_path())
+
+
 def default_problem_store() -> SQLiteProblemStore:
     url = database_url()
     if url:
@@ -153,6 +170,7 @@ def to_summary(problem: ProblemRecord) -> ProblemSummary:
         approval_pressure=problem.approval_pressure or "ready",
         top_action_classes=[proposal.class_ for proposal in problem.action_proposals[:3]],
         context_impact=problem.context_impact,
+        journey_impact=problem.journey_impact,
     )
 
 
@@ -360,6 +378,7 @@ def create_app(
     terminology=None,
     demo_datasets=None,
     connector_configs=None,
+    journeys=None,
 ) -> FastAPI:
     api = FastAPI(
         title="CLARA API",
@@ -390,6 +409,7 @@ def create_app(
     workflow_store = workflows or default_workflow_store()
     signal_store = signals or default_signal_store()
     context_store = contexts or default_context_store()
+    journey_event_store = journeys or default_journey_event_store()
     policy_store = policies or default_policy_store()
     url = database_url()
     taxonomy_store = taxonomies or (PostgresTaxonomyStore(url) if url else TaxonomyStore())
@@ -416,12 +436,14 @@ def create_app(
         return problem
 
     def enrich_problem_for_response(problem: ProblemRecord) -> ProblemRecord:
-        return enrich_problem_with_context(problem, context_store.list_context())
+        context_enriched = enrich_problem_with_context(problem, context_store.list_context())
+        return enrich_problem_with_journey(context_enriched, journey_event_store.list_events())
 
     def list_enriched_problems() -> list[ProblemRecord]:
         context_records = context_store.list_context()
+        journey_events = journey_event_store.list_events()
         return [
-            enrich_problem_with_context(problem, context_records)
+            enrich_problem_with_journey(enrich_problem_with_context(problem, context_records), journey_events)
             for problem in active_problem_store.list_problems()
         ]
 
@@ -584,6 +606,18 @@ def create_app(
             request.csv_text,
             existing_signal_ids=signal_store.existing_signal_ids(),
         )
+
+    @api.get("/journey-events", response_model=list[JourneyEventRecord])
+    def list_journey_events() -> list[JourneyEventRecord]:
+        return journey_event_store.list_events()
+
+    @api.post("/journey-events/import", response_model=JourneyEventImportResult, dependencies=[Depends(require_role(Role.editor))])
+    def import_journey_events(request: JourneyEventImportRequest) -> JourneyEventImportResult:
+        return journey_event_store.import_events(request.events)
+
+    @api.post("/journey-events/import-csv", response_model=JourneyEventImportResult, dependencies=[Depends(require_role(Role.editor))])
+    def import_journey_event_csv(request: JourneyEventCsvImportRequest) -> JourneyEventImportResult:
+        return journey_event_store.import_events(parse_journey_event_csv(request.csv_text))
 
     @api.get("/customer-context", response_model=list[CustomerContextRecord])
     def list_customer_context() -> list[CustomerContextRecord]:
