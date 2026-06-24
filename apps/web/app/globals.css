@@ -1,18 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
-  --background: #f6f7f8;
+  --background: 210 20% 98%;
+  --foreground: 213 27% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 213 27% 12%;
+  --primary: 174 100% 21%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 16% 93%;
+  --secondary-foreground: 213 27% 12%;
+  --muted: 210 16% 93%;
+  --muted-foreground: 213 12% 45%;
+  --accent: 174 30% 90%;
+  --accent-foreground: 174 100% 21%;
+  --destructive: 0 84% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 210 16% 88%;
+  --input: 210 16% 88%;
+  --ring: 174 100% 21%;
+  --radius: 0.5rem;
+
+  /* Legacy Odradek_2 vars (kept for backward compat with existing components) */
   --surface: #ffffff;
   --surface-muted: #eef2f1;
   --text: #161a1d;
-  --muted: #5b656d;
-  --border: #d9dedf;
-  --accent: #006c67;
-  --accent-soft: #dcefed;
   --warning: #9a5b00;
   --warning-soft: #fff1d6;
   --danger: #a9382d;
   --danger-soft: #ffe2df;
   --success: #16643b;
   --success-soft: #ddf1e6;
+  --accent-soft: #dcefed;
+}
+
+.dark {
+  --background: 213 27% 8%;
+  --foreground: 210 20% 98%;
+  --card: 213 27% 10%;
+  --card-foreground: 210 20% 98%;
+  --primary: 174 100% 30%;
+  --primary-foreground: 213 27% 8%;
+  --secondary: 213 27% 15%;
+  --secondary-foreground: 210 20% 98%;
+  --muted: 213 27% 15%;
+  --muted-foreground: 210 12% 60%;
+  --accent: 174 30% 20%;
+  --accent-foreground: 174 100% 40%;
+  --destructive: 0 63% 40%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 213 27% 18%;
+  --input: 213 27% 18%;
+  --ring: 174 100% 30%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
 }
 
 .taxonomy-panel {

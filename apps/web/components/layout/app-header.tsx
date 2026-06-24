@@ -1,0 +1,28 @@
+"use client";
+
+import { Bell, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+
+export function AppHeader() {
+  return (
+    <header className="flex h-14 items-center gap-4 border-b bg-card px-6">
+      <div className="flex flex-1 items-center gap-3">
+        <Search className="h-4 w-4 text-muted-foreground" />
+        <Input
+          type="search"
+          placeholder="Search signals, insights, actions..."
+          className="h-9 max-w-md"
+        />
+      </div>
+      <Button variant="ghost" size="icon">
+        <Bell className="h-4 w-4" />
+      </Button>
+      <div className="flex items-center gap-2">
+        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+          <span className="text-xs font-semibold text-primary">U</span>
+        </div>
+      </div>
+    </header>
+  );
+}
