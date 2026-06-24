@@ -1,0 +1,122 @@
+[
+  {
+    "id": "eval-001",
+    "text": "The checkout page crashes every time I try to pay with my credit card. This is really frustrating!",
+    "expected": {
+      "sentiment": "negative",
+      "sentiment_score": -0.7,
+      "urgency": "high",
+      "tags": ["checkout_failure", "payment_error"],
+      "category": "ux_friction"
+    },
+    "latency_ms": 120
+  },
+  {
+    "id": "eval-002",
+    "text": "I love the new dashboard design, it's so much cleaner and easier to navigate.",
+    "expected": {
+      "sentiment": "positive",
+      "sentiment_score": 0.8,
+      "urgency": "low",
+      "tags": ["positive_trend", "dashboard_design"],
+      "category": "positive_trend"
+    },
+    "latency_ms": 95
+  },
+  {
+    "id": "eval-003",
+    "text": "I've been waiting 3 weeks for a refund and nobody is responding to my emails. I want to cancel my subscription.",
+    "expected": {
+      "sentiment": "negative",
+      "sentiment_score": -0.9,
+      "urgency": "critical",
+      "tags": ["refund_delay", "churn_risk", "poor_support"],
+      "category": "churn_risk"
+    },
+    "latency_ms": 180
+  },
+  {
+    "id": "eval-004",
+    "text": "The onboarding process was confusing at first but the support team helped me through it.",
+    "expected": {
+      "sentiment": "mixed",
+      "sentiment_score": 0.1,
+      "urgency": "medium",
+      "tags": ["onboarding_friction", "good_support"],
+      "category": "ux_friction"
+    },
+    "latency_ms": 110
+  },
+  {
+    "id": "eval-005",
+    "text": "Pricing is unclear and I was charged more than what was advertised. This feels deceptive.",
+    "expected": {
+      "sentiment": "negative",
+      "sentiment_score": -0.6,
+      "urgency": "high",
+      "tags": ["pricing_unclear", "billing_error"],
+      "category": "campaign_performance"
+    },
+    "latency_ms": 130
+  },
+  {
+    "id": "eval-006",
+    "text": "The mobile app keeps freezing when I try to upload photos. Happens every single time.",
+    "expected": {
+      "sentiment": "negative",
+      "sentiment_score": -0.7,
+      "urgency": "high",
+      "tags": ["mobile_app_crash", "upload_failure"],
+      "category": "product_issue"
+    },
+    "latency_ms": 140
+  },
+  {
+    "id": "eval-007",
+    "text": "Great product overall! The analytics features have really helped our team make better decisions.",
+    "expected": {
+      "sentiment": "positive",
+      "sentiment_score": 0.9,
+      "urgency": "low",
+      "tags": ["positive_trend", "analytics_feature"],
+      "category": "positive_trend"
+    },
+    "latency_ms": 90
+  },
+  {
+    "id": "eval-008",
+    "text": "I think the GDPR consent dialog is missing and my data might be processed without proper authorization.",
+    "expected": {
+      "sentiment": "negative",
+      "sentiment_score": -0.5,
+      "urgency": "critical",
+      "tags": ["gdpr_concern", "compliance_issue"],
+      "category": "compliance_concern"
+    },
+    "latency_ms": 160
+  },
+  {
+    "id": "eval-009",
+    "text": "The email campaign I received was completely irrelevant to my use case. Why am I getting these?",
+    "expected": {
+      "sentiment": "negative",
+      "sentiment_score": -0.4,
+      "urgency": "medium",
+      "tags": ["irrelevant_campaign", "marketing_misfire"],
+      "category": "campaign_performance"
+    },
+    "latency_ms": 100
+  },
+  {
+    "id": "eval-010",
+    "text": "Account setup took forever but once I got through it, the product worked great.",
+    "expected": {
+      "sentiment": "mixed",
+      "sentiment_score": 0.2,
+      "urgency": "medium",
+      "tags": ["onboarding_friction", "setup_delay"],
+      "category": "ux_friction"
+    },
+    "latency_ms": 115
+  }
+]
