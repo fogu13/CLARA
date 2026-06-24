@@ -4,14 +4,15 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tags, Lock, GitBranch, Languages } from "lucide-react";
-import { getTaxonomies, getTerminologyDictionary } from "@/lib/client-api";
-import type { TaxonomyCatalog, TerminologyDictionaryEntry } from "@/lib/types";
+import { getLanguageQuality, getTaxonomies, getTerminologyDictionary } from "@/lib/client-api";
+import type { LanguageQualityReport, TaxonomyCatalog, TerminologyDictionaryEntry } from "@/lib/types";
 
 type TaxonomyState = {
   status: "loading" | "ready" | "error";
   message: string;
   catalogs: TaxonomyCatalog[];
   terms: TerminologyDictionaryEntry[];
+  languageQuality?: LanguageQualityReport;
 };
 
 function label(value: string): string {
@@ -29,12 +30,17 @@ export default function TaxonomyPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [catalogs, terms] = await Promise.all([getTaxonomies(), getTerminologyDictionary()]);
+        const [catalogs, terms, languageQuality] = await Promise.all([
+          getTaxonomies(),
+          getTerminologyDictionary(),
+          getLanguageQuality()
+        ]);
         setState({
           status: "ready",
           message: "Taxonomy catalogs loaded from the API.",
           catalogs,
-          terms
+          terms,
+          languageQuality
         });
       } catch (error) {
         setState({
@@ -91,6 +97,45 @@ export default function TaxonomyPage() {
           <CardContent><div className="text-2xl font-bold">{lockedNodes}</div></CardContent>
         </Card>
       </div>
+
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Languages className="h-5 w-5 text-primary" />
+            <CardTitle className="text-base">German / English Readiness</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {state.languageQuality ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Badge variant={state.languageQuality.german_english_ready ? "success" : "warning"}>
+                  {state.languageQuality.german_english_ready ? "DE/EN ready" : "Needs language coverage"}
+                </Badge>
+                <Badge variant="outline">{state.languageQuality.total_signals} signals</Badge>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {state.languageQuality.languages.map((language) => (
+                  <div key={language.language} className="rounded-lg border p-3">
+                    <div className="flex items-center justify-between">
+                      <strong className="text-sm uppercase">{language.language}</strong>
+                      <Badge variant={language.readiness === "ready" ? "success" : "secondary"}>
+                        {language.readiness.replaceAll("_", " ")}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {language.signal_count} signals / {language.terminology_entries} terminology entries / {language.original_language_evidence} original-language evidence rows
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Language readiness is unavailable.</p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

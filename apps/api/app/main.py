@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections import Counter
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -223,6 +224,34 @@ def build_outcome_board(
         learning_measurement_invalid=learning_counts[LearningStatus.measurement_invalid],
         items=items,
     )
+
+
+def build_language_quality_report(signals: list[SignalRecord], terms: list[TerminologyDictionaryEntry]) -> dict:
+    signal_counts = Counter((signal.language or "unknown").lower() for signal in signals)
+    term_counts = Counter(language.lower() for term in terms for language in term.languages)
+    languages = sorted({"de", "en", *signal_counts.keys(), *term_counts.keys()})
+    rows = []
+
+    for language in languages:
+        signal_count = signal_counts[language]
+        terminology_entries = term_counts[language]
+        rows.append(
+            {
+                "language": language,
+                "signal_count": signal_count,
+                "terminology_entries": terminology_entries,
+                "original_language_evidence": signal_count,
+                "readiness": "ready" if signal_count and terminology_entries else "needs_attention",
+            }
+        )
+
+    return {
+        "total_signals": len(signals),
+        "languages": rows,
+        "german_english_ready": all(
+            row["readiness"] == "ready" for row in rows if row["language"] in {"de", "en"}
+        ),
+    }
 
 
 def review_match_key(value: str) -> str:
@@ -606,6 +635,10 @@ def create_app(
     @api.get("/terminology-dictionary", response_model=list[TerminologyDictionaryEntry])
     def list_terminology_dictionary() -> list[TerminologyDictionaryEntry]:
         return terminology_store.list_entries()
+
+    @api.get("/language-quality")
+    def get_language_quality() -> dict:
+        return build_language_quality_report(signal_store.list_signals(), terminology_store.list_entries())
 
     @api.post("/taxonomies/{taxonomy_type}/categories/rename", response_model=TaxonomyCatalog, dependencies=[Depends(require_role(Role.editor))])
     def rename_taxonomy_category(

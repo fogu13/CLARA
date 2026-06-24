@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { apiHeaders } from "@/lib/client-api";
 import { Plug, Trash2, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -99,7 +100,7 @@ export default function IntegrationsPage() {
     try {
       await fetch(`${API_URL}/connectors/${editingConnector}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: apiHeaders(),
         body: JSON.stringify(formData),
       });
       await loadConnectors();
@@ -112,7 +113,7 @@ export default function IntegrationsPage() {
   }
 
   async function deleteConnector(type: string) {
-    await fetch(`${API_URL}/connectors/${type}`, { method: "DELETE" });
+    await fetch(`${API_URL}/connectors/${type}`, { method: "DELETE", headers: apiHeaders() });
     await loadConnectors();
   }
 
@@ -123,7 +124,7 @@ export default function IntegrationsPage() {
     try {
       const res = await fetch(`${API_URL}/connectors/test/${editingConnector}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: apiHeaders(),
         body: JSON.stringify(formData),
       });
       const data = await res.json();
@@ -143,7 +144,7 @@ export default function IntegrationsPage() {
     try {
       const res = await fetch(`${API_URL}/connectors/zendesk/pull`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: apiHeaders(),
         body: JSON.stringify({}),
       });
       const data = await res.json();

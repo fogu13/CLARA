@@ -67,6 +67,20 @@ def test_terminology_dictionary_exposes_multilingual_aliases() -> None:
     assert "dokument akzeptiert" in accepted_documents["aliases"]
 
 
+def test_language_quality_reports_german_english_readiness() -> None:
+    client = make_client()
+
+    report = client.get("/language-quality").json()
+
+    rows = {row["language"]: row for row in report["languages"]}
+    assert report["total_signals"] == 3
+    assert report["german_english_ready"] is True
+    assert rows["de"]["signal_count"] == 2
+    assert rows["de"]["terminology_entries"] > 0
+    assert rows["en"]["signal_count"] == 1
+    assert rows["en"]["readiness"] == "ready"
+
+
 def category_by_id(catalog: dict, category_id: str) -> dict:
     return next(category for category in catalog["categories"] if category["category_id"] == category_id)
 
