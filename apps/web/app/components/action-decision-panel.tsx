@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getWorkflowState, submitApproval } from "../../lib/client-api";
 import type { ActionProposal, ApprovalDecisionStatus, WorkflowState } from "../../lib/types";
 
 type DecisionState = {
-  state: "idle" | "saving" | "saved" | "error";
+  state: "loading" | "idle" | "saving" | "saved" | "error";
   message: string;
   workflow?: WorkflowState;
 };
@@ -16,6 +16,14 @@ const decisionLabels: Record<ApprovalDecisionStatus, string> = {
   needs_more_evidence: "Need evidence"
 };
 
+function latestApproval(workflow: WorkflowState | undefined, actionId: string) {
+  return workflow?.approvals.filter((approval) => approval.action_id === actionId).slice(-1)[0];
+}
+
+function approvalMessage(approval: NonNullable<ReturnType<typeof latestApproval>>): string {
+  return `${approval.decision.replaceAll("_", " ")} recorded by ${approval.reviewer}.`;
+}
+
 export function ActionDecisionPanel({
   problemId,
   action
@@ -24,14 +32,51 @@ export function ActionDecisionPanel({
   action: ActionProposal;
 }) {
   const [decisionState, setDecisionState] = useState<DecisionState>({
-    state: "idle",
-    message: "No decision recorded in this session."
+    state: "loading",
+    message: "Loading previous decisions..."
   });
 
+  useEffect(() => {
+    let cancelled = false;
+
+    getWorkflowState(problemId)
+      .then((workflow) => {
+        if (cancelled) return;
+        const approval = latestApproval(workflow, action.action_id);
+        setDecisionState({
+          state: approval ? "saved" : "idle",
+          message: approval ? approvalMessage(approval) : "No decision recorded.",
+          workflow
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setDecisionState({
+          state: "error",
+          message: error instanceof Error ? error.message : "Could not load previous decisions."
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [problemId, action.action_id]);
+
   async function decide(decision: ApprovalDecisionStatus) {
-    setDecisionState({ state: "saving", message: "Recording decision..." });
+    setDecisionState((current) => ({ ...current, state: "saving", message: "Recording decision..." }));
 
     try {
+      const currentWorkflow = await getWorkflowState(problemId);
+      const existingApproval = latestApproval(currentWorkflow, action.action_id);
+      if (existingApproval) {
+        setDecisionState({
+          state: "saved",
+          message: approvalMessage(existingApproval),
+          workflow: currentWorkflow
+        });
+        return;
+      }
+
       const record = await submitApproval(problemId, {
         action_id: action.action_id,
         decision,
@@ -49,13 +94,15 @@ export function ActionDecisionPanel({
         workflow
       });
     } catch (error) {
-      setDecisionState({
+      setDecisionState((current) => ({
+        ...current,
         state: "error",
         message: error instanceof Error ? error.message : "Could not record the decision."
-      });
+      }));
     }
   }
 
+  const matchingApproval = latestApproval(decisionState.workflow, action.action_id);
   const matchingExecution = decisionState.workflow?.executions.find(
     (execution) => execution.action_id === action.action_id
   );
@@ -65,18 +112,20 @@ export function ActionDecisionPanel({
 
   return (
     <div className="decision-panel" aria-live="polite">
-      <div className="decision-buttons">
-        {(Object.keys(decisionLabels) as ApprovalDecisionStatus[]).map((decision) => (
-          <button
-            key={decision}
-            type="button"
-            disabled={decisionState.state === "saving"}
-            onClick={() => decide(decision)}
-          >
-            {decisionLabels[decision]}
-          </button>
-        ))}
-      </div>
+      {!matchingApproval && decisionState.state !== "loading" ? (
+        <div className="decision-buttons">
+          {(Object.keys(decisionLabels) as ApprovalDecisionStatus[]).map((decision) => (
+            <button
+              key={decision}
+              type="button"
+              disabled={decisionState.state === "saving"}
+              onClick={() => decide(decision)}
+            >
+              {decisionLabels[decision]}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <p className={`decision-message decision-${decisionState.state}`}>{decisionState.message}</p>
       {matchingExecution ? (
         <p className="execution-message">
