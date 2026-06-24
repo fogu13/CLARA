@@ -371,43 +371,134 @@ def action_node(state: TriageState) -> dict[str, Any]:
 def measure_node(state: TriageState) -> dict[str, Any]:
     """Measure outcomes after action execution.
 
-    Phase 3 target: recompute metrics, score resolution_score, resolve insight.
-    Currently a stub that records the measurement intent.
+    Port of Elvis's measure-outcomes edge fn + Odradek_2's direction-aware
+    outcome_status. Builds an outcome contract at action time, then measures
+    the metric and computes resolution_score + closure_level.
+
+    In the full implementation, the measured_value is recomputed from new
+    signals after the measurement window. For the synchronous graph, the
+    caller can pass a measured_value via state; if absent, we record the
+    contract and mark as 'measuring' (pending window expiry).
     """
-    results = state.get("action_results", [])
-    if not results:
+    from app.services.outcome_engine import (
+        build_outcome_contract,
+        closure_level,
+        measure_outcome,
+    )
+
+    approved = state.get("approved_insights", [])
+    action_results = state.get("action_results", [])
+
+    if not approved or not action_results:
         return {"outcome": None, "status": "measured"}
 
-    return {
-        "outcome": {
-            "metric": "affected_contacts",  # Phase 3: from outcome contract
-            "baseline": None,  # Phase 3: captured at action time
-            "measured": None,  # Phase 3: recomputed after window
-            "resolution_score": None,  # Phase 3: clamp01(1 - measured/baseline)
-            "status": "pending_implementation",
-        },
-        "status": "measured",
-    }
+    # Build outcome contract from the first approved insight
+    insight = approved[0]
+    contract = build_outcome_contract(insight=insight)
+
+    # Check if a measured value was provided (e.g. from a scheduled pass
+    # after the measurement window, or a manual "Measure now" action).
+    # If not provided, record the contract and mark as 'measuring'.
+    measured_value = state.get("measured_value")
+
+    if measured_value is not None:
+        outcome = measure_outcome(
+            contract=contract,
+            measured_value=float(measured_value),
+            action_results=action_results,
+        )
+    else:
+        # No measurement yet — record the contract for later measurement
+        outcome = {
+            "metric": contract["metric"],
+            "baseline": contract["baseline"],
+            "target": contract["target"],
+            "measured": None,
+            "resolution_score": None,
+            "status": "not_measured",
+            "closure_level": closure_level(
+                action_results=action_results,
+                measured=None,
+                score=None,
+            ),
+            "summary": (
+                f"Outcome contract captured: {contract['metric']} "
+                f"baseline {contract['baseline']}. "
+                "Measurement pending window expiry."
+            ),
+            "contract": contract,
+        }
+
+    return {"outcome": outcome, "status": "measured"}
 
 
 def learn_node(state: TriageState) -> dict[str, Any]:
     """Extract learnings from the action-outcome cycle.
 
-    Phase 3 target: LLM distils learnings, confidence decay applied.
-    Currently a stub that records the learning intent.
+    Merges Elvis's confidence-decay AbLearning model with Odradek_2's
+    structured LearningConclusion verdicts. If a human conclusion is provided
+    via state, builds a learning record with appropriate confidence.
+    Otherwise, auto-derives a preliminary conclusion from the outcome status.
     """
+    from app.services.learning_engine import (
+        build_learning_from_conclusion,
+        decayed_confidence,
+        learning_freshness,
+    )
+
     outcome = state.get("outcome")
-    if not outcome:
+    approved = state.get("approved_insights", [])
+
+    if not outcome or not approved:
         return {"learning": None, "status": "learned"}
 
-    return {
-        "learning": {
-            "conclusion": None,  # Phase 3: worked/partially_worked/did_not_work
-            "confidence_decay": None,  # Phase 3: exponential decay
-            "status": "pending_implementation",
-        },
-        "status": "learned",
-    }
+    insight = approved[0]
+
+    # If a human conclusion was provided via state, use it.
+    # Otherwise, auto-derive a preliminary conclusion from the outcome.
+    human_conclusion = state.get("human_conclusion")
+
+    if human_conclusion:
+        conclusion = human_conclusion
+    else:
+        # Auto-derive preliminary conclusion from outcome status
+        status = outcome.get("status", "not_measured")
+
+        if status == "target_met":
+            auto_status = "worked"
+            auto_summary = f"Action achieved target for {outcome.get('metric', 'the metric')}."
+        elif status == "improving":
+            auto_status = "partially_worked"
+            auto_summary = f"Action showed improvement for {outcome.get('metric', 'the metric')}."
+        elif status == "not_improved":
+            auto_status = "did_not_work"
+            auto_summary = f"Action did not improve {outcome.get('metric', 'the metric')}."
+        else:  # not_measured
+            auto_status = "inconclusive"
+            auto_summary = "Outcome not yet measured — conclusion is preliminary."
+
+        conclusion = {
+            "learning_status": auto_status,
+            "summary": auto_summary,
+            "limitations": "Auto-derived from outcome status; awaiting human validation.",
+            "next_step": "Validate this learning with a human review.",
+            "reviewer": "system",
+        }
+
+    learning = build_learning_from_conclusion(
+        conclusion=conclusion,
+        insight=insight,
+        outcome=outcome,
+    )
+
+    # Compute current decayed confidence + freshness badge
+    decayed = decayed_confidence(learning)
+    freshness = learning_freshness(learning)
+
+    learning["decayed_confidence"] = round(decayed, 4)
+    learning["freshness"] = freshness
+
+    return {"learning": learning, "status": "learned"}
 
 
 # ============================================================

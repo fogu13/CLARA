@@ -45,10 +45,12 @@ class TriageState(TypedDict, total=False):
     connector_configs: dict[str, dict[str, Any]]  # connector_type -> config (for push)
 
     # --- After measure ---
-    outcome: dict[str, Any] | None  # {metric, baseline, measured, resolution_score}
+    outcome: dict[str, Any] | None  # {metric, baseline, measured, resolution_score, ...}
+    measured_value: float | None  # optional: pre-computed metric value for measurement
 
     # --- After learn ---
-    learning: dict[str, Any] | None  # {conclusion, confidence_decay, ...}
+    learning: dict[str, Any] | None  # {conclusion, confidence_decay, freshness, ...}
+    human_conclusion: dict[str, Any] | None  # optional: human-submitted learning conclusion
 
     # --- Pipeline metadata ---
     errors: list[str]  # accumulated non-fatal errors
