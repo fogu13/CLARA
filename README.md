@@ -11,7 +11,8 @@ future EU-focused SaaS. It is a hybrid of two earlier builds:
 - **New:** LangGraph agentic orchestration, a real connector layer
   (Zendesk in, Jira + Slack out), self-hosted Supabase + Langfuse.
 
-See [PLAN.md](./PLAN.md) for the phased build plan and
+See [docs/roadmap.md](./docs/roadmap.md) for the canonical phased product plan,
+[PLAN.md](./PLAN.md) for architecture notes, and
 [docs/hybrid-architecture.md](./docs/hybrid-architecture.md) for what came from
 where. Elvis's source is preserved under `reference/elvis/` as a port reference.
 

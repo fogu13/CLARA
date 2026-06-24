@@ -15,6 +15,8 @@ from app.domain.models import (
     CustomerContextRecord,
     ExecutionRecord,
     JiraIssueDraft,
+    JourneyEventImportResult,
+    JourneyEventRecord,
     LearningConclusionRecord,
     OutcomeMeasurement,
     ProblemRecord,
@@ -57,6 +59,13 @@ CREATE TABLE IF NOT EXISTS clara_signals (
 
 CREATE TABLE IF NOT EXISTS clara_candidate_decisions (
     candidate_id TEXT PRIMARY KEY,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS clara_journey_events (
+    event_id TEXT PRIMARY KEY,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -339,6 +348,42 @@ class PostgresSignalStore(PostgresConnectionMixin):
         with self._connect() as conn:
             rows = conn.execute("SELECT signal_id FROM clara_signals").fetchall()
         return {row["signal_id"] for row in rows}
+
+
+class PostgresJourneyEventStore(PostgresConnectionMixin):
+    def list_events(self) -> list[JourneyEventRecord]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT payload FROM clara_journey_events ORDER BY event_id"
+            ).fetchall()
+        return [JourneyEventRecord.model_validate(_payload(row["payload"])) for row in rows]
+
+    def import_events(self, events: list[JourneyEventRecord]) -> JourneyEventImportResult:
+        existing_ids = self.existing_event_ids()
+        imported = 0
+        with self._connect() as conn:
+            for event in events:
+                if event.event_id in existing_ids:
+                    continue
+                conn.execute(
+                    """
+                    INSERT INTO clara_journey_events (event_id, payload)
+                    VALUES (%s, %s)
+                    ON CONFLICT (event_id) DO NOTHING
+                    """,
+                    (event.event_id, self._jsonb(_model_payload(event))),
+                )
+                imported += 1
+        return JourneyEventImportResult(
+            imported=imported,
+            skipped_duplicates=len(events) - imported,
+            total_events=len(self.list_events()),
+        )
+
+    def existing_event_ids(self) -> set[str]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT event_id FROM clara_journey_events").fetchall()
+        return {row["event_id"] for row in rows}
 
 
 class PostgresCustomerContextStore(PostgresConnectionMixin, CustomerContextStore):

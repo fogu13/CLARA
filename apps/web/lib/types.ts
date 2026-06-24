@@ -156,6 +156,36 @@ export type AffectedCohort = {
   date_range: string;
 };
 
+export type JourneyEventRecord = {
+  event_id: string;
+  customer_id: string;
+  account_id: string;
+  journey: string;
+  journey_stage: string;
+  event_name: string;
+  event_type: string;
+  timestamp: string;
+  success?: boolean | null;
+  duration_seconds?: number | null;
+  metadata: Record<string, string>;
+};
+
+export type JourneyEventImportResult = {
+  imported: number;
+  skipped_duplicates: number;
+  total_events: number;
+};
+
+export type JourneyImpactSummary = {
+  matched_events: number;
+  matched_customers: number;
+  matched_accounts: number;
+  friction_events: number;
+  deviation_score: number;
+  top_event_names: string[];
+  drivers: string[];
+};
+
 export type ContextImpactSummary = {
   matched_customers: number;
   matched_accounts: number;
@@ -238,6 +268,7 @@ export type ProblemRecord = {
   impact_band?: string;
   approval_pressure?: string;
   context_impact?: ContextImpactSummary | null;
+  journey_impact?: JourneyImpactSummary | null;
 };
 
 export type ProblemSummary = {
@@ -255,6 +286,7 @@ export type ProblemSummary = {
   approval_pressure: string;
   top_action_classes: ActionClass[];
   context_impact?: ContextImpactSummary | null;
+  journey_impact?: JourneyImpactSummary | null;
 };
 
 export type ProblemUpdateRequest = {

@@ -1,9 +1,8 @@
 # Chapter 4: The Artifact
 
-> **DRAFT for review.** This chapter documents the CLARA platform as built. It is generated from the
-> implemented codebase (branch `feat/strategy-alignment`) to align the thesis with the artifact; the
-> author should revise prose, verify citations against the reference list, and reconcile section
-> numbering with the final manuscript.
+> **DRAFT for review.** This chapter is thesis prose, not the product roadmap. The current
+> implementation status and remaining build phases live in `../../docs/roadmap.md`; revise this
+> chapter against that roadmap before final submission.
 
 ## 4.1 Overview
 

@@ -202,6 +202,44 @@ class AffectedCohort(BaseModel):
     date_range: str
 
 
+class JourneyEventRecord(BaseModel):
+    event_id: str = Field(min_length=1)
+    customer_id: str = Field(min_length=1)
+    account_id: str = Field(min_length=1)
+    journey: str = Field(min_length=1)
+    journey_stage: str = Field(min_length=1)
+    event_name: str = Field(min_length=1)
+    event_type: str = "behavior"
+    timestamp: str
+    success: bool | None = None
+    duration_seconds: float | None = Field(default=None, ge=0.0)
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
+class JourneyEventImportRequest(BaseModel):
+    events: list[JourneyEventRecord]
+
+
+class JourneyEventCsvImportRequest(BaseModel):
+    csv_text: str = Field(min_length=1)
+
+
+class JourneyEventImportResult(BaseModel):
+    imported: int
+    skipped_duplicates: int
+    total_events: int
+
+
+class JourneyImpactSummary(BaseModel):
+    matched_events: int = Field(ge=0)
+    matched_customers: int = Field(ge=0)
+    matched_accounts: int = Field(ge=0)
+    friction_events: int = Field(ge=0)
+    deviation_score: float = Field(ge=0.0, le=1.0)
+    top_event_names: list[str] = Field(default_factory=list)
+    drivers: list[str] = Field(default_factory=list)
+
+
 class ContextImpactSummary(BaseModel):
     matched_customers: int = Field(ge=0)
     matched_accounts: int = Field(ge=0)
@@ -284,6 +322,7 @@ class ProblemRecord(BaseModel):
     impact_band: str | None = None
     approval_pressure: str | None = None
     context_impact: ContextImpactSummary | None = None
+    journey_impact: JourneyImpactSummary | None = None
 
 
 class ProblemSummary(BaseModel):
@@ -301,6 +340,7 @@ class ProblemSummary(BaseModel):
     approval_pressure: str
     top_action_classes: list[ActionClass]
     context_impact: ContextImpactSummary | None = None
+    journey_impact: JourneyImpactSummary | None = None
 
 
 class ProblemUpdateRequest(BaseModel):
