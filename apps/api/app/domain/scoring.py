@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 
-IMPACT_WEIGHTS: dict[str, float] = {
+_DEFAULT_WEIGHTS: dict[str, float] = {
     "customer_reach": 1.0,
     "severity": 1.25,
     "recurrence": 1.0,
@@ -13,6 +14,42 @@ IMPACT_WEIGHTS: dict[str, float] = {
     "evidence_confidence": 1.0,
 }
 
+_IMPACT_WEIGHTS: dict[str, float] | None = None
+
+
+def _load_weights() -> dict[str, float]:
+    """Load impact weights from env vars, falling back to defaults.
+
+    Env vars: SCORING_WEIGHT_CUSTOMER_REACH, SCORING_WEIGHT_SEVERITY, etc.
+    Weights are loaded once and cached; call reload_weights() to refresh.
+    """
+    weights: dict[str, float] = {}
+    for key, default in _DEFAULT_WEIGHTS.items():
+        env_key = f"SCORING_WEIGHT_{key.upper()}"
+        val = os.getenv(env_key)
+        if val is not None:
+            try:
+                weights[key] = float(val)
+            except ValueError:
+                weights[key] = default
+        else:
+            weights[key] = default
+    return weights
+
+
+def reload_weights() -> None:
+    """Force reload of weights from env vars (useful for tests)."""
+    global _IMPACT_WEIGHTS
+    _IMPACT_WEIGHTS = None
+
+
+def get_impact_weights() -> dict[str, float]:
+    """Get the current impact weights (cached after first load)."""
+    global _IMPACT_WEIGHTS
+    if _IMPACT_WEIGHTS is None:
+        _IMPACT_WEIGHTS = _load_weights()
+    return _IMPACT_WEIGHTS
+
 
 def clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
     return max(minimum, min(maximum, value))
@@ -20,10 +57,11 @@ def clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
 
 def normalized_impact_score(factors: Mapping[str, float]) -> float:
     """Return a weighted impact score between 0 and 1."""
-    total_weight = sum(IMPACT_WEIGHTS.values())
+    weights = get_impact_weights()
+    total_weight = sum(weights.values())
     weighted_score = 0.0
 
-    for factor, weight in IMPACT_WEIGHTS.items():
+    for factor, weight in weights.items():
         weighted_score += clamp(float(factors.get(factor, 0.0))) * weight
 
     return round(weighted_score / total_weight, 3)

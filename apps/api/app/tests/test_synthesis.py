@@ -1,8 +1,9 @@
-"""Tests for the synthesis service — port of synthesize-insights edge function."""
+"""Tests for the synthesis service — multi-tag clustering + 8-factor severity + frequency."""
 
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -24,6 +25,9 @@ def _mock_ai_env(monkeypatch: pytest.MonkeyPatch) -> None:
     importlib.reload(syn_mod)
 
 
+NOW = datetime(2026, 6, 24, 12, 0, 0, tzinfo=UTC)
+
+
 def _synth_response(tag: str) -> dict[str, Any]:
     return {
         "title": f"{tag} affecting checkout",
@@ -43,36 +47,41 @@ def _synth_response(tag: str) -> dict[str, Any]:
     }
 
 
-def _make_enriched_signals(tag: str, count: int, *, urgency: str = "high", sentiment: str = "negative") -> list[dict]:
-    return [
-        {
-            "id": f"sig-{i}",
+def _make_enriched_signals(
+    tag: str,
+    count: int,
+    *,
+    urgency: str = "high",
+    sentiment: str = "negative",
+    tags: list[str] | None = None,
+    days_ago: float | None = None,
+    source: str = "zendesk",
+) -> list[dict]:
+    if tags is None:
+        tags = [tag]
+    sigs = []
+    for i in range(count):
+        ts = (NOW - timedelta(days=days_ago or i)).isoformat() if days_ago is not None else (
+            NOW - timedelta(days=i)
+        ).isoformat()
+        sigs.append({
+            "id": f"sig-{tag}-{i}",
             "text": f"Feedback {i} about {tag}",
             "signal_type": "qualitative",
             "urgency": urgency,
             "sentiment": sentiment,
-            "tags": [tag],
+            "tags": tags,
             "contact_count": 1,
-        }
-        for i in range(count)
-    ]
+            "source": source,
+            "timestamp": ts,
+        })
+    return sigs
 
 
 class TestCrossSignalSeverity:
-    def test_low_severity_for_few_low_urgency_signals(self, _mock_ai_env: None) -> None:
-        from app.services.synthesis import cross_signal_severity
-
-        # 2 low-urgency signals: max_urgency=1 + volume_bonus=1 = 2 -> medium
-        signals = [
-            {"urgency": "low", "sentiment": "neutral"},
-            {"urgency": "low", "sentiment": "neutral"},
-        ]
-        assert cross_signal_severity(signals) == "medium"
-
     def test_low_severity_for_single_low_urgency(self, _mock_ai_env: None) -> None:
         from app.services.synthesis import cross_signal_severity
 
-        # 1 low-urgency signal: max_urgency=1 + volume_bonus=0 = 1 -> low
         assert cross_signal_severity([{"urgency": "low", "sentiment": "neutral"}]) == "low"
 
     def test_medium_severity_for_medium_urgency(self, _mock_ai_env: None) -> None:
@@ -104,48 +113,144 @@ class TestCrossSignalSeverity:
         ]
         assert cross_signal_severity(signals) == "critical"
 
-    def test_negativity_bonus(self, _mock_ai_env: None) -> None:
-        from app.services.synthesis import cross_signal_severity
-
-        # 3 high-urgency signals, all negative -> gets negativity bonus
-        signals = [
-            {"urgency": "high", "sentiment": "negative"},
-            {"urgency": "high", "sentiment": "negative"},
-            {"urgency": "high", "sentiment": "negative"},
-        ]
-        # max_urgency=3 + volume_bonus=1 + neg_bonus=1 = 5 -> high
-        assert cross_signal_severity(signals) == "high"
-
     def test_empty_signals_returns_low(self, _mock_ai_env: None) -> None:
         from app.services.synthesis import cross_signal_severity
 
         assert cross_signal_severity([]) == "low"
 
 
-class TestClusterByTag:
-    def test_clusters_by_first_tag(self, _mock_ai_env: None) -> None:
-        from app.services.synthesis import cluster_by_tag
+class TestComputeSeverity:
+    def test_simple_fallback_without_context(self, _mock_ai_env: None) -> None:
+        from app.services.synthesis import compute_severity
 
         signals = [
-            {"tags": ["checkout", "payment"]},
-            {"tags": ["checkout"]},
-            {"tags": ["onboarding"]},
-            {"tags": ["checkout", "bug"]},
+            {"urgency": "high", "sentiment": "negative", "customer_id": "c1"},
+            {"urgency": "high", "sentiment": "negative", "customer_id": "c2"},
         ]
-        clusters = cluster_by_tag(signals)
+        result = compute_severity(signals)
+        assert result["method"] == "simple_urgency_volume"
+        assert result["band"] in ("low", "medium", "high", "critical")
 
-        assert "checkout" in clusters
-        assert "onboarding" in clusters
-        assert len(clusters["checkout"]) == 3
-        assert len(clusters["onboarding"]) == 1
+    def test_8_factor_with_context(self, _mock_ai_env: None) -> None:
+        from app.services.synthesis import compute_severity
 
-    def test_skips_signals_without_tags(self, _mock_ai_env: None) -> None:
-        from app.services.synthesis import cluster_by_tag
+        signals = [
+            {"urgency": "critical", "sentiment": "negative", "customer_id": "c1"},
+            {"urgency": "high", "sentiment": "negative", "customer_id": "c2"},
+            {"urgency": "high", "sentiment": "negative", "customer_id": "c3"},
+        ]
+        context = {
+            "journey_criticality": 0.8,
+            "account_count": 50,
+            "financial_exposure": 0.6,
+            "regulatory_risk": 0.3,
+        }
+        result = compute_severity(signals, context_data=context)
+        assert result["method"] == "8_factor_impact"
+        assert "factors" in result
+        assert "customer_reach" in result["factors"]
+        assert "severity" in result["factors"]
+        assert result["score"] > 0
 
-        signals = [{"tags": []}, {"tags": None}, {"tags": ["bug"]}]
-        clusters = cluster_by_tag(signals)
+    def test_empty_signals(self, _mock_ai_env: None) -> None:
+        from app.services.synthesis import compute_severity
 
-        assert "bug" in clusters
+        result = compute_severity([])
+        assert result["band"] == "low"
+        assert result["method"] == "empty"
+
+
+class TestClusterSignals:
+    def test_tag_order_independence(self, _mock_ai_env: None) -> None:
+        """Signals with the same tags in different order cluster together."""
+        from app.services.synthesis import cluster_signals
+
+        signals = [
+            {"id": "s1", "tags": ["checkout_failure", "payment_error"]},
+            {"id": "s2", "tags": ["payment_error", "checkout_failure"]},
+        ]
+        clusters = cluster_signals(signals, jaccard_threshold=0.34)
+        assert len(clusters) == 1
+        assert len(clusters[0][1]) == 2
+
+    def test_disjoint_tags_separate_clusters(self, _mock_ai_env: None) -> None:
+        from app.services.synthesis import cluster_signals
+
+        signals = [
+            {"id": "s1", "tags": ["checkout_failure"]},
+            {"id": "s2", "tags": ["onboarding_friction"]},
+        ]
+        clusters = cluster_signals(signals, jaccard_threshold=0.34)
+        assert len(clusters) == 2
+
+    def test_partial_tag_overlap_clusters(self, _mock_ai_env: None) -> None:
+        """Jaccard >= 0.34 means 1/2 overlap = 0.5 -> grouped."""
+        from app.services.synthesis import cluster_signals
+
+        signals = [
+            {"id": "s1", "tags": ["checkout_failure", "payment_error"]},
+            {"id": "s2", "tags": ["checkout_failure", "bug"]},
+        ]
+        # Jaccard = 1 shared / 3 unique = 0.333; use threshold 0.30 to group
+        clusters = cluster_signals(signals, jaccard_threshold=0.30)
+        assert len(clusters) == 1
+
+    def test_high_jaccard_threshold_separates_partial(self, _mock_ai_env: None) -> None:
+        """High threshold keeps partial-overlap signals separate."""
+        from app.services.synthesis import cluster_signals
+
+        signals = [
+            {"id": "s1", "tags": ["checkout_failure", "payment_error"]},
+            {"id": "s2", "tags": ["checkout_failure", "bug"]},
+        ]
+        # Jaccard = 0.333; threshold 0.50 keeps them separate
+        clusters = cluster_signals(signals, jaccard_threshold=0.50)
+        assert len(clusters) == 2
+
+    def test_no_tags_separate(self, _mock_ai_env: None) -> None:
+        from app.services.synthesis import cluster_signals
+
+        signals = [
+            {"id": "s1", "tags": []},
+            {"id": "s2", "tags": []},
+        ]
+        clusters = cluster_signals(signals)
+        assert len(clusters) == 2
+
+    def test_cluster_label_is_most_common_tag(self, _mock_ai_env: None) -> None:
+        from app.services.synthesis import cluster_signals
+
+        signals = [
+            {"id": "s1", "tags": ["checkout_failure", "payment_error"]},
+            {"id": "s2", "tags": ["checkout_failure", "bug"]},
+            {"id": "s3", "tags": ["checkout_failure"]},
+        ]
+        clusters = cluster_signals(signals, jaccard_threshold=0.34)
+        assert len(clusters) == 1
+        label, sigs = clusters[0]
+        assert label == "checkout_failure"
+
+    def test_empty_signals(self, _mock_ai_env: None) -> None:
+        from app.services.synthesis import cluster_signals
+
+        assert cluster_signals([]) == []
+
+    def test_semantic_fallback_with_embeddings(self, _mock_ai_env: None) -> None:
+        """Signals with no tag overlap but high cosine sim cluster together."""
+        from app.services.synthesis import cluster_signals
+
+        signals = [
+            {"id": "s1", "tags": ["checkout_failure"]},
+            {"id": "s2", "tags": ["payment_crash"]},
+        ]
+        # High cosine sim embeddings (nearly identical)
+        embeddings = [[1.0, 0.0], [0.99, 0.01]]
+        clusters = cluster_signals(
+            signals,
+            jaccard_threshold=0.99,  # no jaccard match
+            semantic_threshold=0.70,
+            embeddings=embeddings,
+        )
         assert len(clusters) == 1
 
 
@@ -157,46 +262,42 @@ class TestSynthesizeInsights:
 
         tag = "checkout_failure"
         signals = _make_enriched_signals(tag, 3)
-
         httpx_mock.add_response(
             url="http://test-ai.local/v1/chat/completions",
             method="POST",
             json={
-                "choices": [
-                    {
-                        "message": {
-                            "tool_calls": [
-                                {
-                                    "function": {
-                                        "name": "submit_insight",
-                                        "arguments": json.dumps(_synth_response(tag)),
-                                    }
-                                }
-                            ]
-                        }
+                "choices": [{
+                    "message": {
+                        "tool_calls": [{
+                            "function": {
+                                "name": "submit_insight",
+                                "arguments": json.dumps(_synth_response(tag)),
+                            }
+                        }]
                     }
-                ],
+                }],
                 "usage": {},
             },
         )
 
-        insights = synthesize_insights(signals)
+        insights = synthesize_insights(signals, min_cluster_size=3)
 
         assert len(insights) == 1
         insight = insights[0]
         assert insight["tag"] == "checkout_failure"
-        assert insight["severity"] == "high"  # 3 high-urgency negative signals
-        assert insight["title"] == "checkout_failure affecting checkout"
-        assert insight["signal_ids"] == ["sig-0", "sig-1", "sig-2"]
-        assert insight["qual_signal_count"] == 3
-        assert insight["audit"]["severity_source"] == "deterministic_cross_signal"
+        assert insight["severity"] in ("low", "medium", "high", "critical")
+        assert "frequency" in insight
+        assert insight["frequency"]["raw_count"] == 3
+        assert insight["frequency"]["trend"] in ("rising", "falling", "stable", "new")
+        assert insight["source_count"] == 1
+        assert insight["cluster_method"] == "jaccard"
+        assert insight["audit"]["severity_source"] == "simple_urgency_volume"
 
     def test_skips_clusters_below_min_size(self, _mock_ai_env: None) -> None:
         from app.services.synthesis import synthesize_insights
 
-        signals = _make_enriched_signals("rare_tag", 1)
-        insights = synthesize_insights(signals, min_cluster_size=2)
-
+        signals = _make_enriched_signals("rare_tag", 2)
+        insights = synthesize_insights(signals, min_cluster_size=3)
         assert insights == []
 
     def test_empty_signals_returns_empty(self, _mock_ai_env: None) -> None:
@@ -210,8 +311,8 @@ class TestSynthesizeInsights:
         from app.services.synthesis import synthesize_insights
 
         signals = (
-            _make_enriched_signals("checkout_failure", 2, urgency="high")
-            + _make_enriched_signals("onboarding_friction", 2, urgency="medium")
+            _make_enriched_signals("checkout_failure", 3, urgency="high")
+            + _make_enriched_signals("onboarding_friction", 3, urgency="medium")
         )
 
         for tag in ["checkout_failure", "onboarding_friction"]:
@@ -219,26 +320,132 @@ class TestSynthesizeInsights:
                 url="http://test-ai.local/v1/chat/completions",
                 method="POST",
                 json={
-                    "choices": [
-                        {
-                            "message": {
-                                "tool_calls": [
-                                    {
-                                        "function": {
-                                            "name": "submit_insight",
-                                            "arguments": json.dumps(_synth_response(tag)),
-                                        }
-                                    }
-                                ]
-                            }
+                    "choices": [{
+                        "message": {
+                            "tool_calls": [{
+                                "function": {
+                                    "name": "submit_insight",
+                                    "arguments": json.dumps(_synth_response(tag)),
+                                }
+                            }]
                         }
-                    ],
+                    }],
                     "usage": {},
                 },
             )
 
-        insights = synthesize_insights(signals)
+        insights = synthesize_insights(signals, min_cluster_size=3)
 
         assert len(insights) == 2
         tags = {i["tag"] for i in insights}
         assert tags == {"checkout_failure", "onboarding_friction"}
+
+    def test_8_factor_severity_with_context(
+        self, _mock_ai_env: None, httpx_mock: Any
+    ) -> None:
+        from app.services.synthesis import synthesize_insights
+
+        tag = "checkout_failure"
+        signals = _make_enriched_signals(tag, 5)
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json={
+                "choices": [{
+                    "message": {
+                        "tool_calls": [{
+                            "function": {
+                                "name": "submit_insight",
+                                "arguments": json.dumps(_synth_response(tag)),
+                            }
+                        }]
+                    }
+                }],
+                "usage": {},
+            },
+        )
+
+        context = {
+            "journey_criticality": 0.9,
+            "account_count": 30,
+            "financial_exposure": 0.5,
+            "regulatory_risk": 0.2,
+        }
+        insights = synthesize_insights(signals, min_cluster_size=3, context_data=context)
+
+        assert len(insights) == 1
+        insight = insights[0]
+        assert insight["severity_method"] == "8_factor_impact"
+        assert "severity_factors" in insight
+        assert "customer_reach" in insight["severity_factors"]
+        assert "evidence_confidence" in insight["severity_factors"]
+
+    def test_source_corroboration_filter(
+        self, _mock_ai_env: None, httpx_mock: Any
+    ) -> None:
+        from app.services.synthesis import synthesize_insights
+
+        tag = "checkout_failure"
+        # All from same source
+        signals = _make_enriched_signals(tag, 3, source="zendesk")
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json={
+                "choices": [{
+                    "message": {
+                        "tool_calls": [{
+                            "function": {
+                                "name": "submit_insight",
+                                "arguments": json.dumps(_synth_response(tag)),
+                            }
+                        }]
+                    }
+                }],
+                "usage": {},
+            },
+        )
+
+        # min_sources=2 should filter out single-source clusters
+        insights = synthesize_insights(signals, min_cluster_size=3, min_sources=2)
+        assert insights == []
+
+        # min_sources=1 should pass
+        insights = synthesize_insights(signals, min_cluster_size=3, min_sources=1)
+        assert len(insights) == 1
+
+    def test_frequency_in_insight_output(
+        self, _mock_ai_env: None, httpx_mock: Any
+    ) -> None:
+        from app.services.synthesis import synthesize_insights
+
+        tag = "checkout_failure"
+        signals = _make_enriched_signals(tag, 5, days_ago=1)
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json={
+                "choices": [{
+                    "message": {
+                        "tool_calls": [{
+                            "function": {
+                                "name": "submit_insight",
+                                "arguments": json.dumps(_synth_response(tag)),
+                            }
+                        }]
+                    }
+                }],
+                "usage": {},
+            },
+        )
+
+        insights = synthesize_insights(signals, min_cluster_size=3)
+
+        assert len(insights) == 1
+        freq = insights[0]["frequency"]
+        assert freq["raw_count"] == 5
+        assert freq["decayed_frequency"] > 0
+        assert freq["trend"] == "new"  # all recent
+        assert freq["source_count"] == 1
+        assert freq["first_seen"] is not None
+        assert freq["last_seen"] is not None

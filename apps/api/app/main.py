@@ -929,6 +929,73 @@ def create_app(
 
         raise HTTPException(status_code=400, detail=f"Unknown connector type: {connector_type}")
 
+    # ====== Triage pipeline endpoint ======
+
+    @api.post("/triage/run")
+    def run_triage_pipeline(body: dict) -> dict:
+        """Run the LangGraph triage pipeline on signals.
+
+        Input: { "signals": [...], "connector_configs": {...}, "context_data": {...} }
+        Output: { "insights": [...], "status": "synthesized", "errors": [...] }
+
+        The pipeline runs ingest -> enrich -> classify -> synthesize and
+        returns insights. The human-in-the-loop approval interrupt is handled
+        separately via the Actions page.
+        """
+        from langgraph.checkpoint.memory import MemorySaver
+
+        from app.agents.triage_graph import build_triage_graph
+
+        raw_signals = body.get("signals", [])
+        if not raw_signals:
+            # If no signals provided, pull from the signal store
+            raw_signals = [
+                {
+                    "signal_id": s.signal_id,
+                    "id": s.signal_id,
+                    "feedback_text": s.feedback_text,
+                    "text": s.feedback_text,
+                    "signal_type": "qualitative",
+                    "source": s.source,
+                    "customer_id": s.customer_id,
+                    "account_id": s.account_id,
+                    "timestamp": s.timestamp,
+                    "contact_count": 1,
+                }
+                for s in signal_store.list_signals()
+            ]
+
+        if not raw_signals:
+            return {"insights": [], "status": "empty", "errors": ["No signals to process"]}
+
+        # Gather connector configs for the action node
+        conn_configs: dict[str, dict] = {}
+        for cc in connector_config_store.list_configs():
+            if cc.is_active:
+                conn_configs[cc.connector_type] = cc.config
+
+        # Optional context data for 8-factor severity
+        context_data = body.get("context_data")
+
+        graph = build_triage_graph(checkpointer=MemorySaver())
+        config = {"configurable": {"thread_id": f"triage-{utc_now()}"}}
+
+        result = graph.invoke(
+            {
+                "signals": raw_signals,
+                "connector_configs": conn_configs,
+                "context_data": context_data,
+            },
+            config=config,
+        )
+
+        return {
+            "insights": result.get("insights", []),
+            "enriched_count": result.get("enrichment_count", 0),
+            "status": result.get("status", "unknown"),
+            "errors": result.get("errors", []),
+        }
+
     return api
 
 

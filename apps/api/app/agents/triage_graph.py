@@ -114,20 +114,30 @@ def classify_node(state: TriageState) -> dict[str, Any]:
     """Semantic taxonomy mapping: embed each signal and map to closest node.
 
     Port of mapSignalToNode (enrich-signal/index.ts:19-43).
-    Requires a DB connection — if absent, skips (signals proceed to synthesis).
+    When a DB connection is available (passed via state), calls
+    map_signal_to_node for each enriched signal. If absent (tests/no-DB),
+    skips gracefully — signals proceed to synthesis without taxonomy mapping.
     """  # noqa: E501
     enriched = state.get("enriched_signals", [])
     if not enriched:
         return {"taxonomy_mappings": [], "classified_count": 0}
 
-    # Classification requires a DB connection (set via config when compiled)
-    # In test/no-DB mode, we skip and let synthesis proceed
+    workspace_id = state.get("workspace_id", 1)
+    db_conn = state.get("db_connection")
     mappings: list[dict[str, Any]] = []
 
-    # The actual DB-backed classification is done via semantic_taxonomy.map_signal_to_node
-    # which needs a psycopg connection. For the graph, we store mappings in state
-    # and the caller (FastAPI route) provides the connection.
-    # For now, mark as classified — the DB integration happens in Phase 1 wiring.
+    if db_conn is not None:
+        from app.services.semantic_taxonomy import map_signal_to_node
+
+        for sig in enriched:
+            sig_id = sig.get("id", sig.get("signal_id", ""))
+            text = sig.get("text", sig.get("feedback_text", ""))
+            try:
+                node_id = map_signal_to_node(db_conn, workspace_id, str(sig_id), text)
+                if node_id:
+                    mappings.append({"signal_id": sig_id, "node_id": node_id})
+            except Exception:
+                logger.debug("Taxonomy mapping failed for %s, skipping", sig_id, exc_info=True)
 
     return {
         "taxonomy_mappings": mappings,
@@ -137,17 +147,19 @@ def classify_node(state: TriageState) -> dict[str, Any]:
 
 
 def synthesize_node(state: TriageState) -> dict[str, Any]:
-    """LLM synthesis: cluster enriched signals by tag and synthesize insights.
+    """LLM synthesis: cluster enriched signals and synthesize insights.
 
-    Port of reference/elvis/supabase/functions/synthesize-insights/index.ts.
-    Severity is computed deterministically (cross_signal_severity); the LLM
-    is explicitly told NOT to set it.
+    Uses multi-tag Jaccard clustering + optional semantic fallback.
+    Severity uses the 8-factor impact model when context_data is available,
+    falling back to the simple urgency+volume+negativity formula.
+    Frequency analysis provides time-decayed counts + trend labels.
     """
     enriched = state.get("enriched_signals", [])
     if not enriched:
         return {"insights": [], "status": "synthesized"}
 
-    insights = synthesize_insights(enriched)
+    context_data = state.get("context_data")
+    insights = synthesize_insights(enriched, context_data=context_data)
 
     errors = list(state.get("errors", []))
     if not insights and enriched:
