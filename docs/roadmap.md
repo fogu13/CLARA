@@ -1,12 +1,12 @@
-# Product Roadmap
+# Unified Product Roadmap
 
-This roadmap tracks the full Feedback-to-Outcome Operating System vision. Section 16 of the original strategy is the smallest credible version, not the full product boundary.
+This is the canonical CLARA roadmap. Older phase lists in `PLAN.md`, thesis notes, and reference plans are historical context only.
+
+CLARA is a European Feedback-to-Outcome Operating System: a governed customer-intelligence and action layer that connects feedback with behavioural and operational data, identifies broken journeys, recommends coordinated product, service and marketing interventions, executes through existing systems, and learns whether the action solved the customer problem.
+
+Working category: feedback-driven journey orchestration.
 
 ## North Star
-
-Build a governed customer-intelligence and action layer that turns customer signals into evidence-backed problems, affected groups, approved actions, controlled execution, customer closure and measurable organizational learning.
-
-Core chain:
 
 ```text
 Signal
@@ -21,379 +21,312 @@ Signal
 -> Organizational learning
 ```
 
-## Current Implementation Status
+Positioning: "We help organizations decide what to do about customer problems, execute safely through the systems they already use, and prove whether the action worked."
 
-| Area | Status | Current Capability |
+## Product Modules
+
+| Module | Purpose | Status |
 | --- | --- | --- |
-| Universal Signal Hub | Phase 1 started | JSON, pasted CSV, uploaded mapped CSV, reusable demo datasets and validation reports, persisted in SQLite |
-| Customer/Account Context Graph | Started | Customer/account IDs plus CSV/JSON context import, sample context, SQLite persistence and context impact summaries |
-| Trusted Intelligence Engine | Started | Deterministic candidates, duplicate detection, candidate review, richer evidence panel and context-aware impact scoring |
-| Live Journey Intelligence | Minimal | Journey and journey-stage fields |
-| Coordinated Action Studio | Started | Structural, recovery and research action proposals with promoted-draft editing |
-| Audience/Intervention Builder | Not started | Planned |
-| Governance/Approval Engine | Started | Policy-rule catalog, approval decisions, blocking checks, persisted records |
-| Resolution/Customer Closure | Minimal | Draft execution records, Jira issue drafts and problem timeline |
-| Outcome Learning Engine | Started | Outcome contracts, measurements, status and outcome board |
-| SME Edition | Started | CSV-first local workflow |
-| Enterprise Edition | Not started | Planned |
-| Industry Packs | Not started | Planned |
+| 1. Universal Signal Hub | Bring feedback, support, behaviour, CRM and operational signals into one canonical event model. | Started |
+| 2. Customer and Account Context Graph | Link contacts, accounts, hierarchy, lifecycle, value, consent, ownership and affected cohorts. | Started |
+| 3. Trusted Intelligence Engine | Evidence-backed taxonomy, classification, root-cause hypotheses, multilingual DE/EN handling and emerging-problem detection. | Started |
+| 4. Live Journey Intelligence | Connect what customers say with what they did, then score journey friction and deviation. | Started |
+| 5. Coordinated Action Studio | Generate product, customer, journey, research and governance actions as one portfolio. | Started |
+| 6. Audience and Intervention Builder | Design governed audiences and intervention briefs without becoming a CDP or campaign platform. | Not started |
+| 7. Governance and Approval Engine | Enforce risk, privacy, evidence, model and tool policies before action. | Started |
+| 8. Resolution and Customer Closure | Track operational closure, customer follow-up and unresolved customers. | Minimal |
+| 9. Outcome Learning Engine | Measure outcomes and build reusable memory of which actions worked in which contexts. | Started |
+| 10. Editions and Industry Packs | Package SME, enterprise and vertical templates for sale. | Not started |
 
-## Phase 0 - Operating Spine
+## Current Build Status
 
-Status: complete.
+| Phase | Name | Status | Branch/commit intent |
+| --- | --- | --- | --- |
+| 0 | Sellable UI / Operating Spine | Done | End-to-end demo UI and workflow |
+| 1 | EU Trust Baseline | Done | RBAC, audit export, Postgres migration trust checks |
+| 2 | German Intelligence | Done | DE/EN readiness, taxonomy and terminology trust slice |
+| 3 | Live Journey Intelligence Lite | Done | Journey event import, journey impact, problem-detail evidence |
+| 4 | Full Action Studio | Next | Action portfolio workspace |
+| 5 | Audience and Intervention Builder | Planned | Governed audience/intervention drafts |
+| 6 | EU Governance and Policy Engine | Planned | Policy-as-code and AI governance |
+| 7 | Execution Connectors and Closure | Planned | Real tool execution and customer closure |
+| 8 | Outcome Learning Engine | Planned | Stronger measurement and reusable action memory |
+| 9 | Packaging and Industry Packs | Planned | SME/enterprise editions and vertical packs |
 
-Goal: prove the end-to-end loop before adding broad integrations or AI complexity.
+## Phase 0 - Sellable UI / Operating Spine
+
+Status: done.
+
+Goal: make the smallest credible product loop visible and usable.
 
 Delivered:
 
-- Action Queue UI
-- signal intake panel
-- sample JSON import
-- pasted CSV import
-- uploaded CSV import with column mapping
-- validation reports before import
-- persisted signals
-- customer/account context import
-- persisted customer context
-- deterministic problem candidates
-- durable promoted draft problems
-- editable promoted draft problems
-- lifecycle transitions
-- problem timeline
-- policy-rule catalog
-- action proposals
-- approval decisions
-- draft execution records
-- Jira issue drafts
-- outcome contracts
-- outcome measurements
-- outcome board
-- SQLite persistence
-- API tests and frontend build checks
+- Signal intake panel for JSON, pasted CSV and uploaded mapped CSV.
+- Reusable demo datasets and validation reports.
+- Customer/account context import and persistence.
+- Deterministic problem candidates and durable promoted draft problems.
+- Editable draft problems and action proposals.
+- Problem detail pages linked from insights.
+- Lifecycle transitions and problem timeline.
+- Policy-rule catalog, approval decisions and duplicate-approval protection.
+- Draft execution records and Jira issue drafts.
+- Outcome contracts, outcome measurements and outcome board.
+- SQLite persistence for local demos.
+- API tests plus frontend lint/build checks.
+
+Remaining later:
+
+- Demo screenshots and short buyer walkthrough.
+- Existing lint-warning cleanup.
+
+## Phase 1 - EU Trust Baseline
+
+Status: done.
+
+Goal: make the prototype safe enough for shared EU/DACH demos.
+
+Delivered:
+
+- RBAC dependencies on consequential API write routes.
+- Admin-only audit export endpoint.
+- Self-contained Postgres migration trust checks.
+- Frontend bearer-token forwarding from `clara_access_token`.
+- Tests for protected routes, audit export and migration prerequisites.
+
+Remaining later:
+
+- Real login/session UI.
+- Remove direct browser-sent trusted identity headers in production; inject identity server-side or through trusted infrastructure.
+- Deeper RLS verification across all persisted objects.
+- Audit export UI.
+
+## Phase 2 - German Intelligence
+
+Status: done.
+
+Goal: prove CLARA is not just English-first feedback triage.
+
+Delivered:
+
+- Versioned product, journey, contact-reason, marketing and compliance taxonomy catalogs.
+- German/English terminology dictionary with aliases, definitions and category mappings.
+- Classification confidence, matched terminology, multilingual notes, contradictory evidence, limitations and evaluation notes on candidates.
+- Root-cause analysis with confidence, evidence factors, alternatives and validation questions.
+- Emerging-problem report with ranked watch/action candidates.
+- Language-quality endpoint and taxonomy UI readiness card.
+- API tests for taxonomy exposure, classification enrichment and language readiness.
+
+Remaining later:
+
+- German UI localization.
+- Larger DE/EN labeled evaluation set.
+- Stronger terminology QA and classification-quality scoring.
+- Industry-specific German dictionaries.
+
+## Phase 3 - Live Journey Intelligence Lite
+
+Status: done.
+
+Goal: connect feedback to behaviour without pretending to be a full product analytics suite.
+
+Delivered:
+
+- Journey event model for CSV/JSON imported behavioural events.
+- `/journey-events`, `/journey-events/import` and `/journey-events/import-csv` endpoints.
+- SQLite and Postgres journey-event storage.
+- Read-time problem enrichment with `journey_impact`.
+- Matching by evidence customer/account plus journey and journey stage.
+- Friction/deviation scoring from failed, blocked, retry or error-like events.
+- Problem-detail Journey Intelligence card, hidden when no events match.
+- API tests proving journey events affect problem evidence/priority responses.
+
+Remaining later:
+
+- Timestamp-window matching instead of broad same-stage matching.
+- Complainants versus non-complainants comparison.
+- Funnel/session metadata and release/experiment context.
+- Full journey graph visualization.
+
+Do not build yet:
+
+- Full behavioural analytics.
+- Session replay.
+- CDP-style customer profiles.
+- Custom funnel tooling.
+
+## Phase 4 - Full Action Studio
+
+Status: next.
+
+Goal: turn one recommended action into a coordinated cross-functional action portfolio.
+
+Scope:
+
+- Product fix tab.
+- Customer recovery tab.
+- Journey intervention tab.
+- Campaign/audience tab.
+- Research tab.
+- Governance tab.
+- Action templates for the five action classes.
+- Owner routing from context impact, journey impact and policy rules.
+- Action dependency handling.
+- Action editing and approval diffs.
+- Action confidence, limitations and evidence links.
+- Experiment proposal generation.
 
 Exit criteria:
 
-- `npm run check` passes.
-- A user can import feedback, generate a candidate, promote it, approve an action and record an outcome.
-- `test_phase0_operating_spine.py` covers the full API loop from context import through outcome timeline.
-- Current local work is committed and pushed.
+- A problem page shows a coherent product + customer + journey + research + governance portfolio.
+- Reviewer can edit and approve/reject each action with visible evidence and policy checks.
+- Tests cover action portfolio generation/editing and approval diffs.
 
-## Phase 1 - Usable Demo For Design Partners
+## Phase 5 - Audience and Intervention Builder
 
-Goal: make the prototype usable with real customer files.
+Status: planned.
 
-Features:
+Goal: design governed interventions without replacing Adobe, Braze, HubSpot, Salesforce or a CDP.
 
-- action proposal editing for promoted drafts
-- richer evidence panel in the Action Queue
-- duplicate candidate detection by journey and stage
-- candidate accept/reject flow
-- reusable demo datasets for SaaS onboarding, ecommerce checkout and retention cancellation
-- basic empty/loading/error states for primary workflows
+Scope:
 
-Primary modules advanced:
+- Audience definition builder.
+- Inclusion and exclusion criteria.
+- Trigger definition.
+- Channel recommendation.
+- Content brief and personalization variables.
+- Control group and primary success metric.
+- Guardrail metrics.
+- Consent availability checks.
+- Active-campaign overlap and over-contact risk.
+- Export formats for HubSpot, Adobe Experience Platform, Braze and Salesforce.
 
-- Module 1: Universal Signal Hub
-- Module 3: Trusted Intelligence Engine
-- Module 5: Coordinated Action Studio
-- Module 10: Action Queue UI
+Exit criteria:
 
-## Phase 2 - Context Graph And Impact Model
+- CLARA can produce a governed audience/intervention draft from an approved problem.
+- The draft states who is included, who is excluded, why, what should happen, what must be measured and what approvals are required.
 
-Goal: make account and customer context materially affect prioritization.
+## Phase 6 - EU Governance and Policy Engine
 
-Features:
+Status: planned.
 
-- customer table
-- account table
-- account value impact scoring
-- consent-risk impact scoring
-- health-score impact scoring
-- customer/account exposure scoring from linked context
-- context impact explanation in the Action Queue
-- lifecycle stage
-- renewal date
-- product ownership
-- source completeness checks
-- data quality warnings
-- affected customer/account explorer
-- contact roles
-- parent-child account hierarchy
+Goal: make governance a product module, not documentation pasted on top.
 
-Delivered so far:
+Scope:
 
-- Context rows linked by evidence customer IDs and account IDs now create a `context_impact` summary on problem detail and summary responses.
-- Account value, customer/account exposure, missing consent and low health can raise impact factors and reorder `/problems` plus `/outcome-board`.
-- Priority lifecycle stages and near-term renewal dates now raise context-linked impact factors with explicit lifecycle and renewal-risk drivers.
-- The Action Queue shows matched customers, matched accounts, high-value accounts, total account value, health, consent-risk count, score lift, owners and regions.
-- `/problems/{problem_id}/affected-context` returns matched context rows, account rollups, missing evidence context IDs and data-quality warnings.
-- The Action Queue includes an affected customer/account explorer with account value, health, lifecycle, owner and consent-risk details.
-- Customer context now supports parent-account IDs/names and contact roles across JSON, CSV and SQLite persistence.
-- Customer context now supports product owners across JSON, CSV, SQLite persistence, completeness checks and affected-account rollups.
-- The affected context explorer generates owner routing recommendations from high-value exposure, consent risk, high-influence contacts, low health and parent-account relationships.
-- `/customer-context/completeness` reports source completeness across scoring, routing and governance fields with readiness levels and warnings.
-- The Customer Context panel shows readiness score, core field coverage and source completeness warnings.
-- API tests cover context-linked scoring, unchanged problems without matching context, summary/detail response parity, account rollups, missing-context warnings, source completeness, schema migration and hierarchy/role persistence.
+- Risk-tiered action matrix.
+- Machine-enforceable policy rules.
+- Evidence confidence thresholds.
+- Customer-contact consent checks.
+- PII detection and sensitive-category safeguards.
+- Retention, lawful-basis and purpose metadata.
+- Model/provider/prompt audit metadata.
+- AI use-case inventory and impact-assessment fields.
+- Incident log.
+- Least-privilege tool permission model.
+- Tool allowlist and output checks.
 
-Primary modules advanced:
+Exit criteria:
 
-- Module 2: Customer and Account Context Graph
-- Module 3: Trusted Intelligence Engine
-- Module 7: Governance and Approval Engine
+- High-risk actions are blocked or escalated by policy before execution.
+- Each AI-assisted recommendation records evidence, model/provider metadata, reviewer decision and audit trail.
 
-## Phase 3 - Trusted Intelligence Engine
+## Phase 7 - Execution Connectors and Customer Closure
 
-Goal: move from deterministic grouping to evidence-backed intelligence.
+Status: planned.
 
-Features:
+Goal: move from drafts to verified operational and customer closure through existing systems.
 
-- taxonomy data model
-- product, journey, contact-reason, marketing and compliance taxonomies
-- taxonomy versioning
-- merge, split, rename and lock categories
-- classification confidence
-- contradictory evidence
-- known limitations
-- multilingual German/English handling
-- terminology dictionary
-- root-cause hypothesis generation
-- emerging-problem detection
-- evaluation set for classification and routing quality
+Scope:
 
-Delivered so far:
+- Real Jira issue creation and status sync.
+- Linear or Azure DevOps draft support.
+- Zendesk customer recovery task.
+- HubSpot customer-success task.
+- Execution accepted, completed and released states.
+- Affected-customer list for closure follow-up.
+- Customer closure eligibility.
+- Response drafting with verified resolution facts only.
+- Follow-up validation prompts.
+- Unresolved-customer tracking.
+- Closure timeline.
 
-- Added versioned product, journey, contact-reason, marketing and compliance taxonomy catalogs with German/English terms, locked categories and category change history.
-- `/taxonomies` exposes taxonomy versions, locale coverage, limitations and category metadata.
-- Taxonomy category operations now support merge, split, rename and lock flows with version bumps, change history and locked-category protection.
-- `/terminology-dictionary` exposes German/English canonical terms, aliases, definitions and category mappings, and candidate classification uses the dictionary aliases for terminology hits.
-- Problem candidates now include structured root-cause analysis with confidence, evidence factors, alternative hypotheses and validation questions.
-- Problem candidates now include taxonomy classifications, confidence, matched terminology, multilingual notes, contradictory evidence, known limitations, evaluation notes and an emerging-problem score.
-- `/emerging-problems` reports ranked watch/action candidates with trend labels, drivers and recommended next steps.
-- The Action Queue UI shows taxonomy readiness and generated-candidate intelligence context.
-- API tests cover taxonomy catalog exposure and trusted classification enrichment.
+Exit criteria:
 
-Primary modules advanced:
+- An approved action creates or updates the external system record.
+- CLARA can show operational closure and customer closure separately.
 
-- Module 3: Trusted Intelligence Engine
+## Phase 8 - Outcome Learning Engine
 
-## Phase 4 - Live Journey Intelligence
+Status: planned.
 
-Goal: connect feedback with behavior and journey deviation.
+Goal: build the defensible moat: reusable knowledge of which actions worked in which contexts.
 
-Features:
+Scope:
 
-- journey graph model
-- touchpoints
-- expected objective and observed outcome
-- product-event ingestion
-- journey-stage classifier
-- friction score
-- complainants versus non-complainants comparison
-- affected cohort generation
-- journey deviation detection
-- funnel/session metadata placeholders
-- experiment and release context
+- Stronger outcome board.
+- Before/after analysis.
+- Matched comparison groups.
+- Holdout/control groups.
+- Phased rollout tracking.
+- Action effectiveness memory.
+- Reusable intervention knowledge.
+- Failed-action learning.
+- Next-best-action recommendations.
+- Problem/action/outcome graph.
+- Longitudinal reporting.
 
-Primary modules advanced:
+Exit criteria:
 
-- Module 1: Universal Signal Hub
-- Module 4: Live Journey Intelligence
+- Every approved action has an outcome contract and a measured result.
+- Similar future problems can retrieve prior action outcomes and warn when a previous approach failed.
 
-## Phase 5 - Full Action Studio
+## Phase 9 - Packaging and Industry Packs
 
-Goal: generate coordinated cross-functional action portfolios.
+Status: planned.
 
-Features:
-
-- Product fix tab
-- Customer recovery tab
-- Journey intervention tab
-- Campaign/audience tab
-- Research tab
-- Governance tab
-- action templates
-- owner routing
-- action dependency handling
-- action editing and approval diffs
-- action confidence and limitations
-- experiment proposal generation
-
-Primary modules advanced:
-
-- Module 5: Coordinated Action Studio
-- Module 7: Governance and Approval Engine
-
-## Phase 6 - Audience And Intervention Builder
-
-Goal: design governed interventions without becoming a CDP or campaign platform.
-
-Features:
-
-- audience definition builder
-- inclusion criteria
-- exclusion criteria
-- trigger definition
-- channel recommendation
-- content brief
-- personalization variables
-- control group
-- primary success metric
-- guardrail metrics
-- consent availability checks
-- overlap with active campaigns
-- risk of over-contacting
-- export formats for HubSpot, Adobe Experience Platform, Braze and Salesforce
-
-Primary modules advanced:
-
-- Module 6: Audience and Intervention Builder
-- Module 7: Governance and Approval Engine
-
-## Phase 7 - EU Governance, Privacy And Policy Engine
-
-Goal: make governance a first-class product module.
-
-Features:
-
-- risk-tiered action matrix
-- machine-enforceable policy rules
-- evidence confidence thresholds
-- customer-contact consent checks
-- PII detection
-- sensitive category safeguards
-- retention policy metadata
-- lawful basis and purpose metadata
-- model/provider/prompt audit metadata
-- reviewer decision records
-- AI use-case inventory
-- AI impact assessment fields
-- incident log
-- least-privilege tool permission model
-- tool allowlist and output checks
-
-Primary modules advanced:
-
-- Module 7: Governance and Approval Engine
-
-## Phase 8 - Execution Connectors And Closure
-
-Goal: move from draft actions to verified operational and customer closure.
-
-Features:
-
-- Jira draft creation
-- Jira status sync
-- Linear or Azure DevOps draft support
-- Zendesk customer recovery task
-- HubSpot customer-success task
-- execution accepted/completed/released states
-- affected customer list
-- customer closure eligibility
-- response drafting
-- follow-up validation prompts
-- unresolved customer tracking
-- closure timeline
-
-Primary modules advanced:
-
-- Module 5: Coordinated Action Studio
-- Module 8: Resolution and Customer Closure
-
-## Phase 9 - Outcome Learning Engine
-
-Goal: build the defensible learning loop.
-
-Features:
-
-- outcome board
-- before/after analysis
-- matched comparison groups
-- holdout/control groups
-- phased rollout tracking
-- action effectiveness memory
-- reusable intervention knowledge
-- failed-action learning
-- next-best-action recommendations
-- problem/action/outcome graph
-- longitudinal reporting
-
-Primary modules advanced:
-
-- Module 9: Outcome Learning Engine
-
-## Phase 10 - Editions And Packaging
-
-Goal: turn the platform into sellable packages.
+Goal: make CLARA easier to buy and implement.
 
 SME edition:
 
-- guided setup
-- CSV upload and mapping
-- Zendesk, HubSpot, Jira and Teams connectors
-- prebuilt taxonomies
-- recommended workflows
-- simple approval rules
-- German/English UI
-- one-week implementation path
+- Guided setup.
+- CSV upload and mapping.
+- Zendesk, HubSpot, Jira and Teams connectors.
+- Prebuilt taxonomies.
+- Recommended workflows.
+- Simple approval rules.
+- German/English UI.
+- One-week implementation path.
 
 Enterprise edition:
 
-- SSO and SCIM
-- business-unit isolation
-- custom taxonomies
-- custom account hierarchy
-- data warehouse integration
-- model routing
-- advanced policy engine
-- audit export
-- configurable retention
-- ServiceNow, Salesforce, Adobe, SAP and Azure DevOps connectors
-- private tool servers
+- SSO and SCIM.
+- Business-unit isolation.
+- Custom taxonomies and account hierarchy.
+- Data warehouse integration.
+- Model routing.
+- Advanced policy engine.
+- Audit export and configurable retention.
+- ServiceNow, Salesforce, Adobe, SAP and Azure DevOps connectors.
+- Private tool servers.
 
-## Phase 11 - Industry Packs
+Industry packs:
 
-Goal: make the product easier to buy and implement in specific markets.
+- B2B industrial: sites, plants, product family, batch, quality routing and recall/compliance escalation.
+- SaaS product: product-area taxonomy, bugs/features, usage events, onboarding/adoption, Productboard/Jira and renewal risk.
+- Ecommerce: delivery, returns, payment, reviews, service recovery, campaign suppression and repeat-purchase measurement.
+- Financial services: onboarding, identity verification, fraud-review boundaries, vulnerability safeguards and stricter approvals.
 
-B2B industrial pack:
+## Technical Enablers
 
-- parent-account hierarchy
-- site and plant context
-- product family and batch
-- technical complaint taxonomy
-- quality routing
-- product recall or compliance escalation
-- multilingual customer communication
+These are implementation details, not separate product phases unless a phase explicitly needs them.
 
-SaaS product pack:
-
-- product-area taxonomy
-- bugs and feature requests
-- usage events
-- onboarding and adoption journeys
-- Jira and Productboard workflows
-- affected-user cohorts
-- beta recruitment
-- renewal risk
-
-Ecommerce pack:
-
-- delivery, returns and payment taxonomies
-- damaged product signals
-- review ingestion
-- service recovery
-- campaign suppression
-- Braze or Klaviyo audience export
-- repeat-purchase measurement
-
-Financial-services pack:
-
-- onboarding and identity verification
-- payment and fraud-review boundaries
-- complaint handling
-- vulnerability safeguards
-- consent and communication controls
-- stricter human approval
-- complete decision/action lineage
+- Postgres/Supabase, pgvector and RLS.
+- Provider-agnostic AI client with local-first OpenAI-compatible routing.
+- LangGraph for agentic orchestration and durable approval interrupts.
+- Langfuse or equivalent tracing/evaluation for AI outputs.
+- Connector layer for Zendesk, Jira, Slack, HubSpot, Adobe, Braze, Salesforce and ServiceNow.
+- Policy service for versioned, auditable controls.
+- OpenTelemetry and LLM tracing.
 
 ## Non-Goals
 
@@ -403,7 +336,15 @@ Financial-services pack:
 - Do not build a full product-management platform.
 - Do not make chat the primary interface.
 - Do not start with autonomous customer-facing execution.
+- Do not compete with Adobe/Braze delivery infrastructure; generate governed intervention drafts and push to those systems.
 
-## Post-Phase-0 Build Queue
+## Current Next Step
 
-1. Start Phase 2: make customer/account context affect impact scoring and prioritization.
+Start Phase 4: Full Action Studio.
+
+Smallest useful Phase 4 slice:
+
+1. Add action portfolio grouping by product fix, customer recovery, journey intervention, research and governance.
+2. Show evidence, risk, owner, destination and policy checks per action tab.
+3. Add reviewer edit/approve/reject flow with approval diffs.
+4. Add tests for portfolio grouping and approval diffs.

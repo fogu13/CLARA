@@ -12,18 +12,18 @@ CLARA_2 (Python/FastAPI) base + Elvis's AI layer + UI ported in.
 | 86 tests + CI | CLARA_2 | apps/api/app/tests + .github/workflows/ci.yml |
 | Direction-aware outcome_status | CLARA_2 | apps/api/app/services/workflow.py:63-87 |
 | Provider-agnostic AI client | Elvis | apps/api/app/services/ai.py (port of _shared/ai.ts) |
-| LLM enrichment + synthesis | Elvis | LangGraph nodes (Phase 1) |
-| Semantic + adaptive taxonomy | Elvis | migrations 003 + taxonomies service (Phase 1) |
-| Outcome contract + decay learnings | Elvis | migration 005 + workflow service (Phase 3) |
-| Conflict resolution (priority->specificity) | Elvis | rule engine (Phase 1) |
-| Auth + RLS + multi-tenancy | Elvis | migration 004 + FastAPI JWT middleware (Phase 0) |
-| 17-page UI (dashboard, signals, taxonomy, ...) | Elvis | apps/web/app/(dashboard)/* (Phase 4) |
-| EU AI Act + GDPR compliance checker | Elvis | compliance route + endpoint (Phase 5) |
-| Events telemetry for thesis | Elvis | events table + logEvent (Phase 5) |
-| LangGraph agent orchestration | NEW | apps/api/app/agents/ (Phase 1) |
-| Connector layer (Zendesk/Jira/Slack) | NEW | apps/api/app/connectors/ (Phase 2) |
-| Langfuse tracing + evals | NEW | infra/docker-compose.langfuse.yml (Phase 0) |
-| Self-hosted Supabase | NEW | infra/docker-compose.supabase.yml (Phase 0) |
+| LLM enrichment + synthesis | Elvis | agentic triage/intelligence nodes |
+| Semantic + adaptive taxonomy | Elvis | taxonomy services and Postgres migrations |
+| Outcome contract + decay learnings | Elvis | workflow and outcome learning services |
+| Conflict resolution (priority->specificity) | Elvis | policy/rule services |
+| Auth + RLS + multi-tenancy | Elvis | auth/RBAC/RLS layer |
+| 17-page UI (dashboard, signals, taxonomy, ...) | Elvis | apps/web/app/(dashboard)/* |
+| EU AI Act + GDPR compliance checker | Elvis | compliance route + endpoint |
+| Events telemetry for thesis | Elvis | events table + telemetry hooks |
+| LangGraph agent orchestration | NEW | apps/api/app/agents/ |
+| Connector layer (Zendesk/Jira/Slack) | NEW | apps/api/app/connectors/ |
+| Langfuse tracing + evals | NEW | infra/docker-compose.langfuse.yml |
+| Self-hosted Supabase | NEW | infra/docker-compose.supabase.yml |
 
 ## Why this shape
 
@@ -45,17 +45,16 @@ CLARA_2 (Python/FastAPI) base + Elvis's AI layer + UI ported in.
 ## What neither source delivers (the thesis-critical gaps)
 
 1. **Real close-the-loop delivery** — both simulate action execution.
-   Phase 2's Zendesk->Jira->Slack slice fixes this.
+   The Execution Connectors and Customer Closure roadmap phase covers this.
 2. **Agentic orchestration** — Elvis uses bounded LLM calls (not agents);
-   CLARA_2 has no AI at all. Phase 1's LangGraph state machine fixes this.
-3. **Measured triage quality** — neither has an eval harness. Phase 5's
-   Langfuse golden-set evaluation fixes this and is thesis-critical.
+   CLARA_2 has no AI at all. The agentic orchestration enabler covers this when needed by roadmap phases.
+3. **Measured triage quality** — neither has an eval harness. The evaluation/tracing enabler covers this and remains thesis-critical.
 
 ## Source-of-truth references
 
 - Elvis AI layer: `reference/elvis/supabase/functions/_shared/ai.ts`
 - Elvis adaptive taxonomy spec: `reference/elvis/docs/superpowers/specs/2026-06-21-adaptive-taxonomy-design.md`
 - Elvis thesis artifact chapter: `thesis/chapters/ch4_artifact.md`
-- CLARA_2 roadmap: `docs/roadmap.md`
+- Canonical CLARA roadmap: `docs/roadmap.md`
 - CLARA_2 data model: `docs/data-model.md`
-- Execution plan: `PLAN.md` (top level)
+- Architecture notes: `PLAN.md` (top level)

@@ -9,14 +9,9 @@ Signal → Insight → Action → Learning cycle run automatically (with human-i
 **EU AI Act / GDPR compliance checks and audit/governance controls are an added layer on top**, not
 the headline. Project name: **CLARA**. See §6.
 
-> **Implementation status (built):** The plan in this document has been implemented in the codebase —
-> action engine (rule builder + conflict resolution + approvals), close-the-loop outcome measurement,
-> the learning repository (confidence decay + relevant-learnings retrieval), real NLP enrichment/
-> synthesis with cross-signal severity, multi-source ingestion (CSV/webhook + connector scaffolds),
-> and evaluation instrumentation. The four "non-trivial design decisions" (§ thesis) are now coded.
-> AI runs through a provider-agnostic, self-hostable layer (any OpenAI-compatible endpoint). Connector *pulls*
-> (Zendesk/Jira/HubSpot/Typeform) remain scaffolded pending credentials. See git history on
-> `feat/strategy-alignment`.
+> **Roadmap status:** This strategy document is market/product context, not the canonical build
+> plan. Current implementation status, completed phases and remaining work live in
+> `../docs/roadmap.md`.
 
 ---
 

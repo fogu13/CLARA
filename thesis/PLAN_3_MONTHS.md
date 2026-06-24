@@ -3,13 +3,11 @@
 **Track:** 30 ECTS Capstone (RAI-9001) · **Advisor meeting:** Jun 19 · **Target defense:** Sep 2026
 **Regulatory anchors (OPIT regs §6):** complete draft → supervisor approval → Thesis Defense Form → examining committee formed ≥1 month before defense → defense (15–20 min presentation) → final PDF ≤2 weeks after defense. Supervisor meetings every ~2 weeks.
 
-**Critical path: the 12–15 practitioner interviews. Recruitment starts now.**
+**Critical path: the 12-15 practitioner interviews. Recruitment starts now.**
 
-> **Platform build status (update):** The artifact is now feature-complete for evaluation — action
-> engine (rule builder, conflict resolution, approvals), close-the-loop measurement, learning
-> repository (decay + retrieval), NLP enrichment/synthesis, CSV/webhook ingestion, and eval
-> instrumentation are all built and on `feat/strategy-alignment`. Remaining critical path is
-> unchanged: **recruit + run the interviews/task sessions.** A draft `chapters/ch4_artifact.md` exists.
+> **Product roadmap note:** Product phases and remaining build work are tracked only in
+> `../docs/roadmap.md`. This file is the thesis calendar, not a second product roadmap.
+> Remaining thesis critical path is unchanged: recruit and run the interviews/task sessions.
 
 ---
 

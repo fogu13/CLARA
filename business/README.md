@@ -1,7 +1,8 @@
 # Business
 
 Commercial and go-to-market materials for CLARA (separate from the academic thesis and the
-platform codebase).
+platform codebase). Product phases and remaining build work are tracked only in
+`../docs/roadmap.md`.
 
 ## Contents
 
