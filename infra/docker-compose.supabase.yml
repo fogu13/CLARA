@@ -1,6 +1,6 @@
 # Self-hosted Supabase — Postgres with pgvector + pg_cron + pg_net
 #
-# Phase 0 target. Provides Postgres + pgvector for the Hybrid_GLM platform
+# Phase 0 target. Provides Postgres + pgvector for the CLARA platform
 # without the hosted Supabase SaaS, preserving the local-first EU moat.
 #
 # Quickstart:
@@ -23,7 +23,7 @@
 services:
   db:
     image: pgvector/pgvector:pg16
-    container_name: hybrid_glm_db
+    container_name: clara_db
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
@@ -43,7 +43,7 @@ services:
   # The FastAPI middleware (apps/api/app/auth.py) verifies JWTs with SUPABASE_JWT_SECRET.
   auth:
     image: supabase/gotrue:v2.164.0
-    container_name: hybrid_glm_auth
+    container_name: clara_auth
     restart: unless-stopped
     depends_on:
       db:

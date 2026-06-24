@@ -5,7 +5,7 @@
 --   reference/elvis/supabase/migrations/20260619160000_learning_decay.sql
 --   reference/elvis/supabase/migrations/20260619120000_add_rule_priority.sql
 --
--- Merges Elvis's outcome-contract loop closure with Odradek_2's
+-- Merges Elvis's outcome-contract loop closure with CLARA_2's
 -- direction-aware outcome_status (apps/api/app/services/workflow.py:63-87).
 --
 -- Phase 3 target: closes the loop with measured outcomes + confidence-decay
@@ -36,27 +36,27 @@ CREATE POLICY events_workspace_isolation
   USING (public.is_current_workspace(workspace_id))
   WITH CHECK (public.is_current_workspace(workspace_id));
 
--- ====== Outcome contract columns on odradek_problems ======
--- Elvis adds these to insights; Odradek_2 stores them in the JSONB payload.
--- We add them as real columns on odradek_problems for queryability + indexing.
-ALTER TABLE odradek_problems ADD COLUMN IF NOT EXISTS outcome_metric TEXT;
-ALTER TABLE odradek_problems ADD COLUMN IF NOT EXISTS outcome_baseline DOUBLE PRECISION;
-ALTER TABLE odradek_problems ADD COLUMN IF NOT EXISTS outcome_target DOUBLE PRECISION;
-ALTER TABLE odradek_problems ADD COLUMN IF NOT EXISTS outcome_measured DOUBLE PRECISION;
-ALTER TABLE odradek_problems ADD COLUMN IF NOT EXISTS resolution_score DOUBLE PRECISION;
-ALTER TABLE odradek_problems ADD COLUMN IF NOT EXISTS measurement_window_days INTEGER DEFAULT 14;
-ALTER TABLE odradek_problems ADD COLUMN IF NOT EXISTS measured_at TIMESTAMPTZ;
-ALTER TABLE odradek_problems ADD COLUMN IF NOT EXISTS measurement_due_at TIMESTAMPTZ;
-ALTER TABLE odradek_problems ADD COLUMN IF NOT EXISTS resolution_summary TEXT;
-ALTER TABLE odradek_problems ADD COLUMN IF NOT EXISTS closure_level TEXT;
+-- ====== Outcome contract columns on clara_problems ======
+-- Elvis adds these to insights; CLARA_2 stores them in the JSONB payload.
+-- We add them as real columns on clara_problems for queryability + indexing.
+ALTER TABLE clara_problems ADD COLUMN IF NOT EXISTS outcome_metric TEXT;
+ALTER TABLE clara_problems ADD COLUMN IF NOT EXISTS outcome_baseline DOUBLE PRECISION;
+ALTER TABLE clara_problems ADD COLUMN IF NOT EXISTS outcome_target DOUBLE PRECISION;
+ALTER TABLE clara_problems ADD COLUMN IF NOT EXISTS outcome_measured DOUBLE PRECISION;
+ALTER TABLE clara_problems ADD COLUMN IF NOT EXISTS resolution_score DOUBLE PRECISION;
+ALTER TABLE clara_problems ADD COLUMN IF NOT EXISTS measurement_window_days INTEGER DEFAULT 14;
+ALTER TABLE clara_problems ADD COLUMN IF NOT EXISTS measured_at TIMESTAMPTZ;
+ALTER TABLE clara_problems ADD COLUMN IF NOT EXISTS measurement_due_at TIMESTAMPTZ;
+ALTER TABLE clara_problems ADD COLUMN IF NOT EXISTS resolution_summary TEXT;
+ALTER TABLE clara_problems ADD COLUMN IF NOT EXISTS closure_level TEXT;
 -- closure_level: 'operational' | 'customer' | 'outcome' (Elvis's closure chips)
 
 CREATE INDEX IF NOT EXISTS idx_problems_outcome_due
-  ON odradek_problems (workspace_id, measurement_due_at)
+  ON clara_problems (workspace_id, measurement_due_at)
   WHERE outcome_measured IS NULL AND measurement_due_at IS NOT NULL;
 
 -- ====== Learning conclusions table (with confidence decay) ======
--- Merges Odradek_2's structured LearningConclusion verdicts with Elvis's
+-- Merges CLARA_2's structured LearningConclusion verdicts with Elvis's
 -- confidence-decay model (half_life_days + last_validated_at).
 CREATE TABLE IF NOT EXISTS public.learning_conclusions (
   conclusion_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

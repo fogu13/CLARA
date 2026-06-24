@@ -4,11 +4,11 @@
 --   reference/elvis/supabase/migrations/20260622120000_taxonomy_discovery.sql
 --   reference/elvis/supabase/migrations/20260622140000_taxonomy_governance.sql
 --
--- Adapted to Odradek_2's schema: taxonomy_nodes uses workspace_id from migration 004,
--- signal_node_map references odradek_signals.signal_id (TEXT) instead of Elvis's
+-- Adapted to CLARA_2's schema: taxonomy_nodes uses workspace_id from migration 004,
+-- signal_node_map references clara_signals.signal_id (TEXT) instead of Elvis's
 -- integer signals.id.
 --
--- Replaces Odradek_2's substring/term-matching classification
+-- Replaces CLARA_2's substring/term-matching classification
 -- (apps/api/app/services/taxonomies.py:364-425) with embedding-based semantic
 -- mapping + adaptive discovery + graduated-authority governance.
 
@@ -59,7 +59,7 @@ CREATE TRIGGER set_taxonomy_nodes_updated_at
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 -- ====== Signal-to-node mapping (multi-label) ======
--- References odradek_signals.signal_id (TEXT) instead of Elvis's integer signals.id.
+-- References clara_signals.signal_id (TEXT) instead of Elvis's integer signals.id.
 CREATE TABLE IF NOT EXISTS public.signal_node_map (
   id BIGSERIAL PRIMARY KEY,
   signal_id TEXT NOT NULL,
@@ -115,7 +115,7 @@ SET search_path = public
 AS $$
   SELECT s.signal_id,
          s.payload->>'feedback_text' AS text_content
-  FROM odradek_signals s
+  FROM clara_signals s
   WHERE s.workspace_id = p_workspace_id
     AND s.payload->>'feedback_text' IS NOT NULL
     AND s.payload->>'feedback_text' != ''

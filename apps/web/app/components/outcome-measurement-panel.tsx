@@ -90,7 +90,7 @@ export function OutcomeMeasurementPanel({
       });
       const snapshot = await getOutcomeSnapshot(problemId);
       setState({ status: "ready", message: "Outcome measurement recorded.", snapshot });
-      window.dispatchEvent(new CustomEvent("odradek:outcome-recorded"));
+      window.dispatchEvent(new CustomEvent("clara:outcome-recorded"));
     } catch (error) {
       setState((current) => ({
         ...current,
@@ -120,7 +120,7 @@ export function OutcomeMeasurementPanel({
         next_step: nextStep || undefined
       });
       setState((current) => ({ ...current, status: "ready", message: "Learning review recorded." }));
-      window.dispatchEvent(new CustomEvent("odradek:outcome-recorded"));
+      window.dispatchEvent(new CustomEvent("clara:outcome-recorded"));
     } catch (error) {
       setState((current) => ({
         ...current,

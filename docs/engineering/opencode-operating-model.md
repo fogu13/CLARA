@@ -1,14 +1,14 @@
 # OpenCode Operating Model
 
-This is the version-one Odradek development-governance workflow. It governs agent use; it does not redesign the product.
+This is the version-one CLARA development-governance workflow. It governs agent use; it does not redesign the product.
 
 ## Workflow
 
 1. Start from one material GitHub issue.
 2. Use one branch and, for future parallel feature work, one isolated linked worktree.
-3. Let Odradek Lead inspect evidence and prepare the smallest plan.
+3. Let CLARA Lead inspect evidence and prepare the smallest plan.
 4. Human approves the plan before implementation.
-5. Odradek Builder is the only normal writing agent.
+5. CLARA Builder is the only normal writing agent.
 6. Run deterministic checks before model review.
 7. Route ordinary changes to Functional Reviewer.
 8. Route privacy, GDPR, Supabase, migration, tenant, logging, AI-governance and workflow-permission concerns to Security, Privacy and Compliance Reviewer first.

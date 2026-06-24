@@ -1,6 +1,6 @@
 """Semantic taxonomy service — port of Elvis's adaptive taxonomy system.
 
-Replaces Odradek_2's substring/term-matching classification
+Replaces CLARA_2's substring/term-matching classification
 (apps/api/app/services/taxonomies.py:364-425) with embedding-based semantic
 mapping + adaptive discovery + graduated-authority governance.
 

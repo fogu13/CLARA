@@ -8,7 +8,7 @@ First connectors to prove the brief's headline
 
 Reuses Elvis's api_poll field-mapping design
 (reference/elvis/supabase/functions/sync-source/index.ts:79-160)
-and replaces Odradek_2's local-only JiraIssueDraft
+and replaces CLARA_2's local-only JiraIssueDraft
 (apps/api/app/services/workflow.py:125-142).
 """
 

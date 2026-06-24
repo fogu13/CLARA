@@ -1,6 +1,6 @@
 """LangGraph triage -> action state machines.
 
-Phase 1: replaces Odradek_2's synchronous per-request build_candidates model
+Phase 1: replaces CLARA_2's synchronous per-request build_candidates model
 (apps/api/app/main.py:384-395) with a durable, resumable graph.
 """
 

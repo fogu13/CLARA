@@ -178,7 +178,7 @@ class SlackDestinationConnector:
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": "🤖 Sent by Odradek Feedback-to-Action Platform",
+                    "text": "🤖 Sent by CLARA Feedback-to-Action Platform",
                 }
             ],
         })

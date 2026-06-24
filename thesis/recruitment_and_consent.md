@@ -1,4 +1,4 @@
-# Recruitment & Consent — Odradek interviews
+# Recruitment & Consent — CLARA interviews
 
 Goal: book **12–15 interviews** (overbook to ~18). ICP: marketing / product / CX practitioners,
 **2+ years' experience, companies of ~10–500 staff, that actively collect customer feedback.**

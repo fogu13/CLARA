@@ -96,11 +96,11 @@ from app.services.workflow import SQLiteWorkflowStore
 
 
 def default_db_path() -> Path:
-    configured_path = os.getenv("ODRADEK_DB_PATH")
+    configured_path = os.getenv("CLARA_DB_PATH")
     if configured_path:
         return Path(configured_path)
 
-    return Path(__file__).resolve().parents[1] / ".data" / "odradek.db"
+    return Path(__file__).resolve().parents[1] / ".data" / "clara.db"
 
 
 def default_workflow_store() -> SQLiteWorkflowStore:
@@ -332,7 +332,7 @@ def create_app(
     connector_configs=None,
 ) -> FastAPI:
     api = FastAPI(
-        title="Odradek API",
+        title="CLARA API",
         version="0.1.0",
         summary="Feedback-to-Outcome API prototype",
     )
@@ -914,8 +914,8 @@ def create_app(
             # For testing, send a minimal test action
             test_action = {
                 "type": "create_ticket" if connector_type == "jira" else "notify",
-                "title": "Odradek connector test",
-                "description": "This is a test from the Odradek platform.",
+                "title": "CLARA connector test",
+                "description": "This is a test from the CLARA platform.",
                 "priority": 3,
                 "insight_title": "Test",
                 "insight_summary": "Connector configuration test",

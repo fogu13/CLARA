@@ -1,7 +1,7 @@
 """Learning engine — confidence decay + relevant-learnings retrieval.
 
 Port of reference/elvis/src/lib/learnings.ts. Merges Elvis's AbLearning
-confidence-decay model with Odradek_2's structured LearningConclusion verdicts.
+confidence-decay model with CLARA_2's structured LearningConclusion verdicts.
 
 Design decision #2 (Elvis): a learning's stored confidence erodes exponentially
 from last_validated_at with a configurable half-life. Fresher/stronger learnings
@@ -11,7 +11,7 @@ Design decision #4 (Elvis): "relevant past learnings" retrieval ranks learnings
 by token overlap with the query, weighted by decayed confidence. A pgvector
 semantic ranking can replace the scorer without changing callers.
 
-Odradek_2 contributes structured verdicts: worked | partially_worked |
+CLARA_2 contributes structured verdicts: worked | partially_worked |
 did_not_work | inconclusive | measurement_invalid (LearningStatus enum).
 """
 
@@ -160,7 +160,7 @@ def build_learning_from_conclusion(
 ) -> dict[str, Any]:
     """Build a learning record from a human conclusion + outcome measurement.
 
-    Merges Odradek_2's structured LearningConclusion (worked/partially_worked/
+    Merges CLARA_2's structured LearningConclusion (worked/partially_worked/
     did_not_work/inconclusive/measurement_invalid) with Elvis's AbLearning
     pattern (topic, evidence, confidence, half_life_days).
 

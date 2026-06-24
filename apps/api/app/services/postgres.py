@@ -41,28 +41,28 @@ from app.services.taxonomies import (
 from app.services.workflow import WorkflowStore
 
 SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS odradek_problems (
+CREATE TABLE IF NOT EXISTS clara_problems (
     problem_id TEXT PRIMARY KEY,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS odradek_signals (
+CREATE TABLE IF NOT EXISTS clara_signals (
     signal_id TEXT PRIMARY KEY,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS odradek_candidate_decisions (
+CREATE TABLE IF NOT EXISTS clara_candidate_decisions (
     candidate_id TEXT PRIMARY KEY,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS odradek_customer_context (
+CREATE TABLE IF NOT EXISTS clara_customer_context (
     customer_id TEXT PRIMARY KEY,
     account_id TEXT,
     payload JSONB NOT NULL,
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS odradek_customer_context (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS odradek_workflow_records (
+CREATE TABLE IF NOT EXISTS clara_workflow_records (
     record_type TEXT NOT NULL,
     record_id TEXT NOT NULL,
     problem_id TEXT NOT NULL,
@@ -82,17 +82,17 @@ CREATE TABLE IF NOT EXISTS odradek_workflow_records (
     PRIMARY KEY (record_type, record_id)
 );
 
-CREATE INDEX IF NOT EXISTS odradek_workflow_problem_idx
-    ON odradek_workflow_records (problem_id, record_type);
+CREATE INDEX IF NOT EXISTS clara_workflow_problem_idx
+    ON clara_workflow_records (problem_id, record_type);
 
-CREATE TABLE IF NOT EXISTS odradek_taxonomy_catalogs (
+CREATE TABLE IF NOT EXISTS clara_taxonomy_catalogs (
     taxonomy_type TEXT PRIMARY KEY,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS odradek_terminology_dictionary (
+CREATE TABLE IF NOT EXISTS clara_terminology_dictionary (
     term_id TEXT PRIMARY KEY,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -149,33 +149,33 @@ class PostgresConnectionMixin:
                 cursor.execute(SCHEMA_SQL)
                 cursor.execute(
                     """
-                    ALTER TABLE odradek_workflow_records
+                    ALTER TABLE clara_workflow_records
                     ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'legacy'
                     """
                 )
                 cursor.execute(
                     """
-                    ALTER TABLE odradek_workflow_records
+                    ALTER TABLE clara_workflow_records
                     ADD COLUMN IF NOT EXISTS retention_expires_at TIMESTAMPTZ
                     """
                 )
                 cursor.execute(
                     """
-                    CREATE INDEX IF NOT EXISTS odradek_workflow_tenant_problem_idx
-                    ON odradek_workflow_records (tenant_id, problem_id, record_type)
+                    CREATE INDEX IF NOT EXISTS clara_workflow_tenant_problem_idx
+                    ON clara_workflow_records (tenant_id, problem_id, record_type)
                     """
                 )
-                cursor.execute("ALTER TABLE odradek_workflow_records ENABLE ROW LEVEL SECURITY")
+                cursor.execute("ALTER TABLE clara_workflow_records ENABLE ROW LEVEL SECURITY")
                 cursor.execute(
                     """
-                    DROP POLICY IF EXISTS odradek_workflow_records_tenant_isolation
-                    ON odradek_workflow_records
+                    DROP POLICY IF EXISTS clara_workflow_records_tenant_isolation
+                    ON clara_workflow_records
                     """
                 )
                 cursor.execute(
                     """
-                    CREATE POLICY odradek_workflow_records_tenant_isolation
-                    ON odradek_workflow_records
+                    CREATE POLICY clara_workflow_records_tenant_isolation
+                    ON clara_workflow_records
                     USING (
                         tenant_id = current_setting('app.tenant_id', true)
                         OR tenant_id = (
@@ -208,14 +208,14 @@ class PostgresProblemStore(PostgresConnectionMixin):
     def list_problems(self) -> list[ProblemRecord]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT payload FROM odradek_problems ORDER BY problem_id"
+                "SELECT payload FROM clara_problems ORDER BY problem_id"
             ).fetchall()
         return [ProblemRecord.model_validate(_payload(row["payload"])) for row in rows]
 
     def get_problem(self, problem_id: str) -> ProblemRecord | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT payload FROM odradek_problems WHERE problem_id = %s",
+                "SELECT payload FROM clara_problems WHERE problem_id = %s",
                 (problem_id,),
             ).fetchone()
         if row is None:
@@ -226,7 +226,7 @@ class PostgresProblemStore(PostgresConnectionMixin):
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO odradek_problems (problem_id, payload)
+                INSERT INTO clara_problems (problem_id, payload)
                 VALUES (%s, %s)
                 ON CONFLICT (problem_id) DO UPDATE
                 SET payload = excluded.payload, updated_at = now()
@@ -267,7 +267,7 @@ class PostgresSignalStore(PostgresConnectionMixin):
     def list_signals(self) -> list[SignalRecord]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT payload FROM odradek_signals ORDER BY signal_id"
+                "SELECT payload FROM clara_signals ORDER BY signal_id"
             ).fetchall()
         return [SignalRecord.model_validate(_payload(row["payload"])) for row in rows]
 
@@ -280,7 +280,7 @@ class PostgresSignalStore(PostgresConnectionMixin):
                     continue
                 conn.execute(
                     """
-                    INSERT INTO odradek_signals (signal_id, payload)
+                    INSERT INTO clara_signals (signal_id, payload)
                     VALUES (%s, %s)
                     ON CONFLICT (signal_id) DO NOTHING
                     """,
@@ -299,7 +299,7 @@ class PostgresSignalStore(PostgresConnectionMixin):
     def get_candidate_decision(self, candidate_id: str) -> CandidateDecisionRecord | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT payload FROM odradek_candidate_decisions WHERE candidate_id = %s",
+                "SELECT payload FROM clara_candidate_decisions WHERE candidate_id = %s",
                 (candidate_id,),
             ).fetchone()
         if row is None:
@@ -326,7 +326,7 @@ class PostgresSignalStore(PostgresConnectionMixin):
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO odradek_candidate_decisions (candidate_id, payload)
+                INSERT INTO clara_candidate_decisions (candidate_id, payload)
                 VALUES (%s, %s)
                 ON CONFLICT (candidate_id) DO UPDATE
                 SET payload = excluded.payload, updated_at = now()
@@ -337,7 +337,7 @@ class PostgresSignalStore(PostgresConnectionMixin):
 
     def existing_signal_ids(self) -> set[str]:
         with self._connect() as conn:
-            rows = conn.execute("SELECT signal_id FROM odradek_signals").fetchall()
+            rows = conn.execute("SELECT signal_id FROM clara_signals").fetchall()
         return {row["signal_id"] for row in rows}
 
 
@@ -345,7 +345,7 @@ class PostgresCustomerContextStore(PostgresConnectionMixin, CustomerContextStore
     def list_context(self) -> list[CustomerContextRecord]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT payload FROM odradek_customer_context ORDER BY customer_id"
+                "SELECT payload FROM clara_customer_context ORDER BY customer_id"
             ).fetchall()
         return [CustomerContextRecord.model_validate(_payload(row["payload"])) for row in rows]
 
@@ -364,7 +364,7 @@ class PostgresCustomerContextStore(PostgresConnectionMixin, CustomerContextStore
                     imported += 1
                 conn.execute(
                     """
-                    INSERT INTO odradek_customer_context (customer_id, account_id, payload)
+                    INSERT INTO clara_customer_context (customer_id, account_id, payload)
                     VALUES (%s, %s, %s)
                     ON CONFLICT (customer_id) DO UPDATE
                     SET account_id = excluded.account_id,
@@ -385,7 +385,7 @@ class PostgresCustomerContextStore(PostgresConnectionMixin, CustomerContextStore
 
     def existing_customer_ids(self) -> set[str]:
         with self._connect() as conn:
-            rows = conn.execute("SELECT customer_id FROM odradek_customer_context").fetchall()
+            rows = conn.execute("SELECT customer_id FROM clara_customer_context").fetchall()
         return {row["customer_id"] for row in rows}
 
 
@@ -400,7 +400,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
             rows = conn.execute(
                 """
                 SELECT record_type, payload
-                FROM odradek_workflow_records
+                FROM clara_workflow_records
                 ORDER BY created_at, record_id
                 """
             ).fetchall()
@@ -453,7 +453,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
             conn.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
             conn.execute(
                 """
-                INSERT INTO odradek_workflow_records (
+                INSERT INTO clara_workflow_records (
                     record_type,
                     record_id,
                     problem_id,
@@ -566,7 +566,7 @@ class PostgresTaxonomyStore(PostgresConnectionMixin, TaxonomyStore):
     def _load_catalogs(self) -> list[TaxonomyCatalog]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT payload FROM odradek_taxonomy_catalogs ORDER BY taxonomy_type"
+                "SELECT payload FROM clara_taxonomy_catalogs ORDER BY taxonomy_type"
             ).fetchall()
         return [TaxonomyCatalog.model_validate(_payload(row["payload"])) for row in rows]
 
@@ -574,7 +574,7 @@ class PostgresTaxonomyStore(PostgresConnectionMixin, TaxonomyStore):
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO odradek_taxonomy_catalogs (taxonomy_type, payload)
+                INSERT INTO clara_taxonomy_catalogs (taxonomy_type, payload)
                 VALUES (%s, %s)
                 ON CONFLICT (taxonomy_type) DO UPDATE
                 SET payload = excluded.payload, updated_at = now()
@@ -614,7 +614,7 @@ class PostgresTerminologyStore(PostgresConnectionMixin, TerminologyStore):
     def _load_entries(self) -> list[TerminologyDictionaryEntry]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT payload FROM odradek_terminology_dictionary ORDER BY term_id"
+                "SELECT payload FROM clara_terminology_dictionary ORDER BY term_id"
             ).fetchall()
         return [
             TerminologyDictionaryEntry.model_validate(_payload(row["payload"]))
@@ -625,7 +625,7 @@ class PostgresTerminologyStore(PostgresConnectionMixin, TerminologyStore):
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO odradek_terminology_dictionary (term_id, payload)
+                INSERT INTO clara_terminology_dictionary (term_id, payload)
                 VALUES (%s, %s)
                 ON CONFLICT (term_id) DO UPDATE
                 SET payload = excluded.payload, updated_at = now()

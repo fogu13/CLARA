@@ -1,4 +1,4 @@
-# Odradek — Consolidated Strategy Synthesis
+# CLARA — Consolidated Strategy Synthesis
 
 > Master strategy document merging the in-folder thesis strategy with four external AI strategy
 > sessions (ChatGPT, Gemini 3.1 Pro, Claude). Created 2026-06-19 for the advisor meeting and to
@@ -7,7 +7,7 @@
 **Positioning (locked):** The main USP is **automating the closing of the feedback loop** — the full
 Signal → Insight → Action → Learning cycle run automatically (with human-in-the-loop where needed).
 **EU AI Act / GDPR compliance checks and audit/governance controls are an added layer on top**, not
-the headline. Project name: **Odradek**. See §6.
+the headline. Project name: **CLARA**. See §6.
 
 > **Implementation status (built):** The plan in this document has been implemented in the codebase —
 > action engine (rule builder + conflict resolution + approvals), close-the-loop outcome measurement,
@@ -25,7 +25,7 @@ the headline. Project name: **Odradek**. See §6.
 | | In-folder strategy | External AI sessions |
 |---|---|---|
 | **What it is** | A scoped, defensible DSR thesis (MSc Responsible AI, OPIT, 30 ECTS, Sept 2026) | An expansive engineering + SaaS-business blueprint |
-| **Artifact** | Odradek — React 18 + Supabase, **already built** | Proposed Python/FastAPI/LangGraph/pgvector/LiteLLM rebuild |
+| **Artifact** | CLARA — React 18 + Supabase, **already built** | Proposed Python/FastAPI/LangGraph/pgvector/LiteLLM rebuild |
 | **Core** | Signal → Insight → Action → **Learning** (incl. Experiment Learning Repository) | Feedback → triage → action → outcome (governed agentic) |
 | **Evaluation** | Qualitative: 12–15 interviews + task scenarios + SUS/TAM, Braun & Clarke | Quantitative ladder: gold set, F1/precision/acceptance/cost/latency |
 | **Target** | SMB marketing teams (10–500 employees) | B2B SaaS 20–300 employees; DACH-first |
@@ -72,7 +72,7 @@ Points reached independently by 3–4 sources:
 - Names the wedge: **governed autonomous action** — agent drafts; compliance + dark-pattern + PII gate clears it before firing.
 - **Reliability math:** 95%/step over 8 steps ≈ 66% end-to-end → keep horizons short, **gate every external write**.
 - DSR eval template: **2026 CHI paper comparing LLM-generated themes to human-coded NPS themes**.
-- Raised a governance-first framing as an alternative. **Rejected** — see §6: Odradek's headline is
+- Raised a governance-first framing as an alternative. **Rejected** — see §6: CLARA's headline is
   automated loop closure, with governance/EU AI Act as an added layer, not the spine.
 
 ---
@@ -89,7 +89,7 @@ These are your genuine moat — protect them:
 
 ## 5. Consolidated competitive landscape
 
-| Group | Players | Role vs Odradek |
+| Group | Players | Role vs CLARA |
 |---|---|---|
 | **Closest threats (intelligence → action)** | Enterpret, Dovetail, Chattermill, SentiSum, Amplitude, Thematic | Replicate evidence-linking + feedback→ticket; beat on **governed action + learning memory** |
 | **Enterprise VoC suites** | Qualtrics, Medallia, Sprinklr, InMoment, Forsta | **Sources/partners, not rivals** — they collect; you operationalize |
@@ -114,14 +114,14 @@ self-hostable). Sources: enterpret.com, /security, /guides (accessed June 2026).
 (volume × value × churn = "revenue at risk"); pervasive evidence/verbatim linking; MCP (later).
 
 **Defensible differences to focus & market — Enterpret does NOT do these:**
-1. **Governed action** — approval matrix, risk tiers, rule **conflict resolution**, audit. It opens a ticket; Odradek *governs* what fires.
+1. **Governed action** — approval matrix, risk tiers, rule **conflict resolution**, audit. It opens a ticket; CLARA *governs* what fires.
 2. **Cross-functional + marketing activation** — one insight → product *and* marketing/CX (segments, suppression, campaigns). It stops at product/support.
 3. **Experiment learning repository** — confidence decay + relevant-learnings retrieval. No VoC vendor ships this — the blue ocean.
 4. **European-first** — self-hostable, your-own-model, EU residency, **EU AI Act checks on the actions**.
 5. **SMB (10–500), governance-first** — a segment Enterpret doesn't court.
 
 **One-line positioning vs Enterpret:** *Enterpret tells product teams what customers say and opens a
-ticket; Odradek governs the action across product and marketing, proves it worked against a contract,
+ticket; CLARA governs the action across product and marketing, proves it worked against a contract,
 and remembers what worked — in your own EU cloud.*
 
 ---
@@ -133,7 +133,7 @@ and remembers what worked — in your own EU cloud.*
   artifact in the folder already commits to; no rewrite needed.
 - **EU AI Act / GDPR compliance checks, audit trail, and graduated authority are an added layer on
   top** of the loop, not the headline. They strengthen the Responsible-AI fit (OPIT) and the EU/DACH
-  commercial angle, but Odradek is sold and evaluated as *the system that closes the loop*, not as a
+  commercial angle, but CLARA is sold and evaluated as *the system that closes the loop*, not as a
   governance gate.
 - The **Experiment Learning Repository** ("Building the Memory") is part of loop closure — it is what
   makes the loop *learn* — and remains the contribution no competitor or AI session touches. Keep it.

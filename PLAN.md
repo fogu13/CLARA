@@ -1,6 +1,6 @@
-# Hybrid_GLM — Build Plan
+# CLARA — Build Plan
 
-Odradek_2 (Python/FastAPI) as the base, porting Elvis's AI layer + UI in.
+CLARA_2 (Python/FastAPI) as the base, porting Elvis's AI layer + UI in.
 Thesis + business in parallel. Local-first LLMs are a hard requirement (EU moat).
 First real connectors: Zendesk (in) + Jira + Slack (out).
 
@@ -25,8 +25,8 @@ First real connectors: Zendesk (in) + Jira + Slack (out).
        Langfuse (self-hosted) — traces + evals for thesis
 ```
 
-Odradek_2's clean domain model + governance + tests stay the backbone. Elvis's
-missing-from-Odradek_2 capabilities (AI, UI, auth, multi-tenancy, semantic
+CLARA_2's clean domain model + governance + tests stay the backbone. Elvis's
+missing-from-CLARA_2 capabilities (AI, UI, auth, multi-tenancy, semantic
 taxonomy, real ingestion) get ported in as new modules. Self-hosted Supabase
 keeps the local-first/EU moat intact while giving Auth + RLS + pgvector without
 reinventing them.
@@ -55,7 +55,7 @@ reinventing them.
       (taxonomies.py:364-425).
 - [ ] Port Elvis LLM enrichment + synthesis with deterministic cross-signal
       severity (synthesize-insights/index.ts:26-36).
-- [ ] Keep Odradek_2 context graph (context_impact.py) + PolicyRule gate
+- [ ] Keep CLARA_2 context graph (context_impact.py) + PolicyRule gate
       (workflow.py:42-56) as graph nodes.
 - [ ] Make every AI output carry evidence/confidence/limitations/audit.
 - **Verify:** golden-set eval in Langfuse (precision/recall vs deterministic
@@ -75,10 +75,10 @@ reinventing them.
 
 ### Phase 3 — Close-the-loop + outcome engine (~1.5 weeks)
 - [ ] Real action execution wired into the LangGraph action node (Phase 2).
-- [ ] Upgrade Odradek_2 outcome_status (workflow.py:63-87) with Elvis
+- [ ] Upgrade CLARA_2 outcome_status (workflow.py:63-87) with Elvis
       resolution_score + closure chips (Operational/Customer/Outcome).
 - [ ] Port Elvis confidence-decay learnings (learnings.ts) + retrieval, merged
-      with Odradek_2 structured LearningConclusion verdicts.
+      with CLARA_2 structured LearningConclusion verdicts.
 - [ ] Durable retries via LangGraph checkpointer (Temporal only if outgrown).
 - **Verify:** approved Jira action -> outcome measured after window ->
   resolution_score + learning conclusion + decayed confidence reflected.
@@ -104,7 +104,7 @@ reinventing them.
 - **Verify:** eval dashboard shows scores; compliance checker returns a report.
 
 ### Phase 6 — SaaS readiness (post-thesis, stub now) (~1 week stub)
-- [ ] Enforce RBAC (Odradek_2 has none; Elvis has schema only).
+- [ ] Enforce RBAC (CLARA_2 has none; Elvis has schema only).
 - [ ] Stripe billing stub + plan limits; team-invite; API-key validation
       middleware (Elvis generates keys but nothing consumes them).
 - [ ] Rate limiting.

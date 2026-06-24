@@ -1,4 +1,4 @@
-# Odradek Thesis — 3-Month Plan (Jun 9 → Sep 2026)
+# CLARA Thesis — 3-Month Plan (Jun 9 → Sep 2026)
 
 **Track:** 30 ECTS Capstone (RAI-9001) · **Advisor meeting:** Jun 19 · **Target defense:** Sep 2026
 **Regulatory anchors (OPIT regs §6):** complete draft → supervisor approval → Thesis Defense Form → examining committee formed ≥1 month before defense → defense (15–20 min presentation) → final PDF ≤2 weeks after defense. Supervisor meetings every ~2 weeks.
@@ -16,7 +16,7 @@
 ## Month 1 — Consolidate & Recruit (Jun 9 – Jul 5)
 
 ### Week 1 (Jun 9–14)
-- [ ] Consolidate into ONE master document (merge `Thesis_Odradek_2.docx` + `chapters/ch1`, `ch3`, `literature_review.md`). Archive everything else.
+- [ ] Consolidate into ONE master document (merge `Thesis_CLARA_2.docx` + `chapters/ch1`, `ch3`, `literature_review.md`). Archive everything else.
 - [ ] Decide scope: H1 (insight-action gap) + H2 (signal fragmentation) as primary; H3–H8 secondary/descriptive.
 - [ ] Draft participant consent form + check OPIT ethics requirements (ask advisor Jun 19).
 - [ ] Build recruitment list: 25–30 candidate marketers (LinkedIn, communities, alumni, employer network).

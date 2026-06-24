@@ -1,9 +1,9 @@
-# Hybrid_GLM
+# CLARA
 
-Hybrid_GLM is a governed feedback-to-action platform for an MSc AI thesis and a
+CLARA is a governed feedback-to-action platform for an MSc AI thesis and a
 future EU-focused SaaS. It is a hybrid of two earlier builds:
 
-- **Base:** Odradek_2 (Python/FastAPI + Next.js) — clean domain model,
+- **Base:** CLARA_2 (Python/FastAPI + Next.js) — clean domain model,
   governance-by-design, 86 tests, CI.
 - **Ported in:** Elvis_thesis_lovable's AI layer (provider-agnostic, local-first
   via Ollama/vLLM), semantic + adaptive taxonomy, 17-page UI, Supabase Auth +
@@ -15,7 +15,7 @@ See [PLAN.md](./PLAN.md) for the phased build plan and
 [docs/hybrid-architecture.md](./docs/hybrid-architecture.md) for what came from
 where. Elvis's source is preserved under `reference/elvis/` as a port reference.
 
-> Odradek is the first build of a European Feedback-to-Outcome platform.
+> CLARA is the first build of a European Feedback-to-Outcome platform.
 
 The initial product is an evidence-backed Action Queue for customer problems:
 
@@ -64,10 +64,10 @@ API health check:
 curl http://localhost:8000/health
 ```
 
-By default, workflow state is persisted to `apps/api/.data/odradek.db`. Override this with:
+By default, workflow state is persisted to `apps/api/.data/clara.db`. Override this with:
 
 ```bash
-export ODRADEK_DB_PATH=/absolute/path/to/odradek.db
+export CLARA_DB_PATH=/absolute/path/to/clara.db
 ```
 
 For Supabase/Postgres-backed deployments, set `DATABASE_URL` instead. When

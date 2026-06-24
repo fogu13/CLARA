@@ -6,7 +6,7 @@ to synthesize an actionable insight per cluster.
 Improvements over the original:
   - Multi-tag Jaccard clustering (replaces first-tag-only grouping)
   - Optional semantic fallback via embeddings
-  - 8-factor severity using Odradek_2's impact scoring (when context available)
+  - 8-factor severity using CLARA_2's impact scoring (when context available)
   - Time-decayed frequency with trend labels (replaces raw volume count)
   - Source corroboration factor
   - Configurable thresholds via env vars

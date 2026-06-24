@@ -1,2 +1,2 @@
-"""Odradek API package."""
+"""CLARA API package."""
 

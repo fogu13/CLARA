@@ -1,7 +1,7 @@
 """Jira destination connector (push).
 
 Creates Jira issues from approved actions via the Jira Cloud REST API v3.
-Replaces Odradek_2's local-only JiraIssueDraft (workflow.py:125-142, which
+Replaces CLARA_2's local-only JiraIssueDraft (workflow.py:125-142, which
 hardcoded project_key="ODR") with a real POST /rest/api/3/issue call.
 
 Auth: config = {
@@ -163,6 +163,6 @@ class JiraDestinationConnector:
                 },
                 "issuetype": {"name": "Task"},
                 "priority": {"name": jira_priority},
-                "labels": ["odradek", "customer-feedback"],
+                "labels": ["clara", "customer-feedback"],
             }
         }

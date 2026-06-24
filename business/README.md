@@ -1,6 +1,6 @@
 # Business
 
-Commercial and go-to-market materials for Odradek (separate from the academic thesis and the
+Commercial and go-to-market materials for CLARA (separate from the academic thesis and the
 platform codebase).
 
 ## Contents

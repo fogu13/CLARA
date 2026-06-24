@@ -2,7 +2,7 @@
 
 ## Document purpose
 
-This document maps the Odradek Hybrid_GLM platform's features against the
+This document maps the CLARA CLARA platform's features against the
 EU AI Act requirements and GDPR obligations. It serves as both a thesis
 chapter contribution and a commercial compliance artifact.
 

@@ -19,7 +19,7 @@
 services:
   langfuse-web:
     image: langfuse/langfuse:2
-    container_name: hybrid_glm_langfuse
+    container_name: clara_langfuse
     restart: unless-stopped
     depends_on:
       - langfuse-db
@@ -34,7 +34,7 @@ services:
 
   langfuse-db:
     image: postgres:15
-    container_name: hybrid_glm_langfuse_db
+    container_name: clara_langfuse_db
     restart: unless-stopped
     environment:
       POSTGRES_DB: langfuse

@@ -2,7 +2,7 @@
 
 Port of Elvis's app_role enum (owner/admin/editor/viewer) with actual
 enforcement. Elvis had the schema but no UI or edge-fn enforcement;
-Odradek_2 had no RBAC at all.
+CLARA_2 had no RBAC at all.
 
 Usage:
   from app.rbac import require_role, Role

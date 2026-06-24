@@ -43,15 +43,15 @@ def test_postgres_url_normalization_accepts_supabase_postgres_scheme() -> None:
 
 
 def test_postgres_schema_contains_production_tables() -> None:
-    assert "odradek_problems" in SCHEMA_SQL
-    assert "odradek_signals" in SCHEMA_SQL
-    assert "odradek_candidate_decisions" in SCHEMA_SQL
-    assert "odradek_customer_context" in SCHEMA_SQL
-    assert "odradek_workflow_records" in SCHEMA_SQL
+    assert "clara_problems" in SCHEMA_SQL
+    assert "clara_signals" in SCHEMA_SQL
+    assert "clara_candidate_decisions" in SCHEMA_SQL
+    assert "clara_customer_context" in SCHEMA_SQL
+    assert "clara_workflow_records" in SCHEMA_SQL
     assert "tenant_id TEXT NOT NULL DEFAULT 'legacy'" in SCHEMA_SQL
     assert "retention_expires_at TIMESTAMPTZ" in SCHEMA_SQL
-    assert "odradek_taxonomy_catalogs" in SCHEMA_SQL
-    assert "odradek_terminology_dictionary" in SCHEMA_SQL
+    assert "clara_taxonomy_catalogs" in SCHEMA_SQL
+    assert "clara_terminology_dictionary" in SCHEMA_SQL
 
 
 def test_workflow_tenant_retention_migration_enables_rls() -> None:
@@ -60,7 +60,7 @@ def test_workflow_tenant_retention_migration_enables_rls() -> None:
     assert "tenant_id TEXT NOT NULL DEFAULT 'legacy'" in migration
     assert "retention_expires_at TIMESTAMPTZ" in migration
     assert "ENABLE ROW LEVEL SECURITY" in migration
-    assert "odradek_workflow_records_tenant_isolation" in migration
+    assert "clara_workflow_records_tenant_isolation" in migration
 
 
 def test_database_url_switches_default_stores_to_postgres(monkeypatch) -> None:

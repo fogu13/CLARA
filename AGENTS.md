@@ -1,6 +1,6 @@
-# Odradek Agent Rules
+# CLARA Agent Rules
 
-Odradek is a governed customer-feedback intelligence and orchestration product. Preserve evidence, confidence, limitations and auditability. Consequential execution starts as draft-plus-human-approval; do not make this a chat-first analytics product, autonomous customer-contact system, CDP or campaign-delivery platform.
+CLARA is a governed customer-feedback intelligence and orchestration product. Preserve evidence, confidence, limitations and auditability. Consequential execution starts as draft-plus-human-approval; do not make this a chat-first analytics product, autonomous customer-contact system, CDP or campaign-delivery platform.
 
 Repository shape: `apps/web` is the Next.js frontend, `apps/api` is the FastAPI backend, `apps/api/migrations` contains PostgreSQL/Supabase-compatible persistence, `apps/api/app/tests` contains API tests, and `docs` contains product and architecture context.
 

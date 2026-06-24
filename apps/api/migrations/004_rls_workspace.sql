@@ -1,9 +1,9 @@
 -- 004 — Workspaces + RLS multi-tenancy
 -- Port of Elvis RLS pattern (reference/elvis/supabase/migrations/20260308202409_*.sql
--- and 20260621180000_per_user_workspace_*.sql), reconciled with Odradek_2's
+-- and 20260621180000_per_user_workspace_*.sql), reconciled with CLARA_2's
 -- migration 002 tenant_id pattern.
 --
--- Fixes Odradek_2's acknowledged gap (apps/api/app/services/postgres.py:471 —
+-- Fixes CLARA_2's acknowledged gap (apps/api/app/services/postgres.py:471 —
 -- "workflow_records has no tenant_id yet; future RLS milestone adds DB tenant
 -- boundaries").
 --
@@ -138,7 +138,7 @@ BEGIN
 END;
 $$;
 
--- ====== Add workspace_id to all odradek_* tables ======
+-- ====== Add workspace_id to all clara_* tables ======
 -- Default to a 'default' workspace so existing data is not orphaned.
 
 DO $$
@@ -155,51 +155,51 @@ BEGIN
     SELECT id INTO default_ws_id FROM public.workspaces WHERE slug = 'default';
   END IF;
 
-  -- odradek_problems
-  ALTER TABLE odradek_problems ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES public.workspaces(id);
-  UPDATE odradek_problems SET workspace_id = default_ws_id WHERE workspace_id IS NULL;
-  ALTER TABLE odradek_problems ALTER COLUMN workspace_id SET NOT NULL;
-  CREATE INDEX IF NOT EXISTS odradek_problems_workspace_idx ON odradek_problems(workspace_id);
+  -- clara_problems
+  ALTER TABLE clara_problems ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES public.workspaces(id);
+  UPDATE clara_problems SET workspace_id = default_ws_id WHERE workspace_id IS NULL;
+  ALTER TABLE clara_problems ALTER COLUMN workspace_id SET NOT NULL;
+  CREATE INDEX IF NOT EXISTS clara_problems_workspace_idx ON clara_problems(workspace_id);
 
-  -- odradek_signals
-  ALTER TABLE odradek_signals ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES public.workspaces(id);
-  UPDATE odradek_signals SET workspace_id = default_ws_id WHERE workspace_id IS NULL;
-  ALTER TABLE odradek_signals ALTER COLUMN workspace_id SET NOT NULL;
-  CREATE INDEX IF NOT EXISTS odradek_signals_workspace_idx ON odradek_signals(workspace_id);
+  -- clara_signals
+  ALTER TABLE clara_signals ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES public.workspaces(id);
+  UPDATE clara_signals SET workspace_id = default_ws_id WHERE workspace_id IS NULL;
+  ALTER TABLE clara_signals ALTER COLUMN workspace_id SET NOT NULL;
+  CREATE INDEX IF NOT EXISTS clara_signals_workspace_idx ON clara_signals(workspace_id);
 
-  -- odradek_candidate_decisions
-  ALTER TABLE odradek_candidate_decisions ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES public.workspaces(id);
-  UPDATE odradek_candidate_decisions SET workspace_id = default_ws_id WHERE workspace_id IS NULL;
-  ALTER TABLE odradek_candidate_decisions ALTER COLUMN workspace_id SET NOT NULL;
-  CREATE INDEX IF NOT EXISTS odradek_candidate_decisions_workspace_idx ON odradek_candidate_decisions(workspace_id);
+  -- clara_candidate_decisions
+  ALTER TABLE clara_candidate_decisions ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES public.workspaces(id);
+  UPDATE clara_candidate_decisions SET workspace_id = default_ws_id WHERE workspace_id IS NULL;
+  ALTER TABLE clara_candidate_decisions ALTER COLUMN workspace_id SET NOT NULL;
+  CREATE INDEX IF NOT EXISTS clara_candidate_decisions_workspace_idx ON clara_candidate_decisions(workspace_id);
 
-  -- odradek_customer_context
-  ALTER TABLE odradek_customer_context ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES public.workspaces(id);
-  UPDATE odradek_customer_context SET workspace_id = default_ws_id WHERE workspace_id IS NULL;
-  ALTER TABLE odradek_customer_context ALTER COLUMN workspace_id SET NOT NULL;
-  CREATE INDEX IF NOT EXISTS odradek_customer_context_workspace_idx ON odradek_customer_context(workspace_id);
+  -- clara_customer_context
+  ALTER TABLE clara_customer_context ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES public.workspaces(id);
+  UPDATE clara_customer_context SET workspace_id = default_ws_id WHERE workspace_id IS NULL;
+  ALTER TABLE clara_customer_context ALTER COLUMN workspace_id SET NOT NULL;
+  CREATE INDEX IF NOT EXISTS clara_customer_context_workspace_idx ON clara_customer_context(workspace_id);
 
-  -- odradek_taxonomy_catalogs
-  ALTER TABLE odradek_taxonomy_catalogs ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES public.workspaces(id);
-  UPDATE odradek_taxonomy_catalogs SET workspace_id = default_ws_id WHERE workspace_id IS NULL;
-  ALTER TABLE odradek_taxonomy_catalogs ALTER COLUMN workspace_id SET NOT NULL;
+  -- clara_taxonomy_catalogs
+  ALTER TABLE clara_taxonomy_catalogs ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES public.workspaces(id);
+  UPDATE clara_taxonomy_catalogs SET workspace_id = default_ws_id WHERE workspace_id IS NULL;
+  ALTER TABLE clara_taxonomy_catalogs ALTER COLUMN workspace_id SET NOT NULL;
 
-  -- odradek_terminology_dictionary
-  ALTER TABLE odradek_terminology_dictionary ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES public.workspaces(id);
-  UPDATE odradek_terminology_dictionary SET workspace_id = default_ws_id WHERE workspace_id IS NULL;
-  ALTER TABLE odradek_terminology_dictionary ALTER COLUMN workspace_id SET NOT NULL;
+  -- clara_terminology_dictionary
+  ALTER TABLE clara_terminology_dictionary ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES public.workspaces(id);
+  UPDATE clara_terminology_dictionary SET workspace_id = default_ws_id WHERE workspace_id IS NULL;
+  ALTER TABLE clara_terminology_dictionary ALTER COLUMN workspace_id SET NOT NULL;
 END $$;
 
--- odradek_workflow_records already has tenant_id TEXT from migration 002.
+-- clara_workflow_records already has tenant_id TEXT from migration 002.
 -- Add workspace_id INTEGER alongside it (tenant_id stays for backward compat).
-ALTER TABLE odradek_workflow_records ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES public.workspaces(id);
-UPDATE odradek_workflow_records SET workspace_id = (
+ALTER TABLE clara_workflow_records ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES public.workspaces(id);
+UPDATE clara_workflow_records SET workspace_id = (
   SELECT id FROM public.workspaces WHERE slug = 'default'
 ) WHERE workspace_id IS NULL;
-ALTER TABLE odradek_workflow_records ALTER COLUMN workspace_id SET NOT NULL;
-CREATE INDEX IF NOT EXISTS odradek_workflow_workspace_idx ON odradek_workflow_records(workspace_id, problem_id, record_type);
+ALTER TABLE clara_workflow_records ALTER COLUMN workspace_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS clara_workflow_workspace_idx ON clara_workflow_records(workspace_id, problem_id, record_type);
 
--- ====== RLS policies on all odradek_* tables ======
+-- ====== RLS policies on all clara_* tables ======
 -- Dual check: app.tenant_id (set by FastAPI middleware) OR JWT claim (Supabase client).
 
 CREATE OR REPLACE FUNCTION public.current_workspace_id()
@@ -233,13 +233,13 @@ DECLARE
 BEGIN
   FOR tbl IN
     SELECT unnest(ARRAY[
-      'odradek_problems',
-      'odradek_signals',
-      'odradek_candidate_decisions',
-      'odradek_customer_context',
-      'odradek_workflow_records',
-      'odradek_taxonomy_catalogs',
-      'odradek_terminology_dictionary'
+      'clara_problems',
+      'clara_signals',
+      'clara_candidate_decisions',
+      'clara_customer_context',
+      'clara_workflow_records',
+      'clara_taxonomy_catalogs',
+      'clara_terminology_dictionary'
     ])
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
@@ -263,9 +263,9 @@ DECLARE
 BEGIN
   FOR tbl IN
     SELECT unnest(ARRAY[
-      'odradek_problems', 'odradek_signals', 'odradek_candidate_decisions',
-      'odradek_customer_context', 'odradek_workflow_records',
-      'odradek_taxonomy_catalogs', 'odradek_terminology_dictionary'
+      'clara_problems', 'clara_signals', 'clara_candidate_decisions',
+      'clara_customer_context', 'clara_workflow_records',
+      'clara_taxonomy_catalogs', 'clara_terminology_dictionary'
     ])
   LOOP
     EXECUTE format(

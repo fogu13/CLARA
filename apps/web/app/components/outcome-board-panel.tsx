@@ -63,8 +63,8 @@ export function OutcomeBoardPanel() {
   useEffect(() => {
     void loadBoard();
 
-    window.addEventListener("odradek:outcome-recorded", loadBoard);
-    return () => window.removeEventListener("odradek:outcome-recorded", loadBoard);
+    window.addEventListener("clara:outcome-recorded", loadBoard);
+    return () => window.removeEventListener("clara:outcome-recorded", loadBoard);
   }, []);
 
   const board = state.board;

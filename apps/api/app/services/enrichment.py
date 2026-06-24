@@ -3,7 +3,7 @@
 Extracts sentiment, sentiment_score, urgency, and tags from qualitative customer
 feedback signals via a single LLM call_tool with forced structured output.
 
-Every enrichment carries evidence/confidence/limitations/audit per Odradek_2's
+Every enrichment carries evidence/confidence/limitations/audit per CLARA_2's
 governed-AI model (apps/api/app/domain/models.py).
 """
 
@@ -109,7 +109,7 @@ def merge_enrichment_into_signal(
     """Merge an LLM enrichment into a signal dict, adding audit metadata.
 
     Adds the enrichment fields plus an `enriched: True` flag and an `audit`
-    block recording the model and enrichment source, per Odradek_2's
+    block recording the model and enrichment source, per CLARA_2's
     evidence/confidence/limitations/audit model.
     """
     from app.services.ai import AI_MODEL

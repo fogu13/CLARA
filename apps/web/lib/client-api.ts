@@ -34,8 +34,8 @@ function apiBaseUrl(): string {
 
 function trustedHeaders(): Record<string, string> {
   return {
-    "x-tenant-id": process.env.NEXT_PUBLIC_ODRADEK_TENANT_ID ?? "demo_tenant",
-    "x-actor-id": process.env.NEXT_PUBLIC_ODRADEK_ACTOR_ID ?? "demo_reviewer"
+    "x-tenant-id": process.env.NEXT_PUBLIC_CLARA_TENANT_ID ?? "demo_tenant",
+    "x-actor-id": process.env.NEXT_PUBLIC_CLARA_ACTOR_ID ?? "demo_reviewer"
   };
 }
 

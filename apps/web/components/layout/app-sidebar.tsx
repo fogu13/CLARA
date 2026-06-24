@@ -40,7 +40,7 @@ export function AppSidebar() {
         <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
           <span className="text-sm font-bold text-primary-foreground">O</span>
         </div>
-        <span className="font-semibold text-foreground">Odradek</span>
+        <span className="font-semibold text-foreground">CLARA</span>
       </div>
       <nav className="flex-1 space-y-1 p-3">
         {NAV_ITEMS.map((item) => {

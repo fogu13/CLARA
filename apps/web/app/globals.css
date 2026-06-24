@@ -22,7 +22,7 @@
   --ring: 174 100% 21%;
   --radius: 0.5rem;
 
-  /* Legacy Odradek_2 vars (kept for backward compat with existing components) */
+  /* Legacy CLARA_2 vars (kept for backward compat with existing components) */
   --surface: #ffffff;
   --surface-muted: #eef2f1;
   --text: #161a1d;

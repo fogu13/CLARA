@@ -1,11 +1,11 @@
 {
-  "name": "odradek",
+  "name": "clara",
   "private": true,
   "workspaces": [
     "apps/web"
   ],
   "scripts": {
-    "api:test": "cd apps/api && PYTHONPYCACHEPREFIX=/tmp/odradek_pycache python3 -m pytest app/tests",
+    "api:test": "cd apps/api && PYTHONPYCACHEPREFIX=/tmp/clara_pycache python3 -m pytest app/tests",
     "web:dev": "npm --workspace apps/web run dev",
     "web:lint": "npm --workspace apps/web run lint",
     "web:build": "npm --workspace apps/web run build",

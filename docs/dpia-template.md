@@ -1,10 +1,10 @@
-# DPIA Template — Odradek Hybrid_GLM Platform
+# DPIA Template — CLARA CLARA Platform
 
 ## Data Protection Impact Assessment
 
 ### 1. Description of the processing
 
-**System:** Odradek Hybrid_GLM — governed customer feedback-to-action platform
+**System:** CLARA CLARA — governed customer feedback-to-action platform
 
 **Processing:** Ingestion, AI-powered triage (sentiment/urgency/tag extraction,
 insight synthesis), governance-gated action routing, outcome measurement, and

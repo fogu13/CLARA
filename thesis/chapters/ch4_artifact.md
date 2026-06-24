@@ -1,17 +1,17 @@
 # Chapter 4: The Artifact
 
-> **DRAFT for review.** This chapter documents the Odradek platform as built. It is generated from the
+> **DRAFT for review.** This chapter documents the CLARA platform as built. It is generated from the
 > implemented codebase (branch `feat/strategy-alignment`) to align the thesis with the artifact; the
 > author should revise prose, verify citations against the reference list, and reconcile section
 > numbering with the final manuscript.
 
 ## 4.1 Overview
 
-The artifact of this thesis is **Odradek**, a working web platform that instantiates the complete
+The artifact of this thesis is **CLARA**, a working web platform that instantiates the complete
 **Signal → Insight → Action → Learning** cycle. Where Chapter 3 established *how* the artifact is
 evaluated, this chapter documents *what was built* and, more importantly, the non-trivial design
 decisions that constitute the design-science contribution (Hevner, March, Park, & Ram, 2004, G6).
-Odradek is implemented as a React 18 / TypeScript single-page application on a Supabase
+CLARA is implemented as a React 18 / TypeScript single-page application on a Supabase
 (PostgreSQL + Auth + Edge Functions) backend. All data is workspace-scoped through row-level
 security, so the platform is multi-tenant by construction.
 
@@ -22,7 +22,7 @@ knowledge loss (Walsh & Ungson, 1991; Argote, 2013).
 
 ## 4.2 Architecture
 
-Odradek is organised as a pipeline of bounded stages, each with a clear interface:
+CLARA is organised as a pipeline of bounded stages, each with a clear interface:
 
 | Stage | Responsibility | Implementation |
 |-------|----------------|----------------|
@@ -51,7 +51,7 @@ Each is now implemented; this section documents the chosen design and its theore
 ### 4.3.1 Rule conflict resolution
 
 When several rules match the same insight, the engine must decide which fires, or the system will
-either over-act (duplicate tickets, alert fatigue) or under-act. Odradek's `evaluate-rules` function
+either over-act (duplicate tickets, alert fatigue) or under-act. CLARA's `evaluate-rules` function
 ranks matched rules by **priority**, breaks ties by **specificity** (number of conditions), and then
 deduplicates by **action type** so that each action type fires at most once; superseded rules are
 recorded and returned. This is a pragmatic instantiation of conflict-resolution strategies from
@@ -61,7 +61,7 @@ Sheridan, & Wickens, 2000) by letting more specific, higher-priority rules domin
 
 ### 4.3.2 Confidence decay in learnings
 
-An A/B result that was valid two years ago may no longer hold. Odradek stores each learning's
+An A/B result that was valid two years ago may no longer hold. CLARA stores each learning's
 `last_validated_at` and a `half_life_days`, and computes a **decayed confidence** on read using
 exponential decay (`base × 0.5^(age / half-life)`); learnings past their half-life are flagged
 "stale." This treats organisational memory as perishable rather than permanent, consistent with work
@@ -80,7 +80,7 @@ dilution of widespread low-urgency issues.
 
 ### 4.3.4 Relevant past-learnings retrieval
 
-When a practitioner plans a new experiment, the system should surface what is already known. Odradek
+When a practitioner plans a new experiment, the system should surface what is already known. CLARA
 ranks learnings by token overlap with the query, weighted by decayed confidence, and surfaces them
 both in a search interface and inline in the rule builder. The design is an information-retrieval
 problem (Salton & McGill, 1983) framed as case-based reasoning (Kolodner, 1993) and knowledge reuse

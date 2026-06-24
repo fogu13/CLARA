@@ -1,0 +1,33 @@
+# Render Blueprint — CLARA API
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: clara-api
+    runtime: python
+    buildCommand: pip install -e ".[dev]"
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: AI_BASE_URL
+        value: http://localhost:11434/v1
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: llama3.1
+      - key: APP_CORS_ORIGINS
+        sync: false
+      - key: LANGFUSE_PUBLIC_KEY
+        sync: false
+      - key: LANGFUSE_SECRET_KEY
+        sync: false
+      - key: LANGFUSE_BASE_URL
+        sync: false
+    healthCheckPath: /health
+    autoDeploy: true

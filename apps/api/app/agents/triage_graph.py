@@ -1,6 +1,6 @@
 """LangGraph triage pipeline — agentic state machine.
 
-Replaces Odradek_2's synchronous per-request build_candidates model
+Replaces CLARA_2's synchronous per-request build_candidates model
 (apps/api/app/main.py:384-395) with a durable, resumable graph:
 
     ingest -> enrich -> classify -> synthesize -> governance_gate
@@ -9,9 +9,9 @@ Replaces Odradek_2's synchronous per-request build_candidates model
 Design principles (preserved from both source repos):
   - Bounded LLM calls for structured extraction; no autonomous action selection.
   - Human-in-the-loop interrupt for consequential actions (EU AI Act Art 14).
-  - Every AI claim carries evidence/confidence/limitations/audit (Odradek_2 model).
+  - Every AI claim carries evidence/confidence/limitations/audit (CLARA_2 model).
   - Deterministic cross-signal severity (Elvis synthesize-insights) stays in code.
-  - Governance gate (Odradek_2 PolicyRule) blocks action if checks fail.
+  - Governance gate (CLARA_2 PolicyRule) blocks action if checks fail.
   - MemorySaver checkpointer for tests; PostgresSaver for production durability.
 """
 
@@ -175,7 +175,7 @@ def synthesize_node(state: TriageState) -> dict[str, Any]:
 def governance_node(state: TriageState) -> dict[str, Any]:
     """Governance gate: check policy rules before action.
 
-    Wraps Odradek_2's assert_governance_allows_decision pattern
+    Wraps CLARA_2's assert_governance_allows_decision pattern
     (workflow.py:43-57). Blocking checks prevent action — the human can
     still review but cannot approve.
     """  # noqa: E501
@@ -383,7 +383,7 @@ def action_node(state: TriageState) -> dict[str, Any]:
 def measure_node(state: TriageState) -> dict[str, Any]:
     """Measure outcomes after action execution.
 
-    Port of Elvis's measure-outcomes edge fn + Odradek_2's direction-aware
+    Port of Elvis's measure-outcomes edge fn + CLARA_2's direction-aware
     outcome_status. Builds an outcome contract at action time, then measures
     the metric and computes resolution_score + closure_level.
 
@@ -447,7 +447,7 @@ def measure_node(state: TriageState) -> dict[str, Any]:
 def learn_node(state: TriageState) -> dict[str, Any]:
     """Extract learnings from the action-outcome cycle.
 
-    Merges Elvis's confidence-decay AbLearning model with Odradek_2's
+    Merges Elvis's confidence-decay AbLearning model with CLARA_2's
     structured LearningConclusion verdicts. If a human conclusion is provided
     via state, builds a learning record with appropriate confidence.
     Otherwise, auto-derives a preliminary conclusion from the outcome status.

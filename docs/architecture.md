@@ -76,4 +76,4 @@ Seed problem records and policy rules are still loaded from JSON in the prototyp
 - Jira issue drafts;
 - outcome measurements.
 
-The default database file is `apps/api/.data/odradek.db`, ignored by git. This is sufficient for local demos and development; a later milestone should move seed problem records, signals, context, promoted drafts and workflow state into PostgreSQL with tenant boundaries.
+The default database file is `apps/api/.data/clara.db`, ignored by git. This is sufficient for local demos and development; a later milestone should move seed problem records, signals, context, promoted drafts and workflow state into PostgreSQL with tenant boundaries.

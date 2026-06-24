@@ -208,7 +208,7 @@ class TestJiraPush:
 
         assert "auth failed" in str(exc_info.value).lower()
 
-    def test_includes_odradek_labels(self, httpx_mock: Any) -> None:
+    def test_includes_clara_labels(self, httpx_mock: Any) -> None:
         from app.connectors.jira import JiraDestinationConnector
 
         httpx_mock.add_response(
@@ -230,5 +230,5 @@ class TestJiraPush:
         )
 
         body = json.loads(httpx_mock.get_requests()[-1].read())
-        assert "odradek" in body["fields"]["labels"]
+        assert "clara" in body["fields"]["labels"]
         assert "customer-feedback" in body["fields"]["labels"]

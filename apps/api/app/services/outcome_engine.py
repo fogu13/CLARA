@@ -1,10 +1,10 @@
 """Outcome engine — close-the-loop measurement.
 
 Merges Elvis's outcome-contract + resolution_score (measure-outcomes edge fn)
-with Odradek_2's direction-aware outcome_status (workflow.py:63-87).
+with CLARA_2's direction-aware outcome_status (workflow.py:63-87).
 
 Elvis: resolution_score = clamp01(1 - measured/baseline) for "lower is better"
-metrics (e.g. complaint recurrence). Odradek_2: direction-aware status handles
+metrics (e.g. complaint recurrence). CLARA_2: direction-aware status handles
 both "higher is better" and "lower is better" metrics correctly.
 
 The hybrid engine:
@@ -12,7 +12,7 @@ The hybrid engine:
      measurement_window_days).
   2. After the measurement window, recomputes the metric from new signals.
   3. Computes resolution_score (Elvis's formula, generalized for direction).
-  4. Reports direction-aware status (Odradek_2's outcome_status).
+  4. Reports direction-aware status (CLARA_2's outcome_status).
   5. Assigns a closure_level (Elvis's chips: operational/customer/outcome).
 """
 
@@ -32,7 +32,7 @@ def clamp01(n: float) -> float:
 def outcome_direction(*, baseline: float, target: float) -> str:
     """Determine if higher or lower values are better.
 
-    Port of Odradek_2's outcome_direction (workflow.py:64-65).
+    Port of CLARA_2's outcome_direction (workflow.py:64-65).
     """
     return "increase" if target >= baseline else "decrease"
 
@@ -45,7 +45,7 @@ def outcome_status(
 ) -> str:
     """Direction-aware outcome status.
 
-    Port of Odradek_2's outcome_status (workflow.py:68-88). Handles both
+    Port of CLARA_2's outcome_status (workflow.py:68-88). Handles both
     "higher is better" (success_threshold >= baseline) and "lower is better"
     (success_threshold < baseline) metrics correctly, so complaint-rate metrics
     are not misread as completion-rate metrics.
@@ -185,7 +185,7 @@ def measure_outcome(
 
     Combines:
       - resolution_score (Elvis's formula, generalized)
-      - outcome_status (Odradek_2's direction-aware status)
+      - outcome_status (CLARA_2's direction-aware status)
       - closure_level (Elvis's chips)
 
     Returns: {

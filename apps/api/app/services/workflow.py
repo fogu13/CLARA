@@ -133,7 +133,7 @@ def build_jira_issue_draft(
         summary=problem.title,
         description=description,
         labels=[
-            "odradek",
+            "clara",
             label_token(problem.journey),
             label_token(problem.journey_stage),
         ],
