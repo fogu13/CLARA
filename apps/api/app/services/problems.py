@@ -5,6 +5,8 @@ import sqlite3
 from pathlib import Path
 
 from app.domain.models import (
+    ActionProposal,
+    ActionProposalSnapshot,
     ActionProposalUpdateRequest,
     ProblemRecord,
     ProblemStatus,
@@ -30,6 +32,10 @@ def apply_problem_update(problem: ProblemRecord, update: ProblemUpdateRequest) -
     return with_approval_pressure(problem.model_copy(update=updates))
 
 
+def action_snapshot(action: ActionProposal) -> ActionProposalSnapshot:
+    return ActionProposalSnapshot.model_validate(action.model_dump(by_alias=True))
+
+
 def apply_action_proposal_update(
     problem: ProblemRecord,
     action_id: str,
@@ -45,6 +51,8 @@ def apply_action_proposal_update(
             continue
 
         found_action = True
+        if updates and action.original_snapshot is None:
+            updates["original_snapshot"] = action_snapshot(action)
         updated_actions.append(action.model_copy(update=updates))
 
     if not found_action:

@@ -902,10 +902,12 @@ def create_app(
     @api.get("/audit-export", dependencies=[Depends(require_role(Role.admin))])
     def export_audit_log() -> dict:
         return {
-            "approvals": [record.model_dump(mode="json") for record in workflow_store.list_approvals()],
-            "executions": [record.model_dump(mode="json") for record in workflow_store.list_executions()],
+            "approvals": [
+                record.model_dump(mode="json", by_alias=True) for record in workflow_store.list_approvals()
+            ],
+            "executions": [record.model_dump(mode="json", by_alias=True) for record in workflow_store.list_executions()],
             "jira_issue_drafts": [
-                record.model_dump(mode="json") for record in workflow_store.list_jira_issue_drafts()
+                record.model_dump(mode="json", by_alias=True) for record in workflow_store.list_jira_issue_drafts()
             ],
         }
 

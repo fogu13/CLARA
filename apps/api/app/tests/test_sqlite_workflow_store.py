@@ -2,7 +2,7 @@ from pathlib import Path
 
 from app.domain.models import ApprovalDecision, LearningConclusionRequest, OutcomeMeasurement
 from app.services.seed import load_seed_problems
-from app.services.workflow import SQLiteWorkflowStore
+from app.services.workflow import SQLiteWorkflowStore, action_snapshot
 
 
 def test_sqlite_store_persists_approvals_and_executions(tmp_path: Path) -> None:
@@ -23,10 +23,45 @@ def test_sqlite_store_persists_approvals_and_executions(tmp_path: Path) -> None:
     state = second_store.state_for_problem(problem)
 
     assert state.approvals[0].action_id == "ACT-501"
+    assert state.approvals[0].action_snapshot is not None
     assert state.executions[0].status == "draft_created"
     assert state.jira_issue_drafts[0].action_id == "ACT-501"
     assert state.jira_issue_drafts[0].execution_id == state.executions[0].execution_id
     assert "verification" in state.jira_issue_drafts[0].description.lower()
+
+
+def test_sqlite_store_persists_approval_action_diff(tmp_path: Path) -> None:
+    problem = load_seed_problems()[0]
+    action = problem.action_proposals[0]
+    edited_action = action.model_copy(
+        update={
+            "owner": "edited_owner",
+            "original_snapshot": action_snapshot(action),
+        }
+    )
+    problem = problem.model_copy(
+        update={"action_proposals": [edited_action, *problem.action_proposals[1:]]}
+    )
+    db_path = tmp_path / "workflow.db"
+
+    first_store = SQLiteWorkflowStore(db_path)
+    first_store.record_approval(
+        problem=problem,
+        decision=ApprovalDecision(
+            action_id="ACT-501",
+            decision="approved",
+            reviewer="test_product_owner",
+        ),
+    )
+
+    second_store = SQLiteWorkflowStore(db_path)
+    approval = second_store.state_for_problem(problem).approvals[0]
+
+    assert approval.action_snapshot is not None
+    assert approval.action_snapshot.owner == "edited_owner"
+    assert approval.action_diff[0].field == "owner"
+    assert approval.action_diff[0].before == action.owner
+    assert approval.action_diff[0].after == "edited_owner"
 
 
 def test_sqlite_store_classifies_decrease_outcomes(tmp_path: Path) -> None:

@@ -140,7 +140,7 @@ def _payload(value: Any) -> dict[str, Any]:
 
 
 def _model_payload(model: Any) -> dict[str, Any]:
-    return model.model_dump(mode="json")
+    return model.model_dump(mode="json", by_alias=True)
 
 
 class PostgresConnectionMixin:

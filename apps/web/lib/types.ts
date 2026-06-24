@@ -203,6 +203,22 @@ export type ContextImpactSummary = {
   drivers: string[];
 };
 
+export type ActionProposalSnapshot = {
+  action_id: string;
+  class: ActionClass;
+  owner: string;
+  destination: string;
+  proposal: string;
+  risk_level: RiskLevel;
+  approval_state: string;
+};
+
+export type ActionProposalChange = {
+  field: string;
+  before: string;
+  after: string;
+};
+
 export type ActionProposal = {
   action_id: string;
   class: ActionClass;
@@ -211,6 +227,7 @@ export type ActionProposal = {
   proposal: string;
   risk_level: RiskLevel;
   approval_state: string;
+  original_snapshot?: ActionProposalSnapshot | null;
 };
 
 export type GovernanceCheck = {
@@ -331,6 +348,8 @@ export type ApprovalRecord = ApprovalDecision & {
   decision_id: string;
   problem_id: string;
   created_at: string;
+  action_snapshot?: ActionProposalSnapshot | null;
+  action_diff: ActionProposalChange[];
 };
 
 export type ExecutionRecord = {
