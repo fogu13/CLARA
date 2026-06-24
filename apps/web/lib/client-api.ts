@@ -44,14 +44,36 @@ function trustedHeaders(): Record<string, string> {
   };
 }
 
+function browserAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    return window.localStorage.getItem("clara_access_token");
+  } catch {
+    return null;
+  }
+}
+
+export function apiHeaders(headers?: HeadersInit): Headers {
+  const merged = new Headers({
+    "Content-Type": "application/json",
+    ...trustedHeaders()
+  });
+
+  new Headers(headers).forEach((value, key) => merged.set(key, value));
+
+  const token = browserAccessToken();
+  if (token && !merged.has("Authorization")) {
+    merged.set("Authorization", `Bearer ${token}`);
+  }
+
+  return merged;
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...trustedHeaders(),
-      ...(init?.headers ?? {})
-    }
+    headers: apiHeaders(init?.headers)
   });
 
   if (!response.ok) {
