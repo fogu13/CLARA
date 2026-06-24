@@ -9,7 +9,8 @@ import { DraftProblemEditor } from "@/app/components/draft-problem-editor";
 import { EvidencePanel } from "@/app/components/evidence-panel";
 import { OutcomeMeasurementPanel } from "@/app/components/outcome-measurement-panel";
 import { ProblemLifecyclePanel } from "@/app/components/problem-lifecycle-panel";
-import { getActionQueueProblems } from "@/lib/api";
+import { getActionQueueProblems, getPolicyRules } from "@/lib/api";
+import type { ActionClass, ActionProposal, GovernanceCheck, PolicyRule, ProblemRecord } from "@/lib/types";
 
 function percent(value: number | undefined): string {
   return `${Math.round((value ?? 0) * 100)}%`;
@@ -19,6 +20,134 @@ function label(value: string): string {
   return value.replaceAll("_", " ");
 }
 
+type PortfolioArea = {
+  actionClass: ActionClass;
+  title: string;
+  intent: string;
+};
+
+const portfolioAreas: PortfolioArea[] = [
+  {
+    actionClass: "structural",
+    title: "Product Fix",
+    intent: "Structural work that removes the root cause."
+  },
+  {
+    actionClass: "customer_recovery",
+    title: "Customer Recovery",
+    intent: "Immediate recovery for affected customers."
+  },
+  {
+    actionClass: "journey_intervention",
+    title: "Journey Intervention",
+    intent: "Governed audience or lifecycle intervention draft."
+  },
+  {
+    actionClass: "research",
+    title: "Research",
+    intent: "Validation work for uncertain causes or solutions."
+  },
+  {
+    actionClass: "governance",
+    title: "Governance",
+    intent: "Policy, evidence and approval readiness work."
+  }
+];
+
+function matchingRules(action: ActionProposal, rules: PolicyRule[]): PolicyRule[] {
+  return rules.filter(
+    (rule) =>
+      rule.applies_to_action_classes.includes(action.class) &&
+      (action.class === "governance" || rule.applies_to_destinations.includes(action.destination))
+  );
+}
+
+function checkForRule(rule: PolicyRule, checks: GovernanceCheck[]): GovernanceCheck | undefined {
+  return checks.find((check) => (check.policy_rule_id ?? check.rule) === rule.rule_id);
+}
+
+function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord; policyRules: PolicyRule[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Action Portfolio</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {portfolioAreas.map((area) => {
+          const actions = problem.action_proposals.filter((action) => action.class === area.actionClass);
+
+          return (
+            <section key={area.actionClass} className="rounded-lg border p-4">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold">{area.title}</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">{area.intent}</p>
+                </div>
+                <Badge variant="outline">{actions.length || "no"} draft{actions.length === 1 ? "" : "s"}</Badge>
+              </div>
+
+              {actions.length > 0 ? (
+                <div className="mt-4 space-y-4">
+                  {actions.map((action) => {
+                    const rules = matchingRules(action, policyRules);
+
+                    return (
+                      <div key={action.action_id} className="rounded-md border bg-muted/20 p-3">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <h3 className="text-sm font-semibold">{label(action.class)}</h3>
+                            <p className="mt-1 text-sm text-muted-foreground">{action.proposal}</p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge variant="outline">{action.destination}</Badge>
+                            <Badge variant={action.risk_level === "critical" ? "destructive" : "secondary"}>
+                              {action.risk_level}
+                            </Badge>
+                            <Badge variant="outline">{action.owner}</Badge>
+                            <Badge variant="outline">{label(action.approval_state)}</Badge>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid gap-3 text-xs text-muted-foreground md:grid-cols-2">
+                          <p>
+                            Evidence: {problem.evidence.length} excerpts / confidence{" "}
+                            {percent(problem.evidence_confidence)} / {problem.affected_cohort.customers} customers
+                          </p>
+                          <div>
+                            <p className="font-medium text-foreground">Policy checks</p>
+                            {rules.length > 0 ? (
+                              <ul className="mt-1 space-y-1">
+                                {rules.map((rule) => {
+                                  const check = checkForRule(rule, problem.governance_checks);
+
+                                  return (
+                                    <li key={rule.rule_id}>
+                                      {rule.title}: {check ? label(check.status) : "not evaluated"}
+                                      {check?.blocking ? " / blocking" : ""}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            ) : (
+                              <p className="mt-1">No matching policy rule attached yet.</p>
+                            )}
+                          </div>
+                        </div>
+                        <ActionProposalEditor problemId={problem.problem_id} action={action} />
+                        <ActionDecisionPanel problemId={problem.problem_id} action={action} />
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-muted-foreground">No {area.title.toLowerCase()} draft yet.</p>
+              )}
+            </section>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
 
 function JourneyImpactCard({ problem }: { problem: Awaited<ReturnType<typeof getActionQueueProblems>>[number] }) {
   const impact = problem.journey_impact;
@@ -73,7 +202,7 @@ export default async function InsightDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const problems = await getActionQueueProblems();
+  const [problems, policyRules] = await Promise.all([getActionQueueProblems(), getPolicyRules()]);
   const problem = problems.find((item) => item.problem_id === id);
 
   if (!problem) notFound();
@@ -170,32 +299,7 @@ export default async function InsightDetailPage({
       <AffectedContextPanel problemId={problem.problem_id} />
       <JourneyImpactCard problem={problem} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Action Portfolio</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {problem.action_proposals.map((action) => (
-            <section key={action.action_id} className="rounded-lg border p-4">
-              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <h2 className="text-sm font-semibold">{label(action.class)}</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">{action.proposal}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline">{action.destination}</Badge>
-                  <Badge variant={action.risk_level === "critical" ? "destructive" : "secondary"}>
-                    {action.risk_level}
-                  </Badge>
-                  <Badge variant="outline">{action.owner}</Badge>
-                </div>
-              </div>
-              <ActionProposalEditor problemId={problem.problem_id} action={action} />
-              <ActionDecisionPanel problemId={problem.problem_id} action={action} />
-            </section>
-          ))}
-        </CardContent>
-      </Card>
+      <ActionPortfolioCard problem={problem} policyRules={policyRules} />
 
       <Card>
         <CardHeader>

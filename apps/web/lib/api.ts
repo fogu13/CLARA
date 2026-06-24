@@ -1,9 +1,11 @@
 import sampleProblems from "../../../data/sample_problems.json";
+import samplePolicyRules from "../../../data/sample_policy_rules.json";
 import sampleTaxonomies from "../../../data/sample_taxonomies.json";
 import sampleTerminologyDictionary from "../../../data/sample_terminology_dictionary.json";
 import { impactBand, impactScore } from "./scoring";
 import type {
   EmergingProblemReport,
+  PolicyRule,
   ProblemRecord,
   ProblemSummary,
   TerminologyDictionaryEntry,
@@ -29,6 +31,7 @@ const fallbackProblems = (sampleProblems as unknown as ProblemRecord[]).map((pro
   };
 });
 
+const fallbackPolicyRules = samplePolicyRules as unknown as PolicyRule[];
 const fallbackTaxonomies = sampleTaxonomies as unknown as TaxonomyCatalog[];
 const fallbackTerminologyDictionary =
   sampleTerminologyDictionary as unknown as TerminologyDictionaryEntry[];
@@ -59,6 +62,16 @@ export async function getActionQueueProblems(): Promise<ProblemRecord[]> {
     );
   } catch {
     return fallbackProblems;
+  }
+}
+
+export async function getPolicyRules(): Promise<PolicyRule[]> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+  try {
+    return await fetchJson<PolicyRule[]>(`${apiUrl}/policy-rules`);
+  } catch {
+    return fallbackPolicyRules;
   }
 }
 
