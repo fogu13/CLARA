@@ -257,7 +257,9 @@ class ContextImpactSummary(BaseModel):
     drivers: list[str] = Field(default_factory=list)
 
 
-class ActionProposal(BaseModel):
+class ActionProposalSnapshot(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     action_id: str
     class_: ActionClass = Field(alias="class")
     owner: str
@@ -265,6 +267,25 @@ class ActionProposal(BaseModel):
     proposal: str
     risk_level: RiskLevel
     approval_state: str
+
+
+class ActionProposalChange(BaseModel):
+    field: str
+    before: str
+    after: str
+
+
+class ActionProposal(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    action_id: str
+    class_: ActionClass = Field(alias="class")
+    owner: str
+    destination: str
+    proposal: str
+    risk_level: RiskLevel
+    approval_state: str
+    original_snapshot: ActionProposalSnapshot | None = None
 
 
 class GovernanceCheck(BaseModel):
@@ -395,6 +416,8 @@ class ApprovalRecord(ApprovalDecision):
     decision_id: str
     problem_id: str
     created_at: str
+    action_snapshot: ActionProposalSnapshot | None = None
+    action_diff: list[ActionProposalChange] = Field(default_factory=list)
 
 
 class ExecutionRecord(BaseModel):

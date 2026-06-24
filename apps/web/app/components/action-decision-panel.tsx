@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getWorkflowState, submitApproval } from "../../lib/client-api";
-import type { ActionProposal, ApprovalDecisionStatus, WorkflowState } from "../../lib/types";
+import type { ActionProposal, ActionProposalChange, ApprovalDecisionStatus, WorkflowState } from "../../lib/types";
 
 type DecisionState = {
   state: "loading" | "idle" | "saving" | "saved" | "error";
@@ -22,6 +22,33 @@ function latestApproval(workflow: WorkflowState | undefined, actionId: string) {
 
 function approvalMessage(approval: NonNullable<ReturnType<typeof latestApproval>>): string {
   return `${approval.decision.replaceAll("_", " ")} recorded by ${approval.reviewer}.`;
+}
+
+function pendingChanges(action: ActionProposal): ActionProposalChange[] {
+  if (!action.original_snapshot) return [];
+
+  return (["owner", "destination", "proposal", "risk_level", "approval_state"] as const).flatMap((field) => {
+    const before = String(action.original_snapshot?.[field] ?? "");
+    const after = String(action[field] ?? "");
+    return before === after ? [] : [{ field, before, after }];
+  });
+}
+
+function ActionDiff({ title, changes }: { title: string; changes: ActionProposalChange[] }) {
+  if (changes.length === 0) return null;
+
+  return (
+    <div className="action-diff">
+      <p className="action-diff-title">{title}</p>
+      <ul>
+        {changes.map((change) => (
+          <li key={change.field}>
+            <strong>{change.field.replaceAll("_", " ")}:</strong> {change.before}{" -> "}{change.after}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 export function ActionDecisionPanel({
@@ -109,6 +136,7 @@ export function ActionDecisionPanel({
   const matchingJiraDraft = decisionState.workflow?.jira_issue_drafts.find(
     (draft) => draft.action_id === action.action_id
   );
+  const changes = matchingApproval?.action_diff ?? pendingChanges(action);
 
   return (
     <div className="decision-panel" aria-live="polite">
@@ -127,6 +155,7 @@ export function ActionDecisionPanel({
         </div>
       ) : null}
       <p className={`decision-message decision-${decisionState.state}`}>{decisionState.message}</p>
+      <ActionDiff title={matchingApproval ? "Approved action diff" : "Pending approval diff"} changes={changes} />
       {matchingExecution ? (
         <p className="execution-message">
           Execution: {matchingExecution.status.replaceAll("_", " ")} in{" "}

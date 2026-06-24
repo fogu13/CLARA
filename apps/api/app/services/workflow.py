@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import UTC, datetime
 from itertools import count
@@ -9,6 +10,9 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 from app.domain.models import (
+    ActionProposal,
+    ActionProposalChange,
+    ActionProposalSnapshot,
     ApprovalDecision,
     ApprovalDecisionStatus,
     ApprovalRecord,
@@ -82,6 +86,27 @@ def find_action(problem: ProblemRecord, action_id: str):
         raise HTTPException(status_code=404, detail="Action proposal not found")
 
     return action
+
+
+def action_snapshot(action: ActionProposal) -> ActionProposalSnapshot:
+    return ActionProposalSnapshot.model_validate(action.model_dump(by_alias=True))
+
+
+def action_diff(action: ActionProposal) -> list[ActionProposalChange]:
+    if action.original_snapshot is None:
+        return []
+
+    current = action_snapshot(action)
+    changes: list[ActionProposalChange] = []
+    for field in ["owner", "destination", "proposal", "risk_level", "approval_state"]:
+        before = getattr(action.original_snapshot, field)
+        after = getattr(current, field)
+        before_value = before.value if hasattr(before, "value") else str(before)
+        after_value = after.value if hasattr(after, "value") else str(after)
+        if before_value != after_value:
+            changes.append(ActionProposalChange(field=field, before=before_value, after=after_value))
+
+    return changes
 
 
 def assert_governance_allows_decision(
@@ -271,6 +296,8 @@ class WorkflowStore:
             reviewer=decision.reviewer,
             note=decision.note,
             created_at=utc_now(),
+            action_snapshot=action_snapshot(action),
+            action_diff=action_diff(action),
         )
         self._approvals.append(record)
 
@@ -569,6 +596,8 @@ class SQLiteWorkflowStore:
             );
             """
         )
+        self._ensure_column("approvals", "action_snapshot", "TEXT")
+        self._ensure_column("approvals", "action_diff", "TEXT NOT NULL DEFAULT '[]'")
         self._ensure_column("learning_conclusions", "tenant_id", "TEXT NOT NULL DEFAULT 'legacy'")
         self._ensure_column("learning_conclusions", "retention_expires_at", "TEXT NOT NULL DEFAULT ''")
         self._connection.commit()
@@ -639,8 +668,17 @@ class SQLiteWorkflowStore:
         created_at = utc_now()
         cursor = self._connection.execute(
             """
-            INSERT INTO approvals (problem_id, action_id, decision, reviewer, note, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO approvals (
+                problem_id,
+                action_id,
+                decision,
+                reviewer,
+                note,
+                created_at,
+                action_snapshot,
+                action_diff
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 problem.problem_id,
@@ -649,6 +687,8 @@ class SQLiteWorkflowStore:
                 decision.reviewer,
                 decision.note,
                 created_at,
+                json.dumps(action_snapshot(action).model_dump(mode="json", by_alias=True)),
+                json.dumps([change.model_dump(mode="json") for change in action_diff(action)]),
             ),
         )
         approval_id = cursor.lastrowid
@@ -937,6 +977,8 @@ class SQLiteWorkflowStore:
 
     @staticmethod
     def _approval_from_row(row: sqlite3.Row) -> ApprovalRecord:
+        snapshot_payload = row["action_snapshot"] if "action_snapshot" in row.keys() else None
+        diff_payload = row["action_diff"] if "action_diff" in row.keys() else "[]"
         return ApprovalRecord(
             decision_id=f"DEC-{row['id']:04d}",
             problem_id=row["problem_id"],
@@ -945,6 +987,10 @@ class SQLiteWorkflowStore:
             reviewer=row["reviewer"],
             note=row["note"],
             created_at=row["created_at"],
+            action_snapshot=ActionProposalSnapshot.model_validate(json.loads(snapshot_payload))
+            if snapshot_payload
+            else None,
+            action_diff=[ActionProposalChange.model_validate(item) for item in json.loads(diff_payload or "[]")],
         )
 
     @staticmethod

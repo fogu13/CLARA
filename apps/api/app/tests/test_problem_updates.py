@@ -96,6 +96,43 @@ def test_promoted_draft_action_proposal_can_be_edited() -> None:
     assert updated_action["approval_state"] == "ready_for_product_review"
 
 
+def test_action_approval_records_edit_diff() -> None:
+    client = make_client()
+    problem_id = promote_first_candidate(client)
+    original_problem = client.get(f"/problems/{problem_id}").json()
+    action_id = original_problem["action_proposals"][0]["action_id"]
+
+    client.patch(
+        f"/problems/{problem_id}/actions/{action_id}",
+        json={
+            "proposal": "Open a Jira investigation with revised acceptance criteria.",
+            "owner": "product_triage",
+            "approval_state": "ready_for_product_review",
+        },
+    )
+    response = client.post(
+        f"/problems/{problem_id}/approvals",
+        json={
+            "action_id": action_id,
+            "decision": "approved",
+            "reviewer": "test_product_owner",
+        },
+    )
+
+    assert response.status_code == 200
+    approval = response.json()
+    assert approval["action_snapshot"]["owner"] == "product_triage"
+    assert {change["field"] for change in approval["action_diff"]} == {
+        "owner",
+        "proposal",
+        "approval_state",
+    }
+
+    workflow = client.get(f"/problems/{problem_id}/workflow").json()
+    recorded = next(item for item in workflow["approvals"] if item["action_id"] == action_id)
+    assert recorded["action_diff"] == approval["action_diff"]
+
+
 def test_seed_problem_action_edits_are_rejected() -> None:
     client = make_client()
 

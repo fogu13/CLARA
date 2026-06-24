@@ -2,13 +2,14 @@ from pathlib import Path
 
 from app import main
 from app.domain.models import (
+    ApprovalDecision,
     LearningConclusionRecord,
     LearningConclusionRequest,
     OutcomeMeasurement,
 )
-from app.services.postgres import SCHEMA_SQL, PostgresWorkflowStore, normalize_database_url
+from app.services.postgres import SCHEMA_SQL, PostgresWorkflowStore, _model_payload, normalize_database_url
 from app.services.seed import load_seed_problems
-from app.services.workflow import WorkflowStore
+from app.services.workflow import WorkflowStore, action_snapshot
 
 
 class DummyPostgresStore:
@@ -113,6 +114,49 @@ def test_postgres_workflow_loads_latest_outcome_as_snapshot() -> None:
     assert snapshot.latest_value == latest_measurement.observed_value
     assert snapshot.improvement_direction == "decrease"
     assert snapshot.status == "improving"
+
+
+def test_postgres_workflow_loads_approval_with_action_diff() -> None:
+    problem = load_seed_problems()[0]
+    action = problem.action_proposals[0]
+    edited_action = action.model_copy(
+        update={
+            "owner": "edited_owner",
+            "original_snapshot": action_snapshot(action),
+        }
+    )
+    problem = problem.model_copy(
+        update={"action_proposals": [edited_action, *problem.action_proposals[1:]]}
+    )
+
+    saved_records = []
+    store = PostgresWorkflowStore.__new__(PostgresWorkflowStore)
+    WorkflowStore.__init__(store)
+    store._save_workflow_record = lambda *record: saved_records.append(record)
+
+    store.record_approval(
+        problem=problem,
+        decision=ApprovalDecision(
+            action_id="ACT-501",
+            decision="approved",
+            reviewer="test_product_owner",
+        ),
+    )
+
+    approval_record = next(row[3] for row in saved_records if row[0] == "approval")
+    rows = [{"record_type": "approval", "payload": _model_payload(approval_record)}]
+    reload_store = PostgresWorkflowStore.__new__(PostgresWorkflowStore)
+    WorkflowStore.__init__(reload_store)
+    reload_store._connect = lambda: FakePostgresConnection(rows)
+
+    reload_store._load_records()
+    approval = reload_store.state_for_problem(problem).approvals[0]
+
+    assert approval.action_snapshot is not None
+    assert approval.action_snapshot.class_.value == "structural"
+    assert approval.action_snapshot.owner == "edited_owner"
+    assert approval.action_diff[0].field == "owner"
+    assert approval.action_diff[0].after == "edited_owner"
 
 
 def test_postgres_workflow_records_outcome_without_list_state() -> None:
