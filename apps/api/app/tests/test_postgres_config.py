@@ -63,6 +63,15 @@ def test_workflow_tenant_retention_migration_enables_rls() -> None:
     assert "clara_workflow_records_tenant_isolation" in migration
 
 
+def test_pgvector_taxonomy_migration_is_self_contained() -> None:
+    migration = Path("migrations/003_pgvector_taxonomy.sql").read_text()
+
+    taxonomy_table_index = migration.index("CREATE TABLE IF NOT EXISTS public.taxonomy_nodes")
+    assert migration.index("CREATE TABLE IF NOT EXISTS public.workspaces") < taxonomy_table_index
+    assert migration.index("CREATE OR REPLACE FUNCTION public.is_current_workspace") < taxonomy_table_index
+    assert migration.index("CREATE OR REPLACE FUNCTION public.update_updated_at_column") < taxonomy_table_index
+
+
 def test_database_url_switches_default_stores_to_postgres(monkeypatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@host:5432/postgres")
     monkeypatch.setattr(main, "PostgresProblemStore", DummyPostgresStore)

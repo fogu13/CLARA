@@ -106,3 +106,13 @@ def test_connector_configuration_requires_admin(monkeypatch) -> None:
 
     assert editor_response.status_code == 403
     assert admin_response.status_code == 200
+
+def test_audit_export_requires_admin(monkeypatch) -> None:
+    client = make_auth_client(monkeypatch)
+
+    viewer_response = client.get("/audit-export", headers=auth_header("viewer"))
+    admin_response = client.get("/audit-export", headers=auth_header("admin"))
+
+    assert viewer_response.status_code == 403
+    assert admin_response.status_code == 200
+    assert set(admin_response.json()) == {"approvals", "executions", "jira_issue_drafts"}

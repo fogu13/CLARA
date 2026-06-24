@@ -15,6 +15,38 @@
 -- ====== pgvector extension ======
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- ====== Prerequisites used by this migration ======
+-- Keep these here so 003 is safe with lexicographic migration tools.
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SET search_path = public;
+
+CREATE TABLE IF NOT EXISTS public.workspaces (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  slug VARCHAR(100) UNIQUE NOT NULL,
+  settings JSONB DEFAULT '{}',
+  onboarded BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE OR REPLACE FUNCTION public.is_current_workspace(_ws_id integer)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT COALESCE(
+    _ws_id = NULLIF(current_setting('app.tenant_id', true), '')::int,
+    _ws_id = (NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'workspace_id')::int,
+    FALSE
+  )
+$$;
+
+
 -- ====== Taxonomy nodes — 3-level company taxonomy with embeddings ======
 CREATE TABLE IF NOT EXISTS public.taxonomy_nodes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -832,6 +832,16 @@ def create_app(
     def list_jira_drafts() -> list[JiraIssueDraft]:
         return workflow_store.list_jira_issue_drafts()
 
+    @api.get("/audit-export", dependencies=[Depends(require_role(Role.admin))])
+    def export_audit_log() -> dict:
+        return {
+            "approvals": [record.model_dump(mode="json") for record in workflow_store.list_approvals()],
+            "executions": [record.model_dump(mode="json") for record in workflow_store.list_executions()],
+            "jira_issue_drafts": [
+                record.model_dump(mode="json") for record in workflow_store.list_jira_issue_drafts()
+            ],
+        }
+
     # ====== Connector endpoints (Phase 2) ======
 
     @api.get("/connectors")
