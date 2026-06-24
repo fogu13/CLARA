@@ -60,16 +60,30 @@ def test_non_jira_approval_does_not_create_jira_draft() -> None:
     response = client.post(
         "/problems/PRB-108/approvals",
         json={
+            "action_id": "ACT-504",
+            "decision": "approved",
+            "reviewer": "test_research_owner",
+        },
+    )
+
+    assert response.status_code == 200
+    workflow = client.get("/problems/PRB-108/workflow").json()
+    assert workflow["executions"][-1]["destination"] == "research_panel"
+    assert workflow["jira_issue_drafts"] == []
+
+
+def test_missing_customer_contact_check_prevents_approval() -> None:
+    response = client.post(
+        "/problems/PRB-108/approvals",
+        json={
             "action_id": "ACT-502",
             "decision": "approved",
             "reviewer": "test_cx_owner",
         },
     )
 
-    assert response.status_code == 200
-    workflow = client.get("/problems/PRB-108/workflow").json()
-    assert workflow["executions"][-1]["destination"] == "zendesk"
-    assert workflow["jira_issue_drafts"] == []
+    assert response.status_code == 409
+    assert "blocking governance checks" in response.json()["detail"]
 
 
 def test_blocking_governance_failure_prevents_approval() -> None:

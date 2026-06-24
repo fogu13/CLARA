@@ -32,6 +32,50 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
+UNRESOLVED_GOVERNANCE_STATUSES = {"fail", "review_required"}
+GOVERNED_ACTION_CLASSES = {"customer_recovery", "journey_intervention", "governance"}
+# ponytail: local policy map; pass PolicyRuleStore into workflow if this grows.
+GOVERNANCE_RULES_BY_DESTINATION = {
+    "zendesk": {
+        "customer_contact_requires_consent_review",
+        "customer_contact_requires_valid_consent",
+        "sensitive_attribute_inference_prohibited",
+    },
+    "hubspot": {
+        "customer_contact_requires_consent_review",
+        "customer_contact_requires_valid_consent",
+        "audience_activation_requires_privacy_review",
+        "sensitive_attribute_inference_prohibited",
+        "high_risk_marketing_change_requires_privacy_review",
+    },
+    "braze": {
+        "customer_contact_requires_consent_review",
+        "customer_contact_requires_valid_consent",
+        "audience_activation_requires_privacy_review",
+        "sensitive_attribute_inference_prohibited",
+        "high_risk_marketing_change_requires_privacy_review",
+    },
+    "salesforce": {
+        "customer_contact_requires_consent_review",
+        "customer_contact_requires_valid_consent",
+        "audience_activation_requires_privacy_review",
+        "sensitive_attribute_inference_prohibited",
+        "high_risk_marketing_change_requires_privacy_review",
+    },
+    "adobe_experience_platform": {
+        "audience_activation_requires_privacy_review",
+        "sensitive_attribute_inference_prohibited",
+        "high_risk_marketing_change_requires_privacy_review",
+    },
+    "policy_review": {
+        "customer_contact_requires_valid_consent",
+        "audience_activation_requires_privacy_review",
+        "sensitive_attribute_inference_prohibited",
+        "high_risk_marketing_change_requires_privacy_review",
+    },
+}
+
+
 def find_action(problem: ProblemRecord, action_id: str):
     action = next((proposal for proposal in problem.action_proposals if proposal.action_id == action_id), None)
     if action is None:
@@ -44,13 +88,35 @@ def assert_governance_allows_decision(
     *,
     problem: ProblemRecord,
     decision: ApprovalDecision,
+    action,
 ) -> None:
-    blocking_failures = [
-        check
-        for check in problem.governance_checks
-        if check.blocking and check.status.value == "fail"
-    ]
-    if decision.decision == ApprovalDecisionStatus.approved and blocking_failures:
+    if decision.decision != ApprovalDecisionStatus.approved:
+        return
+
+    destination = action.destination.strip().lower()
+    applicable_rule_ids = GOVERNANCE_RULES_BY_DESTINATION.get(destination)
+    if applicable_rule_ids is None and action.class_.value in GOVERNED_ACTION_CLASSES:
+        applicable_rule_ids = {
+            rule_id
+            for destination_rule_ids in GOVERNANCE_RULES_BY_DESTINATION.values()
+            for rule_id in destination_rule_ids
+        }
+
+    if applicable_rule_ids is not None:
+        checks_by_rule = {check.policy_rule_id or check.rule: check for check in problem.governance_checks}
+        blocking_failures = [
+            rule_id
+            for rule_id in applicable_rule_ids
+            if (check := checks_by_rule.get(rule_id)) is None
+            or check.status.value in UNRESOLVED_GOVERNANCE_STATUSES
+        ]
+    else:
+        blocking_failures = [
+            check
+            for check in problem.governance_checks
+            if check.blocking and check.status.value == "fail"
+        ]
+    if blocking_failures:
         raise HTTPException(
             status_code=409,
             detail="Action cannot be approved while blocking governance checks are failing",
@@ -195,7 +261,7 @@ class WorkflowStore:
         decision: ApprovalDecision,
     ) -> ApprovalRecord:
         action = find_action(problem, decision.action_id)
-        assert_governance_allows_decision(problem=problem, decision=decision)
+        assert_governance_allows_decision(problem=problem, decision=decision, action=action)
 
         record = ApprovalRecord(
             decision_id=f"DEC-{next(self._approval_ids):04d}",
@@ -568,7 +634,7 @@ class SQLiteWorkflowStore:
         decision: ApprovalDecision,
     ) -> ApprovalRecord:
         action = find_action(problem, decision.action_id)
-        assert_governance_allows_decision(problem=problem, decision=decision)
+        assert_governance_allows_decision(problem=problem, decision=decision, action=action)
 
         created_at = utc_now()
         cursor = self._connection.execute(

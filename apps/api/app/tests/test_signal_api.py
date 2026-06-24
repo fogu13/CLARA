@@ -269,8 +269,60 @@ def test_problem_candidate_can_be_promoted_into_action_queue() -> None:
     promoted_problem = promotion_response.json()
     assert promoted_problem["problem_id"].startswith("PRB-DRAFT-")
     assert promoted_problem["status"] == "validation_required"
-    assert promoted_problem["action_proposals"]
+    assert {action["class"] for action in promoted_problem["action_proposals"]} == {
+        "structural",
+        "customer_recovery",
+        "journey_intervention",
+        "research",
+        "governance",
+    }
+    assert {
+        "customer_contact_requires_valid_consent",
+        "audience_activation_requires_privacy_review",
+        "sensitive_attribute_inference_prohibited",
+        "high_risk_marketing_change_requires_privacy_review",
+    }.issubset({check["policy_rule_id"] for check in promoted_problem["governance_checks"]})
     assert any(problem["problem_id"] == promoted_problem["problem_id"] for problem in problems)
+
+
+def test_promoted_governed_actions_require_governance_review() -> None:
+    client = make_client()
+    candidate = client.get("/problem-candidates").json()[0]
+    problem = client.post(f"/problem-candidates/{candidate['candidate_id']}/promote").json()
+
+    for action_class in ["journey_intervention", "governance"]:
+        action = next(
+            action for action in problem["action_proposals"] if action["class"] == action_class
+        )
+        response = client.post(
+            f"/problems/{problem['problem_id']}/approvals",
+            json={
+                "action_id": action["action_id"],
+                "decision": "approved",
+                "reviewer": "test_reviewer",
+            },
+        )
+
+        assert response.status_code == 409
+        assert "blocking governance checks" in response.json()["detail"]
+
+    journey_action = next(
+        action for action in problem["action_proposals"] if action["class"] == "journey_intervention"
+    )
+    client.patch(
+        f"/problems/{problem['problem_id']}/actions/{journey_action['action_id']}",
+        json={"destination": "hubspot "},
+    )
+    response = client.post(
+        f"/problems/{problem['problem_id']}/approvals",
+        json={
+            "action_id": journey_action["action_id"],
+            "decision": "approved",
+            "reviewer": "test_reviewer",
+        },
+    )
+    assert response.status_code == 409
+    assert "blocking governance checks" in response.json()["detail"]
 
 
 def test_duplicate_candidate_accept_is_rejected() -> None:

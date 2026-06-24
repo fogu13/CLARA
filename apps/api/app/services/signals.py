@@ -338,6 +338,20 @@ def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
             ),
             ActionProposal.model_validate(
                 {
+                    "action_id": f"ACT-{problem_id}-JOURNEY",
+                    "class": "journey_intervention",
+                    "owner": "lifecycle_marketing",
+                    "destination": "hubspot",
+                    "proposal": (
+                        f"Draft a governed intervention for customers stuck in {candidate.journey_stage} "
+                        "after consent and suppression checks are confirmed."
+                    ),
+                    "risk_level": "high",
+                    "approval_state": "needs_privacy_review",
+                }
+            ),
+            ActionProposal.model_validate(
+                {
                     "action_id": f"ACT-{problem_id}-RESEARCH",
                     "class": "research",
                     "owner": "ux_research",
@@ -345,6 +359,17 @@ def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
                     "proposal": "Validate the candidate root-cause hypothesis with affected customers.",
                     "risk_level": "low",
                     "approval_state": "ready_to_create",
+                }
+            ),
+            ActionProposal.model_validate(
+                {
+                    "action_id": f"ACT-{problem_id}-GOVERNANCE",
+                    "class": "governance",
+                    "owner": "privacy_ops",
+                    "destination": "policy_review",
+                    "proposal": "Review evidence confidence, consent gaps and policy blockers before execution.",
+                    "risk_level": "medium",
+                    "approval_state": "needs_governance_review",
                 }
             ),
         ],
@@ -363,6 +388,38 @@ def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
                 policy_rule_id="customer_contact_requires_consent_review",
                 status="review_required",
                 reason="Consent metadata is not available in imported signals.",
+                blocking=True,
+            ),
+            GovernanceCheck(
+                check_id=f"GOV-{problem_id}-VALID-CONSENT",
+                rule="customer_contact_requires_valid_consent",
+                policy_rule_id="customer_contact_requires_valid_consent",
+                status="review_required",
+                reason="Valid consent, lawful basis and suppression status are not attached yet.",
+                blocking=True,
+            ),
+            GovernanceCheck(
+                check_id=f"GOV-{problem_id}-AUDIENCE-PRIVACY",
+                rule="audience_activation_requires_privacy_review",
+                policy_rule_id="audience_activation_requires_privacy_review",
+                status="review_required",
+                reason="Journey interventions require privacy review before downstream activation.",
+                blocking=True,
+            ),
+            GovernanceCheck(
+                check_id=f"GOV-{problem_id}-SENSITIVE-DATA",
+                rule="sensitive_attribute_inference_prohibited",
+                policy_rule_id="sensitive_attribute_inference_prohibited",
+                status="pass",
+                reason="Generated actions do not use sensitive-category targeting criteria.",
+                blocking=True,
+            ),
+            GovernanceCheck(
+                check_id=f"GOV-{problem_id}-MARKETING-PRIVACY",
+                rule="high_risk_marketing_change_requires_privacy_review",
+                policy_rule_id="high_risk_marketing_change_requires_privacy_review",
+                status="review_required",
+                reason="High-risk lifecycle intervention changes need privacy review before approval.",
                 blocking=True,
             ),
         ],
