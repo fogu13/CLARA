@@ -93,6 +93,7 @@ from app.services.signals import (
 )
 from app.services.taxonomies import TaxonomyStore, TerminologyStore, classify_candidate
 from app.services.workflow import SQLiteWorkflowStore
+from app.rbac import Role, require_role
 
 
 def default_db_path() -> Path:
@@ -464,7 +465,7 @@ def create_app(
             context_store.list_context(),
         )
 
-    @api.patch("/problems/{problem_id}", response_model=ProblemRecord)
+    @api.patch("/problems/{problem_id}", response_model=ProblemRecord, dependencies=[Depends(require_role(Role.editor))])
     def update_problem(problem_id: str, update: ProblemUpdateRequest) -> ProblemRecord:
         require_problem(problem_id)
         updated_problem = active_problem_store.update_problem(problem_id, update)
@@ -476,7 +477,7 @@ def create_app(
 
         return enrich_problem_for_response(updated_problem)
 
-    @api.patch("/problems/{problem_id}/actions/{action_id}", response_model=ProblemRecord)
+    @api.patch("/problems/{problem_id}/actions/{action_id}", response_model=ProblemRecord, dependencies=[Depends(require_role(Role.editor))])
     def update_action_proposal(
         problem_id: str,
         action_id: str,
@@ -503,7 +504,7 @@ def create_app(
 
         return enrich_problem_for_response(updated_problem)
 
-    @api.post("/problems/{problem_id}/transitions", response_model=ProblemTransitionRecord)
+    @api.post("/problems/{problem_id}/transitions", response_model=ProblemTransitionRecord, dependencies=[Depends(require_role(Role.editor))])
     def transition_problem(
         problem_id: str,
         transition: ProblemTransitionRequest,
@@ -533,11 +534,11 @@ def create_app(
     def list_signals() -> list[SignalRecord]:
         return signal_store.list_signals()
 
-    @api.post("/signals/import", response_model=SignalImportResult)
+    @api.post("/signals/import", response_model=SignalImportResult, dependencies=[Depends(require_role(Role.editor))])
     def import_signals(request: SignalImportRequest) -> SignalImportResult:
         return signal_store.import_signals(request.signals)
 
-    @api.post("/signals/import-csv", response_model=SignalImportResult)
+    @api.post("/signals/import-csv", response_model=SignalImportResult, dependencies=[Depends(require_role(Role.editor))])
     def import_signal_csv(request: SignalCsvImportRequest) -> SignalImportResult:
         report = validate_signal_csv(
             request.csv_text,
@@ -566,13 +567,13 @@ def create_app(
     def get_customer_context_completeness() -> CustomerContextCompletenessReport:
         return context_completeness_report(context_store.list_context())
 
-    @api.post("/customer-context/import", response_model=CustomerContextImportResult)
+    @api.post("/customer-context/import", response_model=CustomerContextImportResult, dependencies=[Depends(require_role(Role.editor))])
     def import_customer_context(
         request: CustomerContextImportRequest,
     ) -> CustomerContextImportResult:
         return context_store.import_context(request.records)
 
-    @api.post("/customer-context/import-csv", response_model=CustomerContextImportResult)
+    @api.post("/customer-context/import-csv", response_model=CustomerContextImportResult, dependencies=[Depends(require_role(Role.editor))])
     def import_customer_context_csv(
         request: CustomerContextCsvImportRequest,
     ) -> CustomerContextImportResult:
@@ -606,7 +607,7 @@ def create_app(
     def list_terminology_dictionary() -> list[TerminologyDictionaryEntry]:
         return terminology_store.list_entries()
 
-    @api.post("/taxonomies/{taxonomy_type}/categories/rename", response_model=TaxonomyCatalog)
+    @api.post("/taxonomies/{taxonomy_type}/categories/rename", response_model=TaxonomyCatalog, dependencies=[Depends(require_role(Role.editor))])
     def rename_taxonomy_category(
         taxonomy_type: TaxonomyType,
         request: TaxonomyRenameRequest,
@@ -622,7 +623,7 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @api.post("/taxonomies/{taxonomy_type}/categories/lock", response_model=TaxonomyCatalog)
+    @api.post("/taxonomies/{taxonomy_type}/categories/lock", response_model=TaxonomyCatalog, dependencies=[Depends(require_role(Role.editor))])
     def lock_taxonomy_category(
         taxonomy_type: TaxonomyType,
         request: TaxonomyLockRequest,
@@ -636,7 +637,7 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @api.post("/taxonomies/{taxonomy_type}/categories/merge", response_model=TaxonomyCatalog)
+    @api.post("/taxonomies/{taxonomy_type}/categories/merge", response_model=TaxonomyCatalog, dependencies=[Depends(require_role(Role.editor))])
     def merge_taxonomy_categories(
         taxonomy_type: TaxonomyType,
         request: TaxonomyMergeRequest,
@@ -653,7 +654,7 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @api.post("/taxonomies/{taxonomy_type}/categories/split", response_model=TaxonomyCatalog)
+    @api.post("/taxonomies/{taxonomy_type}/categories/split", response_model=TaxonomyCatalog, dependencies=[Depends(require_role(Role.editor))])
     def split_taxonomy_category(
         taxonomy_type: TaxonomyType,
         request: TaxonomySplitRequest,
@@ -680,7 +681,7 @@ def create_app(
     def list_demo_datasets() -> list[DemoDatasetSummary]:
         return [to_demo_dataset_summary(dataset) for dataset in active_demo_datasets]
 
-    @api.post("/demo-datasets/{dataset_id}/import", response_model=DemoDatasetImportResult)
+    @api.post("/demo-datasets/{dataset_id}/import", response_model=DemoDatasetImportResult, dependencies=[Depends(require_role(Role.editor))])
     def import_demo_dataset(dataset_id: str) -> DemoDatasetImportResult:
         dataset = require_demo_dataset(dataset_id)
         signal_result = signal_store.import_signals(dataset.signals)
@@ -700,7 +701,7 @@ def create_app(
     def list_emerging_problems() -> EmergingProblemReport:
         return build_emerging_problem_report(current_candidates())
 
-    @api.post("/problem-candidates/{candidate_id}/promote", response_model=ProblemRecord)
+    @api.post("/problem-candidates/{candidate_id}/promote", response_model=ProblemRecord, dependencies=[Depends(require_role(Role.editor))])
     def promote_problem_candidate(candidate_id: str) -> ProblemRecord:
         candidate = require_candidate(candidate_id)
         problem = promote_candidate(candidate)
@@ -710,7 +711,7 @@ def create_app(
 
         return enrich_problem_for_response(active_problem_store.upsert_problem(problem))
 
-    @api.post("/problem-candidates/{candidate_id}/accept", response_model=ProblemRecord)
+    @api.post("/problem-candidates/{candidate_id}/accept", response_model=ProblemRecord, dependencies=[Depends(require_role(Role.editor))])
     def accept_problem_candidate(
         candidate_id: str,
         request: CandidateReviewRequest,
@@ -734,7 +735,7 @@ def create_app(
         )
         return enrich_problem_for_response(promoted_problem)
 
-    @api.post("/problem-candidates/{candidate_id}/reject", response_model=ProblemCandidate)
+    @api.post("/problem-candidates/{candidate_id}/reject", response_model=ProblemCandidate, dependencies=[Depends(require_role(Role.editor))])
     def reject_problem_candidate(
         candidate_id: str,
         request: CandidateReviewRequest,
@@ -751,7 +752,7 @@ def create_app(
         )
         return require_candidate(candidate_id)
 
-    @api.post("/problems/{problem_id}/approvals", response_model=ApprovalRecord)
+    @api.post("/problems/{problem_id}/approvals", response_model=ApprovalRecord, dependencies=[Depends(require_role(Role.editor))])
     def record_approval(problem_id: str, decision: ApprovalDecision) -> ApprovalRecord:
         problem = require_problem(problem_id)
         return workflow_store.record_approval(problem=problem, decision=decision)
@@ -770,7 +771,7 @@ def create_app(
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
         return workflow_store.state_for_problem(problem, tenant_id=tenant_id)
 
-    @api.post("/problems/{problem_id}/outcomes", response_model=OutcomeMeasurement)
+    @api.post("/problems/{problem_id}/outcomes", response_model=OutcomeMeasurement, dependencies=[Depends(require_role(Role.editor))])
     def record_outcome(problem_id: str, measurement: OutcomeMeasurement) -> OutcomeMeasurement:
         problem = require_problem(problem_id)
         if measurement.problem_id != problem_id:
@@ -781,6 +782,7 @@ def create_app(
     @api.post(
         "/problems/{problem_id}/learning-conclusions",
         response_model=LearningConclusionRecord,
+        dependencies=[Depends(require_role(Role.editor))],
     )
     def record_outcome_learning(
         problem_id: str,
@@ -836,7 +838,7 @@ def create_app(
     def list_connectors() -> list[dict]:
         return [c.model_dump() for c in connector_config_store.list_configs()]
 
-    @api.put("/connectors/{connector_type}")
+    @api.put("/connectors/{connector_type}", dependencies=[Depends(require_role(Role.admin))])
     def upsert_connector(
         connector_type: str,
         config: dict,
@@ -854,14 +856,14 @@ def create_app(
         connector_config_store.upsert_config(stored_cfg)
         return {"connector_type": connector_type, "status": "saved"}
 
-    @api.delete("/connectors/{connector_type}")
+    @api.delete("/connectors/{connector_type}", dependencies=[Depends(require_role(Role.admin))])
     def delete_connector(connector_type: str) -> dict:
         deleted = connector_config_store.delete_config(connector_type)
         if not deleted:
             raise HTTPException(status_code=404, detail="Connector not found")
         return {"connector_type": connector_type, "status": "deleted"}
 
-    @api.post("/connectors/zendesk/pull")
+    @api.post("/connectors/zendesk/pull", dependencies=[Depends(require_role(Role.admin))])
     def pull_zendesk(config: dict | None = None) -> dict:
         """Pull tickets from Zendesk and return mapped signals.
 
@@ -891,7 +893,7 @@ def create_app(
 
         return {"pulled": len(signals), "signals": signals[:10]}
 
-    @api.post("/connectors/test/{connector_type}")
+    @api.post("/connectors/test/{connector_type}", dependencies=[Depends(require_role(Role.admin))])
     def test_connector(connector_type: str, config: dict) -> dict:
         """Test a connector configuration without saving it."""
         from app.connectors import get_destination, get_source
@@ -931,7 +933,7 @@ def create_app(
 
     # ====== Triage pipeline endpoint ======
 
-    @api.post("/triage/run")
+    @api.post("/triage/run", dependencies=[Depends(require_role(Role.editor))])
     def run_triage_pipeline(body: dict) -> dict:
         """Run the LangGraph triage pipeline on signals.
 
