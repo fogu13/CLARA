@@ -83,6 +83,20 @@ export type TerminologyDictionaryEntry = {
   usage_notes: string[];
 };
 
+export type LanguageQualityRow = {
+  language: string;
+  signal_count: number;
+  terminology_entries: number;
+  original_language_evidence: number;
+  readiness: "ready" | "needs_attention" | string;
+};
+
+export type LanguageQualityReport = {
+  total_signals: number;
+  languages: LanguageQualityRow[];
+  german_english_ready: boolean;
+};
+
 export type EmergingProblemSignal = {
   candidate_id: string;
   title: string;

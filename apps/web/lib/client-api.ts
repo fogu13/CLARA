@@ -12,6 +12,7 @@ import type {
   DemoDatasetSummary,
   ExecutionRecord,
   JiraIssueDraft,
+  LanguageQualityReport,
   LearningConclusionRecord,
   LearningConclusionRequest,
   OutcomeBoard,
@@ -180,6 +181,10 @@ export async function getTaxonomies(): Promise<TaxonomyCatalog[]> {
 
 export async function getTerminologyDictionary(): Promise<TerminologyDictionaryEntry[]> {
   return requestJson<TerminologyDictionaryEntry[]>(`${apiBaseUrl()}/terminology-dictionary`);
+}
+
+export async function getLanguageQuality(): Promise<LanguageQualityReport> {
+  return requestJson<LanguageQualityReport>(`${apiBaseUrl()}/language-quality`);
 }
 
 export async function getDemoDatasets(): Promise<DemoDatasetSummary[]> {
