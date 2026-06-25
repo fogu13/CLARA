@@ -112,6 +112,10 @@ export async function getJiraDrafts(): Promise<JiraIssueDraft[]> {
   return requestJson<JiraIssueDraft[]>(`${apiBaseUrl()}/jira-drafts`);
 }
 
+export async function getApprovals(): Promise<ApprovalRecord[]> {
+  return requestJson<ApprovalRecord[]>(`${apiBaseUrl()}/approvals`);
+}
+
 export async function getExecutions(): Promise<ExecutionRecord[]> {
   return requestJson<ExecutionRecord[]>(`${apiBaseUrl()}/executions`);
 }

@@ -1,20 +1,242 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { MessageSquare, Lightbulb, CheckCircle, TrendingUp, Plug, AlertCircle } from "lucide-react";
-import { apiBaseUrl } from "@/lib/client-api";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ArrowRight,
+  CheckCircle,
+  ClipboardCheck,
+  Gauge,
+  Plug,
+  ShieldAlert,
+  Sparkles,
+  Target,
+  TrendingUp,
+  Users
+} from "lucide-react";
+import { apiBaseUrl, apiHeaders, getApprovals, getExecutions, getOutcomeBoard, getProblems } from "@/lib/client-api";
 import { fallbackProblems } from "@/lib/sample-data";
-import type { ProblemSummary } from "@/lib/types";
+import type { ActionClass, ApprovalRecord, ExecutionRecord, OutcomeBoard, OutcomeBoardItem, ProblemSummary } from "@/lib/types";
 
 type ConnectorSummary = { connector_type: string; is_active: boolean };
 
-interface DashboardData {
+type DashboardData = {
   problems: ProblemSummary[];
+  outcomeBoard: OutcomeBoard;
+  approvals: ApprovalRecord[];
+  executions: ExecutionRecord[];
   connectors: ConnectorSummary[];
   usingFallback: boolean;
+  partialSources: string[];
+};
+
+type AttentionItem = {
+  problem: ProblemSummary;
+  reason: string;
+  severity: "blocked" | "review" | "watch";
+};
+
+type OwnerLoad = {
+  owner: string;
+  problems: number;
+  affectedCustomers: number;
+  blocked: number;
+  topProblem: ProblemSummary;
+};
+
+const actionClassLabels: Record<ActionClass, string> = {
+  structural: "Product fix",
+  customer_recovery: "Customer recovery",
+  journey_intervention: "Intervention",
+  research: "Research",
+  governance: "Governance"
+};
+
+function label(value: string): string {
+  return value.replaceAll("_", " ");
+}
+
+function percent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function compact(value: number): string {
+  return new Intl.NumberFormat("en", { notation: "compact" }).format(value);
+}
+
+function fallbackSummaries(): ProblemSummary[] {
+  return fallbackProblems.map((problem) => ({
+    problem_id: problem.problem_id,
+    title: problem.title,
+    journey: problem.journey,
+    journey_stage: problem.journey_stage,
+    owner: problem.owner,
+    status: problem.status,
+    impact_score: problem.impact_score ?? 0,
+    impact_band: problem.impact_band ?? "low",
+    evidence_confidence: problem.evidence_confidence,
+    affected_customers: problem.affected_cohort.customers,
+    affected_accounts: problem.affected_cohort.accounts,
+    approval_pressure: problem.approval_pressure ?? "ready",
+    top_action_classes: problem.action_proposals.slice(0, 3).map((action) => action.class),
+    context_impact: problem.context_impact,
+    journey_impact: problem.journey_impact
+  }));
+}
+
+function fallbackOutcomeBoard(): OutcomeBoard {
+  const items: OutcomeBoardItem[] = fallbackProblems.map((problem) => ({
+    problem_id: problem.problem_id,
+    title: problem.title,
+    owner: problem.owner,
+    problem_status: problem.status,
+    impact_score: problem.impact_score ?? 0,
+    impact_band: problem.impact_band ?? "low",
+    metric: problem.outcome_contract.primary_metric,
+    baseline: problem.outcome_contract.baseline,
+    success_threshold: problem.outcome_contract.success_threshold,
+    latest_value: null,
+    outcome_status: "not_measured",
+    improvement_direction:
+      problem.outcome_contract.success_threshold >= problem.outcome_contract.baseline ? "increase" : "decrease",
+    latest_learning_status: null,
+    latest_learning_reviewed_at: null,
+    measurement_window_days: problem.outcome_contract.measurement_window_days,
+    comparison_method: problem.outcome_contract.comparison_method,
+    responsible_owner: problem.outcome_contract.responsible_owner
+  }));
+
+  return {
+    total: items.length,
+    not_measured: items.length,
+    not_improved: 0,
+    improving: 0,
+    target_met: 0,
+    learning_worked: 0,
+    learning_partially_worked: 0,
+    learning_did_not_work: 0,
+    learning_inconclusive: 0,
+    learning_measurement_invalid: 0,
+    items
+  };
+}
+
+function impact(problem: ProblemSummary): number {
+  return problem.impact_score ?? 0;
+}
+
+function blockingChecks(problem: ProblemSummary): number {
+  return problem.status === "blocked_by_policy" || problem.approval_pressure === "blocked" ? 1 : 0;
+}
+
+function needsReview(problem: ProblemSummary): boolean {
+  return problem.status === "approval_needed" || problem.status === "validation_required" || problem.approval_pressure === "needs_review";
+}
+
+function isResolved(problem: ProblemSummary): boolean {
+  return problem.status === "resolved";
+}
+
+function leadershipHeadline(problems: ProblemSummary[], outcomeBoard: OutcomeBoard): string {
+  const top = [...problems].sort((a, b) => impact(b) - impact(a))[0];
+  if (!top) return "No active customer problems in the queue.";
+
+  const blocked = problems.filter((problem) => blockingChecks(problem) > 0).length;
+  const improving = outcomeBoard.improving + outcomeBoard.target_met;
+  if (blocked > 0) return `${blocked} customer problems need governance or leadership unblock before execution.`;
+  if (improving > 0) return `${improving} outcomes are improving or at target; keep attention on the next highest-impact issue.`;
+  return `${top.title} is the highest-impact issue currently needing accountable action.`;
+}
+
+function attentionItems(problems: ProblemSummary[]): AttentionItem[] {
+  return [...problems]
+    .filter((problem) => !isResolved(problem))
+    .map((problem) => {
+      const blocked = blockingChecks(problem);
+      if (blocked > 0) return { problem, reason: "Blocking governance gate", severity: "blocked" as const };
+      if (needsReview(problem)) return { problem, reason: "Approval or owner review needed", severity: "review" as const };
+      return { problem, reason: `${compact(problem.affected_customers)} customers represented`, severity: "watch" as const };
+    })
+    .sort((a, b) => {
+      const severity = { blocked: 3, review: 2, watch: 1 };
+      return severity[b.severity] - severity[a.severity] || impact(b.problem) - impact(a.problem);
+    })
+    .slice(0, 5);
+}
+
+function ownerLoads(problems: ProblemSummary[]): OwnerLoad[] {
+  const byOwner = new Map<string, ProblemSummary[]>();
+  for (const problem of problems.filter((item) => !isResolved(item))) {
+    byOwner.set(problem.owner, [...(byOwner.get(problem.owner) ?? []), problem]);
+  }
+
+  return [...byOwner.entries()]
+    .map(([owner, items]) => {
+      const sorted = [...items].sort((a, b) => impact(b) - impact(a));
+      return {
+        owner,
+        problems: items.length,
+        affectedCustomers: items.reduce((total, problem) => total + problem.affected_customers, 0),
+        blocked: items.filter((problem) => blockingChecks(problem) > 0).length,
+        topProblem: sorted[0]
+      };
+    })
+    .sort((a, b) => b.blocked - a.blocked || b.affectedCustomers - a.affectedCustomers)
+    .slice(0, 4);
+}
+
+function actionMix(problems: ProblemSummary[]): { actionClass: ActionClass; count: number }[] {
+  const counts = new Map<ActionClass, number>();
+  for (const actionClass of problems.flatMap((problem) => problem.top_action_classes)) {
+    counts.set(actionClass, (counts.get(actionClass) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .map(([actionClass, count]) => ({ actionClass, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+function approvedActionIds(approvals: ApprovalRecord[]): Set<string> {
+  return new Set(approvals.filter((approval) => approval.decision === "approved").map((approval) => approval.action_id));
+}
+
+async function getConnectors(): Promise<ConnectorSummary[]> {
+  const response = await fetch(`${apiBaseUrl()}/connectors`, { headers: apiHeaders() });
+  if (!response.ok) return [];
+  return response.json() as Promise<ConnectorSummary[]>;
+}
+
+function MetricCard({
+  title,
+  value,
+  detail,
+  tone = "neutral"
+}: {
+  title: string;
+  value: string | number;
+  detail: string;
+  tone?: "neutral" | "good" | "warn" | "bad";
+}) {
+  const toneClass = {
+    neutral: "text-foreground",
+    good: "text-emerald-600",
+    warn: "text-amber-600",
+    bad: "text-destructive"
+  }[tone];
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className={`text-3xl font-bold ${toneClass}`}>{value}</div>
+        <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function DashboardPage() {
@@ -23,144 +245,138 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function load() {
-      const baseUrl = apiBaseUrl();
       try {
-        const [problemsRes, connectorsRes] = await Promise.all([
-          fetch(`${baseUrl}/problems`).then(r => r.ok ? r.json() : []),
-          fetch(`${baseUrl}/connectors`).then(r => r.ok ? r.json() : []),
+        const [problems, outcomeBoard] = await Promise.all([getProblems(), getOutcomeBoard()]);
+        const partialSources: string[] = [];
+        const [approvals, executions, connectors] = await Promise.all([
+          getApprovals().catch(() => {
+            partialSources.push("approvals");
+            return [];
+          }),
+          getExecutions().catch(() => {
+            partialSources.push("executions");
+            return [];
+          }),
+          getConnectors().catch(() => {
+            partialSources.push("connectors");
+            return [];
+          })
         ]);
-        setData({
-          problems: problemsRes || [],
-          connectors: connectorsRes || [],
-          usingFallback: false
-        });
+        setData({ problems, outcomeBoard, approvals, executions, connectors, usingFallback: false, partialSources });
       } catch {
         setData({
-          problems: fallbackProblems.map((problem) => ({
-            problem_id: problem.problem_id,
-            title: problem.title,
-            journey: problem.journey,
-            journey_stage: problem.journey_stage,
-            owner: problem.owner,
-            status: problem.status,
-            impact_score: problem.impact_score ?? 0,
-            impact_band: problem.impact_band ?? "unknown",
-            evidence_confidence: problem.evidence_confidence,
-            affected_customers: problem.affected_cohort.customers,
-            affected_accounts: problem.affected_cohort.accounts,
-            approval_pressure: problem.approval_pressure ?? "ready",
-            top_action_classes: problem.action_proposals.map((action) => action.class)
-          })),
+          problems: fallbackSummaries(),
+          outcomeBoard: fallbackOutcomeBoard(),
+          approvals: [],
+          executions: [],
           connectors: [],
-          usingFallback: true
+          usingFallback: true,
+          partialSources: []
         });
       } finally {
         setLoading(false);
       }
     }
-    load();
+
+    void load();
   }, []);
 
-  if (loading) return <div className="text-muted-foreground">Loading dashboard...</div>;
+  if (loading) return <div className="text-muted-foreground">Loading leadership dashboard...</div>;
 
-  const problems = data?.problems || [];
-  const connectors = data?.connectors || [];
-  const openProblems = problems.filter((p: any) => p.status === "approval_needed" || p.status === "open").length;
-  const blockedProblems = problems.filter((p: any) => p.status === "blocked_by_policy").length;
+  const problems = data?.problems ?? [];
+  const outcomeBoard = data?.outcomeBoard ?? fallbackOutcomeBoard();
+  const approvals = data?.approvals ?? [];
+  const executions = data?.executions ?? [];
+  const connectors = data?.connectors ?? [];
+  const actionClassCount = problems.reduce((total, problem) => total + problem.top_action_classes.length, 0);
+  const approvedActions = approvedActionIds(approvals);
+  const blockedProblems = problems.filter((problem) => blockingChecks(problem) > 0);
+  const highImpactProblems = problems.filter((problem) => impact(problem) >= 0.7 || problem.impact_band === "high");
+  const representedCustomers = problems.reduce((total, problem) => total + problem.affected_customers, 0);
+  const interventionReady = problems.filter((problem) => problem.top_action_classes.includes("journey_intervention"));
+  const measuredOutcomes = outcomeBoard.total - outcomeBoard.not_measured;
+  const improvingOutcomes = outcomeBoard.improving + outcomeBoard.target_met;
+  const activeConnectors = connectors.filter((connector) => connector.is_active).length;
+  const pendingDecisionProblems = problems.filter((problem) => !isResolved(problem) && needsReview(problem));
+  const attention = attentionItems(problems);
+  const loads = ownerLoads(problems);
+  const mix = actionMix(problems);
+  const maxMix = Math.max(...mix.map((item) => item.count), 1);
+  const measuredRate = outcomeBoard.total > 0 ? measuredOutcomes / outcomeBoard.total : 0;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Feedback-to-Action Platform — governed AI triage with real connectors
-        </p>
+      <div className="overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-6 text-white shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl">
+            <Badge className="border-white/20 bg-white/10 text-white" variant="outline">Leadership cockpit</Badge>
+            <h1 className="mt-4 text-3xl font-bold tracking-tight">{leadershipHeadline(problems, outcomeBoard)}</h1>
+            <p className="mt-3 text-sm text-slate-300">
+              A governed, minimized view of customer pain, proposed actions, approvals, execution drafts and outcome proof.
+            </p>
+          </div>
+          <div className="grid min-w-64 grid-cols-2 gap-3 text-sm">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <p className="text-slate-400">Customers represented</p>
+              <p className="mt-1 text-2xl font-semibold">{compact(representedCustomers)}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <p className="text-slate-400">Outcome proof</p>
+              <p className="mt-1 text-2xl font-semibold">{percent(measuredRate)}</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {data?.usingFallback ? (
         <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
-          API unreachable at {apiBaseUrl()} — showing sample data.
+          API leadership data incomplete at {apiBaseUrl()} — showing sample leadership data.
         </div>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Open Problems</CardTitle>
-            <MessageSquare className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{openProblems}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {problems.length} total in queue
-            </p>
-          </CardContent>
-        </Card>
+      {!data?.usingFallback && data?.partialSources.length ? (
+        <div className="rounded-md border border-dashed border-amber-500/50 bg-amber-500/5 p-3 text-sm text-amber-700 dark:text-amber-400">
+          Partial leadership data: {data.partialSources.join(", ")} unavailable, so related counts may be understated.
+        </div>
+      ) : null}
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Policy Blocked</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{blockedProblems}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Governance gate active
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Connectors</CardTitle>
-            <Plug className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{connectors.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {connectors.filter((c: any) => c.is_active).length} active
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Resolution Rate</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {problems.length > 0
-                ? Math.round((problems.filter((p: any) => p.status === "resolved").length / problems.length) * 100)
-                : 0}%
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Problems resolved
-            </p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <MetricCard title="High-Impact Problems" value={highImpactProblems.length} detail={`${problems.length} total problems in queue`} tone={highImpactProblems.length > 0 ? "warn" : "good"} />
+        <MetricCard title="Governance Blockers" value={blockedProblems.length} detail="Require policy or privacy decision" tone={blockedProblems.length > 0 ? "bad" : "good"} />
+        <MetricCard title="Pending Decisions" value={pendingDecisionProblems.length} detail={`${approvals.length} approval decisions recorded`} tone={pendingDecisionProblems.length > 0 ? "warn" : "good"} />
+        <MetricCard title="Outcome Signals" value={`${improvingOutcomes}/${outcomeBoard.total}`} detail={`${measuredOutcomes} measured, ${outcomeBoard.not_measured} pending`} tone={improvingOutcomes > 0 ? "good" : "neutral"} />
+        <MetricCard title="Live Connectors" value={`${activeConnectors}/${connectors.length}`} detail="Configured operational routes" tone={activeConnectors > 0 ? "good" : "neutral"} />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_0.8fr]">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Recent Problems</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-lg"><ShieldAlert className="h-5 w-5 text-amber-500" /> Leadership Attention Queue</CardTitle>
+            <Link className="text-sm text-primary hover:underline" href="/insights">Open insights</Link>
           </CardHeader>
           <CardContent>
-            {problems.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No problems in the queue yet.</p>
+            {attention.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No leadership attention needed right now.</p>
             ) : (
               <div className="space-y-3">
-                {problems.slice(0, 5).map((p: any) => (
-                  <div key={p.problem_id} className="flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{p.title}</p>
-                      <p className="text-xs text-muted-foreground">{p.journey} / {p.journey_stage}</p>
+                {attention.map(({ problem, reason, severity }, index) => (
+                  <Link key={problem.problem_id} className="block rounded-xl border p-4 transition-colors hover:bg-muted/50" href={`/insights/${problem.problem_id}`}>
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-semibold">{index + 1}</span>
+                          <h2 className="font-semibold">{problem.title}</h2>
+                        </div>
+                        <p className="mt-2 text-sm text-muted-foreground">{problem.journey} / {problem.journey_stage}</p>
+                        <p className="mt-1 text-sm">{reason}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 md:justify-end">
+                        <Badge variant={severity === "blocked" ? "destructive" : severity === "review" ? "warning" : "secondary"}>{severity}</Badge>
+                        <Badge variant="outline">impact {percent(impact(problem))}</Badge>
+                        <Badge variant="outline">{compact(problem.affected_customers)} customers</Badge>
+                      </div>
                     </div>
-                    <Badge variant={p.status === "resolved" ? "success" : p.status === "blocked_by_policy" ? "destructive" : "secondary"}>
-                      {p.status?.replace(/_/g, " ")}
-                    </Badge>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}
@@ -169,73 +385,78 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Connector Status</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-lg"><Gauge className="h-5 w-5 text-primary" /> Action Funnel</CardTitle>
           </CardHeader>
-          <CardContent>
-            {connectors.length === 0 ? (
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">No connectors configured.</p>
-                <Button variant="outline" size="sm" onClick={() => window.location.href = "/integrations"}>
-                  Configure Connectors
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {connectors.map((c: any) => (
-                  <div key={c.connector_type} className="flex items-center justify-between">
-                    <span className="text-sm font-medium capitalize">{c.connector_type}</span>
-                    <Badge variant={c.is_active ? "success" : "secondary"}>
-                      {c.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            )}
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-lg border p-3"><p className="text-muted-foreground">Action classes</p><p className="mt-1 text-2xl font-bold">{actionClassCount}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-muted-foreground">Approved</p><p className="mt-1 text-2xl font-bold">{approvedActions.size}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-muted-foreground">Draft executions</p><p className="mt-1 text-2xl font-bold">{executions.length}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-muted-foreground">Intervention-ready</p><p className="mt-1 text-2xl font-bold">{interventionReady.length}</p></div>
+            </div>
+            <div className="space-y-3">
+              {mix.map((item) => (
+                <div key={item.actionClass}>
+                  <div className="mb-1 flex items-center justify-between text-sm"><span>{actionClassLabels[item.actionClass]}</span><span className="text-muted-foreground">{item.count}</span></div>
+                  <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${(item.count / maxMix) * 100}%` }} /></div>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Platform Architecture</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 text-sm md:grid-cols-2 lg:grid-cols-4">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-emerald-500" />
-              <span>LangGraph triage engine</span>
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Target className="h-5 w-5 text-emerald-500" /> Outcome Proof</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-lg border p-3"><p className="text-muted-foreground">Target met</p><p className="mt-1 text-2xl font-bold text-emerald-600">{outcomeBoard.target_met}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-muted-foreground">Improving</p><p className="mt-1 text-2xl font-bold text-emerald-600">{outcomeBoard.improving}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-muted-foreground">Not improved</p><p className="mt-1 text-2xl font-bold text-amber-600">{outcomeBoard.not_improved}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-muted-foreground">Not measured</p><p className="mt-1 text-2xl font-bold">{outcomeBoard.not_measured}</p></div>
             </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-emerald-500" />
-              <span>Provider-agnostic AI (Ollama/vLLM)</span>
+            <div className="space-y-2">
+              {outcomeBoard.items.slice(0, 3).map((item) => (
+                <Link key={item.problem_id} className="flex items-center justify-between rounded-lg border p-3 text-sm hover:bg-muted/50" href={`/insights/${item.problem_id}`}>
+                  <span className="truncate pr-3">{item.title}</span>
+                  <Badge variant={item.outcome_status === "target_met" || item.outcome_status === "improving" ? "success" : "outline"}>{label(item.outcome_status)}</Badge>
+                </Link>
+              ))}
             </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-emerald-500" />
-              <span>Zendesk / Jira / Slack connectors</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-emerald-500" />
-              <span>Human-in-the-loop approval</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-emerald-500" />
-              <span>Outcome measurement + resolution score</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-emerald-500" />
-              <span>Confidence-decay learnings</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-emerald-500" />
-              <span>pgvector semantic taxonomy</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-emerald-500" />
-              <span>EU AI Act governance gate</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Users className="h-5 w-5 text-primary" /> Owner Load</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {loads.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No active owner load.</p>
+            ) : (
+              loads.map((load) => (
+                <div key={load.owner} className="rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div><p className="font-medium">{label(load.owner)}</p><p className="mt-1 text-xs text-muted-foreground">Top issue: {load.topProblem.title}</p></div>
+                    <Badge variant={load.blocked > 0 ? "destructive" : "secondary"}>{load.problems} issues</Badge>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">{compact(load.affectedCustomers)} affected customers / {load.blocked} blocked</p>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Sparkles className="h-5 w-5 text-amber-500" /> Sellable Readiness</CardTitle></CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><ClipboardCheck className="h-4 w-4" /> Governed interventions</span><Badge variant={interventionReady.length > 0 ? "success" : "secondary"}>{interventionReady.length}</Badge></div>
+            <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><TrendingUp className="h-4 w-4" /> Learning records</span><Badge variant="outline">{outcomeBoard.learning_worked + outcomeBoard.learning_partially_worked + outcomeBoard.learning_did_not_work}</Badge></div>
+            <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><Plug className="h-4 w-4" /> Active routes</span><Badge variant={activeConnectors > 0 ? "success" : "secondary"}>{activeConnectors}</Badge></div>
+            <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Human approvals</span><Badge variant={approvals.length > 0 ? "success" : "outline"}>{approvals.length}</Badge></div>
+            <Link className="inline-flex items-center gap-2 text-primary hover:underline" href="/actions">Review action portfolio <ArrowRight className="h-3 w-3" /></Link>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
