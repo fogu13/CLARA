@@ -683,17 +683,20 @@ class WorkflowState(BaseModel):
 
 
 class SignalRecord(BaseModel):
+    # Only signal_id (primary key) and feedback_text are required; every other field has a
+    # sensible default so arbitrary CSVs import. Unmapped columns are kept in `metadata`.
     signal_id: str
-    customer_id: str
-    account_id: str
-    source: str
-    journey: str
-    journey_stage: str
+    feedback_text: str
+    customer_id: str = "unknown_customer"
+    account_id: str = "unknown_account"
+    source: str = "csv_upload"
+    journey: str = "unknown_journey"
+    journey_stage: str = "unknown_stage"
     campaign_exposure: list[str] = Field(default_factory=list)
     product_events: list[str] = Field(default_factory=list)
-    feedback_text: str
-    language: str
-    timestamp: str
+    language: str = "unknown"
+    timestamp: str = "1970-01-01T00:00:00Z"
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class SignalImportRequest(BaseModel):

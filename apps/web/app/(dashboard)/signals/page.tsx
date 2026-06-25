@@ -85,7 +85,7 @@ export default function SignalsPage() {
     setStatus({ tone: "busy", message: `Importing ${fileCsv.rows.length} row(s)…` });
     try {
       const batchId = Date.now().toString(36);
-      const canonical = toCanonicalSignalCsvWithDefaults(fileCsv.rows, fileCsv.mapping, batchId);
+      const canonical = toCanonicalSignalCsvWithDefaults(fileCsv.rows, fileCsv.mapping, batchId, fileCsv.headers);
       const report = await validateSignalCsv(canonical);
       if (!report.valid) {
         const first = report.errors[0];
@@ -175,7 +175,7 @@ export default function SignalsPage() {
             <CardTitle className="text-base">Map columns — {fileCsv.fileName}</CardTitle>
             <p className="text-sm text-muted-foreground">
               Match your columns to CLARA&apos;s fields. Only <strong>Feedback text</strong> is required;
-              anything you leave unmapped is filled with a default (generated ID, source, timestamp, etc.).
+              unmapped canonical fields use a default, and any other column in your file is kept as metadata.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
