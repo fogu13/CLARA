@@ -108,7 +108,7 @@ export default function ActionsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Intervention Builder</CardTitle>
+          <CardTitle>Audience readiness</CardTitle>
         </CardHeader>
         <CardContent>
           {interventionItems.length === 0 ? (

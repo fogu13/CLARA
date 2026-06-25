@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScrollText, Plus, Sparkles } from "lucide-react";
+import { ScrollText, Plus } from "lucide-react";
 
 export default function RulesPage() {
   return (
