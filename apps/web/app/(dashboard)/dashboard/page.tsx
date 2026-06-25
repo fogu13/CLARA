@@ -5,30 +5,55 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MessageSquare, Lightbulb, CheckCircle, TrendingUp, Plug, AlertCircle } from "lucide-react";
+import { apiBaseUrl } from "@/lib/client-api";
+import { fallbackProblems } from "@/lib/sample-data";
+import type { ProblemSummary } from "@/lib/types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+type ConnectorSummary = { connector_type: string; is_active: boolean };
 
 interface DashboardData {
-  problems: any[];
-  connectors: any[];
-  signals: any[];
+  problems: ProblemSummary[];
+  connectors: ConnectorSummary[];
+  usingFallback: boolean;
 }
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
+      const baseUrl = apiBaseUrl();
       try {
         const [problemsRes, connectorsRes] = await Promise.all([
-          fetch(`${API_URL}/problems`).then(r => r.ok ? r.json() : []),
-          fetch(`${API_URL}/connectors`).then(r => r.ok ? r.json() : []),
+          fetch(`${baseUrl}/problems`).then(r => r.ok ? r.json() : []),
+          fetch(`${baseUrl}/connectors`).then(r => r.ok ? r.json() : []),
         ]);
-        setData({ problems: problemsRes || [], connectors: connectorsRes || [], signals: [] });
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load");
+        setData({
+          problems: problemsRes || [],
+          connectors: connectorsRes || [],
+          usingFallback: false
+        });
+      } catch {
+        setData({
+          problems: fallbackProblems.map((problem) => ({
+            problem_id: problem.problem_id,
+            title: problem.title,
+            journey: problem.journey,
+            journey_stage: problem.journey_stage,
+            owner: problem.owner,
+            status: problem.status,
+            impact_score: problem.impact_score ?? 0,
+            impact_band: problem.impact_band ?? "unknown",
+            evidence_confidence: problem.evidence_confidence,
+            affected_customers: problem.affected_cohort.customers,
+            affected_accounts: problem.affected_cohort.accounts,
+            approval_pressure: problem.approval_pressure ?? "ready",
+            top_action_classes: problem.action_proposals.map((action) => action.class)
+          })),
+          connectors: [],
+          usingFallback: true
+        });
       } finally {
         setLoading(false);
       }
@@ -37,7 +62,6 @@ export default function DashboardPage() {
   }, []);
 
   if (loading) return <div className="text-muted-foreground">Loading dashboard...</div>;
-  if (error) return <div className="text-destructive">Error: {error}</div>;
 
   const problems = data?.problems || [];
   const connectors = data?.connectors || [];
@@ -52,6 +76,12 @@ export default function DashboardPage() {
           Feedback-to-Action Platform — governed AI triage with real connectors
         </p>
       </div>
+
+      {data?.usingFallback ? (
+        <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
+          API unreachable at {apiBaseUrl()} — showing sample data.
+        </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
