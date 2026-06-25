@@ -25,6 +25,23 @@ SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET") or ""
 SUPABASE_URL = os.getenv("SUPABASE_URL") or ""
 AUTH_ENABLED = bool(SUPABASE_JWT_SECRET)
 
+# Fail-closed guard. The dev fallback below grants role=owner to every unauthenticated
+# request, which is convenient locally but catastrophic in production. Set
+# CLARA_REQUIRE_AUTH=true in any real deployment so a missing JWT secret refuses to boot
+# instead of silently disabling auth.
+REQUIRE_AUTH = (os.getenv("CLARA_REQUIRE_AUTH") or "").strip().lower() in {"1", "true", "yes", "on"}
+if REQUIRE_AUTH and not AUTH_ENABLED:
+    raise RuntimeError(
+        "CLARA_REQUIRE_AUTH is set but SUPABASE_JWT_SECRET is unset — "
+        "refusing to start with authentication disabled."
+    )
+if not AUTH_ENABLED:
+    logger.warning(
+        "SUPABASE_JWT_SECRET is unset: authentication is DISABLED and every request is "
+        "treated as role=owner. Set SUPABASE_JWT_SECRET (and CLARA_REQUIRE_AUTH=true) "
+        "before deploying."
+    )
+
 
 class UserContext(BaseModel):
     """Identity + tenant context extracted from a verified Supabase JWT."""

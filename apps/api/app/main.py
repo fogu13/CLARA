@@ -105,7 +105,7 @@ from app.services.signals import (
     validate_signal_csv,
 )
 from app.services.taxonomies import TaxonomyStore, TerminologyStore, classify_candidate
-from app.services.workflow import SQLiteWorkflowStore
+from app.services.workflow import SQLiteWorkflowStore, utc_now
 from app.rbac import Role, require_role
 
 
@@ -278,6 +278,30 @@ def review_match_key(value: str) -> str:
     return value.replace("_", " ").strip().lower()
 
 
+# Connector config keys whose values are secrets and must never be returned to clients.
+_SECRET_CONFIG_KEYS = {
+    "api_token",
+    "bot_token",
+    "token",
+    "secret",
+    "password",
+    "access_token",
+    "client_secret",
+}
+
+
+def redacted_connector_config(connector) -> dict:
+    """Serialize a ConnectorConfig with secret credential values masked."""
+    data = connector.model_dump()
+    config = data.get("config")
+    if isinstance(config, dict):
+        data["config"] = {
+            key: ("***redacted***" if key in _SECRET_CONFIG_KEYS and value else value)
+            for key, value in config.items()
+        }
+    return data
+
+
 class TrustedWorkflowIdentity:
     def __init__(self, *, tenant_id: str, actor_id: str) -> None:
         self.tenant_id = tenant_id
@@ -420,10 +444,7 @@ def create_app(
         PostgresTerminologyStore(url) if url else TerminologyStore()
     )
     active_demo_datasets = demo_datasets or load_demo_datasets()
-    from app.connectors.config_store import (
-        ConnectorConfigStore,
-        default_connector_config_store,
-    )
+    from app.connectors.config_store import default_connector_config_store
 
     connector_config_store = connector_configs or default_connector_config_store()
     if not signal_store.list_signals():
@@ -933,9 +954,9 @@ def create_app(
 
     # ====== Connector endpoints (Phase 2) ======
 
-    @api.get("/connectors")
+    @api.get("/connectors", dependencies=[Depends(require_role(Role.admin))])
     def list_connectors() -> list[dict]:
-        return [c.model_dump() for c in connector_config_store.list_configs()]
+        return [redacted_connector_config(c) for c in connector_config_store.list_configs()]
 
     @api.put("/connectors/{connector_type}", dependencies=[Depends(require_role(Role.admin))])
     def upsert_connector(
@@ -944,9 +965,15 @@ def create_app(
     ) -> dict:
         from app.connectors.config_store import ConnectorConfig
 
-        stored = ConnectorConfigStore()
         existing = connector_config_store.get_config(connector_type)
         display_name = config.pop("_display_name", existing.display_name if existing else "")
+        # Preserve stored secrets when the client sends a blank or masked placeholder
+        # (the GET endpoint redacts secrets, so edit forms never carry the real value).
+        if existing:
+            for key in _SECRET_CONFIG_KEYS:
+                incoming = config.get(key)
+                if (not incoming or incoming == "***redacted***") and key in existing.config:
+                    config[key] = existing.config[key]
         stored_cfg = ConnectorConfig(
             connector_type=connector_type,
             config=config,

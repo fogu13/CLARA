@@ -6,9 +6,10 @@
   ],
   "scripts": {
     "api:test": "cd apps/api && PYTHONPYCACHEPREFIX=/tmp/clara_pycache python3 -m pytest app/tests",
+    "api:lint": "cd apps/api && python3 -m ruff check --select F app",
     "web:dev": "npm --workspace apps/web run dev",
     "web:lint": "npm --workspace apps/web run lint",
     "web:build": "npm --workspace apps/web run build",
-    "check": "npm run api:test && npm run web:lint && npm run web:build"
+    "check": "npm run api:lint && npm run api:test && npm run web:lint && npm run web:build"
   }
 }

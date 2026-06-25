@@ -47,6 +47,27 @@ def make_auth_client(monkeypatch) -> TestClient:
     )
 
 
+def make_auth_client_with_connectors(monkeypatch, connector_store) -> TestClient:
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", SECRET)
+
+    import app.auth as auth_mod
+    import app.rbac as rbac_mod
+    import app.main as main_mod
+
+    importlib.reload(auth_mod)
+    importlib.reload(rbac_mod)
+    importlib.reload(main_mod)
+
+    return TestClient(
+        main_mod.create_app(
+            problem_store=ProblemStore(load_seed_problems()),
+            signals=SignalStore(),
+            workflows=WorkflowStore(),
+            connector_configs=connector_store,
+        )
+    )
+
+
 def auth_header(role: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token(role)}"}
 
@@ -116,3 +137,54 @@ def test_audit_export_requires_admin(monkeypatch) -> None:
     assert viewer_response.status_code == 403
     assert admin_response.status_code == 200
     assert set(admin_response.json()) == {"approvals", "executions", "closure_records", "jira_issue_drafts"}
+
+
+def test_connector_listing_requires_admin_and_redacts_secrets(monkeypatch) -> None:
+    from app.connectors.config_store import ConnectorConfig, ConnectorConfigStore
+
+    store = ConnectorConfigStore(
+        [
+            ConnectorConfig(
+                connector_type="slack",
+                config={"bot_token": "xoxb-supersecret", "channel": "#alerts"},
+            )
+        ]
+    )
+    client = make_auth_client_with_connectors(monkeypatch, store)
+
+    # Read path must be admin-gated like the write/pull/test paths.
+    assert client.get("/connectors", headers=auth_header("viewer")).status_code == 403
+
+    response = client.get("/connectors", headers=auth_header("admin"))
+    assert response.status_code == 200
+    config = response.json()[0]["config"]
+    assert config["bot_token"] == "***redacted***"
+    assert config["channel"] == "#alerts"  # non-secret fields pass through
+    assert "xoxb-supersecret" not in response.text
+
+
+def test_connector_update_preserves_secret_when_blank(monkeypatch) -> None:
+    from app.connectors.config_store import ConnectorConfig, ConnectorConfigStore
+
+    store = ConnectorConfigStore(
+        [
+            ConnectorConfig(
+                connector_type="slack",
+                config={"bot_token": "xoxb-supersecret", "channel": "#alerts"},
+            )
+        ]
+    )
+    client = make_auth_client_with_connectors(monkeypatch, store)
+
+    # Operator edits a non-secret field; the redacted token comes back blank from the form.
+    response = client.put(
+        "/connectors/slack",
+        headers=auth_header("admin"),
+        json={"channel": "#newchannel", "bot_token": ""},
+    )
+    assert response.status_code == 200
+
+    stored = store.get_config("slack")
+    assert stored is not None
+    assert stored.config["bot_token"] == "xoxb-supersecret"  # not wiped
+    assert stored.config["channel"] == "#newchannel"
