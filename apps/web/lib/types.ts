@@ -211,6 +211,7 @@ export type ActionProposalSnapshot = {
   proposal: string;
   risk_level: RiskLevel;
   approval_state: string;
+  depends_on: string[];
 };
 
 export type ActionProposalChange = {
@@ -227,6 +228,7 @@ export type ActionProposal = {
   proposal: string;
   risk_level: RiskLevel;
   approval_state: string;
+  depends_on?: string[];
   original_snapshot?: ActionProposalSnapshot | null;
 };
 

@@ -267,6 +267,7 @@ class ActionProposalSnapshot(BaseModel):
     proposal: str
     risk_level: RiskLevel
     approval_state: str
+    depends_on: list[str] = Field(default_factory=list)
 
 
 class ActionProposalChange(BaseModel):
@@ -285,6 +286,7 @@ class ActionProposal(BaseModel):
     proposal: str
     risk_level: RiskLevel
     approval_state: str
+    depends_on: list[str] = Field(default_factory=list)
     original_snapshot: ActionProposalSnapshot | None = None
 
 

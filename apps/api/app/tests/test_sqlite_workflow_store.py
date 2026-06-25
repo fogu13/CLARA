@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app.domain.models import ApprovalDecision, LearningConclusionRequest, OutcomeMeasurement
+from fastapi import HTTPException
 from app.services.seed import load_seed_problems
 from app.services.workflow import SQLiteWorkflowStore, action_snapshot
 
@@ -62,6 +63,49 @@ def test_sqlite_store_persists_approval_action_diff(tmp_path: Path) -> None:
     assert approval.action_diff[0].field == "owner"
     assert approval.action_diff[0].before == action.owner
     assert approval.action_diff[0].after == "edited_owner"
+
+
+def test_sqlite_store_blocks_approval_until_dependency_approved(tmp_path: Path) -> None:
+    problem = load_seed_problems()[0]
+    independent = problem.action_proposals[0].model_copy(update={"depends_on": []})
+    dependent = problem.action_proposals[0].model_copy(
+        update={"action_id": "ACT-501-DEP", "depends_on": ["ACT-501"]}
+    )
+    problem = problem.model_copy(update={"action_proposals": [independent, dependent]})
+    store = SQLiteWorkflowStore(tmp_path / "workflow.db")
+
+    try:
+        store.record_approval(
+            problem=problem,
+            decision=ApprovalDecision(
+                action_id="ACT-501-DEP",
+                decision="approved",
+                reviewer="test_reviewer",
+            ),
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 409
+        assert "dependencies are approved" in exc.detail
+    else:
+        raise AssertionError("dependent action was approved before its dependency")
+
+    store.record_approval(
+        problem=problem,
+        decision=ApprovalDecision(
+            action_id="ACT-501",
+            decision="approved",
+            reviewer="test_reviewer",
+        ),
+    )
+    follow_up = store.record_approval(
+        problem=problem,
+        decision=ApprovalDecision(
+            action_id="ACT-501-DEP",
+            decision="approved",
+            reviewer="test_reviewer",
+        ),
+    )
+    assert follow_up.decision.value == "approved"
 
 
 def test_sqlite_store_classifies_decrease_outcomes(tmp_path: Path) -> None:
