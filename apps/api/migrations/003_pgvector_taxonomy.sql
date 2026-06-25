@@ -81,11 +81,13 @@ CREATE INDEX IF NOT EXISTS idx_taxonomy_nodes_parent
 CREATE INDEX IF NOT EXISTS idx_taxonomy_nodes_embedding
   ON public.taxonomy_nodes USING hnsw (embedding vector_cosine_ops);
 
+DROP POLICY IF EXISTS taxonomy_nodes_workspace_isolation ON public.taxonomy_nodes;
 CREATE POLICY taxonomy_nodes_workspace_isolation
   ON public.taxonomy_nodes FOR ALL
   USING (public.is_current_workspace(workspace_id))
   WITH CHECK (public.is_current_workspace(workspace_id));
 
+DROP TRIGGER IF EXISTS set_taxonomy_nodes_updated_at ON public.taxonomy_nodes;
 CREATE TRIGGER set_taxonomy_nodes_updated_at
   BEFORE UPDATE ON public.taxonomy_nodes
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
@@ -111,6 +113,7 @@ CREATE INDEX IF NOT EXISTS idx_signal_node_map_node
 CREATE INDEX IF NOT EXISTS idx_signal_node_map_workspace
   ON public.signal_node_map (workspace_id);
 
+DROP POLICY IF EXISTS signal_node_map_workspace_isolation ON public.signal_node_map;
 CREATE POLICY signal_node_map_workspace_isolation
   ON public.signal_node_map FOR ALL
   USING (public.is_current_workspace(workspace_id))
@@ -263,12 +266,14 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
+-- Use PERFORM (not SELECT) inside the block, and a single-quoted command string — a nested
+-- $$...$$ here would terminate the outer DO block and fail to parse.
 DO $$
 BEGIN
-  SELECT cron.schedule(
+  PERFORM cron.schedule(
     'taxonomy-governance-daily',
     '0 3 * * *',
-    $$ SELECT public.apply_taxonomy_governance(id) FROM public.workspaces $$
+    'SELECT public.apply_taxonomy_governance(id) FROM public.workspaces'
   );
   EXCEPTION WHEN OTHERS THEN NULL;
 END $$;

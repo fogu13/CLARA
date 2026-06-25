@@ -15,12 +15,16 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      # Require auth in production: refuses to boot if neither SUPABASE_URL (JWKS) nor
+      # SUPABASE_JWT_SECRET is set, instead of silently treating every caller as owner.
+      - key: CLARA_REQUIRE_AUTH
+        value: "true"
       - key: AI_BASE_URL
-        value: http://localhost:11434/v1
+        value: https://api.mistral.ai/v1
       - key: AI_API_KEY
         sync: false
       - key: AI_MODEL
-        value: llama3.1
+        value: mistral-small-latest
       - key: APP_CORS_ORIGINS
         sync: false
       - key: LANGFUSE_PUBLIC_KEY

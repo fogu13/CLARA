@@ -11,8 +11,10 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def _no_auth_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Auth disabled — no JWT secret configured (local dev / test default)."""
+    """Auth disabled — no JWT secret and no JWKS URL (local dev / test default)."""
     monkeypatch.delenv("SUPABASE_JWT_SECRET", raising=False)
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("CLARA_REQUIRE_AUTH", raising=False)
     import importlib
 
     import app.auth as auth_mod
@@ -22,8 +24,10 @@ def _no_auth_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def _auth_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Auth enabled with a test JWT secret."""
+    """Auth enabled with a test HS256 JWT secret (no JWKS URL)."""
     monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-jwt-secret-for-hybrid")
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("CLARA_REQUIRE_AUTH", raising=False)
     import importlib
 
     import app.auth as auth_mod
@@ -154,15 +158,90 @@ class TestUserContext:
 
 
 class TestVerifyToken:
-    def test_raises_500_when_secret_unset(self, _no_auth_env: None) -> None:
+    def test_raises_500_for_hs256_token_when_secret_unset(self, _no_auth_env: None) -> None:
+        from fastapi import HTTPException
+
+        from app.auth import verify_token
+
+        # A structurally valid HS256 token, but no secret is configured to verify it.
+        hs_token = jwt.encode({"sub": "x"}, "irrelevant", algorithm="HS256")
+        with pytest.raises(HTTPException) as exc_info:
+            verify_token(hs_token)
+
+        assert exc_info.value.status_code == 500
+
+    def test_raises_401_for_garbage_token(self, _auth_env: None) -> None:
         from fastapi import HTTPException
 
         from app.auth import verify_token
 
         with pytest.raises(HTTPException) as exc_info:
-            verify_token("some-token")
+            verify_token("not-a-jwt")
 
-        assert exc_info.value.status_code == 500
+        assert exc_info.value.status_code == 401
+
+
+class TestAppMetadataClaims:
+    def test_resolves_role_and_workspace_from_app_metadata(self, _auth_env: None) -> None:
+        from app.auth import get_current_user
+
+        token = _make_token(
+            "test-jwt-secret-for-hybrid",
+            sub="admin-1",
+            app_metadata={"user_role": "owner", "workspace_id": 2},
+        )
+        user = get_current_user(authorization=f"Bearer {token}")
+
+        assert user.role == "owner"
+        assert user.workspace_id == 2
+
+    def test_app_metadata_overrides_top_level_claims(self, _auth_env: None) -> None:
+        from app.auth import get_current_user
+
+        token = _make_token(
+            "test-jwt-secret-for-hybrid",
+            sub="admin-2",
+            user_role="viewer",  # top-level
+            app_metadata={"user_role": "admin"},  # app_metadata wins
+        )
+        user = get_current_user(authorization=f"Bearer {token}")
+
+        assert user.role == "admin"
+
+
+class TestAsymmetricVerification:
+    def test_es256_token_verified_via_jwks(
+        self, _auth_env: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pytest.importorskip("cryptography")
+        from cryptography.hazmat.primitives.asymmetric import ec
+
+        import app.auth as auth_mod
+
+        private_key = ec.generate_private_key(ec.SECP256R1())
+        token = jwt.encode(
+            {
+                "sub": "user-es",
+                "app_metadata": {"user_role": "owner", "workspace_id": 3},
+                "exp": int(time.time()) + 3600,
+            },
+            private_key,
+            algorithm="ES256",
+        )
+
+        class _FakeSigningKey:
+            key = private_key.public_key()
+
+        class _FakeJWKSClient:
+            def get_signing_key_from_jwt(self, _token: str) -> _FakeSigningKey:
+                return _FakeSigningKey()
+
+        monkeypatch.setattr(auth_mod, "_jwks_client", lambda: _FakeJWKSClient())
+
+        user = auth_mod.get_current_user(authorization=f"Bearer {token}")
+        assert user.user_id == "user-es"
+        assert user.role == "owner"
+        assert user.workspace_id == 3
 
 
 class TestAuthInFastAPI:
