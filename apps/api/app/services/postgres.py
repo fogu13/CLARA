@@ -27,6 +27,7 @@ from app.domain.models import (
     SignalRecord,
     TaxonomyCatalog,
     TerminologyDictionaryEntry,
+    WorkspaceSettings,
 )
 from app.services.contexts import CustomerContextStore
 from app.services.problems import (
@@ -104,6 +105,13 @@ CREATE TABLE IF NOT EXISTS clara_taxonomy_catalogs (
 
 CREATE TABLE IF NOT EXISTS clara_terminology_dictionary (
     term_id TEXT PRIMARY KEY,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS clara_workspace_settings (
+    workspace_id INTEGER PRIMARY KEY,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -694,3 +702,28 @@ class PostgresTerminologyStore(PostgresConnectionMixin, TerminologyStore):
                 """,
                 (entry.term_id, self._jsonb(_model_payload(entry))),
             )
+
+
+class PostgresWorkspaceStore(PostgresConnectionMixin):
+    def get(self, workspace_id: int) -> WorkspaceSettings:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT payload FROM clara_workspace_settings WHERE workspace_id = %s",
+                (workspace_id,),
+            ).fetchone()
+        if row is None:
+            return WorkspaceSettings()
+        return WorkspaceSettings.model_validate(_payload(row["payload"]))
+
+    def put(self, workspace_id: int, settings: WorkspaceSettings) -> WorkspaceSettings:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO clara_workspace_settings (workspace_id, payload)
+                VALUES (%s, %s)
+                ON CONFLICT (workspace_id) DO UPDATE
+                SET payload = excluded.payload, updated_at = now()
+                """,
+                (workspace_id, self._jsonb(_model_payload(settings))),
+            )
+        return settings

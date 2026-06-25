@@ -32,10 +32,12 @@ import type {
   SignalImportResult,
   SignalRecord,
   SignalValidationReport,
+  SystemConfig,
   TaxonomyCatalog,
   TaxonomyType,
   TerminologyDictionaryEntry,
-  WorkflowState
+  WorkflowState,
+  WorkspaceSettings
 } from "./types";
 
 export function apiBaseUrl(): string {
@@ -260,6 +262,21 @@ export async function lockTaxonomyCategory(
 
 export async function getTerminologyDictionary(): Promise<TerminologyDictionaryEntry[]> {
   return requestJson<TerminologyDictionaryEntry[]>(`${apiBaseUrl()}/terminology-dictionary`);
+}
+
+export async function getWorkspace(): Promise<WorkspaceSettings> {
+  return requestJson<WorkspaceSettings>(`${apiBaseUrl()}/workspace`);
+}
+
+export async function updateWorkspace(settings: WorkspaceSettings): Promise<WorkspaceSettings> {
+  return requestJson<WorkspaceSettings>(`${apiBaseUrl()}/workspace`, {
+    method: "PUT",
+    body: JSON.stringify(settings)
+  });
+}
+
+export async function getSystemConfig(): Promise<SystemConfig> {
+  return requestJson<SystemConfig>(`${apiBaseUrl()}/system-config`);
 }
 
 export async function getLanguageQuality(): Promise<LanguageQualityReport> {

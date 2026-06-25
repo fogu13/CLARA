@@ -130,6 +130,20 @@ class TaxonomySplitRequest(BaseModel):
     actor: str = "taxonomy_owner"
 
 
+class WorkspaceSettings(BaseModel):
+    name: str = "My Workspace"
+    slug: str = "my-workspace"
+    notification_email: str = ""
+    measurement_window_days: int = 14
+    learning_half_life_days: int = 180
+
+
+class SystemConfig(BaseModel):
+    ai_base_url: str
+    ai_model: str
+    auth_enabled: bool
+
+
 class ActionClass(str, Enum):
     structural = "structural"
     customer_recovery = "customer_recovery"
