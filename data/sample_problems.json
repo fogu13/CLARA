@@ -66,7 +66,21 @@
         "destination": "zendesk",
         "proposal": "Create a recovery task for currently blocked customers with approved support copy and callback option after 48 hours.",
         "risk_level": "medium",
-        "approval_state": "needs_cx_approval"
+        "approval_state": "needs_cx_approval",
+        "intervention_brief": {
+          "audience_summary": "Customers blocked in onboarding verification who have valid support-contact consent.",
+          "inclusion_criteria": ["Two verification failures in seven days", "Open or unresolved verification support case", "Valid service-contact basis"],
+          "exclusion_criteria": ["Fraud-review flag", "Legal hold", "Already contacted in the current suppression window"],
+          "trigger": "Second failed verification attempt within seven days",
+          "recommended_channel": "zendesk recovery task",
+          "content_brief": "Acknowledge the failed verification loop, offer document-specific guidance and a callback option, and avoid promising approval before review.",
+          "personalization_variables": ["customer_id", "journey_stage", "latest_failure_reason"],
+          "control_group": "Hold back eligible low-risk customers where support policy allows measurement.",
+          "primary_success_metric": "verification_completion_7d",
+          "guardrail_metrics": ["repeat_signal_rate", "support_contact_rate", "complaint_rate"],
+          "consent_notes": ["Only service-recovery contact is allowed until consent is verified."],
+          "governance_notes": ["Draft task only; no autonomous customer contact.", "Use approved support copy before execution."]
+        }
       },
       {
         "action_id": "ACT-503",
@@ -75,7 +89,21 @@
         "destination": "hubspot",
         "proposal": "Draft an audience of customers with two verification failures in seven days, valid consent, and no fraud-review flag.",
         "risk_level": "high",
-        "approval_state": "needs_marketing_and_privacy_approval"
+        "approval_state": "needs_marketing_and_privacy_approval",
+        "intervention_brief": {
+          "audience_summary": "Customers stuck in onboarding verification, excluding fraud/legal review and invalid-consent records.",
+          "inclusion_criteria": ["Two verification failures in seven days", "No completed verification event", "Valid marketing or service consent"],
+          "exclusion_criteria": ["Fraud-review flag", "No valid consent", "Recent recovery contact"],
+          "trigger": "Verification failure count reaches two within seven days",
+          "recommended_channel": "hubspot workflow draft",
+          "content_brief": "Send a guidance message that links to document-specific help and routes unresolved customers to support; do not imply automated approval.",
+          "personalization_variables": ["customer_id", "journey_stage", "document_type"],
+          "control_group": "Reserve a small eligible holdout if privacy review approves measurement.",
+          "primary_success_metric": "verification_completion_7d",
+          "guardrail_metrics": ["complaint_rate", "support_contact_rate", "unsubscribe_rate"],
+          "consent_notes": ["Activation requires destination-system consent verification."],
+          "governance_notes": ["Privacy review required before audience export.", "No sensitive attributes in inclusion criteria."]
+        }
       },
       {
         "action_id": "ACT-504",
@@ -172,7 +200,21 @@
         "destination": "hubspot",
         "proposal": "Block activation until cancellation status is available as a hard suppression rule.",
         "risk_level": "high",
-        "approval_state": "blocked_by_policy"
+        "approval_state": "blocked_by_policy",
+        "intervention_brief": {
+          "audience_summary": "Suppression-first draft for retention audiences affected by completed cancellation events.",
+          "inclusion_criteria": ["Customer appears in retention audience", "Cancellation completed or cancellation signal present"],
+          "exclusion_criteria": ["Already-cancelled customers", "No valid marketing consent", "Open complaint or legal escalation"],
+          "trigger": "Cancellation status changes before next retention send",
+          "recommended_channel": "hubspot suppression rule draft",
+          "content_brief": "Do not send a customer message; update suppression logic and record affected customers for closure review.",
+          "personalization_variables": ["customer_id", "account_id", "cancellation_status"],
+          "control_group": "No holdout for suppression of ineligible customers.",
+          "primary_success_metric": "post_cancellation_send_rate",
+          "guardrail_metrics": ["complaint_rate", "support_contact_rate"],
+          "consent_notes": ["Consent cannot override a completed cancellation suppression rule."],
+          "governance_notes": ["Blocked until policy owner approves suppression criteria.", "CLARA produces a draft; campaign platform executes after approval."]
+        }
       },
       {
         "action_id": "ACT-511",

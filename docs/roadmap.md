@@ -46,8 +46,8 @@ Positioning: "We help organizations decide what to do about customer problems, e
 | 1 | EU Trust Baseline | Done | RBAC, audit export, Postgres migration trust checks |
 | 2 | German Intelligence | Done | DE/EN readiness, taxonomy and terminology trust slice |
 | 3 | Live Journey Intelligence Lite | Done | Journey event import, journey impact, problem-detail evidence |
-| 4 | Full Action Studio | Next | Action portfolio workspace |
-| 5 | Audience and Intervention Builder | Planned | Governed audience/intervention drafts |
+| 4 | Full Action Studio | Done | Action portfolio workspace, approval diffs and dependencies |
+| 5 | Audience and Intervention Builder | Next | Governed audience/intervention drafts |
 | 6 | EU Governance and Policy Engine | Planned | Policy-as-code and AI governance |
 | 7 | Execution Connectors and Closure | Planned | Real tool execution and customer closure |
 | 8 | Outcome Learning Engine | Planned | Stronger measurement and reusable action memory |
@@ -156,7 +156,7 @@ Do not build yet:
 
 ## Phase 4 - Full Action Studio
 
-Status: next.
+Status: done.
 
 Goal: turn one recommended action into a coordinated cross-functional action portfolio.
 
@@ -183,7 +183,7 @@ Exit criteria:
 
 ## Phase 5 - Audience and Intervention Builder
 
-Status: planned.
+Status: next.
 
 Goal: design governed interventions without replacing Adobe, Braze, HubSpot, Salesforce or a CDP.
 
@@ -340,11 +340,11 @@ These are implementation details, not separate product phases unless a phase exp
 
 ## Current Next Step
 
-Start Phase 4: Full Action Studio.
+Start Phase 5: Audience and Intervention Builder.
 
-Smallest useful Phase 4 slice:
+Smallest useful Phase 5 slice:
 
-1. Add action portfolio grouping by product fix, customer recovery, journey intervention, research and governance.
-2. Show evidence, risk, owner, destination and policy checks per action tab.
-3. Add reviewer edit/approve/reject flow with approval diffs.
-4. Add tests for portfolio grouping and approval diffs.
+1. Attach governed intervention briefs to customer recovery and journey intervention actions.
+2. Show audience, exclusions, trigger, channel, content brief, control group, success metric, guardrails and consent/governance notes in the action portfolio.
+3. Allow reviewer edits to the draft brief before approval.
+4. Add tests for brief generation and approval diffs.

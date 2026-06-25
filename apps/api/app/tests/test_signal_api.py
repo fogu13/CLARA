@@ -285,6 +285,23 @@ def test_problem_candidate_can_be_promoted_into_action_queue() -> None:
     assert any(problem["problem_id"] == promoted_problem["problem_id"] for problem in problems)
 
 
+def test_promoted_customer_intervention_actions_include_governed_briefs() -> None:
+    client = make_client()
+    candidate = client.get("/problem-candidates").json()[0]
+    problem = client.post(f"/problem-candidates/{candidate['candidate_id']}/promote").json()
+    actions = {action["class"]: action for action in problem["action_proposals"]}
+
+    recovery_brief = actions["customer_recovery"]["intervention_brief"]
+    journey_brief = actions["journey_intervention"]["intervention_brief"]
+
+    assert recovery_brief["recommended_channel"] == "zendesk recovery task"
+    assert journey_brief["recommended_channel"] == "hubspot workflow draft"
+    assert "Customers without valid communication consent" in journey_brief["exclusion_criteria"]
+    assert "Consent metadata is not available" in journey_brief["consent_notes"][0]
+    assert journey_brief["primary_success_metric"].endswith("_completion_7d")
+    assert actions["structural"].get("intervention_brief") is None
+
+
 def test_promoted_portfolio_wires_action_dependencies() -> None:
     client = make_client()
     candidate = client.get("/problem-candidates").json()[0]

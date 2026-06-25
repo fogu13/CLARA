@@ -257,6 +257,21 @@ class ContextImpactSummary(BaseModel):
     drivers: list[str] = Field(default_factory=list)
 
 
+class InterventionBrief(BaseModel):
+    audience_summary: str = Field(min_length=1)
+    inclusion_criteria: list[str] = Field(default_factory=list)
+    exclusion_criteria: list[str] = Field(default_factory=list)
+    trigger: str = Field(min_length=1)
+    recommended_channel: str = Field(min_length=1)
+    content_brief: str = Field(min_length=1)
+    personalization_variables: list[str] = Field(default_factory=list)
+    control_group: str = Field(min_length=1)
+    primary_success_metric: str = Field(min_length=1)
+    guardrail_metrics: list[str] = Field(default_factory=list)
+    consent_notes: list[str] = Field(default_factory=list)
+    governance_notes: list[str] = Field(default_factory=list)
+
+
 class ActionProposalSnapshot(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -268,6 +283,7 @@ class ActionProposalSnapshot(BaseModel):
     risk_level: RiskLevel
     approval_state: str
     depends_on: list[str] = Field(default_factory=list)
+    intervention_brief: InterventionBrief | None = None
 
 
 class ActionProposalChange(BaseModel):
@@ -287,6 +303,7 @@ class ActionProposal(BaseModel):
     risk_level: RiskLevel
     approval_state: str
     depends_on: list[str] = Field(default_factory=list)
+    intervention_brief: InterventionBrief | None = None
     original_snapshot: ActionProposalSnapshot | None = None
 
 
@@ -379,6 +396,7 @@ class ActionProposalUpdateRequest(BaseModel):
     proposal: str | None = Field(default=None, min_length=1)
     risk_level: RiskLevel | None = None
     approval_state: str | None = Field(default=None, min_length=1)
+    intervention_brief: InterventionBrief | None = None
 
 
 class ProblemTransitionRequest(BaseModel):

@@ -15,6 +15,7 @@ from app.domain.models import (
     CandidateDecisionStatus,
     Evidence,
     GovernanceCheck,
+    InterventionBrief,
     OutcomeContract,
     ProblemCandidate,
     ProblemRecord,
@@ -265,6 +266,44 @@ def build_candidates(signals: list[SignalRecord]) -> list[ProblemCandidate]:
     return sorted(candidates, key=lambda candidate: candidate.signal_count, reverse=True)
 
 
+def intervention_brief_for_candidate(candidate: ProblemCandidate, *, channel: str) -> InterventionBrief:
+    stage_token = candidate.journey_stage.lower().replace(" ", "_")
+    return InterventionBrief(
+        audience_summary=(
+            f"Customers represented by {candidate.signal_count} signals in {candidate.journey} / "
+            f"{candidate.journey_stage}; draft only until consent and suppression checks pass."
+        ),
+        inclusion_criteria=[
+            f"Evidence references {candidate.customer_count} affected customers",
+            f"Journey is {candidate.journey}",
+            f"Journey stage is {candidate.journey_stage}",
+        ],
+        exclusion_criteria=[
+            "Customers without valid communication consent",
+            "Customers under active complaint, fraud, legal or vulnerability review",
+            "Customers already contacted for this issue in the current suppression window",
+        ],
+        trigger=f"New signal or journey event shows unresolved {candidate.journey_stage} friction",
+        recommended_channel=channel,
+        content_brief=(
+            "Explain the known issue, give a low-friction recovery path, avoid promises beyond verified "
+            "resolution facts, and route unresolved cases to the accountable owner."
+        ),
+        personalization_variables=["customer_id", "account_id", "journey_stage", "owner"],
+        control_group="Hold back a small eligible sample where policy and account rules allow measurement.",
+        primary_success_metric=f"{stage_token}_completion_7d",
+        guardrail_metrics=["repeat_signal_rate", "support_contact_rate", "unsubscribe_or_opt_out_rate"],
+        consent_notes=[
+            "Consent metadata is not available in imported signals.",
+            "Activation requires a consent check in the destination system before customer contact.",
+        ],
+        governance_notes=[
+            "Draft intervention only; CLARA does not send customer messages autonomously.",
+            "Privacy review must approve audience criteria before export or execution.",
+        ],
+    )
+
+
 def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
     journey_token = candidate.journey.upper().replace(" ", "-")
     stage_token = candidate.journey_stage.upper().replace(" ", "-")
@@ -335,6 +374,10 @@ def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
                     "risk_level": "medium",
                     "approval_state": "needs_cx_approval",
                     "depends_on": [f"ACT-{problem_id}-GOVERNANCE"],
+                    "intervention_brief": intervention_brief_for_candidate(
+                        candidate,
+                        channel="zendesk recovery task",
+                    ),
                 }
             ),
             ActionProposal.model_validate(
@@ -350,6 +393,10 @@ def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
                     "risk_level": "high",
                     "approval_state": "needs_privacy_review",
                     "depends_on": [f"ACT-{problem_id}-GOVERNANCE"],
+                    "intervention_brief": intervention_brief_for_candidate(
+                        candidate,
+                        channel="hubspot workflow draft",
+                    ),
                 }
             ),
             ActionProposal.model_validate(

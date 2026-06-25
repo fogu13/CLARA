@@ -53,7 +53,9 @@ def apply_action_proposal_update(
         found_action = True
         if updates and action.original_snapshot is None:
             updates["original_snapshot"] = action_snapshot(action)
-        updated_actions.append(action.model_copy(update=updates))
+        payload = action.model_dump(by_alias=True)
+        payload.update(updates)
+        updated_actions.append(ActionProposal.model_validate(payload))
 
     if not found_action:
         return None

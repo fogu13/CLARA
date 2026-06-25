@@ -23,6 +23,8 @@ export function ActionProposalEditor({
   const [destination, setDestination] = useState(action.destination);
   const [riskLevel, setRiskLevel] = useState<RiskLevel>(action.risk_level);
   const [approvalState, setApprovalState] = useState(action.approval_state);
+  const [briefChannel, setBriefChannel] = useState(action.intervention_brief?.recommended_channel ?? "");
+  const [briefContent, setBriefContent] = useState(action.intervention_brief?.content_brief ?? "");
   const [editorState, setEditorState] = useState<EditorState>({
     status: "idle",
     message: "Action proposal can be refined before approval."
@@ -41,7 +43,14 @@ export function ActionProposalEditor({
         owner,
         destination,
         risk_level: riskLevel,
-        approval_state: approvalState
+        approval_state: approvalState,
+        intervention_brief: action.intervention_brief
+          ? {
+              ...action.intervention_brief,
+              recommended_channel: briefChannel,
+              content_brief: briefContent
+            }
+          : undefined
       });
       setEditorState({
         status: "saved",
@@ -89,6 +98,18 @@ export function ActionProposalEditor({
         Proposal
         <textarea value={proposal} rows={3} onChange={(event) => setProposal(event.target.value)} />
       </label>
+      {action.intervention_brief ? (
+        <div className="action-editor-grid">
+          <label>
+            Intervention channel
+            <input value={briefChannel} onChange={(event) => setBriefChannel(event.target.value)} />
+          </label>
+          <label>
+            Content brief
+            <textarea value={briefContent} rows={3} onChange={(event) => setBriefContent(event.target.value)} />
+          </label>
+        </div>
+      ) : null}
       <div className="action-editor-actions">
         <button type="button" disabled={editorState.status === "saving"} onClick={saveAction}>
           Save action
