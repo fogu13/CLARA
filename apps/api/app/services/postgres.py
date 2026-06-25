@@ -9,12 +9,14 @@ from uuid import uuid4
 
 from app.domain.models import (
     ApprovalRecord,
-    ClosureRecord,
     CandidateDecisionRecord,
     CandidateDecisionStatus,
+    ClosureRecord,
     CustomerContextImportResult,
     CustomerContextRecord,
     ExecutionRecord,
+    FeedbackRule,
+    FeedbackRuleCreate,
     JiraIssueDraft,
     JourneyEventImportResult,
     JourneyEventRecord,
@@ -727,3 +729,43 @@ class PostgresWorkspaceStore(PostgresConnectionMixin):
                 (workspace_id, self._jsonb(_model_payload(settings))),
             )
         return settings
+
+
+class PostgresRuleStore(PostgresConnectionMixin):
+    def __init__(self, url: str) -> None:
+        super().__init__(url)
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS clara_feedback_rules (
+                    rule_id TEXT PRIMARY KEY,
+                    payload JSONB NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
+
+    def list_rules(self) -> list[FeedbackRule]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT payload FROM clara_feedback_rules ORDER BY created_at DESC"
+            ).fetchall()
+        rules = [FeedbackRule.model_validate(_payload(row["payload"])) for row in rows]
+        return sorted(rules, key=lambda rule: rule.priority, reverse=True)
+
+    def create_rule(self, create: FeedbackRuleCreate) -> FeedbackRule:
+        rule = FeedbackRule(rule_id=f"RULE-{uuid4().hex[:8]}", **create.model_dump())
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO clara_feedback_rules (rule_id, payload) VALUES (%s, %s)",
+                (rule.rule_id, self._jsonb(_model_payload(rule))),
+            )
+        return rule
+
+    def delete_rule(self, rule_id: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "DELETE FROM clara_feedback_rules WHERE rule_id = %s RETURNING rule_id",
+                (rule_id,),
+            ).fetchone()
+        return row is not None
