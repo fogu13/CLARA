@@ -1,29 +1,98 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MessageSquare, Upload, Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { apiBaseUrl, apiHeaders, getSignals, importSignalCsv, validateSignalCsv } from "@/lib/client-api";
+import { inferColumnMapping, parseCsv, toCanonicalSignalCsv, unmappedRequiredFields } from "@/lib/csv";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+type Status = { tone: "idle" | "busy" | "ok" | "error"; message: string };
 
 export default function SignalsPage() {
   const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<Status>({ tone: "idle", message: "" });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch(`${API_URL}/signals`);
-        if (res.ok) setSignals(await res.json());
-      } catch { /* API not running */ }
-      finally { setLoading(false); }
-    }
-    load();
+    getSignals()
+      .then(setSignals)
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
+  async function refresh() {
+    try {
+      setSignals(await getSignals());
+    } catch {
+      /* keep current list */
+    }
+  }
+
+  async function handleFile(file: File | undefined) {
+    if (!file) return;
+    setStatus({ tone: "busy", message: `Importing ${file.name}…` });
+    try {
+      const { headers, rows } = parseCsv(await file.text());
+      const mapping = inferColumnMapping(headers);
+      const missing = unmappedRequiredFields(mapping);
+      if (missing.length > 0) {
+        setStatus({
+          tone: "error",
+          message: `Couldn't match these required columns: ${missing.join(", ")}. Expected headers like signal_id, customer_id, source, journey, journey_stage, feedback_text, timestamp.`
+        });
+        return;
+      }
+      const canonical = toCanonicalSignalCsv(rows, mapping);
+      const report = await validateSignalCsv(canonical);
+      if (!report.valid) {
+        const first = report.errors[0];
+        setStatus({
+          tone: "error",
+          message: `CSV has ${report.errors.length} error(s)${first ? `: ${first.message}` : ""}.`
+        });
+        return;
+      }
+      const result = await importSignalCsv(canonical);
+      await refresh();
+      setStatus({
+        tone: "ok",
+        message: `Imported ${result.imported} signal(s); skipped ${result.skipped_duplicates} duplicate(s).`
+      });
+    } catch (error) {
+      setStatus({ tone: "error", message: error instanceof Error ? error.message : "Couldn't import the CSV." });
+    }
+  }
+
+  async function runTriage() {
+    setStatus({ tone: "busy", message: "Running triage… this can take a moment." });
+    try {
+      const response = await fetch(`${apiBaseUrl()}/triage/run`, {
+        method: "POST",
+        headers: apiHeaders(),
+        body: JSON.stringify({})
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.detail ?? `Triage failed (${response.status})`);
+      }
+      const result = await response.json();
+      await refresh();
+      setStatus({
+        tone: "ok",
+        message: `Triage ${result.status}: ${result.insights?.length ?? 0} insight(s) generated.`
+      });
+    } catch (error) {
+      setStatus({ tone: "error", message: error instanceof Error ? error.message : "Couldn't run triage." });
+    }
+  }
+
   if (loading) return <div className="text-muted-foreground">Loading signals...</div>;
+
+  const busy = status.tone === "busy";
 
   return (
     <div className="space-y-6">
@@ -33,16 +102,41 @@ export default function SignalsPage() {
           <p className="text-sm text-muted-foreground mt-1">Customer feedback signals from all sources</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(event) => {
+              void handleFile(event.target.files?.[0]);
+              event.target.value = "";
+            }}
+          />
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => fileInputRef.current?.click()}>
             <Upload className="h-4 w-4 mr-2" />
             Import CSV
           </Button>
-          <Button size="sm">
+          <Button size="sm" disabled={busy} onClick={runTriage}>
             <Sparkles className="h-4 w-4 mr-2" />
             Run Triage
           </Button>
         </div>
       </div>
+
+      {status.message ? (
+        <div
+          className={cn(
+            "rounded-md border p-3 text-sm",
+            status.tone === "error"
+              ? "border-destructive/40 bg-destructive/5 text-destructive"
+              : status.tone === "ok"
+                ? "border-emerald-500/40 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400"
+                : "border-border bg-muted text-muted-foreground"
+          )}
+        >
+          {status.message}
+        </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
