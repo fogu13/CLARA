@@ -1,5 +1,7 @@
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from app.domain.models import ApprovalDecision
 from app.main import create_app
 from app.services.problems import ProblemStore
 from app.services.seed import load_seed_problems
@@ -13,6 +15,49 @@ client = TestClient(
 )
 
 TRUSTED_HEADERS = {"x-tenant-id": "test_tenant", "x-actor-id": "test_product_owner"}
+
+
+def test_action_dependency_must_be_approved_first() -> None:
+    problem = load_seed_problems()[0]
+    independent = problem.action_proposals[0].model_copy(update={"depends_on": []})
+    dependent = problem.action_proposals[0].model_copy(
+        update={"action_id": "ACT-501-DEP", "depends_on": ["ACT-501"]}
+    )
+    problem = problem.model_copy(update={"action_proposals": [independent, dependent]})
+    store = WorkflowStore()
+
+    try:
+        store.record_approval(
+            problem=problem,
+            decision=ApprovalDecision(
+                action_id="ACT-501-DEP",
+                decision="approved",
+                reviewer="test_reviewer",
+            ),
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 409
+        assert "dependencies are approved" in exc.detail
+    else:
+        raise AssertionError("dependent action was approved before its dependency")
+
+    store.record_approval(
+        problem=problem,
+        decision=ApprovalDecision(
+            action_id="ACT-501",
+            decision="approved",
+            reviewer="test_reviewer",
+        ),
+    )
+    follow_up = store.record_approval(
+        problem=problem,
+        decision=ApprovalDecision(
+            action_id="ACT-501-DEP",
+            decision="approved",
+            reviewer="test_reviewer",
+        ),
+    )
+    assert follow_up.decision.value == "approved"
 
 
 def test_approval_creates_execution_record() -> None:

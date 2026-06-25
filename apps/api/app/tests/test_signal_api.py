@@ -285,6 +285,20 @@ def test_problem_candidate_can_be_promoted_into_action_queue() -> None:
     assert any(problem["problem_id"] == promoted_problem["problem_id"] for problem in problems)
 
 
+def test_promoted_portfolio_wires_action_dependencies() -> None:
+    client = make_client()
+    candidate = client.get("/problem-candidates").json()[0]
+    problem = client.post(f"/problem-candidates/{candidate['candidate_id']}/promote").json()
+    actions = {action["class"]: action for action in problem["action_proposals"]}
+    governance_id = actions["governance"]["action_id"]
+
+    assert actions["customer_recovery"]["depends_on"] == [governance_id]
+    assert actions["journey_intervention"]["depends_on"] == [governance_id]
+    assert actions["structural"]["depends_on"] == []
+    assert actions["research"]["depends_on"] == []
+    assert actions["governance"]["depends_on"] == []
+
+
 def test_promoted_governed_actions_require_governance_review() -> None:
     client = make_client()
     candidate = client.get("/problem-candidates").json()[0]

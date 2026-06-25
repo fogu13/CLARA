@@ -334,6 +334,7 @@ def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
                     ),
                     "risk_level": "medium",
                     "approval_state": "needs_cx_approval",
+                    "depends_on": [f"ACT-{problem_id}-GOVERNANCE"],
                 }
             ),
             ActionProposal.model_validate(
@@ -348,6 +349,7 @@ def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
                     ),
                     "risk_level": "high",
                     "approval_state": "needs_privacy_review",
+                    "depends_on": [f"ACT-{problem_id}-GOVERNANCE"],
                 }
             ),
             ActionProposal.model_validate(

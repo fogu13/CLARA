@@ -113,6 +113,26 @@ function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord;
                             {percent(problem.evidence_confidence)} / {problem.affected_cohort.customers} customers
                           </p>
                           <div>
+                            <p className="font-medium text-foreground">Dependencies</p>
+                            {action.depends_on && action.depends_on.length > 0 ? (
+                              <ul className="mt-1 space-y-1">
+                                {action.depends_on.map((dependencyId) => {
+                                  const dependency = problem.action_proposals.find(
+                                    (item) => item.action_id === dependencyId
+                                  );
+
+                                  return (
+                                    <li key={dependencyId}>
+                                      {dependency ? label(dependency.class) : dependencyId}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            ) : (
+                              <p className="mt-1">None - can be approved independently.</p>
+                            )}
+                          </div>
+                          <div>
                             <p className="font-medium text-foreground">Policy checks</p>
                             {rules.length > 0 ? (
                               <ul className="mt-1 space-y-1">

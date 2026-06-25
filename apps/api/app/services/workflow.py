@@ -109,11 +109,32 @@ def action_diff(action: ActionProposal) -> list[ActionProposalChange]:
     return changes
 
 
+def assert_dependencies_satisfied(
+    *,
+    action,
+    approved_action_ids: set[str],
+) -> None:
+    unresolved = [
+        dependency_id
+        for dependency_id in getattr(action, "depends_on", [])
+        if dependency_id not in approved_action_ids
+    ]
+    if unresolved:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Action cannot be approved until dependencies are approved: "
+                + ", ".join(unresolved)
+            ),
+        )
+
+
 def assert_governance_allows_decision(
     *,
     problem: ProblemRecord,
     decision: ApprovalDecision,
     action,
+    approved_action_ids: set[str] | None = None,
 ) -> None:
     if decision.decision != ApprovalDecisionStatus.approved:
         return
@@ -146,6 +167,11 @@ def assert_governance_allows_decision(
             status_code=409,
             detail="Action cannot be approved while blocking governance checks are failing",
         )
+
+    assert_dependencies_satisfied(
+        action=action,
+        approved_action_ids=approved_action_ids or set(),
+    )
 
 
 def label_token(value: str) -> str:
@@ -286,7 +312,18 @@ class WorkflowStore:
         decision: ApprovalDecision,
     ) -> ApprovalRecord:
         action = find_action(problem, decision.action_id)
-        assert_governance_allows_decision(problem=problem, decision=decision, action=action)
+        approved_action_ids = {
+            approval.action_id
+            for approval in self._approvals
+            if approval.problem_id == problem.problem_id
+            and approval.decision == ApprovalDecisionStatus.approved
+        }
+        assert_governance_allows_decision(
+            problem=problem,
+            decision=decision,
+            action=action,
+            approved_action_ids=approved_action_ids,
+        )
 
         record = ApprovalRecord(
             decision_id=f"DEC-{next(self._approval_ids):04d}",
@@ -663,7 +700,17 @@ class SQLiteWorkflowStore:
         decision: ApprovalDecision,
     ) -> ApprovalRecord:
         action = find_action(problem, decision.action_id)
-        assert_governance_allows_decision(problem=problem, decision=decision, action=action)
+        approved_rows = self._connection.execute(
+            "SELECT action_id FROM approvals WHERE problem_id = ? AND decision = ?",
+            (problem.problem_id, ApprovalDecisionStatus.approved.value),
+        ).fetchall()
+        approved_action_ids = {row["action_id"] for row in approved_rows}
+        assert_governance_allows_decision(
+            problem=problem,
+            decision=decision,
+            action=action,
+            approved_action_ids=approved_action_ids,
+        )
 
         created_at = utc_now()
         cursor = self._connection.execute(
