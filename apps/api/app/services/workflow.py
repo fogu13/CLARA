@@ -16,6 +16,8 @@ from app.domain.models import (
     ApprovalDecision,
     ApprovalDecisionStatus,
     ApprovalRecord,
+    ClosureRecord,
+    ClosureRecordRequest,
     ExecutionRecord,
     ExecutionStatus,
     JiraIssueDraft,
@@ -222,6 +224,26 @@ def learning_label(status: str) -> str:
     return status.replace("_", " ")
 
 
+def build_response_draft(problem: ProblemRecord, request: ClosureRecordRequest) -> str:
+    facts = "; ".join(request.verified_resolution_facts)
+    draft = (
+        "Draft for human review only: "
+        f"We reviewed the {problem.journey} / {problem.journey_stage} issue. "
+        f"Verified resolution facts: {facts}. "
+        f"Current closure status is {request.customer_status.replace('_', ' ')}. "
+        "Please contact support if the problem is still affecting you."
+    )
+    return draft[:2000]
+
+
+def customer_closure_eligible(request: ClosureRecordRequest) -> bool:
+    return (
+        request.operational_status in {"released", "verified"}
+        and request.customer_status in {"draft_ready", "contacted"}
+        and request.unresolved_customers > 0
+    )
+
+
 def build_jira_issue_draft(
     *,
     draft_id: str,
@@ -279,12 +301,14 @@ class WorkflowStore:
         self._execution_ids = count(1)
         self._jira_draft_ids = count(1)
         self._transition_ids = count(1)
+        self._closure_ids = count(1)
         self._approvals: list[ApprovalRecord] = []
         self._executions: list[ExecutionRecord] = []
         self._jira_issue_drafts: list[JiraIssueDraft] = []
         self._outcomes: dict[str, OutcomeMeasurement] = {}
         self._transitions: list[ProblemTransitionRecord] = []
         self._learning_conclusions: list[LearningConclusionRecord] = []
+        self._closure_records: list[ClosureRecord] = []
 
     def list_approvals(self) -> list[ApprovalRecord]:
         return self._approvals
@@ -294,6 +318,9 @@ class WorkflowStore:
 
     def list_jira_issue_drafts(self) -> list[JiraIssueDraft]:
         return self._jira_issue_drafts
+
+    def list_closure_records(self) -> list[ClosureRecord]:
+        return self._closure_records
 
     def record_transition(
         self,
@@ -411,6 +438,30 @@ class WorkflowStore:
         self._learning_conclusions.append(record)
         return record
 
+    def record_closure(
+        self,
+        *,
+        problem: ProblemRecord,
+        closure: ClosureRecordRequest,
+        tenant_id: str,
+        actor: str,
+    ) -> ClosureRecord:
+        if closure.unresolved_customers > problem.affected_cohort.customers:
+            raise HTTPException(status_code=422, detail="Unresolved customers cannot exceed affected cohort")
+        created_at = utc_now()
+        record = ClosureRecord(
+            closure_id=f"CLR-{next(self._closure_ids):04d}",
+            problem_id=problem.problem_id,
+            tenant_id=tenant_id,
+            actor=actor,
+            customer_closure_eligible=customer_closure_eligible(closure),
+            created_at=created_at,
+            response_draft=closure.response_draft or build_response_draft(problem, closure),
+            **closure.model_dump(exclude={"response_draft"}),
+        )
+        self._closure_records.append(record)
+        return record
+
     def latest_learning_conclusion(
         self,
         problem: ProblemRecord,
@@ -466,6 +517,12 @@ class WorkflowStore:
                 for conclusion in self._learning_conclusions
                 if conclusion.problem_id == problem.problem_id
                 and (tenant_id is None or conclusion.tenant_id == tenant_id)
+            ],
+            closure_records=[
+                closure
+                for closure in self._closure_records
+                if closure.problem_id == problem.problem_id
+                and (tenant_id is None or closure.tenant_id == tenant_id)
             ],
             timeline=self.timeline_for_problem(problem, tenant_id=tenant_id),
         )
@@ -562,6 +619,24 @@ class WorkflowStore:
             if conclusion.problem_id == problem.problem_id
             and (tenant_id is None or conclusion.tenant_id == tenant_id)
         )
+        events.extend(
+            TimelineEvent(
+                event_id=closure.closure_id,
+                problem_id=closure.problem_id,
+                event_type="closure_recorded",
+                label="Closure recorded",
+                detail=(
+                    f"Operational: {closure.operational_status.replace('_', ' ')} / "
+                    f"customer: {closure.customer_status.replace('_', ' ')} / "
+                    f"unresolved customers: {closure.unresolved_customers}"
+                ),
+                actor=closure.actor,
+                created_at=closure.created_at,
+            )
+            for closure in self._closure_records
+            if closure.problem_id == problem.problem_id
+            and (tenant_id is None or closure.tenant_id == tenant_id)
+        )
 
         return sorted(events, key=lambda event: event.created_at, reverse=True)
 
@@ -644,6 +719,14 @@ class SQLiteWorkflowStore:
                 limitations TEXT NOT NULL,
                 next_step TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS closure_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                closure_id TEXT NOT NULL UNIQUE,
+                problem_id TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
             """
         )
         self._ensure_column("approvals", "action_snapshot", "TEXT")
@@ -671,6 +754,10 @@ class SQLiteWorkflowStore:
     def list_jira_issue_drafts(self) -> list[JiraIssueDraft]:
         rows = self._connection.execute("SELECT * FROM jira_issue_drafts ORDER BY id").fetchall()
         return [self._jira_issue_draft_from_row(row) for row in rows]
+
+    def list_closure_records(self) -> list[ClosureRecord]:
+        rows = self._connection.execute("SELECT * FROM closure_records ORDER BY id").fetchall()
+        return [ClosureRecord.model_validate(json.loads(row["payload"])) for row in rows]
 
     def record_transition(
         self,
@@ -896,6 +983,42 @@ class SQLiteWorkflowStore:
         self._connection.commit()
         return record
 
+    def record_closure(
+        self,
+        *,
+        problem: ProblemRecord,
+        closure: ClosureRecordRequest,
+        tenant_id: str,
+        actor: str,
+    ) -> ClosureRecord:
+        if closure.unresolved_customers > problem.affected_cohort.customers:
+            raise HTTPException(status_code=422, detail="Unresolved customers cannot exceed affected cohort")
+        created_at = utc_now()
+        record = ClosureRecord(
+            closure_id=f"CLR-{uuid4().hex}",
+            problem_id=problem.problem_id,
+            tenant_id=tenant_id,
+            actor=actor,
+            customer_closure_eligible=customer_closure_eligible(closure),
+            created_at=created_at,
+            response_draft=closure.response_draft or build_response_draft(problem, closure),
+            **closure.model_dump(exclude={"response_draft"}),
+        )
+        self._connection.execute(
+            """
+            INSERT INTO closure_records (closure_id, problem_id, payload, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                record.closure_id,
+                record.problem_id,
+                json.dumps(record.model_dump(mode="json")),
+                record.created_at,
+            ),
+        )
+        self._connection.commit()
+        return record
+
     def outcome_snapshot(self, problem: ProblemRecord) -> OutcomeSnapshot:
         contract = problem.outcome_contract
         row = self._connection.execute(
@@ -962,6 +1085,10 @@ class SQLiteWorkflowStore:
             f"SELECT * FROM learning_conclusions WHERE problem_id = ? {learning_clause} ORDER BY id",
             learning_params,
         ).fetchall()
+        closure_rows = self._connection.execute(
+            "SELECT * FROM closure_records WHERE problem_id = ? ORDER BY id",
+            (problem.problem_id,),
+        ).fetchall()
 
         return WorkflowState(
             problem_id=problem.problem_id,
@@ -973,6 +1100,11 @@ class SQLiteWorkflowStore:
             outcome=self.outcome_snapshot(problem),
             learning_conclusions=[
                 self._learning_conclusion_from_row(row) for row in learning_conclusions
+            ],
+            closure_records=[
+                record
+                for record in (ClosureRecord.model_validate(json.loads(row["payload"])) for row in closure_rows)
+                if tenant_id is None or record.tenant_id == tenant_id
             ],
             timeline=self.timeline_for_problem(problem, tenant_id=tenant_id),
         )
@@ -1009,6 +1141,10 @@ class SQLiteWorkflowStore:
             f"SELECT * FROM learning_conclusions WHERE problem_id = ? {learning_clause} ORDER BY id",
             learning_params,
         ).fetchall()
+        closure_rows = self._connection.execute(
+            "SELECT * FROM closure_records WHERE problem_id = ? ORDER BY id",
+            (problem.problem_id,),
+        ).fetchall()
 
         events.extend(
             self._transition_timeline_event(self._transition_from_row(row))
@@ -1031,6 +1167,11 @@ class SQLiteWorkflowStore:
         events.extend(
             self._learning_timeline_event(self._learning_conclusion_from_row(row))
             for row in learning_rows
+        )
+        events.extend(
+            self._closure_timeline_event(record)
+            for record in (ClosureRecord.model_validate(json.loads(row["payload"])) for row in closure_rows)
+            if tenant_id is None or record.tenant_id == tenant_id
         )
 
         return sorted(events, key=lambda event: event.created_at, reverse=True)
@@ -1108,6 +1249,22 @@ class SQLiteWorkflowStore:
             summary=row["summary"],
             limitations=row["limitations"],
             next_step=row["next_step"],
+        )
+
+    @staticmethod
+    def _closure_timeline_event(closure: ClosureRecord) -> TimelineEvent:
+        return TimelineEvent(
+            event_id=closure.closure_id,
+            problem_id=closure.problem_id,
+            event_type="closure_recorded",
+            label="Closure recorded",
+            detail=(
+                f"Operational: {closure.operational_status.replace('_', ' ')} / "
+                f"customer: {closure.customer_status.replace('_', ' ')} / "
+                f"unresolved customers: {closure.unresolved_customers}"
+            ),
+            actor=closure.actor,
+            created_at=closure.created_at,
         )
 
     @staticmethod

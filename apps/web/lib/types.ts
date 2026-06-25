@@ -399,6 +399,27 @@ export type ExecutionRecord = {
   created_at: string;
 };
 
+export type ClosureRecordRequest = {
+  operational_status: "not_started" | "draft_created" | "in_progress" | "released" | "verified";
+  customer_status: "not_started" | "not_eligible" | "draft_ready" | "contacted" | "unresolved";
+  owner: string;
+  verified_resolution_facts: string[];
+  unresolved_customers: number;
+  follow_up_channel: string;
+  response_draft?: string | null;
+  limitations: string[];
+};
+
+export type ClosureRecord = ClosureRecordRequest & {
+  closure_id: string;
+  problem_id: string;
+  tenant_id: string;
+  actor: string;
+  customer_closure_eligible: boolean;
+  response_draft?: string | null;
+  created_at: string;
+};
+
 export type JiraIssueDraft = {
   draft_id: string;
   problem_id: string;
@@ -508,6 +529,7 @@ export type WorkflowState = {
   jira_issue_drafts: JiraIssueDraft[];
   outcome: OutcomeSnapshot;
   learning_conclusions: LearningConclusionRecord[];
+  closure_records: ClosureRecord[];
   timeline: TimelineEvent[];
 };
 

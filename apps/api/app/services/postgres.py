@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from app.domain.models import (
     ApprovalRecord,
+    ClosureRecord,
     CandidateDecisionRecord,
     CandidateDecisionStatus,
     CustomerContextImportResult,
@@ -456,6 +457,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         transitions: list[ProblemTransitionRecord] = []
         outcomes: dict[str, OutcomeMeasurement] = {}
         learning_conclusions: list[LearningConclusionRecord] = []
+        closure_records: list[ClosureRecord] = []
 
         for row in rows:
             payload = _payload(row["payload"])
@@ -473,6 +475,8 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
                 outcomes[measurement.problem_id] = measurement
             elif record_type == "learning_conclusion":
                 learning_conclusions.append(LearningConclusionRecord.model_validate(payload))
+            elif record_type == "closure":
+                closure_records.append(ClosureRecord.model_validate(payload))
 
         self._approvals = approvals
         self._executions = executions
@@ -480,10 +484,12 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         self._transitions = transitions
         self._outcomes = outcomes
         self._learning_conclusions = learning_conclusions
+        self._closure_records = closure_records
         self._approval_ids = count(_next_id(approvals, "decision_id", "DEC") + 1)
         self._execution_ids = count(_next_id(executions, "execution_id", "EXE") + 1)
         self._jira_draft_ids = count(_next_id(jira_drafts, "draft_id", "JIRA") + 1)
         self._transition_ids = count(_next_id(transitions, "transition_id", "TRN") + 1)
+        self._closure_ids = count(_next_id(closure_records, "closure_id", "CLR") + 1)
 
     def _save_workflow_record(
         self,
@@ -588,6 +594,17 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
             conclusion.retention_expires_at,
         )
         return conclusion
+
+    def record_closure(self, *args: Any, **kwargs: Any):
+        closure = WorkflowStore.record_closure(self, *args, **kwargs)
+        self._save_workflow_record(
+            "closure",
+            closure.closure_id,
+            closure.problem_id,
+            closure,
+            closure.tenant_id,
+        )
+        return closure
 
 
 def _next_id(records: list[Any], field_name: str, prefix: str) -> int:

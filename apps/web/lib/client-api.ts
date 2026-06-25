@@ -2,6 +2,8 @@ import type {
   ApprovalDecision,
   ApprovalRecord,
   ActionProposalUpdateRequest,
+  ClosureRecord,
+  ClosureRecordRequest,
   AffectedContextExplorer,
   CandidateReviewRequest,
   CustomerContextCompletenessReport,
@@ -148,6 +150,16 @@ export async function transitionProblem(
   return requestJson<ProblemTransitionRecord>(`${apiBaseUrl()}/problems/${problemId}/transitions`, {
     method: "POST",
     body: JSON.stringify(transition)
+  });
+}
+
+export async function recordClosure(
+  problemId: string,
+  closure: ClosureRecordRequest
+): Promise<ClosureRecord> {
+  return requestJson<ClosureRecord>(`${apiBaseUrl()}/problems/${problemId}/closure`, {
+    method: "POST",
+    body: JSON.stringify(closure)
   });
 }
 

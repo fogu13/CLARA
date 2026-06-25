@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.domain.models import ApprovalDecision, LearningConclusionRequest, OutcomeMeasurement
+from app.domain.models import ApprovalDecision, ClosureRecordRequest, LearningConclusionRequest, OutcomeMeasurement
 from fastapi import HTTPException
 from app.services.seed import load_seed_problems
 from app.services.workflow import SQLiteWorkflowStore, action_snapshot
@@ -157,3 +157,32 @@ def test_sqlite_store_persists_learning_conclusions(tmp_path: Path) -> None:
     assert latest is not None
     assert latest.learning_status.value == "worked"
     assert "learning_reviewed" in {event.event_type for event in state.timeline}
+
+
+
+def test_sqlite_store_persists_closure_records(tmp_path: Path) -> None:
+    problem = load_seed_problems()[0]
+    db_path = tmp_path / "workflow.db"
+    first_store = SQLiteWorkflowStore(db_path)
+
+    record = first_store.record_closure(
+        problem=problem,
+        closure=ClosureRecordRequest(
+            operational_status="released",
+            customer_status="draft_ready",
+            owner="cx_operations",
+            verified_resolution_facts=["Resolution released."],
+            unresolved_customers=2,
+            follow_up_channel="zendesk closure task",
+            limitations=["Support review required."],
+        ),
+        tenant_id="test_tenant",
+        actor="test_operator",
+    )
+
+    second_store = SQLiteWorkflowStore(db_path)
+    state = second_store.state_for_problem(problem)
+
+    assert state.closure_records[0].closure_id == record.closure_id
+    assert state.closure_records[0].customer_closure_eligible is True
+    assert "closure_recorded" in {event.event_type for event in state.timeline}
