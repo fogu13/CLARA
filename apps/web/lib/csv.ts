@@ -126,3 +126,55 @@ export function unmappedRequiredFields(mapping: ColumnMapping): SignalCsvField[]
   return signalCsvFields.filter((field) => !mapping[field]);
 }
 
+// The only column a user must map: the feedback text itself. Everything else is
+// auto-filled with a sensible default so arbitrary CSVs import without busywork.
+export const essentialSignalCsvField: SignalCsvField = "feedback_text";
+
+function defaultSignalValue(field: SignalCsvField, rowIndex: number, batchId: string, now: string): string {
+  switch (field) {
+    case "signal_id":
+      return `csv-${batchId}-${rowIndex}`;
+    case "customer_id":
+    case "account_id":
+      return "unknown";
+    case "source":
+      return "csv_import";
+    case "journey":
+      return "unknown";
+    case "journey_stage":
+      return "general";
+    case "language":
+      return "en";
+    case "timestamp":
+      return now;
+    default:
+      // feedback_text (required, no default), campaign_exposure, product_events
+      return "";
+  }
+}
+
+// Build the canonical CSV, filling any unmapped/empty field with a default so the
+// import only really needs the feedback text mapped.
+export function toCanonicalSignalCsvWithDefaults(
+  rows: Record<string, string>[],
+  mapping: ColumnMapping,
+  batchId: string
+): string {
+  const now = new Date().toISOString();
+  const csvRows = [
+    signalCsvFields.join(","),
+    ...rows.map((row, index) => {
+      const rowNumber = index + 1;
+      return signalCsvFields
+        .map((field) => {
+          const mappedHeader = mapping[field];
+          const raw = mappedHeader ? (row[mappedHeader] ?? "").trim() : "";
+          return escapeCsvCell(raw || defaultSignalValue(field, rowNumber, batchId, now));
+        })
+        .join(",");
+    })
+  ];
+
+  return csvRows.join("\n");
+}
+
