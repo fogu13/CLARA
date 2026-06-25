@@ -13,6 +13,7 @@ import { getActionQueueProblems, getPolicyRules } from "@/lib/api";
 import type {
   ActionClass,
   ActionProposal,
+  AudienceReadiness,
   GovernanceCheck,
   InterventionBrief,
   PolicyRule,
@@ -88,6 +89,58 @@ function BriefList({ title, items }: { title: string; items: string[] }) {
   );
 }
 
+function readinessVariant(readiness: AudienceReadiness): "success" | "warning" | "destructive" {
+  if (readiness.readiness_status === "ready_for_review") return "success";
+  if (readiness.readiness_status === "blocked_by_policy") return "destructive";
+  return "warning";
+}
+
+function AudienceReadinessCard({ readiness }: { readiness: AudienceReadiness }) {
+  return (
+    <div className="mt-3 rounded-lg border bg-muted/20 p-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="font-medium text-foreground">Audience readiness</p>
+          <p className="mt-1">Export target: {readiness.export_destination} / {readiness.export_format}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge variant={readinessVariant(readiness)}>{label(readiness.readiness_status)}</Badge>
+          <Badge variant={readiness.over_contact_risk === "high" ? "destructive" : "outline"}>
+            {readiness.over_contact_risk} contact risk
+          </Badge>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-5">
+        <div className="rounded-md border bg-background p-2">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">estimated</p>
+          <p className="text-lg font-semibold text-foreground">{readiness.estimated_audience_size}</p>
+        </div>
+        <div className="rounded-md border bg-background p-2">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">eligible</p>
+          <p className="text-lg font-semibold text-foreground">{readiness.eligible_customers}</p>
+        </div>
+        <div className="rounded-md border bg-background p-2">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">excluded</p>
+          <p className="text-lg font-semibold text-foreground">{readiness.excluded_customers}</p>
+        </div>
+        <div className="rounded-md border bg-background p-2">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">consent ready</p>
+          <p className="text-lg font-semibold text-foreground">{readiness.consent_ready_customers}</p>
+        </div>
+        <div className="rounded-md border bg-background p-2">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">suppressed</p>
+          <p className="text-lg font-semibold text-foreground">{readiness.suppression_excluded_customers}</p>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <BriefList title="Readiness reasons" items={readiness.readiness_reasons} />
+        <BriefList title="Activation constraints" items={readiness.activation_constraints} />
+        <BriefList title="Export fields" items={readiness.export_fields} />
+      </div>
+    </div>
+  );
+}
+
 function InterventionBriefCard({ brief }: { brief: InterventionBrief }) {
   return (
     <div className="mt-3 rounded-md border bg-background p-3 text-xs text-muted-foreground">
@@ -98,6 +151,7 @@ function InterventionBriefCard({ brief }: { brief: InterventionBrief }) {
         </div>
         <Badge variant="outline">{brief.recommended_channel}</Badge>
       </div>
+      {brief.audience_readiness ? <AudienceReadinessCard readiness={brief.audience_readiness} /> : null}
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <BriefList title="Include" items={brief.inclusion_criteria} />
         <BriefList title="Exclude" items={brief.exclusion_criteria} />

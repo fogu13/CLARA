@@ -19,6 +19,13 @@ function label(value: string): string {
   return value.replaceAll("_", " ");
 }
 
+function readinessBadge(status: string): "success" | "warning" | "destructive" | "outline" {
+  if (status === "ready_for_review") return "success";
+  if (status === "blocked_by_policy") return "destructive";
+  if (status === "needs_consent_review") return "warning";
+  return "outline";
+}
+
 export default function ActionsPage() {
   const [items, setItems] = useState<ActionQueueItem[]>([]);
   const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
@@ -58,6 +65,16 @@ export default function ActionsPage() {
     item.problem.governance_checks.some((check) => check.blocking && check.status !== "pass")
   ).length;
   const destinations = new Set(items.map((item) => item.action.destination).filter(Boolean));
+  const interventionItems = items.filter((item) => item.action.intervention_brief?.audience_readiness);
+  const readyInterventions = interventionItems.filter(
+    (item) => item.action.intervention_brief?.audience_readiness?.readiness_status === "ready_for_review"
+  ).length;
+  const consentReviewInterventions = interventionItems.filter(
+    (item) => item.action.intervention_brief?.audience_readiness?.readiness_status === "needs_consent_review"
+  ).length;
+  const blockedInterventions = interventionItems.filter(
+    (item) => item.action.intervention_brief?.audience_readiness?.readiness_status === "blocked_by_policy"
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -88,6 +105,70 @@ export default function ActionsPage() {
           <CardContent><div className="text-2xl font-bold">{destinations.size}</div></CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Intervention Builder</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {interventionItems.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No audience-ready intervention drafts yet.</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-4">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Drafts</p>
+                  <p className="mt-1 text-2xl font-bold">{interventionItems.length}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Ready for review</p>
+                  <p className="mt-1 text-2xl font-bold text-emerald-600">{readyInterventions}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Consent review</p>
+                  <p className="mt-1 text-2xl font-bold text-amber-600">{consentReviewInterventions}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Blocked</p>
+                  <p className="mt-1 text-2xl font-bold text-destructive">{blockedInterventions}</p>
+                </div>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {interventionItems.map(({ problem, action }) => {
+                  const readiness = action.intervention_brief?.audience_readiness;
+                  if (!readiness) return null;
+
+                  return (
+                    <Link
+                      key={`${problem.problem_id}-${action.action_id}-readiness`}
+                      href={`/insights/${problem.problem_id}`}
+                      className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
+                    >
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold">{problem.title}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {readiness.export_destination} / {readiness.export_format}
+                          </p>
+                        </div>
+                        <Badge variant={readinessBadge(readiness.readiness_status)}>
+                          {label(readiness.readiness_status)}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 grid grid-cols-4 gap-2 text-xs">
+                        <div><p className="text-muted-foreground">Est.</p><p className="font-semibold">{readiness.estimated_audience_size}</p></div>
+                        <div><p className="text-muted-foreground">Eligible</p><p className="font-semibold">{readiness.eligible_customers}</p></div>
+                        <div><p className="text-muted-foreground">Excluded</p><p className="font-semibold">{readiness.excluded_customers}</p></div>
+                        <div><p className="text-muted-foreground">Risk</p><p className="font-semibold">{readiness.over_contact_risk}</p></div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

@@ -47,7 +47,7 @@ Positioning: "We help organizations decide what to do about customer problems, e
 | 2 | German Intelligence | Done | DE/EN readiness, taxonomy and terminology trust slice |
 | 3 | Live Journey Intelligence Lite | Done | Journey event import, journey impact, problem-detail evidence |
 | 4 | Full Action Studio | Done | Action portfolio workspace, approval diffs and dependencies |
-| 5 | Audience and Intervention Builder | Next | Governed audience/intervention drafts |
+| 5 | Audience and Intervention Builder | In progress | Governed briefs, audience readiness and export-ready drafts |
 | 6 | EU Governance and Policy Engine | Planned | Policy-as-code and AI governance |
 | 7 | Execution Connectors and Closure | Planned | Real tool execution and customer closure |
 | 8 | Outcome Learning Engine | Planned | Stronger measurement and reusable action memory |
@@ -183,9 +183,16 @@ Exit criteria:
 
 ## Phase 5 - Audience and Intervention Builder
 
-Status: next.
+Status: in progress.
 
 Goal: design governed interventions without replacing Adobe, Braze, HubSpot, Salesforce or a CDP.
+
+Delivered so far:
+
+- Governed intervention briefs attached to customer recovery and journey intervention actions.
+- Audience readiness estimates with eligibility, consent, suppression and over-contact signals.
+- Export-ready draft metadata for downstream systems without live campaign activation.
+- Leadership dashboard and action-queue UX for intervention readiness.
 
 Scope:
 
@@ -340,11 +347,11 @@ These are implementation details, not separate product phases unless a phase exp
 
 ## Current Next Step
 
-Start Phase 5: Audience and Intervention Builder.
+Finish Phase 5 v1, then move to Phase 7 customer closure.
 
-Smallest useful Phase 5 slice:
+Remaining useful Phase 5 slice:
 
-1. Attach governed intervention briefs to customer recovery and journey intervention actions.
-2. Show audience, exclusions, trigger, channel, content brief, control group, success metric, guardrails and consent/governance notes in the action portfolio.
-3. Allow reviewer edits to the draft brief before approval.
-4. Add tests for brief generation and approval diffs.
+1. Add explicit export/download drafts for approved interventions.
+2. Attach consent and suppression metadata from customer context where available.
+3. Show intervention readiness in a dedicated operator workflow.
+4. Keep execution as draft-plus-human-approval; do not send campaigns from CLARA.
