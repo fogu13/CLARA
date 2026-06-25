@@ -141,13 +141,13 @@ function isResolved(problem: ProblemSummary): boolean {
 
 function leadershipHeadline(problems: ProblemSummary[], outcomeBoard: OutcomeBoard): string {
   const top = [...problems].sort((a, b) => impact(b) - impact(a))[0];
-  if (!top) return "No active customer problems in the queue.";
+  if (!top) return "No open problems right now.";
 
   const blocked = problems.filter((problem) => blockingChecks(problem) > 0).length;
   const improving = outcomeBoard.improving + outcomeBoard.target_met;
-  if (blocked > 0) return `${blocked} customer problems need governance or leadership unblock before execution.`;
-  if (improving > 0) return `${improving} outcomes are improving or at target; keep attention on the next highest-impact issue.`;
-  return `${top.title} is the highest-impact issue currently needing accountable action.`;
+  if (blocked > 0) return `${blocked} ${blocked === 1 ? "problem needs" : "problems need"} a decision before work can start.`;
+  if (improving > 0) return `${improving} ${improving === 1 ? "outcome is" : "outcomes are"} improving or on target.`;
+  return `${top.title} is the highest-impact problem right now.`;
 }
 
 function attentionItems(problems: ProblemSummary[]): AttentionItem[] {
@@ -309,10 +309,10 @@ export default function DashboardPage() {
       <div className="overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-6 text-white shadow-sm">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-3xl">
-            <Badge className="border-white/20 bg-white/10 text-white" variant="outline">Leadership cockpit</Badge>
+            <Badge className="border-white/20 bg-white/10 text-white" variant="outline">Overview</Badge>
             <h1 className="mt-4 text-3xl font-bold tracking-tight">{leadershipHeadline(problems, outcomeBoard)}</h1>
             <p className="mt-3 text-sm text-slate-300">
-              A governed, minimized view of customer pain, proposed actions, approvals, execution drafts and outcome proof.
+              The highest-impact customer problems, the actions proposed for them, and whether those actions worked.
             </p>
           </div>
           <div className="grid min-w-64 grid-cols-2 gap-3 text-sm">
@@ -330,13 +330,13 @@ export default function DashboardPage() {
 
       {data?.usingFallback ? (
         <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
-          API leadership data incomplete at {apiBaseUrl()} — showing sample leadership data.
+          Showing sample data — couldn&apos;t reach the API.
         </div>
       ) : null}
 
       {!data?.usingFallback && data?.partialSources.length ? (
         <div className="rounded-md border border-dashed border-amber-500/50 bg-amber-500/5 p-3 text-sm text-amber-700 dark:text-amber-400">
-          Partial leadership data: {data.partialSources.join(", ")} unavailable, so related counts may be understated.
+          Some data is unavailable ({data.partialSources.join(", ")}); a few counts may be low.
         </div>
       ) : null}
 
@@ -345,7 +345,7 @@ export default function DashboardPage() {
         <MetricCard title="Governance Blockers" value={blockedProblems.length} detail="Require policy or privacy decision" tone={blockedProblems.length > 0 ? "bad" : "good"} />
         <MetricCard title="Pending Decisions" value={pendingDecisionProblems.length} detail={`${approvals.length} approval decisions recorded`} tone={pendingDecisionProblems.length > 0 ? "warn" : "good"} />
         <MetricCard title="Outcome Signals" value={`${improvingOutcomes}/${outcomeBoard.total}`} detail={`${measuredOutcomes} measured, ${outcomeBoard.not_measured} pending`} tone={improvingOutcomes > 0 ? "good" : "neutral"} />
-        <MetricCard title="Live Connectors" value={`${activeConnectors}/${connectors.length}`} detail="Configured operational routes" tone={activeConnectors > 0 ? "good" : "neutral"} />
+        <MetricCard title="Connectors" value={`${activeConnectors}/${connectors.length}`} detail="Active integrations" tone={activeConnectors > 0 ? "good" : "neutral"} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.4fr_0.8fr]">
@@ -451,7 +451,7 @@ export default function DashboardPage() {
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><ClipboardCheck className="h-4 w-4" /> Governed interventions</span><Badge variant={interventionReady.length > 0 ? "success" : "secondary"}>{interventionReady.length}</Badge></div>
             <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><TrendingUp className="h-4 w-4" /> Learning records</span><Badge variant="outline">{outcomeBoard.learning_worked + outcomeBoard.learning_partially_worked + outcomeBoard.learning_did_not_work}</Badge></div>
-            <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><Plug className="h-4 w-4" /> Active routes</span><Badge variant={activeConnectors > 0 ? "success" : "secondary"}>{activeConnectors}</Badge></div>
+            <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><Plug className="h-4 w-4" /> Active connectors</span><Badge variant={activeConnectors > 0 ? "success" : "secondary"}>{activeConnectors}</Badge></div>
             <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Human approvals</span><Badge variant={approvals.length > 0 ? "success" : "outline"}>{approvals.length}</Badge></div>
             <Link className="inline-flex items-center gap-2 text-primary hover:underline" href="/actions">Review action portfolio <ArrowRight className="h-3 w-3" /></Link>
           </CardContent>

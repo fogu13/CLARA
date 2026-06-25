@@ -38,7 +38,7 @@ export function AppSidebar() {
     <aside className="flex w-64 flex-col border-r bg-card">
       <div className="flex h-14 items-center gap-2 border-b px-6">
         <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-          <span className="text-sm font-bold text-primary-foreground">O</span>
+          <span className="text-sm font-bold text-primary-foreground">C</span>
         </div>
         <span className="font-semibold text-foreground">CLARA</span>
       </div>
@@ -66,9 +66,6 @@ export function AppSidebar() {
       <div className="border-t p-4">
         <p className="text-xs text-muted-foreground">
           Feedback-to-Action Platform
-        </p>
-        <p className="text-xs text-muted-foreground mt-1">
-          v0.4.0 — Hybrid Build
         </p>
       </div>
     </aside>

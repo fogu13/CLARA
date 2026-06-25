@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { apiHeaders } from "@/lib/client-api";
-import { Plug, Trash2, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { Plug, Trash2, CheckCircle, Loader2 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
