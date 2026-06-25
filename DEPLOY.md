@@ -30,15 +30,22 @@ git push -u origin main
    - Project URL: `https://XXXXX.supabase.co`
    - Service Role Key: `eyJ...`
    - From **Settings → API → JWT Settings**: JWT Secret
-6. From **Settings → Database**: Connection string
-   `postgresql://postgres:PASSWORD@db.XXXXX.supabase.co:5432/postgres`
-7. Enable pgvector: **Dashboard → Database → Extensions → vector → Enable**
-8. Run migrations in **SQL Editor** (in order):
+6. From **Connect** (top bar) → **Session pooler**, copy the IPv4 connection string for
+   `DATABASE_URL`:
+   `postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-<region>.pooler.supabase.com:5432/postgres`
+   ⚠️ Use the **pooler**, not the direct `db.<ref>.supabase.co` host — direct is IPv6-only and
+   Render's free tier is IPv4-only.
+7. Run migrations in the **SQL Editor in this order** — note **004 runs BEFORE 003** (003's
+   `unmapped_signals()` references a `workspace_id` column that 004 adds; 003 enables pgvector
+   itself, so no separate "enable vector" step is needed):
    - `apps/api/migrations/001_supabase_postgres.sql`
    - `apps/api/migrations/002_workflow_tenant_retention.sql`
-   - `apps/api/migrations/003_pgvector_taxonomy.sql`
    - `apps/api/migrations/004_rls_workspace.sql`
+   - `apps/api/migrations/003_pgvector_taxonomy.sql`
    - `apps/api/migrations/005_outcome_events_learnings.sql`
+   - `apps/api/migrations/006_clara_workspace_id_default.sql`
+   _(For the existing **CLARA** project these are already applied via MCP — listed here for
+   reproducibility.)_
 
 ## Step 3 — Deploy API to Render
 
@@ -53,14 +60,18 @@ git push -u origin main
 
 | Key | Value |
 |---|---|
-| `DATABASE_URL` | `postgresql://postgres:...@db.XXXXX.supabase.co:5432/postgres` |
-| `SUPABASE_JWT_SECRET` | `<JWT secret from Supabase>` |
-| `SUPABASE_URL` | `https://XXXXX.supabase.co` |
+| `DATABASE_URL` | Session-pooler string from Step 2.6 (`...pooler.supabase.com:5432`) |
+| `SUPABASE_URL` | `https://XXXXX.supabase.co` (drives JWKS verification of ES256 tokens) |
 | `SUPABASE_SERVICE_ROLE_KEY` | `<service role key>` |
-| `AI_BASE_URL` | `https://api.openai.com/v1` (or `http://localhost:11434/v1` for Ollama) |
-| `AI_API_KEY` | `sk-...` (leave empty for local Ollama) |
-| `AI_MODEL` | `gpt-4o-mini` (or `llama3.1` for Ollama) |
-| `APP_CORS_ORIGINS` | `https://clara.vercel.app` (add your Vercel URL after Step 4) |
+| `CLARA_REQUIRE_AUTH` | `true` (fail closed — refuse to boot if auth is unconfigured) |
+| `AI_BASE_URL` | `https://api.mistral.ai/v1` |
+| `AI_API_KEY` | `<your Mistral API key>` |
+| `AI_MODEL` | `mistral-small-latest` |
+| `APP_CORS_ORIGINS` | `https://clara-theta-nine.vercel.app` (your Vercel URL, set after Step 4) |
+
+> `SUPABASE_JWT_SECRET` is **not** required — this project signs tokens with ES256
+> (asymmetric), which the API verifies via the JWKS endpoint derived from `SUPABASE_URL`.
+> Only set `SUPABASE_JWT_SECRET` if you switch the project to legacy HS256 signing.
 
 5. Deploy → wait for build to complete
 6. Test: `curl https://clara-api.onrender.com/health` → `{"status":"ok"}`
@@ -81,14 +92,32 @@ git push -u origin main
    - **Framework Preset:** Next.js
    - **Build Command:** `npm run build`
    - **Output Directory:** `.next`
-3. Add Environment Variable:
+3. Add Environment Variables:
    - `NEXT_PUBLIC_API_URL` = `https://clara-api.onrender.com` (your Render URL)
+   - `NEXT_PUBLIC_SUPABASE_URL` = `https://XXXXX.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = the publishable/anon key (Supabase → Settings → API)
 4. Deploy
-5. After deploy, copy the Vercel URL (e.g. `https://clara.vercel.app`)
+5. After deploy, copy the Vercel URL (e.g. `https://clara-theta-nine.vercel.app`)
 6. Go back to Render → Environment → update `APP_CORS_ORIGINS` to include the Vercel URL
 7. Go to Supabase → Auth → URL Configuration:
-   - Site URL: `https://clara.vercel.app`
-   - Redirect URLs: `https://clara.vercel.app/**`
+   - Site URL: `https://clara-theta-nine.vercel.app`
+   - Redirect URLs: `https://clara-theta-nine.vercel.app/**`
+
+### Step 4.5 — Create the admin login
+
+The frontend requires a Supabase login (no public signup). Create one admin account:
+
+1. Supabase → **Authentication → Users → Add user** → set email + password, tick
+   *Auto Confirm User*.
+2. Grant it the owner role by setting its JWT `app_metadata` (the API reads `user_role` /
+   `workspace_id` from there). In the **SQL Editor**:
+   ```sql
+   update auth.users
+     set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb)
+       || '{"user_role":"owner","workspace_id":1}'::jsonb
+   where email = 'you@example.com';
+   ```
+3. Sign in at `https://clara-theta-nine.vercel.app/auth`.
 
 ## Step 5 — Verify end-to-end
 

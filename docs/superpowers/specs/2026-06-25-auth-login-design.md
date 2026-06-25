@@ -20,23 +20,29 @@ real login so it can obtain and send a Supabase JWT. Scope: one pre-seeded admin
 ## Approach
 
 ### 1. Frontend login (`apps/web`)
-- Add `@supabase/supabase-js`. New `apps/web/lib/supabase.ts` creates a browser client from
-  `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-- Replace the stub `(auth)/auth/page.tsx` with an email+password form calling
-  `supabase.auth.signInWithPassword`. On success, write `session.access_token` to
-  `localStorage['clara_access_token']` (the key `client-api.ts` already reads) and redirect to
-  `/dashboard`. Surface auth errors inline.
-- `(dashboard)/layout.tsx`: redirect to `/auth` when there is no Supabase session; add a
-  sign-out control (`supabase.auth.signOut()` + clear the token) in the app header.
-- Keep the token in sync with the Supabase session (write on `onAuthStateChange`).
+- **No SDK dependency** (CI runs `npm ci`; adding a dep without regenerating the lockfile
+  would break the build, and sign-in is one POST). `apps/web/lib/auth-client.ts` calls Supabase
+  GoTrue directly: `signIn` POSTs `{SUPABASE_URL}/auth/v1/token?grant_type=password` with the
+  anon key, stores `access_token` in `localStorage['clara_access_token']` (the key
+  `client-api.ts` already reads); `signOut` clears it; `isAuthenticated` checks token presence +
+  `exp`. Config from `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- Replace the stub `(auth)/auth/page.tsx` with an email+password form → `signIn` → redirect to
+  `/dashboard`; errors shown inline.
+- `components/auth/auth-guard.tsx` wraps `(dashboard)/layout.tsx`: redirects to `/auth` when
+  auth is configured and there's no valid token; no-op when auth isn't configured (local dev).
+- Sign-out control in the app header (`signOut` + redirect to `/auth`).
 
-### 2. API role/workspace from `app_metadata` (`apps/api/app/auth.py`)
-- After verifying the JWT (HS256, existing path), read role/workspace from the verified
-  claims' `app_metadata` first, then fall back to top-level claims, then defaults:
-  `role = app_metadata.user_role or user_role or "viewer"`,
-  `workspace_id = app_metadata.workspace_id or workspace_id or 1`.
-- `app_metadata` is admin-controlled (not user-editable), so this is safe to trust. No
-  Supabase auth hook and no per-request DB query needed.
+### 2. API JWT verification + role/workspace from `app_metadata` (`apps/api/app/auth.py`)
+- **The project signs access tokens with ES256 (asymmetric JWT keys)** — confirmed via the
+  JWKS endpoint. So `verify_token` routes on the token's `alg`: ES256/RS256 → verify against the
+  Supabase JWKS (`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`) using `jwt.PyJWKClient`; HS256 →
+  verify with `SUPABASE_JWT_SECRET` (kept as a fallback for legacy/local). No shared secret is
+  needed in ES256 mode. Requires `PyJWT[crypto]` (cryptography) for EC verification.
+- `AUTH_ENABLED = bool(SUPABASE_JWT_SECRET or SUPABASE_URL)`.
+- Read role/workspace from the verified claims' `app_metadata` first, then top-level, then
+  defaults: `role = app_metadata.user_role or user_role or "viewer"`,
+  `workspace_id = app_metadata.workspace_id or workspace_id or 1`. `app_metadata` is
+  admin-controlled (not user-editable), so it is safe to trust; no Supabase auth hook needed.
 
 ### 3. Seed the admin (Supabase, via MCP)
 - The user creates the auth user (email + password) in the Supabase dashboard (password never
@@ -60,10 +66,10 @@ real login so it can obtain and send a Supabase JWT. Scope: one pre-seeded admin
   dollar-quote/ordering bugs in the repo to match what was applied.
 
 ## Risks / open checks
-- **JWT signing alg.** API verifies HS256 with `SUPABASE_JWT_SECRET`. If the project signs
-  access tokens with asymmetric keys (ES256), HS256 verification fails. The anon key is HS256
-  (legacy), suggesting HS256 is active — **verify by decoding a real login token** before relying
-  on it. If asymmetric, add JWKS verification to `auth.py` (extra step).
+- **JWT signing alg — RESOLVED.** Probed the JWKS endpoint: the project signs with ES256
+  (asymmetric). Handled by JWKS verification in component 2. `SUPABASE_URL` is therefore required
+  on the API (for the JWKS URL); `SUPABASE_JWT_SECRET` is optional.
+- Verify at test time that a real signed-in token's `app_metadata` carries `user_role`/`workspace_id`.
 - `mistral-embed` is 1024-dim vs `vector(768)`; not exercised by `/triage/run`, so not blocking.
 
 ## Testing / verification

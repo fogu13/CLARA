@@ -17,30 +17,48 @@ import os
 
 import jwt
 from fastapi import Header, HTTPException
+from jwt import PyJWKClient
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET") or ""
-SUPABASE_URL = os.getenv("SUPABASE_URL") or ""
-AUTH_ENABLED = bool(SUPABASE_JWT_SECRET)
+SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
+# Auth is enabled if tokens can be verified either way: a JWKS URL (asymmetric ES256/RS256 —
+# the modern Supabase default) or a shared HS256 secret (legacy / local).
+AUTH_ENABLED = bool(SUPABASE_JWT_SECRET or SUPABASE_URL)
+
+_JWKS_URL = f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json" if SUPABASE_URL else ""
+_jwk_client: PyJWKClient | None = None
 
 # Fail-closed guard. The dev fallback below grants role=owner to every unauthenticated
 # request, which is convenient locally but catastrophic in production. Set
-# CLARA_REQUIRE_AUTH=true in any real deployment so a missing JWT secret refuses to boot
+# CLARA_REQUIRE_AUTH=true in any real deployment so missing auth config refuses to boot
 # instead of silently disabling auth.
 REQUIRE_AUTH = (os.getenv("CLARA_REQUIRE_AUTH") or "").strip().lower() in {"1", "true", "yes", "on"}
 if REQUIRE_AUTH and not AUTH_ENABLED:
     raise RuntimeError(
-        "CLARA_REQUIRE_AUTH is set but SUPABASE_JWT_SECRET is unset — "
-        "refusing to start with authentication disabled."
+        "CLARA_REQUIRE_AUTH is set but neither SUPABASE_URL (JWKS) nor SUPABASE_JWT_SECRET "
+        "is configured — refusing to start with authentication disabled."
     )
 if not AUTH_ENABLED:
     logger.warning(
-        "SUPABASE_JWT_SECRET is unset: authentication is DISABLED and every request is "
-        "treated as role=owner. Set SUPABASE_JWT_SECRET (and CLARA_REQUIRE_AUTH=true) "
+        "Neither SUPABASE_URL nor SUPABASE_JWT_SECRET is set: authentication is DISABLED and "
+        "every request is treated as role=owner. Configure auth (and CLARA_REQUIRE_AUTH=true) "
         "before deploying."
     )
+
+
+def _jwks_client() -> PyJWKClient:
+    """Lazily build (and cache) the JWKS client for asymmetric token verification."""
+    global _jwk_client
+    if _jwk_client is None:
+        if not _JWKS_URL:
+            raise HTTPException(
+                status_code=500, detail="Auth not configured: SUPABASE_URL is unset"
+            )
+        _jwk_client = PyJWKClient(_JWKS_URL)
+    return _jwk_client
 
 
 class UserContext(BaseModel):
@@ -65,17 +83,26 @@ def _default_context() -> UserContext:
 def verify_token(token: str) -> dict:
     """Verify a Supabase JWT and return its claims.
 
-    Raises HTTPException(401) if the token is invalid, expired, or auth is
-    misconfigured.
+    Routes on the token's `alg`: ES256/RS256 (asymmetric, the modern Supabase default) are
+    verified against the project JWKS; HS256 is verified with the shared secret. Raises
+    HTTPException(401) if the token is invalid/expired, 500 if auth is misconfigured.
     """
-    if not SUPABASE_JWT_SECRET:
-        raise HTTPException(
-            status_code=500,
-            detail="Auth not configured: SUPABASE_JWT_SECRET is unset",
-        )
-
     try:
-        claims = jwt.decode(
+        alg = jwt.get_unverified_header(token).get("alg", "")
+        if alg.startswith(("ES", "RS")):
+            signing_key = _jwks_client().get_signing_key_from_jwt(token).key
+            return jwt.decode(
+                token,
+                signing_key,
+                algorithms=["ES256", "RS256"],
+                options={"verify_aud": False},
+            )
+        if not SUPABASE_JWT_SECRET:
+            raise HTTPException(
+                status_code=500,
+                detail="Auth not configured: no SUPABASE_JWT_SECRET for HS256 tokens",
+            )
+        return jwt.decode(
             token,
             SUPABASE_JWT_SECRET,
             algorithms=["HS256"],
@@ -83,10 +110,8 @@ def verify_token(token: str) -> dict:
         )
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired") from None
-    except jwt.InvalidTokenError as exc:
+    except jwt.PyJWTError as exc:
         raise HTTPException(status_code=401, detail=f"Invalid token: {exc}") from exc
-
-    return claims
 
 
 def get_current_user(
@@ -110,11 +135,12 @@ def get_current_user(
     if not user_id:
         raise HTTPException(status_code=401, detail="Token missing sub claim")
 
-    # workspace_id may be in the JWT (custom claim) or resolved later via a
-    # profiles lookup. For now, prefer the JWT claim; default to 1 if absent.
-    workspace_id = claims.get("workspace_id", 1)
+    # Role/workspace live in app_metadata (admin-controlled, not user-editable), which
+    # Supabase embeds in the JWT. Fall back to top-level custom claims, then defaults.
+    app_metadata = claims.get("app_metadata") or {}
+    workspace_id = app_metadata.get("workspace_id", claims.get("workspace_id", 1))
+    role = app_metadata.get("user_role", claims.get("user_role", "viewer"))
     email = claims.get("email", "")
-    role = claims.get("user_role", "viewer")
 
     return UserContext(user_id=user_id, workspace_id=workspace_id, email=email, role=role)
 
