@@ -28,6 +28,8 @@ from app.domain.models import (
     DemoDatasetSummary,
     EmergingProblemReport,
     ExecutionRecord,
+    FeedbackRule,
+    FeedbackRuleCreate,
     JiraIssueDraft,
     JourneyEventCsvImportRequest,
     JourneyEventImportRequest,
@@ -87,6 +89,7 @@ from app.services.postgres import (
     PostgresCustomerContextStore,
     PostgresJourneyEventStore,
     PostgresProblemStore,
+    PostgresRuleStore,
     PostgresSignalStore,
     PostgresTaxonomyStore,
     PostgresTerminologyStore,
@@ -95,6 +98,7 @@ from app.services.postgres import (
     database_url,
 )
 from app.services.problems import ProblemStore, SQLiteProblemStore
+from app.services.rules import SQLiteRuleStore
 from app.services.seed import (
     load_demo_datasets,
     load_seed_customer_context,
@@ -166,6 +170,13 @@ def default_workspace_store():
     if url:
         return PostgresWorkspaceStore(url)
     return SQLiteWorkspaceStore(default_db_path())
+
+
+def default_rule_store():
+    url = database_url()
+    if url:
+        return PostgresRuleStore(url)
+    return SQLiteRuleStore(default_db_path())
 
 
 def to_summary(problem: ProblemRecord) -> ProblemSummary:
@@ -418,6 +429,7 @@ def create_app(
     connector_configs=None,
     journeys=None,
     workspace=None,
+    feedback_rules=None,
 ) -> FastAPI:
     api = FastAPI(
         title="CLARA API",
@@ -452,6 +464,7 @@ def create_app(
     journey_event_store = journeys or default_journey_event_store()
     policy_store = policies or default_policy_store()
     workspace_store = workspace or default_workspace_store()
+    rule_store = feedback_rules or default_rule_store()
     url = database_url()
     taxonomy_store = taxonomies or (PostgresTaxonomyStore(url) if url else TaxonomyStore())
     terminology_store = terminology or (
@@ -990,6 +1003,24 @@ def create_app(
             ai_model=os.getenv("AI_MODEL") or "gpt-4o-mini",
             auth_enabled=AUTH_ENABLED,
         )
+
+    @api.get("/rules", response_model=list[FeedbackRule])
+    def list_rules() -> list[FeedbackRule]:
+        return rule_store.list_rules()
+
+    @api.post(
+        "/rules",
+        response_model=FeedbackRule,
+        dependencies=[Depends(require_role(Role.editor))],
+    )
+    def create_rule(rule: FeedbackRuleCreate) -> FeedbackRule:
+        return rule_store.create_rule(rule)
+
+    @api.delete("/rules/{rule_id}", dependencies=[Depends(require_role(Role.editor))])
+    def delete_rule(rule_id: str) -> dict:
+        if not rule_store.delete_rule(rule_id):
+            raise HTTPException(status_code=404, detail="Rule not found")
+        return {"rule_id": rule_id, "status": "deleted"}
 
     # ====== Connector endpoints (Phase 2) ======
 

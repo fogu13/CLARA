@@ -562,6 +562,26 @@ export type SystemConfig = {
   auth_enabled: boolean;
 };
 
+export type RuleCondition = {
+  field: string;
+  operator: string;
+  value: string;
+};
+
+export type RuleAction = {
+  type: string;
+  target: string;
+};
+
+export type FeedbackRule = {
+  rule_id: string;
+  name: string;
+  conditions: RuleCondition[];
+  actions: RuleAction[];
+  priority: number;
+  is_active: boolean;
+};
+
 export type SignalImportResult = {
   imported: number;
   skipped_duplicates: number;

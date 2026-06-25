@@ -13,6 +13,7 @@ import type {
   DemoDatasetImportResult,
   DemoDatasetSummary,
   ExecutionRecord,
+  FeedbackRule,
   JiraIssueDraft,
   JourneyEventImportResult,
   JourneyEventRecord,
@@ -277,6 +278,21 @@ export async function updateWorkspace(settings: WorkspaceSettings): Promise<Work
 
 export async function getSystemConfig(): Promise<SystemConfig> {
   return requestJson<SystemConfig>(`${apiBaseUrl()}/system-config`);
+}
+
+export async function getRules(): Promise<FeedbackRule[]> {
+  return requestJson<FeedbackRule[]>(`${apiBaseUrl()}/rules`);
+}
+
+export async function createRule(rule: Omit<FeedbackRule, "rule_id">): Promise<FeedbackRule> {
+  return requestJson<FeedbackRule>(`${apiBaseUrl()}/rules`, {
+    method: "POST",
+    body: JSON.stringify(rule)
+  });
+}
+
+export async function deleteRule(ruleId: string): Promise<void> {
+  await requestJson(`${apiBaseUrl()}/rules/${ruleId}`, { method: "DELETE" });
 }
 
 export async function getLanguageQuality(): Promise<LanguageQualityReport> {

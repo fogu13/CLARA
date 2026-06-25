@@ -958,3 +958,31 @@ class EmergingProblemReport(BaseModel):
     watch_count: int = Field(ge=0)
     action_count: int = Field(ge=0)
     signals: list[EmergingProblemSignal] = Field(default_factory=list)
+
+
+class RuleCondition(BaseModel):
+    field: str = ""
+    operator: str = "equals"
+    value: str = ""
+
+
+class RuleAction(BaseModel):
+    type: str = ""
+    target: str = ""
+
+
+class FeedbackRule(BaseModel):
+    rule_id: str
+    name: str
+    conditions: list[RuleCondition] = Field(default_factory=list)
+    actions: list[RuleAction] = Field(default_factory=list)
+    priority: int = 0
+    is_active: bool = True
+
+
+class FeedbackRuleCreate(BaseModel):
+    name: str = Field(min_length=1)
+    conditions: list[RuleCondition] = Field(default_factory=list)
+    actions: list[RuleAction] = Field(default_factory=list)
+    priority: int = 0
+    is_active: bool = True
