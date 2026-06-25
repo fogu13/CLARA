@@ -145,6 +145,124 @@ def test_blocking_governance_failure_prevents_approval() -> None:
     assert "blocking governance checks" in response.json()["detail"]
 
 
+def test_closure_record_separates_operational_and_customer_closure() -> None:
+    client = TestClient(
+        create_app(
+            problem_store=ProblemStore(load_seed_problems()),
+            workflows=WorkflowStore(),
+        )
+    )
+    response = client.post(
+        "/problems/PRB-108/closure",
+        headers=TRUSTED_HEADERS,
+        json={
+            "operational_status": "released",
+            "customer_status": "draft_ready",
+            "owner": "cx_operations",
+            "verified_resolution_facts": ["Document guidance page released."],
+            "unresolved_customers": 2,
+            "follow_up_channel": "zendesk closure task",
+            "limitations": ["Support copy still requires review."],
+        },
+    )
+
+    assert response.status_code == 200
+    closure = response.json()
+    assert closure["customer_closure_eligible"] is True
+    assert "Draft for human review only" in closure["response_draft"]
+
+    workflow = client.get("/problems/PRB-108/workflow", headers=TRUSTED_HEADERS).json()
+    assert workflow["closure_records"][-1]["operational_status"] == "released"
+    assert "closure_recorded" in {event["event_type"] for event in workflow["timeline"]}
+
+
+def test_closure_redacts_common_pii() -> None:
+    client = TestClient(
+        create_app(
+            problem_store=ProblemStore(load_seed_problems()),
+            workflows=WorkflowStore(),
+        )
+    )
+    response = client.post(
+        "/problems/PRB-108/closure",
+        headers=TRUSTED_HEADERS,
+        json={
+            "operational_status": "released",
+            "customer_status": "draft_ready",
+            "owner": "cx@example.com",
+            "verified_resolution_facts": ["Resolved for CUST-123 after phone +1 555 123 4567."],
+            "unresolved_customers": 1,
+            "follow_up_channel": "zendesk",
+            "limitations": [],
+        },
+    )
+
+    assert response.status_code == 200
+    closure = response.json()
+    assert closure["owner"] == "[EMAIL REDACTED]"
+    assert "[ID REDACTED]" in closure["verified_resolution_facts"][0]
+    assert "[PHONE REDACTED]" in closure["verified_resolution_facts"][0]
+    assert closure["tenant_id"] == "test_tenant"
+    assert closure["actor"] == "test_product_owner"
+
+
+def test_closure_records_are_tenant_filtered_in_workflow_state() -> None:
+    client = TestClient(
+        create_app(
+            problem_store=ProblemStore(load_seed_problems()),
+            workflows=WorkflowStore(),
+        )
+    )
+    client.post(
+        "/problems/PRB-108/closure",
+        headers=TRUSTED_HEADERS,
+        json={
+            "operational_status": "released",
+            "customer_status": "draft_ready",
+            "owner": "cx_operations",
+            "verified_resolution_facts": ["Resolution released."],
+            "unresolved_customers": 1,
+            "follow_up_channel": "zendesk",
+            "limitations": [],
+        },
+    )
+
+    same_tenant = client.get("/problems/PRB-108/workflow", headers=TRUSTED_HEADERS).json()
+    other_tenant = client.get(
+        "/problems/PRB-108/workflow",
+        headers={"x-tenant-id": "other_tenant", "x-actor-id": "test_product_owner"},
+    ).json()
+
+    assert len(same_tenant["closure_records"]) == 1
+    assert other_tenant["closure_records"] == []
+    assert "closure_recorded" in {event["event_type"] for event in same_tenant["timeline"]}
+    assert "closure_recorded" not in {event["event_type"] for event in other_tenant["timeline"]}
+
+
+def test_closure_unresolved_customers_cannot_exceed_affected_cohort() -> None:
+    client = TestClient(
+        create_app(
+            problem_store=ProblemStore(load_seed_problems()),
+            workflows=WorkflowStore(),
+        )
+    )
+    response = client.post(
+        "/problems/PRB-108/closure",
+        headers=TRUSTED_HEADERS,
+        json={
+            "operational_status": "released",
+            "customer_status": "draft_ready",
+            "owner": "cx_operations",
+            "verified_resolution_facts": ["Resolution released."],
+            "unresolved_customers": 999,
+            "follow_up_channel": "zendesk",
+            "limitations": [],
+        },
+    )
+
+    assert response.status_code == 422
+
+
 def test_outcome_measurement_updates_snapshot() -> None:
     measurement = {
         "problem_id": "PRB-108",

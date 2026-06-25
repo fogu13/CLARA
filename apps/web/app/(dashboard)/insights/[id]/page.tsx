@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ActionDecisionPanel } from "@/app/components/action-decision-panel";
 import { ActionProposalEditor } from "@/app/components/action-proposal-editor";
 import { AffectedContextPanel } from "@/app/components/affected-context-panel";
+import { CustomerClosurePanel } from "@/app/components/customer-closure-panel";
 import { DraftProblemEditor } from "@/app/components/draft-problem-editor";
 import { EvidencePanel } from "@/app/components/evidence-panel";
 import { OutcomeMeasurementPanel } from "@/app/components/outcome-measurement-panel";
@@ -457,6 +458,7 @@ export default async function InsightDetailPage({
       </Card>
 
       <ProblemLifecyclePanel problem={problem} />
+      <CustomerClosurePanel problem={problem} />
       <OutcomeMeasurementPanel problemId={problem.problem_id} contract={problem.outcome_contract} />
     </div>
   );

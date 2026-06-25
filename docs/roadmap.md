@@ -49,7 +49,7 @@ Positioning: "We help organizations decide what to do about customer problems, e
 | 4 | Full Action Studio | Done | Action portfolio workspace, approval diffs and dependencies |
 | 5 | Audience and Intervention Builder | In progress | Governed briefs, audience readiness and export-ready drafts |
 | 6 | EU Governance and Policy Engine | Planned | Policy-as-code and AI governance |
-| 7 | Execution Connectors and Closure | Planned | Real tool execution and customer closure |
+| 7 | Execution Connectors and Closure | In progress | Closure v1: operational/customer closure tracking |
 | 8 | Outcome Learning Engine | Planned | Stronger measurement and reusable action memory |
 | 9 | Packaging and Industry Packs | Planned | SME/enterprise editions and vertical packs |
 
@@ -239,9 +239,16 @@ Exit criteria:
 
 ## Phase 7 - Execution Connectors and Customer Closure
 
-Status: planned.
+Status: in progress.
 
 Goal: move from drafts to verified operational and customer closure through existing systems.
+
+Delivered so far:
+
+- Operational closure and customer closure are tracked separately.
+- Customer closure eligibility and unresolved-customer count are recorded.
+- Verified-facts-only response drafts are generated for human review.
+- Closure records appear in workflow state, audit export and problem timeline.
 
 Scope:
 
@@ -349,9 +356,9 @@ These are implementation details, not separate product phases unless a phase exp
 
 Finish Phase 5 v1, then move to Phase 7 customer closure.
 
-Remaining useful Phase 5 slice:
+Remaining useful Phase 7 slice:
 
-1. Add explicit export/download drafts for approved interventions.
-2. Attach consent and suppression metadata from customer context where available.
-3. Show intervention readiness in a dedicated operator workflow.
-4. Keep execution as draft-plus-human-approval; do not send campaigns from CLARA.
+1. Add execution accepted/completed/released state transitions.
+2. Add real Jira status sync or Zendesk/HubSpot task draft connectors.
+3. Add affected-customer closure lists from context where consent permits.
+4. Keep customer contact as draft-plus-human-approval; do not send messages from CLARA.

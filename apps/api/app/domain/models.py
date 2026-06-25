@@ -543,6 +543,58 @@ def pseudonymized_identifier(value: str, field_name: str) -> str:
     return redacted
 
 
+class ClosureRecordRequest(BaseModel):
+    operational_status: Literal["not_started", "draft_created", "in_progress", "released", "verified"]
+    customer_status: Literal["not_started", "not_eligible", "draft_ready", "contacted", "unresolved"]
+    owner: str = Field(min_length=1)
+    verified_resolution_facts: list[str] = Field(min_length=1)
+    unresolved_customers: int = Field(ge=0)
+    follow_up_channel: str = Field(min_length=1)
+    response_draft: str | None = Field(default=None, max_length=2000)
+    limitations: list[str] = Field(default_factory=list)
+
+    @field_validator("owner", "follow_up_channel", "response_draft")
+    @classmethod
+    def redact_text_fields(cls, value: str | None) -> str | None:
+        redacted = redact_common_pii(value)
+        if value is not None and not redacted:
+            raise ValueError("Text fields cannot be blank.")
+        return redacted
+
+    @field_validator("verified_resolution_facts", "limitations")
+    @classmethod
+    def redact_list_text(cls, values: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for value in values:
+            redacted = redact_common_pii(value)
+            if not redacted:
+                raise ValueError("Text fields cannot be blank.")
+            cleaned.append(redacted)
+        return cleaned
+
+    @model_validator(mode="after")
+    def customer_closure_needs_verified_facts(self) -> "ClosureRecordRequest":
+        if self.customer_status in {"draft_ready", "contacted"} and self.operational_status not in {"released", "verified"}:
+            raise ValueError("customer closure requires released or verified operational status")
+        if self.customer_status == "contacted" and self.response_draft is None:
+            raise ValueError("contacted closure records require the reviewed response text")
+        return self
+
+
+class ClosureRecord(ClosureRecordRequest):
+    closure_id: str
+    problem_id: str
+    tenant_id: str
+    actor: str
+    customer_closure_eligible: bool
+    created_at: str
+
+    @field_validator("tenant_id", "actor")
+    @classmethod
+    def identifiers_must_be_pseudonymized(cls, value: str) -> str:
+        return pseudonymized_identifier(value, "Identifier")
+
+
 class LearningConclusionRequest(BaseModel):
     learning_status: LearningStatus
     summary: str = Field(min_length=1, max_length=2000)
@@ -626,6 +678,7 @@ class WorkflowState(BaseModel):
     jira_issue_drafts: list[JiraIssueDraft]
     outcome: OutcomeSnapshot
     learning_conclusions: list[LearningConclusionRecord]
+    closure_records: list[ClosureRecord] = Field(default_factory=list)
     timeline: list[TimelineEvent]
 
 

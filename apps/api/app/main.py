@@ -12,6 +12,8 @@ from app.domain.models import (
     AffectedContextExplorer,
     ApprovalDecision,
     ApprovalRecord,
+    ClosureRecord,
+    ClosureRecordRequest,
     CandidateDecisionStatus,
     CandidateReviewRequest,
     CandidateReviewStatus,
@@ -847,6 +849,20 @@ def create_app(
 
         return workflow_store.record_outcome(problem=problem, measurement=measurement)
 
+    @api.post("/problems/{problem_id}/closure", response_model=ClosureRecord, dependencies=[Depends(require_role(Role.editor))])
+    def record_closure(
+        problem_id: str,
+        closure: ClosureRecordRequest,
+        identity: TrustedWorkflowIdentity = Depends(require_trusted_workflow_identity),
+    ) -> ClosureRecord:
+        problem = require_problem(problem_id)
+        return workflow_store.record_closure(
+            problem=problem,
+            closure=closure,
+            tenant_id=identity.tenant_id,
+            actor=identity.actor_id,
+        )
+
     @api.post(
         "/problems/{problem_id}/learning-conclusions",
         response_model=LearningConclusionRecord,
@@ -907,6 +923,9 @@ def create_app(
                 record.model_dump(mode="json", by_alias=True) for record in workflow_store.list_approvals()
             ],
             "executions": [record.model_dump(mode="json", by_alias=True) for record in workflow_store.list_executions()],
+            "closure_records": [
+                record.model_dump(mode="json", by_alias=True) for record in workflow_store.list_closure_records()
+            ],
             "jira_issue_drafts": [
                 record.model_dump(mode="json", by_alias=True) for record in workflow_store.list_jira_issue_drafts()
             ],

@@ -115,4 +115,4 @@ def test_audit_export_requires_admin(monkeypatch) -> None:
 
     assert viewer_response.status_code == 403
     assert admin_response.status_code == 200
-    assert set(admin_response.json()) == {"approvals", "executions", "jira_issue_drafts"}
+    assert set(admin_response.json()) == {"approvals", "executions", "closure_records", "jira_issue_drafts"}
