@@ -58,19 +58,36 @@ def split_multi_value(value: str | None) -> list[str]:
     return [item.strip() for item in value.replace("|", ";").split(";") if item.strip()]
 
 
-REQUIRED_SIGNAL_FIELDS = [
-    "signal_id",
+# Only feedback_text is required. The rest are "recommended": if a column is present but a
+# row leaves it empty we warn (quality hint), but a missing column is fine — it gets a default.
+REQUIRED_SIGNAL_FIELDS = ["feedback_text"]
+
+RECOMMENDED_SIGNAL_FIELDS = [
     "customer_id",
     "account_id",
     "source",
     "journey",
     "journey_stage",
-    "feedback_text",
     "language",
     "timestamp",
 ]
 
-RECOMMENDED_SIGNAL_FIELDS = ["campaign_exposure", "product_events"]
+# Canonical columns mapped onto SignalRecord fields; any other CSV column is kept in metadata.
+KNOWN_SIGNAL_COLUMNS = frozenset(
+    {
+        "signal_id",
+        "customer_id",
+        "account_id",
+        "source",
+        "journey",
+        "journey_stage",
+        "campaign_exposure",
+        "product_events",
+        "feedback_text",
+        "language",
+        "timestamp",
+    }
+)
 
 
 def read_signal_csv_rows(csv_text: str) -> tuple[list[str], list[dict[str, str]]]:
@@ -101,7 +118,7 @@ def validate_signal_csv(
             )
         )
 
-    for field in [*REQUIRED_SIGNAL_FIELDS, *RECOMMENDED_SIGNAL_FIELDS]:
+    for field in REQUIRED_SIGNAL_FIELDS:
         if field not in headers:
             errors.append(
                 SignalValidationIssue(
@@ -185,6 +202,12 @@ def parse_signal_csv(csv_text: str) -> list[SignalRecord]:
     signals: list[SignalRecord] = []
 
     for index, row in enumerate(reader, start=1):
+        # Any column that isn't a canonical signal field is preserved as metadata.
+        metadata = {
+            key: (value or "").strip()
+            for key, value in row.items()
+            if key and key not in KNOWN_SIGNAL_COLUMNS and (value or "").strip()
+        }
         signals.append(
             SignalRecord(
                 signal_id=row.get("signal_id") or f"CSV-{index:04d}",
@@ -198,6 +221,7 @@ def parse_signal_csv(csv_text: str) -> list[SignalRecord]:
                 feedback_text=row.get("feedback_text") or "",
                 language=row.get("language") or "unknown",
                 timestamp=row.get("timestamp") or "1970-01-01T00:00:00Z",
+                metadata=metadata,
             )
         )
 
@@ -598,10 +622,17 @@ class SQLiteSignalStore:
                 product_events TEXT NOT NULL,
                 feedback_text TEXT NOT NULL,
                 language TEXT NOT NULL,
-                timestamp TEXT NOT NULL
+                timestamp TEXT NOT NULL,
+                metadata TEXT NOT NULL DEFAULT '{}'
             )
             """
         )
+        # Add the metadata column to databases created before it existed.
+        columns = {row["name"] for row in self._connection.execute("PRAGMA table_info(signals)")}
+        if "metadata" not in columns:
+            self._connection.execute(
+                "ALTER TABLE signals ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'"
+            )
         self._connection.execute(
             """
             CREATE TABLE IF NOT EXISTS candidate_decisions (
@@ -638,9 +669,10 @@ class SQLiteSignalStore:
                         product_events,
                         feedback_text,
                         language,
-                        timestamp
+                        timestamp,
+                        metadata
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         signal.signal_id,
@@ -654,6 +686,7 @@ class SQLiteSignalStore:
                         signal.feedback_text,
                         signal.language,
                         signal.timestamp,
+                        json.dumps(signal.metadata),
                     ),
                 )
                 imported += 1
@@ -729,6 +762,7 @@ class SQLiteSignalStore:
             feedback_text=row["feedback_text"],
             language=row["language"],
             timestamp=row["timestamp"],
+            metadata=json.loads(row["metadata"]) if "metadata" in row.keys() else {},
         )
 
     @staticmethod

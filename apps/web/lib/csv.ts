@@ -153,28 +153,35 @@ function defaultSignalValue(field: SignalCsvField, rowIndex: number, batchId: st
   }
 }
 
-// Build the canonical CSV, filling any unmapped/empty field with a default so the
-// import only really needs the feedback text mapped.
+// Build the canonical CSV: map columns to canonical fields (filling unmapped ones with
+// defaults), and carry any other source column through under its own header so the backend
+// keeps it as signal metadata. Only the feedback text really needs mapping.
 export function toCanonicalSignalCsvWithDefaults(
   rows: Record<string, string>[],
   mapping: ColumnMapping,
-  batchId: string
+  batchId: string,
+  sourceHeaders: string[] = []
 ): string {
   const now = new Date().toISOString();
-  const csvRows = [
-    signalCsvFields.join(","),
-    ...rows.map((row, index) => {
-      const rowNumber = index + 1;
-      return signalCsvFields
-        .map((field) => {
-          const mappedHeader = mapping[field];
-          const raw = mappedHeader ? (row[mappedHeader] ?? "").trim() : "";
-          return escapeCsvCell(raw || defaultSignalValue(field, rowNumber, batchId, now));
-        })
-        .join(",");
-    })
-  ];
+  const usedHeaders = new Set(Object.values(mapping).filter(Boolean));
+  const knownFields = new Set<string>(signalCsvFields);
+  // Columns the user didn't map and that don't collide with a canonical name -> metadata.
+  const extraHeaders = sourceHeaders.filter(
+    (header) => !usedHeaders.has(header) && !knownFields.has(header)
+  );
 
-  return csvRows.join("\n");
+  const headerRow = [...signalCsvFields, ...extraHeaders].map(escapeCsvCell).join(",");
+  const dataRows = rows.map((row, index) => {
+    const rowNumber = index + 1;
+    const canonical = signalCsvFields.map((field) => {
+      const mappedHeader = mapping[field];
+      const raw = mappedHeader ? (row[mappedHeader] ?? "").trim() : "";
+      return escapeCsvCell(raw || defaultSignalValue(field, rowNumber, batchId, now));
+    });
+    const extras = extraHeaders.map((header) => escapeCsvCell((row[header] ?? "").trim()));
+    return [...canonical, ...extras].join(",");
+  });
+
+  return [headerRow, ...dataRows].join("\n");
 }
 

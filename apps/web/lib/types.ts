@@ -545,6 +545,7 @@ export type SignalRecord = {
   feedback_text: string;
   language: string;
   timestamp: string;
+  metadata?: Record<string, string>;
 };
 
 export type SignalImportResult = {

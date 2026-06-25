@@ -61,6 +61,31 @@ def test_import_csv_rejects_invalid_report() -> None:
     assert response.json()["detail"]["valid"] is False
 
 
+def test_validate_csv_only_requires_feedback_text() -> None:
+    client = make_client()
+    minimal = "feedback_text\nThe checkout flow is broken.\n"
+
+    report = client.post("/signals/validate-csv", json={"csv_text": minimal}).json()
+
+    assert report["valid"] is True
+    assert report["importable_rows"] == 1
+    # No "missing required column" errors for the contextual fields.
+    assert not any("Missing required column" in issue["message"] for issue in report["errors"])
+
+
+def test_import_csv_preserves_extra_columns_as_metadata() -> None:
+    client = make_client()
+    csv_text = "feedback_text,rating,region\nGreat onboarding,5,EU\nConfusing flow,2,US\n"
+
+    imported = client.post("/signals/import-csv", json={"csv_text": csv_text})
+    assert imported.status_code == 200
+
+    listed = client.get("/signals").json()
+    metadatas = [signal["metadata"] for signal in listed]
+    assert {"rating": "5", "region": "EU"} in metadatas
+    assert {"rating": "2", "region": "US"} in metadatas
+
+
 def test_validate_csv_warns_for_existing_signal_ids() -> None:
     client = make_client()
     existing_csv = """signal_id,customer_id,account_id,source,journey,journey_stage,campaign_exposure,product_events,feedback_text,language,timestamp
