@@ -70,7 +70,7 @@ export default function IntegrationsPage() {
 
   async function loadConnectors() {
     try {
-      const res = await fetch(`${API_URL}/connectors`);
+      const res = await fetch(`${API_URL}/connectors`, { headers: apiHeaders() });
       if (res.ok) {
         const data = await res.json();
         setConnectors(data);
@@ -87,7 +87,10 @@ export default function IntegrationsPage() {
     const fields = CONNECTOR_CATALOG.find(c => c.type === connectorType)?.fields || [];
     const initial: Record<string, string> = {};
     fields.forEach(f => {
-      initial[f.key] = existing?.config[f.key] || "";
+      // The API masks secret values as "***redacted***"; never hydrate those into
+      // editable inputs — leave them blank so the operator re-enters to change them.
+      const value = existing?.config[f.key];
+      initial[f.key] = !value || value === "***redacted***" ? "" : value;
     });
     setFormData(initial);
     setEditingConnector(connectorType);

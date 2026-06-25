@@ -36,7 +36,15 @@ CREATE TABLE IF NOT EXISTS public.workspaces (
 ALTER TABLE public.workspaces ENABLE ROW LEVEL SECURITY;
 
 -- ====== User Roles ======
-CREATE TYPE IF NOT EXISTS public.app_role AS ENUM ('owner', 'admin', 'editor', 'viewer');
+-- Postgres has no CREATE TYPE IF NOT EXISTS; guard with a DO block so the migration
+-- is idempotent and does not abort on re-run.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'app_role') THEN
+        CREATE TYPE public.app_role AS ENUM ('owner', 'admin', 'editor', 'viewer');
+    END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS public.user_roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

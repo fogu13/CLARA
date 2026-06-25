@@ -338,6 +338,41 @@ class TestTriageGraphAuditMetadata:
         assert "LLM-synthesized" in insights[0]["audit"]["limitations"][0]
 
 
+class TestEnrichNodeProvenance:
+    """Regression: enrich_node must not strip source/timestamp/customer_id/signal_type."""
+
+    def test_enrich_node_preserves_signal_provenance(self, _mock_ai_env: None) -> None:
+        from app.agents.triage_graph import enrich_node
+
+        signal = {
+            "signal_id": "s1",
+            "feedback_text": "checkout broke at payment",
+            "source": "zendesk",
+            "timestamp": "2026-06-01T00:00:00Z",
+            "customer_id": "cust-1",
+            "signal_type": "quantitative",
+        }
+        # No enrichment returned -> exercises the passthrough branch that builds from `item`.
+        with patch("app.agents.triage_graph.enrich_signals", return_value=[]):
+            result = enrich_node({"signals": [signal]})
+
+        enriched = result["enriched_signals"]
+        assert len(enriched) == 1
+        s = enriched[0]
+        assert s["source"] == "zendesk"
+        assert s["timestamp"] == "2026-06-01T00:00:00Z"
+        assert s["customer_id"] == "cust-1"
+        assert s["signal_type"] == "quantitative"  # real type preserved, not hardcoded
+
+
+def test_main_imports_utc_now() -> None:
+    """Regression: /triage/run called utc_now() without importing it (NameError -> 500)."""
+    import app.main as main_mod
+
+    assert callable(main_mod.utc_now)
+    assert main_mod.utc_now()  # the f"triage-{utc_now()}" call site no longer NameErrors
+
+
 class TestSemanticTaxonomy:
     """Test the semantic taxonomy helper functions (no DB required)."""
 

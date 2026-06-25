@@ -65,9 +65,12 @@ def enrich_node(state: TriageState) -> dict[str, Any]:
     # Prepare items for enrichment (only qualitative signals with text)
     items = [
         {
+            # Carry the full original signal forward so downstream frequency, trend,
+            # source corroboration and 8-factor severity keep source/timestamp/customer_id.
+            **s,
             "id": s.get("signal_id", s.get("id", "")),
             "text": s.get("feedback_text", s.get("text", "")),
-            "signal_type": "qualitative",
+            "signal_type": s.get("signal_type", "qualitative"),
             "contact_count": s.get("contact_count", 1),
         }
         for s in signals
