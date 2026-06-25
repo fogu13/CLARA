@@ -33,6 +33,7 @@ import type {
   SignalRecord,
   SignalValidationReport,
   TaxonomyCatalog,
+  TaxonomyType,
   TerminologyDictionaryEntry,
   WorkflowState
 } from "./types";
@@ -235,6 +236,26 @@ export async function getPolicyRules(): Promise<PolicyRule[]> {
 
 export async function getTaxonomies(): Promise<TaxonomyCatalog[]> {
   return requestJson<TaxonomyCatalog[]>(`${apiBaseUrl()}/taxonomies`);
+}
+
+export async function renameTaxonomyCategory(
+  taxonomyType: TaxonomyType,
+  body: { category_id: string; label: string; description?: string }
+): Promise<TaxonomyCatalog> {
+  return requestJson<TaxonomyCatalog>(
+    `${apiBaseUrl()}/taxonomies/${taxonomyType}/categories/rename`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function lockTaxonomyCategory(
+  taxonomyType: TaxonomyType,
+  categoryId: string
+): Promise<TaxonomyCatalog> {
+  return requestJson<TaxonomyCatalog>(
+    `${apiBaseUrl()}/taxonomies/${taxonomyType}/categories/lock`,
+    { method: "POST", body: JSON.stringify({ category_id: categoryId }) }
+  );
 }
 
 export async function getTerminologyDictionary(): Promise<TerminologyDictionaryEntry[]> {

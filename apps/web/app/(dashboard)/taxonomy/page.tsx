@@ -3,10 +3,24 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tags, Lock, GitBranch, Languages } from "lucide-react";
-import { getLanguageQuality, getTaxonomies, getTerminologyDictionary } from "@/lib/client-api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tags, Lock, GitBranch, Languages, Pencil } from "lucide-react";
+import {
+  getLanguageQuality,
+  getTaxonomies,
+  getTerminologyDictionary,
+  lockTaxonomyCategory,
+  renameTaxonomyCategory
+} from "@/lib/client-api";
 import { fallbackTaxonomies, fallbackTerminologyDictionary } from "@/lib/sample-data";
-import type { LanguageQualityReport, TaxonomyCatalog, TerminologyDictionaryEntry } from "@/lib/types";
+import type {
+  LanguageQualityReport,
+  TaxonomyCatalog,
+  TaxonomyCategory,
+  TaxonomyType,
+  TerminologyDictionaryEntry
+} from "@/lib/types";
 
 type TaxonomyState = {
   status: "loading" | "ready" | "fallback" | "error";
@@ -27,6 +41,58 @@ export default function TaxonomyPage() {
     catalogs: [],
     terms: []
   });
+  const [editing, setEditing] = useState<{ type: TaxonomyType; categoryId: string } | null>(null);
+  const [renameLabel, setRenameLabel] = useState("");
+  const [renameDescription, setRenameDescription] = useState("");
+  const [action, setAction] = useState<{ tone: "ok" | "error"; message: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function applyCatalog(updated: TaxonomyCatalog) {
+    setState((current) => ({
+      ...current,
+      catalogs: current.catalogs.map((catalog) =>
+        catalog.taxonomy_type === updated.taxonomy_type ? updated : catalog
+      )
+    }));
+  }
+
+  function startRename(type: TaxonomyType, category: TaxonomyCategory) {
+    setEditing({ type, categoryId: category.category_id });
+    setRenameLabel(category.label);
+    setRenameDescription(category.description);
+    setAction(null);
+  }
+
+  async function submitRename(type: TaxonomyType, categoryId: string) {
+    if (!renameLabel.trim()) return;
+    setBusy(true);
+    try {
+      const updated = await renameTaxonomyCategory(type, {
+        category_id: categoryId,
+        label: renameLabel.trim(),
+        description: renameDescription.trim() || undefined
+      });
+      applyCatalog(updated);
+      setEditing(null);
+      setAction({ tone: "ok", message: `Renamed to “${renameLabel.trim()}”.` });
+    } catch (error) {
+      setAction({ tone: "error", message: error instanceof Error ? error.message : "Rename failed." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function lockCategory(type: TaxonomyType, categoryId: string) {
+    setBusy(true);
+    try {
+      applyCatalog(await lockTaxonomyCategory(type, categoryId));
+      setAction({ tone: "ok", message: "Category locked." });
+    } catch (error) {
+      setAction({ tone: "error", message: error instanceof Error ? error.message : "Lock failed." });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -82,6 +148,18 @@ export default function TaxonomyPage() {
       {state.status === "fallback" ? (
         <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
           {state.message}
+        </div>
+      ) : null}
+
+      {action ? (
+        <div
+          className={`rounded-md border p-3 text-sm ${
+            action.tone === "error"
+              ? "border-destructive/40 bg-destructive/5 text-destructive"
+              : "border-emerald-500/40 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400"
+          }`}
+        >
+          {action.message}
         </div>
       ) : null}
 
@@ -193,6 +271,56 @@ export default function TaxonomyPage() {
                             {category.change_history[0].description}
                           </p>
                         ) : null}
+                        {editing?.categoryId === category.category_id &&
+                        editing?.type === catalog.taxonomy_type ? (
+                          <div className="mt-3 space-y-2">
+                            <Input
+                              value={renameLabel}
+                              onChange={(event) => setRenameLabel(event.target.value)}
+                              placeholder="Label"
+                              className="h-8 text-sm"
+                            />
+                            <Input
+                              value={renameDescription}
+                              onChange={(event) => setRenameDescription(event.target.value)}
+                              placeholder="Description (optional)"
+                              className="h-8 text-sm"
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                disabled={busy || !renameLabel.trim()}
+                                onClick={() => submitRename(catalog.taxonomy_type, category.category_id)}
+                              >
+                                Save
+                              </Button>
+                              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(null)}>
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-3 flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={busy || category.locked}
+                              onClick={() => startRename(catalog.taxonomy_type, category)}
+                            >
+                              <Pencil className="mr-1 h-3 w-3" /> Rename
+                            </Button>
+                            {!category.locked ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={busy}
+                                onClick={() => lockCategory(catalog.taxonomy_type, category.category_id)}
+                              >
+                                <Lock className="mr-1 h-3 w-3" /> Lock
+                              </Button>
+                            ) : null}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
