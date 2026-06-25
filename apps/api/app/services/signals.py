@@ -11,6 +11,7 @@ from pathlib import Path
 from app.domain.models import (
     ActionProposal,
     AffectedCohort,
+    AudienceReadiness,
     CandidateDecisionRecord,
     CandidateDecisionStatus,
     Evidence,
@@ -266,7 +267,40 @@ def build_candidates(signals: list[SignalRecord]) -> list[ProblemCandidate]:
     return sorted(candidates, key=lambda candidate: candidate.signal_count, reverse=True)
 
 
-def intervention_brief_for_candidate(candidate: ProblemCandidate, *, channel: str) -> InterventionBrief:
+def audience_readiness_for_candidate(candidate: ProblemCandidate, *, destination: str) -> AudienceReadiness:
+    estimated_size = candidate.customer_count
+    return AudienceReadiness(
+        estimated_audience_size=estimated_size,
+        eligible_customers=0,
+        excluded_customers=estimated_size,
+        consent_ready_customers=0,
+        suppression_excluded_customers=0,
+        over_contact_risk="medium" if estimated_size >= 25 else "low",
+        readiness_status="needs_consent_review",
+        readiness_reasons=[
+            "Audience is estimated from evidence-linked customers only.",
+            "Consent, lawful basis and suppression metadata must be verified before export.",
+        ],
+        export_destination=destination,
+        export_format=f"{destination}_draft_csv",
+        export_fields=[
+            "customer_id",
+            "account_id",
+            "journey",
+            "journey_stage",
+            "trigger_reason",
+            "recommended_channel",
+            "control_group_flag",
+        ],
+        activation_constraints=[
+            "Export is a draft for human review; CLARA does not activate campaigns.",
+            "Remove customers without valid consent or with legal/fraud/vulnerability holds.",
+            "Apply current suppression and over-contact rules in the destination system.",
+        ],
+    )
+
+
+def intervention_brief_for_candidate(candidate: ProblemCandidate, *, channel: str, destination: str) -> InterventionBrief:
     stage_token = candidate.journey_stage.lower().replace(" ", "_")
     return InterventionBrief(
         audience_summary=(
@@ -301,6 +335,7 @@ def intervention_brief_for_candidate(candidate: ProblemCandidate, *, channel: st
             "Draft intervention only; CLARA does not send customer messages autonomously.",
             "Privacy review must approve audience criteria before export or execution.",
         ],
+        audience_readiness=audience_readiness_for_candidate(candidate, destination=destination),
     )
 
 
@@ -377,6 +412,7 @@ def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
                     "intervention_brief": intervention_brief_for_candidate(
                         candidate,
                         channel="zendesk recovery task",
+                        destination="zendesk",
                     ),
                 }
             ),
@@ -396,6 +432,7 @@ def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
                     "intervention_brief": intervention_brief_for_candidate(
                         candidate,
                         channel="hubspot workflow draft",
+                        destination="hubspot",
                     ),
                 }
             ),

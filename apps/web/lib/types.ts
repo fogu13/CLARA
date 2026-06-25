@@ -203,6 +203,21 @@ export type ContextImpactSummary = {
   drivers: string[];
 };
 
+export type AudienceReadiness = {
+  estimated_audience_size: number;
+  eligible_customers: number;
+  excluded_customers: number;
+  consent_ready_customers: number;
+  suppression_excluded_customers: number;
+  over_contact_risk: "low" | "medium" | "high";
+  readiness_status: "ready_for_review" | "needs_consent_review" | "blocked_by_policy";
+  readiness_reasons: string[];
+  export_destination: string;
+  export_format: string;
+  export_fields: string[];
+  activation_constraints: string[];
+};
+
 export type InterventionBrief = {
   audience_summary: string;
   inclusion_criteria: string[];
@@ -216,6 +231,7 @@ export type InterventionBrief = {
   guardrail_metrics: string[];
   consent_notes: string[];
   governance_notes: string[];
+  audience_readiness?: AudienceReadiness | null;
 };
 
 export type ActionProposalSnapshot = {

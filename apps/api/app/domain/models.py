@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ProblemStatus(str, Enum):
@@ -257,6 +257,35 @@ class ContextImpactSummary(BaseModel):
     drivers: list[str] = Field(default_factory=list)
 
 
+class AudienceReadiness(BaseModel):
+    estimated_audience_size: int = Field(ge=0)
+    eligible_customers: int = Field(ge=0)
+    excluded_customers: int = Field(ge=0)
+    consent_ready_customers: int = Field(ge=0)
+    suppression_excluded_customers: int = Field(ge=0)
+    over_contact_risk: Literal["low", "medium", "high"]
+    readiness_status: Literal["ready_for_review", "needs_consent_review", "blocked_by_policy"]
+    readiness_reasons: list[str] = Field(default_factory=list)
+    export_destination: str = Field(min_length=1)
+    export_format: str = Field(min_length=1)
+    export_fields: list[str] = Field(default_factory=list)
+    activation_constraints: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def counts_must_be_consistent(self) -> "AudienceReadiness":
+        if self.eligible_customers + self.excluded_customers != self.estimated_audience_size:
+            raise ValueError("eligible and excluded customers must equal estimated audience size")
+        if self.consent_ready_customers > self.estimated_audience_size:
+            raise ValueError("consent-ready customers cannot exceed estimated audience size")
+        if self.suppression_excluded_customers > self.excluded_customers:
+            raise ValueError("suppression exclusions cannot exceed excluded customers")
+        if self.readiness_status == "ready_for_review" and self.eligible_customers == 0:
+            raise ValueError("ready audiences must include at least one eligible customer")
+        if self.readiness_status == "ready_for_review" and self.eligible_customers > self.consent_ready_customers:
+            raise ValueError("ready audiences require consent coverage for every eligible customer")
+        return self
+
+
 class InterventionBrief(BaseModel):
     audience_summary: str = Field(min_length=1)
     inclusion_criteria: list[str] = Field(default_factory=list)
@@ -270,6 +299,7 @@ class InterventionBrief(BaseModel):
     guardrail_metrics: list[str] = Field(default_factory=list)
     consent_notes: list[str] = Field(default_factory=list)
     governance_notes: list[str] = Field(default_factory=list)
+    audience_readiness: AudienceReadiness | None = None
 
 
 class ActionProposalSnapshot(BaseModel):

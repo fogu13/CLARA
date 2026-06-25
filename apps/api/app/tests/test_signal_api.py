@@ -1,5 +1,8 @@
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
+from app.domain.models import AudienceReadiness
 from app.main import create_app
 from app.services.problems import ProblemStore
 from app.services.seed import load_seed_problems
@@ -15,6 +18,24 @@ def make_client() -> TestClient:
             signals=SignalStore(),
         )
     )
+
+
+def test_ready_audience_requires_consent_coverage() -> None:
+    with pytest.raises(ValidationError):
+        AudienceReadiness(
+            estimated_audience_size=3,
+            eligible_customers=2,
+            excluded_customers=1,
+            consent_ready_customers=1,
+            suppression_excluded_customers=0,
+            over_contact_risk="low",
+            readiness_status="ready_for_review",
+            readiness_reasons=["Invalid ready audience."],
+            export_destination="hubspot",
+            export_format="hubspot_static_list_csv",
+            export_fields=["customer_id"],
+            activation_constraints=["Human approval required."],
+        )
 
 
 def test_seed_signals_are_available_and_generate_candidates() -> None:
@@ -299,6 +320,13 @@ def test_promoted_customer_intervention_actions_include_governed_briefs() -> Non
     assert "Customers without valid communication consent" in journey_brief["exclusion_criteria"]
     assert "Consent metadata is not available" in journey_brief["consent_notes"][0]
     assert journey_brief["primary_success_metric"].endswith("_completion_7d")
+    readiness = journey_brief["audience_readiness"]
+    assert readiness["estimated_audience_size"] == candidate["customer_count"]
+    assert readiness["eligible_customers"] == 0
+    assert readiness["excluded_customers"] == candidate["customer_count"]
+    assert readiness["readiness_status"] == "needs_consent_review"
+    assert readiness["export_destination"] == "hubspot"
+    assert "control_group_flag" in readiness["export_fields"]
     assert actions["structural"].get("intervention_brief") is None
 
 

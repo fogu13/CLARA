@@ -79,7 +79,21 @@
           "primary_success_metric": "verification_completion_7d",
           "guardrail_metrics": ["repeat_signal_rate", "support_contact_rate", "complaint_rate"],
           "consent_notes": ["Only service-recovery contact is allowed until consent is verified."],
-          "governance_notes": ["Draft task only; no autonomous customer contact.", "Use approved support copy before execution."]
+          "governance_notes": ["Draft task only; no autonomous customer contact.", "Use approved support copy before execution."],
+          "audience_readiness": {
+            "estimated_audience_size": 2,
+            "eligible_customers": 1,
+            "excluded_customers": 1,
+            "consent_ready_customers": 1,
+            "suppression_excluded_customers": 0,
+            "over_contact_risk": "low",
+            "readiness_status": "ready_for_review",
+            "readiness_reasons": ["One affected customer has service-contact consent and no suppression flag.", "One customer requires consent review before contact."],
+            "export_destination": "zendesk",
+            "export_format": "zendesk_recovery_task_csv",
+            "export_fields": ["customer_id", "account_id", "journey_stage", "latest_failure_reason", "callback_option"],
+            "activation_constraints": ["Create draft support tasks only.", "Use approved recovery copy before any customer contact."]
+          }
         }
       },
       {
@@ -102,7 +116,21 @@
           "primary_success_metric": "verification_completion_7d",
           "guardrail_metrics": ["complaint_rate", "support_contact_rate", "unsubscribe_rate"],
           "consent_notes": ["Activation requires destination-system consent verification."],
-          "governance_notes": ["Privacy review required before audience export.", "No sensitive attributes in inclusion criteria."]
+          "governance_notes": ["Privacy review required before audience export.", "No sensitive attributes in inclusion criteria."],
+          "audience_readiness": {
+            "estimated_audience_size": 2,
+            "eligible_customers": 0,
+            "excluded_customers": 2,
+            "consent_ready_customers": 1,
+            "suppression_excluded_customers": 1,
+            "over_contact_risk": "medium",
+            "readiness_status": "needs_consent_review",
+            "readiness_reasons": ["Marketing/service consent must be verified in HubSpot.", "Recent recovery contact suppression must be applied before export."],
+            "export_destination": "hubspot",
+            "export_format": "hubspot_workflow_draft_csv",
+            "export_fields": ["customer_id", "account_id", "journey_stage", "document_type", "control_group_flag"],
+            "activation_constraints": ["Export draft only after privacy approval.", "Exclude fraud/legal review and invalid-consent records.", "Apply holdout where measurement is approved."]
+          }
         }
       },
       {
@@ -213,7 +241,21 @@
           "primary_success_metric": "post_cancellation_send_rate",
           "guardrail_metrics": ["complaint_rate", "support_contact_rate"],
           "consent_notes": ["Consent cannot override a completed cancellation suppression rule."],
-          "governance_notes": ["Blocked until policy owner approves suppression criteria.", "CLARA produces a draft; campaign platform executes after approval."]
+          "governance_notes": ["Blocked until policy owner approves suppression criteria.", "CLARA produces a draft; campaign platform executes after approval."],
+          "audience_readiness": {
+            "estimated_audience_size": 91,
+            "eligible_customers": 0,
+            "excluded_customers": 91,
+            "consent_ready_customers": 0,
+            "suppression_excluded_customers": 91,
+            "over_contact_risk": "high",
+            "readiness_status": "blocked_by_policy",
+            "readiness_reasons": ["Cancelled customers must be suppressed from retention campaigns.", "Policy owner must approve the hard suppression rule before platform export."],
+            "export_destination": "hubspot",
+            "export_format": "hubspot_suppression_rule_draft_csv",
+            "export_fields": ["customer_id", "account_id", "cancellation_status", "suppression_reason"],
+            "activation_constraints": ["Do not send a customer message.", "Export only a suppression draft after policy approval.", "Track affected customers for closure review."]
+          }
         }
       },
       {

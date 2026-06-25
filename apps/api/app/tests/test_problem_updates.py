@@ -106,6 +106,8 @@ def test_action_intervention_brief_can_be_edited_and_diffed() -> None:
     brief = action["intervention_brief"]
     brief["recommended_channel"] = "hubspot review list"
     brief["content_brief"] = "Updated reviewer-approved intervention brief."
+    brief["audience_readiness"]["export_format"] = "hubspot_static_list_csv"
+    brief["audience_readiness"]["readiness_reasons"].append("Reviewer requested static-list export.")
 
     response = client.patch(
         f"/problems/{problem_id}/actions/{action['action_id']}",
@@ -117,7 +119,9 @@ def test_action_intervention_brief_can_be_edited_and_diffed() -> None:
         item for item in response.json()["action_proposals"] if item["action_id"] == action["action_id"]
     )
     assert updated_action["intervention_brief"]["recommended_channel"] == "hubspot review list"
+    assert updated_action["intervention_brief"]["audience_readiness"]["export_format"] == "hubspot_static_list_csv"
     assert updated_action["original_snapshot"]["intervention_brief"]["recommended_channel"] == "hubspot workflow draft"
+    assert updated_action["original_snapshot"]["intervention_brief"]["audience_readiness"]["export_format"] == "hubspot_draft_csv"
 
     approval = client.post(
         f"/problems/{problem_id}/approvals",
