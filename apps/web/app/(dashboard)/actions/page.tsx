@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ActionDecisionPanel } from "@/app/components/action-decision-panel";
 import { getExecutions, getProblem, getProblems } from "@/lib/client-api";
+import { fallbackProblems } from "@/lib/sample-data";
 import type { ActionProposal, ExecutionRecord, ProblemRecord } from "@/lib/types";
 import { CheckCircle, XCircle, Clock, ArrowRight } from "lucide-react";
 
@@ -22,7 +23,7 @@ export default function ActionsPage() {
   const [items, setItems] = useState<ActionQueueItem[]>([]);
   const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [usingFallback, setUsingFallback] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -35,8 +36,14 @@ export default function ActionsPage() {
           )
         );
         setExecutions(executionRecords);
-      } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : "Failed to load actions");
+      } catch {
+        setItems(
+          fallbackProblems.flatMap((problem) =>
+            problem.action_proposals.map((action) => ({ problem, action }))
+          )
+        );
+        setExecutions([]);
+        setUsingFallback(true);
       } finally {
         setLoading(false);
       }
@@ -61,7 +68,11 @@ export default function ActionsPage() {
         </p>
       </div>
 
-      {error ? <div className="text-sm text-destructive">{error}</div> : null}
+      {usingFallback ? (
+        <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
+          API unreachable — showing sample action proposals.
+        </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

@@ -1,8 +1,10 @@
-import sampleProblems from "../../../data/sample_problems.json";
-import samplePolicyRules from "../../../data/sample_policy_rules.json";
-import sampleTaxonomies from "../../../data/sample_taxonomies.json";
-import sampleTerminologyDictionary from "../../../data/sample_terminology_dictionary.json";
-import { impactBand, impactScore } from "./scoring";
+import {
+  fallbackEmergingProblems,
+  fallbackPolicyRules,
+  fallbackProblems,
+  fallbackTaxonomies,
+  fallbackTerminologyDictionary
+} from "./sample-data";
 import type {
   EmergingProblemReport,
   PolicyRule,
@@ -11,37 +13,6 @@ import type {
   TerminologyDictionaryEntry,
   TaxonomyCatalog
 } from "./types";
-
-const fallbackProblems = (sampleProblems as unknown as ProblemRecord[]).map((problem) => {
-  const score = impactScore(problem.impact_factors);
-  const governanceFailures = problem.governance_checks.filter(
-    (check) => check.blocking && check.status === "fail"
-  ).length;
-
-  return {
-    ...problem,
-    impact_score: score,
-    impact_band: impactBand(score),
-    approval_pressure:
-      problem.status === "blocked_by_policy" || governanceFailures > 0
-        ? "blocked"
-        : problem.status === "approval_needed"
-          ? "needs_review"
-          : "ready"
-  };
-});
-
-const fallbackPolicyRules = samplePolicyRules as unknown as PolicyRule[];
-const fallbackTaxonomies = sampleTaxonomies as unknown as TaxonomyCatalog[];
-const fallbackTerminologyDictionary =
-  sampleTerminologyDictionary as unknown as TerminologyDictionaryEntry[];
-const fallbackEmergingProblems: EmergingProblemReport = {
-  generated_at: new Date(0).toISOString(),
-  candidate_count: 0,
-  watch_count: 0,
-  action_count: 0,
-  signals: []
-};
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { cache: "no-store" });

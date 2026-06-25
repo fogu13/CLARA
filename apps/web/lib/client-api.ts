@@ -35,7 +35,7 @@ import type {
   WorkflowState
 } from "./types";
 
-function apiBaseUrl(): string {
+export function apiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 }
 

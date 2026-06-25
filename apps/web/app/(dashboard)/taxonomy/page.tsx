@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tags, Lock, GitBranch, Languages } from "lucide-react";
 import { getLanguageQuality, getTaxonomies, getTerminologyDictionary } from "@/lib/client-api";
+import { fallbackTaxonomies, fallbackTerminologyDictionary } from "@/lib/sample-data";
 import type { LanguageQualityReport, TaxonomyCatalog, TerminologyDictionaryEntry } from "@/lib/types";
 
 type TaxonomyState = {
-  status: "loading" | "ready" | "error";
+  status: "loading" | "ready" | "fallback" | "error";
   message: string;
   catalogs: TaxonomyCatalog[];
   terms: TerminologyDictionaryEntry[];
@@ -42,12 +43,12 @@ export default function TaxonomyPage() {
           terms,
           languageQuality
         });
-      } catch (error) {
+      } catch {
         setState({
-          status: "error",
-          message: error instanceof Error ? error.message : "Could not load taxonomies.",
-          catalogs: [],
-          terms: []
+          status: "fallback",
+          message: "API unreachable — showing sample taxonomy data.",
+          catalogs: fallbackTaxonomies,
+          terms: fallbackTerminologyDictionary
         });
       }
     }
@@ -78,6 +79,11 @@ export default function TaxonomyPage() {
       </div>
 
       {state.status === "error" ? <div className="text-sm text-destructive">{state.message}</div> : null}
+      {state.status === "fallback" ? (
+        <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
+          {state.message}
+        </div>
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
