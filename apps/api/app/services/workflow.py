@@ -92,17 +92,30 @@ def action_snapshot(action: ActionProposal) -> ActionProposalSnapshot:
     return ActionProposalSnapshot.model_validate(action.model_dump(by_alias=True))
 
 
+def _diff_value(value) -> str:
+    if hasattr(value, "value"):
+        return value.value
+    if hasattr(value, "model_dump"):
+        return json.dumps(value.model_dump(mode="json"), sort_keys=True)
+    return str(value)
+
+
 def action_diff(action: ActionProposal) -> list[ActionProposalChange]:
     if action.original_snapshot is None:
         return []
 
     current = action_snapshot(action)
     changes: list[ActionProposalChange] = []
-    for field in ["owner", "destination", "proposal", "risk_level", "approval_state"]:
-        before = getattr(action.original_snapshot, field)
-        after = getattr(current, field)
-        before_value = before.value if hasattr(before, "value") else str(before)
-        after_value = after.value if hasattr(after, "value") else str(after)
+    for field in [
+        "owner",
+        "destination",
+        "proposal",
+        "risk_level",
+        "approval_state",
+        "intervention_brief",
+    ]:
+        before_value = _diff_value(getattr(action.original_snapshot, field))
+        after_value = _diff_value(getattr(current, field))
         if before_value != after_value:
             changes.append(ActionProposalChange(field=field, before=before_value, after=after_value))
 

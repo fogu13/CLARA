@@ -24,14 +24,21 @@ function approvalMessage(approval: NonNullable<ReturnType<typeof latestApproval>
   return `${approval.decision.replaceAll("_", " ")} recorded by ${approval.reviewer}.`;
 }
 
+function diffValue(value: unknown): string {
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return String(value ?? "");
+}
+
 function pendingChanges(action: ActionProposal): ActionProposalChange[] {
   if (!action.original_snapshot) return [];
 
-  return (["owner", "destination", "proposal", "risk_level", "approval_state"] as const).flatMap((field) => {
-    const before = String(action.original_snapshot?.[field] ?? "");
-    const after = String(action[field] ?? "");
-    return before === after ? [] : [{ field, before, after }];
-  });
+  return (["owner", "destination", "proposal", "risk_level", "approval_state", "intervention_brief"] as const).flatMap(
+    (field) => {
+      const before = diffValue(action.original_snapshot?.[field]);
+      const after = diffValue(action[field]);
+      return before === after ? [] : [{ field, before, after }];
+    }
+  );
 }
 
 function ActionDiff({ title, changes }: { title: string; changes: ActionProposalChange[] }) {

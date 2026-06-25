@@ -96,6 +96,40 @@ def test_promoted_draft_action_proposal_can_be_edited() -> None:
     assert updated_action["approval_state"] == "ready_for_product_review"
 
 
+def test_action_intervention_brief_can_be_edited_and_diffed() -> None:
+    client = make_client()
+    problem_id = promote_first_candidate(client)
+    original_problem = client.get(f"/problems/{problem_id}").json()
+    action = next(
+        action for action in original_problem["action_proposals"] if action["class"] == "journey_intervention"
+    )
+    brief = action["intervention_brief"]
+    brief["recommended_channel"] = "hubspot review list"
+    brief["content_brief"] = "Updated reviewer-approved intervention brief."
+
+    response = client.patch(
+        f"/problems/{problem_id}/actions/{action['action_id']}",
+        json={"intervention_brief": brief},
+    )
+
+    assert response.status_code == 200
+    updated_action = next(
+        item for item in response.json()["action_proposals"] if item["action_id"] == action["action_id"]
+    )
+    assert updated_action["intervention_brief"]["recommended_channel"] == "hubspot review list"
+    assert updated_action["original_snapshot"]["intervention_brief"]["recommended_channel"] == "hubspot workflow draft"
+
+    approval = client.post(
+        f"/problems/{problem_id}/approvals",
+        json={
+            "action_id": action["action_id"],
+            "decision": "rejected",
+            "reviewer": "test_privacy_owner",
+        },
+    ).json()
+    assert "intervention_brief" in {change["field"] for change in approval["action_diff"]}
+
+
 def test_action_approval_records_edit_diff() -> None:
     client = make_client()
     problem_id = promote_first_candidate(client)

@@ -203,6 +203,21 @@ export type ContextImpactSummary = {
   drivers: string[];
 };
 
+export type InterventionBrief = {
+  audience_summary: string;
+  inclusion_criteria: string[];
+  exclusion_criteria: string[];
+  trigger: string;
+  recommended_channel: string;
+  content_brief: string;
+  personalization_variables: string[];
+  control_group: string;
+  primary_success_metric: string;
+  guardrail_metrics: string[];
+  consent_notes: string[];
+  governance_notes: string[];
+};
+
 export type ActionProposalSnapshot = {
   action_id: string;
   class: ActionClass;
@@ -212,6 +227,7 @@ export type ActionProposalSnapshot = {
   risk_level: RiskLevel;
   approval_state: string;
   depends_on: string[];
+  intervention_brief?: InterventionBrief | null;
 };
 
 export type ActionProposalChange = {
@@ -229,6 +245,7 @@ export type ActionProposal = {
   risk_level: RiskLevel;
   approval_state: string;
   depends_on?: string[];
+  intervention_brief?: InterventionBrief | null;
   original_snapshot?: ActionProposalSnapshot | null;
 };
 
@@ -321,6 +338,7 @@ export type ActionProposalUpdateRequest = {
   proposal?: string;
   risk_level?: RiskLevel;
   approval_state?: string;
+  intervention_brief?: InterventionBrief | null;
 };
 
 export type ProblemTransitionRequest = {

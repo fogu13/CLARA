@@ -10,7 +10,14 @@ import { EvidencePanel } from "@/app/components/evidence-panel";
 import { OutcomeMeasurementPanel } from "@/app/components/outcome-measurement-panel";
 import { ProblemLifecyclePanel } from "@/app/components/problem-lifecycle-panel";
 import { getActionQueueProblems, getPolicyRules } from "@/lib/api";
-import type { ActionClass, ActionProposal, GovernanceCheck, PolicyRule, ProblemRecord } from "@/lib/types";
+import type {
+  ActionClass,
+  ActionProposal,
+  GovernanceCheck,
+  InterventionBrief,
+  PolicyRule,
+  ProblemRecord
+} from "@/lib/types";
 
 function percent(value: number | undefined): string {
   return `${Math.round((value ?? 0) * 100)}%`;
@@ -66,6 +73,56 @@ function checkForRule(rule: PolicyRule, checks: GovernanceCheck[]): GovernanceCh
   return checks.find((check) => (check.policy_rule_id ?? check.rule) === rule.rule_id);
 }
 
+function BriefList({ title, items }: { title: string; items: string[] }) {
+  if (items.length === 0) return null;
+
+  return (
+    <div>
+      <p className="font-medium text-foreground">{title}</p>
+      <ul className="mt-1 space-y-1">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function InterventionBriefCard({ brief }: { brief: InterventionBrief }) {
+  return (
+    <div className="mt-3 rounded-md border bg-background p-3 text-xs text-muted-foreground">
+      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="font-medium text-foreground">Governed intervention brief</p>
+          <p className="mt-1">{brief.audience_summary}</p>
+        </div>
+        <Badge variant="outline">{brief.recommended_channel}</Badge>
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <BriefList title="Include" items={brief.inclusion_criteria} />
+        <BriefList title="Exclude" items={brief.exclusion_criteria} />
+        <div>
+          <p className="font-medium text-foreground">Trigger</p>
+          <p className="mt-1">{brief.trigger}</p>
+        </div>
+        <div>
+          <p className="font-medium text-foreground">Content brief</p>
+          <p className="mt-1">{brief.content_brief}</p>
+        </div>
+        <BriefList title="Personalization" items={brief.personalization_variables} />
+        <div>
+          <p className="font-medium text-foreground">Measurement</p>
+          <p className="mt-1">Primary: {brief.primary_success_metric}</p>
+          <p className="mt-1">Control: {brief.control_group}</p>
+        </div>
+        <BriefList title="Guardrails" items={brief.guardrail_metrics} />
+        <BriefList title="Consent" items={brief.consent_notes} />
+        <BriefList title="Governance" items={brief.governance_notes} />
+      </div>
+    </div>
+  );
+}
+
 function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord; policyRules: PolicyRule[] }) {
   return (
     <Card>
@@ -107,6 +164,9 @@ function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord;
                             <Badge variant="outline">{label(action.approval_state)}</Badge>
                           </div>
                         </div>
+                        {action.intervention_brief ? (
+                          <InterventionBriefCard brief={action.intervention_brief} />
+                        ) : null}
                         <div className="mt-3 grid gap-3 text-xs text-muted-foreground md:grid-cols-2">
                           <p>
                             Evidence: {problem.evidence.length} excerpts / confidence{" "}
