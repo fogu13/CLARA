@@ -83,11 +83,11 @@ export function ActionDecisionPanel({
           workflow
         });
       })
-      .catch((error) => {
+      .catch(() => {
         if (cancelled) return;
         setDecisionState({
           state: "error",
-          message: error instanceof Error ? error.message : "Could not load previous decisions."
+          message: "Couldn't load previous decisions."
         });
       });
 

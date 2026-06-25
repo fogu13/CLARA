@@ -306,23 +306,25 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-6 text-white shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="rounded-2xl border bg-card p-8 shadow-sm">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <Badge className="border-white/20 bg-white/10 text-white" variant="outline">Overview</Badge>
-            <h1 className="mt-4 text-3xl font-bold tracking-tight">{leadershipHeadline(problems, outcomeBoard)}</h1>
-            <p className="mt-3 text-sm text-slate-300">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Overview</p>
+            <h1 className="mt-3 text-3xl font-bold tracking-tight text-foreground">
+              {leadershipHeadline(problems, outcomeBoard)}
+            </h1>
+            <p className="mt-3 text-sm text-muted-foreground">
               The highest-impact customer problems, the actions proposed for them, and whether those actions worked.
             </p>
           </div>
-          <div className="grid min-w-64 grid-cols-2 gap-3 text-sm">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-              <p className="text-slate-400">Customers represented</p>
-              <p className="mt-1 text-2xl font-semibold">{compact(representedCustomers)}</p>
+          <div className="flex shrink-0 gap-8">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Customers affected</p>
+              <p className="mt-1 text-3xl font-semibold tabular-nums">{compact(representedCustomers)}</p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-              <p className="text-slate-400">Outcome proof</p>
-              <p className="mt-1 text-2xl font-semibold">{percent(measuredRate)}</p>
+            <div className="border-l pl-8">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Outcomes measured</p>
+              <p className="mt-1 text-3xl font-semibold tabular-nums">{percent(measuredRate)}</p>
             </div>
           </div>
         </div>
@@ -344,14 +346,14 @@ export default function DashboardPage() {
         <MetricCard title="High-Impact Problems" value={highImpactProblems.length} detail={`${problems.length} total problems in queue`} tone={highImpactProblems.length > 0 ? "warn" : "good"} />
         <MetricCard title="Governance Blockers" value={blockedProblems.length} detail="Require policy or privacy decision" tone={blockedProblems.length > 0 ? "bad" : "good"} />
         <MetricCard title="Pending Decisions" value={pendingDecisionProblems.length} detail={`${approvals.length} approval decisions recorded`} tone={pendingDecisionProblems.length > 0 ? "warn" : "good"} />
-        <MetricCard title="Outcome Signals" value={`${improvingOutcomes}/${outcomeBoard.total}`} detail={`${measuredOutcomes} measured, ${outcomeBoard.not_measured} pending`} tone={improvingOutcomes > 0 ? "good" : "neutral"} />
+        <MetricCard title="Outcomes improving" value={`${improvingOutcomes}/${outcomeBoard.total}`} detail={`${measuredOutcomes} measured, ${outcomeBoard.not_measured} pending`} tone={improvingOutcomes > 0 ? "good" : "neutral"} />
         <MetricCard title="Connectors" value={`${activeConnectors}/${connectors.length}`} detail="Active integrations" tone={activeConnectors > 0 ? "good" : "neutral"} />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.4fr_0.8fr]">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-lg"><ShieldAlert className="h-5 w-5 text-amber-500" /> Leadership Attention Queue</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-lg"><ShieldAlert className="h-5 w-5 text-amber-500" /> Needs attention</CardTitle>
             <Link className="text-sm text-primary hover:underline" href="/insights">Open insights</Link>
           </CardHeader>
           <CardContent>
@@ -385,14 +387,14 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg"><Gauge className="h-5 w-5 text-primary" /> Action Funnel</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-lg"><Gauge className="h-5 w-5 text-primary" /> Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg border p-3"><p className="text-muted-foreground">Action classes</p><p className="mt-1 text-2xl font-bold">{actionClassCount}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-muted-foreground">Action types</p><p className="mt-1 text-2xl font-bold">{actionClassCount}</p></div>
               <div className="rounded-lg border p-3"><p className="text-muted-foreground">Approved</p><p className="mt-1 text-2xl font-bold">{approvedActions.size}</p></div>
               <div className="rounded-lg border p-3"><p className="text-muted-foreground">Draft executions</p><p className="mt-1 text-2xl font-bold">{executions.length}</p></div>
-              <div className="rounded-lg border p-3"><p className="text-muted-foreground">Intervention-ready</p><p className="mt-1 text-2xl font-bold">{interventionReady.length}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-muted-foreground">Interventions ready</p><p className="mt-1 text-2xl font-bold">{interventionReady.length}</p></div>
             </div>
             <div className="space-y-3">
               {mix.map((item) => (
@@ -408,7 +410,7 @@ export default function DashboardPage() {
 
       <div className="grid gap-4 xl:grid-cols-3">
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Target className="h-5 w-5 text-emerald-500" /> Outcome Proof</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Target className="h-5 w-5 text-emerald-500" /> Outcomes</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-lg border p-3"><p className="text-muted-foreground">Target met</p><p className="mt-1 text-2xl font-bold text-emerald-600">{outcomeBoard.target_met}</p></div>
@@ -428,7 +430,7 @@ export default function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Users className="h-5 w-5 text-primary" /> Owner Load</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Users className="h-5 w-5 text-primary" /> Workload by owner</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {loads.length === 0 ? (
               <p className="text-sm text-muted-foreground">No active owner load.</p>
@@ -447,9 +449,9 @@ export default function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Sparkles className="h-5 w-5 text-amber-500" /> Sellable Readiness</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Sparkles className="h-5 w-5 text-amber-500" /> Readiness</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><ClipboardCheck className="h-4 w-4" /> Governed interventions</span><Badge variant={interventionReady.length > 0 ? "success" : "secondary"}>{interventionReady.length}</Badge></div>
+            <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><ClipboardCheck className="h-4 w-4" /> Interventions</span><Badge variant={interventionReady.length > 0 ? "success" : "secondary"}>{interventionReady.length}</Badge></div>
             <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><TrendingUp className="h-4 w-4" /> Learning records</span><Badge variant="outline">{outcomeBoard.learning_worked + outcomeBoard.learning_partially_worked + outcomeBoard.learning_did_not_work}</Badge></div>
             <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><Plug className="h-4 w-4" /> Active connectors</span><Badge variant={activeConnectors > 0 ? "success" : "secondary"}>{activeConnectors}</Badge></div>
             <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Human approvals</span><Badge variant={approvals.length > 0 ? "success" : "outline"}>{approvals.length}</Badge></div>
