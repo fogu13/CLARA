@@ -7,14 +7,37 @@ import { Button } from "@/components/ui/button";
 import { MessageSquare, Upload, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiBaseUrl, apiHeaders, getSignals, importSignalCsv, validateSignalCsv } from "@/lib/client-api";
-import { inferColumnMapping, parseCsv, toCanonicalSignalCsv, unmappedRequiredFields } from "@/lib/csv";
+import {
+  essentialSignalCsvField,
+  inferColumnMapping,
+  parseCsv,
+  signalCsvFields,
+  toCanonicalSignalCsvWithDefaults
+} from "@/lib/csv";
+import type { ColumnMapping } from "@/lib/csv";
 
 type Status = { tone: "idle" | "busy" | "ok" | "error"; message: string };
+type FileCsv = { fileName: string; headers: string[]; rows: Record<string, string>[]; mapping: ColumnMapping };
+
+const fieldLabels: Record<string, string> = {
+  feedback_text: "Feedback text",
+  signal_id: "Signal ID",
+  customer_id: "Customer ID",
+  account_id: "Account ID",
+  source: "Source",
+  journey: "Journey",
+  journey_stage: "Journey stage",
+  campaign_exposure: "Campaign exposure",
+  product_events: "Product events",
+  language: "Language",
+  timestamp: "Timestamp"
+};
 
 export default function SignalsPage() {
   const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<Status>({ tone: "idle", message: "" });
+  const [fileCsv, setFileCsv] = useState<FileCsv | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -34,34 +57,45 @@ export default function SignalsPage() {
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
-    setStatus({ tone: "busy", message: `Importing ${file.name}…` });
     try {
       const { headers, rows } = parseCsv(await file.text());
-      const mapping = inferColumnMapping(headers);
-      const missing = unmappedRequiredFields(mapping);
-      if (missing.length > 0) {
-        setStatus({
-          tone: "error",
-          message: `Couldn't match these required columns: ${missing.join(", ")}. Expected headers like signal_id, customer_id, source, journey, journey_stage, feedback_text, timestamp.`
-        });
+      if (rows.length === 0) {
+        setStatus({ tone: "error", message: "That file has no data rows." });
         return;
       }
-      const canonical = toCanonicalSignalCsv(rows, mapping);
+      setFileCsv({ fileName: file.name, headers, rows, mapping: inferColumnMapping(headers) });
+      setStatus({ tone: "idle", message: `Loaded ${rows.length} row(s) from ${file.name}. Map your columns and import.` });
+    } catch {
+      setStatus({ tone: "error", message: "Couldn't read that file as CSV." });
+    }
+  }
+
+  function updateMapping(field: string, header: string) {
+    setFileCsv((current) =>
+      current ? { ...current, mapping: { ...current.mapping, [field]: header } } : current
+    );
+  }
+
+  async function importMapped() {
+    if (!fileCsv) return;
+    if (!fileCsv.mapping[essentialSignalCsvField]) {
+      setStatus({ tone: "error", message: "Map the column that holds the feedback text — it's the only required field." });
+      return;
+    }
+    setStatus({ tone: "busy", message: `Importing ${fileCsv.rows.length} row(s)…` });
+    try {
+      const batchId = Date.now().toString(36);
+      const canonical = toCanonicalSignalCsvWithDefaults(fileCsv.rows, fileCsv.mapping, batchId);
       const report = await validateSignalCsv(canonical);
       if (!report.valid) {
         const first = report.errors[0];
-        setStatus({
-          tone: "error",
-          message: `CSV has ${report.errors.length} error(s)${first ? `: ${first.message}` : ""}.`
-        });
+        setStatus({ tone: "error", message: `Couldn't import: ${first ? first.message : `${report.errors.length} validation error(s)`}` });
         return;
       }
       const result = await importSignalCsv(canonical);
+      setFileCsv(null);
       await refresh();
-      setStatus({
-        tone: "ok",
-        message: `Imported ${result.imported} signal(s); skipped ${result.skipped_duplicates} duplicate(s).`
-      });
+      setStatus({ tone: "ok", message: `Imported ${result.imported} signal(s); skipped ${result.skipped_duplicates} duplicate(s).` });
     } catch (error) {
       setStatus({ tone: "error", message: error instanceof Error ? error.message : "Couldn't import the CSV." });
     }
@@ -81,10 +115,7 @@ export default function SignalsPage() {
       }
       const result = await response.json();
       await refresh();
-      setStatus({
-        tone: "ok",
-        message: `Triage ${result.status}: ${result.insights?.length ?? 0} insight(s) generated.`
-      });
+      setStatus({ tone: "ok", message: `Triage ${result.status}: ${result.insights?.length ?? 0} insight(s) generated.` });
     } catch (error) {
       setStatus({ tone: "error", message: error instanceof Error ? error.message : "Couldn't run triage." });
     }
@@ -136,6 +167,51 @@ export default function SignalsPage() {
         >
           {status.message}
         </div>
+      ) : null}
+
+      {fileCsv ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Map columns — {fileCsv.fileName}</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Match your columns to CLARA&apos;s fields. Only <strong>Feedback text</strong> is required;
+              anything you leave unmapped is filled with a default (generated ID, source, timestamp, etc.).
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {signalCsvFields.map((field) => {
+                const required = field === essentialSignalCsvField;
+                return (
+                  <label key={field} className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium">
+                      {fieldLabels[field] ?? field}
+                      {required ? <span className="text-destructive"> *</span> : null}
+                    </span>
+                    <select
+                      className="h-9 rounded-md border bg-background px-2 text-sm"
+                      value={fileCsv.mapping[field] ?? ""}
+                      onChange={(event) => updateMapping(field, event.target.value)}
+                    >
+                      <option value="">— Not mapped —</option>
+                      {fileCsv.headers.map((header) => (
+                        <option key={header} value={header}>{header}</option>
+                      ))}
+                    </select>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" disabled={busy} onClick={importMapped}>
+                Import {fileCsv.rows.length} row(s)
+              </Button>
+              <Button variant="ghost" size="sm" disabled={busy} onClick={() => { setFileCsv(null); setStatus({ tone: "idle", message: "" }); }}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-3">
