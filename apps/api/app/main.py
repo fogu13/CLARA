@@ -7,16 +7,17 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth import UserContext, get_current_user
 from app.domain.models import (
     ActionProposalUpdateRequest,
     AffectedContextExplorer,
     ApprovalDecision,
     ApprovalRecord,
-    ClosureRecord,
-    ClosureRecordRequest,
     CandidateDecisionStatus,
     CandidateReviewRequest,
     CandidateReviewStatus,
+    ClosureRecord,
+    ClosureRecordRequest,
     CustomerContextCompletenessReport,
     CustomerContextCsvImportRequest,
     CustomerContextImportRequest,
@@ -52,6 +53,7 @@ from app.domain.models import (
     SignalImportResult,
     SignalRecord,
     SignalValidationReport,
+    SystemConfig,
     TaxonomyCatalog,
     TaxonomyLockRequest,
     TaxonomyMergeRequest,
@@ -60,8 +62,10 @@ from app.domain.models import (
     TaxonomyType,
     TerminologyDictionaryEntry,
     WorkflowState,
+    WorkspaceSettings,
     pseudonymized_identifier,
 )
+from app.rbac import Role, require_role
 from app.services.context_impact import (
     build_affected_context_explorer,
     enrich_problem_with_context,
@@ -87,6 +91,7 @@ from app.services.postgres import (
     PostgresTaxonomyStore,
     PostgresTerminologyStore,
     PostgresWorkflowStore,
+    PostgresWorkspaceStore,
     database_url,
 )
 from app.services.problems import ProblemStore, SQLiteProblemStore
@@ -106,7 +111,7 @@ from app.services.signals import (
 )
 from app.services.taxonomies import TaxonomyStore, TerminologyStore, classify_candidate
 from app.services.workflow import SQLiteWorkflowStore, utc_now
-from app.rbac import Role, require_role
+from app.services.workspace import SQLiteWorkspaceStore
 
 
 def default_db_path() -> Path:
@@ -154,6 +159,13 @@ def default_problem_store() -> SQLiteProblemStore:
 
 def default_policy_store() -> PolicyRuleStore:
     return PolicyRuleStore(load_seed_policy_rules())
+
+
+def default_workspace_store():
+    url = database_url()
+    if url:
+        return PostgresWorkspaceStore(url)
+    return SQLiteWorkspaceStore(default_db_path())
 
 
 def to_summary(problem: ProblemRecord) -> ProblemSummary:
@@ -405,6 +417,7 @@ def create_app(
     demo_datasets=None,
     connector_configs=None,
     journeys=None,
+    workspace=None,
 ) -> FastAPI:
     api = FastAPI(
         title="CLARA API",
@@ -438,6 +451,7 @@ def create_app(
     context_store = contexts or default_context_store()
     journey_event_store = journeys or default_journey_event_store()
     policy_store = policies or default_policy_store()
+    workspace_store = workspace or default_workspace_store()
     url = database_url()
     taxonomy_store = taxonomies or (PostgresTaxonomyStore(url) if url else TaxonomyStore())
     terminology_store = terminology or (
@@ -951,6 +965,31 @@ def create_app(
                 record.model_dump(mode="json", by_alias=True) for record in workflow_store.list_jira_issue_drafts()
             ],
         }
+
+    @api.get("/workspace", response_model=WorkspaceSettings)
+    def get_workspace(user: UserContext = Depends(get_current_user)) -> WorkspaceSettings:  # noqa: B008
+        return workspace_store.get(user.workspace_id)
+
+    @api.put(
+        "/workspace",
+        response_model=WorkspaceSettings,
+        dependencies=[Depends(require_role(Role.editor))],
+    )
+    def update_workspace(
+        settings: WorkspaceSettings,
+        user: UserContext = Depends(get_current_user),  # noqa: B008
+    ) -> WorkspaceSettings:
+        return workspace_store.put(user.workspace_id, settings)
+
+    @api.get("/system-config", response_model=SystemConfig)
+    def get_system_config() -> SystemConfig:
+        from app.auth import AUTH_ENABLED
+
+        return SystemConfig(
+            ai_base_url=os.getenv("AI_BASE_URL") or "https://api.openai.com/v1",
+            ai_model=os.getenv("AI_MODEL") or "gpt-4o-mini",
+            auth_enabled=AUTH_ENABLED,
+        )
 
     # ====== Connector endpoints (Phase 2) ======
 
