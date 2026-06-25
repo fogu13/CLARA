@@ -547,6 +547,20 @@ export type SignalRecord = {
   timestamp: string;
 };
 
+export type WorkspaceSettings = {
+  name: string;
+  slug: string;
+  notification_email: string;
+  measurement_window_days: number;
+  learning_half_life_days: number;
+};
+
+export type SystemConfig = {
+  ai_base_url: string;
+  ai_model: string;
+  auth_enabled: boolean;
+};
+
 export type SignalImportResult = {
   imported: number;
   skipped_duplicates: number;
