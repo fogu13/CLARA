@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>CLARA — Turn customer signals into governed action</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2026%2026'%3E%3Ccircle%20cx='13'%20cy='13'%20r='10.5'%20fill='none'%20stroke='%23016f60'%20stroke-width='2.6'%20stroke-dasharray='44%2014'%20stroke-linecap='round'/%3E%3Ccircle%20cx='13'%20cy='2.5'%20r='3'%20fill='%23e0a24a'/%3E%3Ccircle%20cx='13'%20cy='13'%20r='2.2'%20fill='%231bb89e'/%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%20100'%3E%3Cpath%20d='M69.28%2027.02%20A30%2030%200%201%200%2069.28%2072.98'%20fill='none'%20stroke='%23016f60'%20stroke-width='12'%20stroke-linecap='round'/%3E%3Ccircle%20cx='78'%20cy='50'%20r='8'%20fill='%23e0a24a'/%3E%3C/svg%3E" />
 <meta name="description" content="CLARA is the European feedback-to-outcome platform. It connects what customers say with what they do, finds the problems that matter, recommends coordinated action, enforces your policies before anything ships, and proves whether it worked." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -49,17 +49,17 @@
   a:focus-visible,button:focus-visible{outline:2px solid var(--teal);outline-offset:3px;border-radius:8px}
 
   /* nav */
-  header.nav{position:fixed;inset:0 0 auto;z-index:50;transition:.25s ease}
+  header.nav{position:fixed;inset:0 0 auto;z-index:50;transition:.25s ease;--navfg:#eef6f4;--navmuted:#9fc0ba;--markfg:#1bb89e}
   header.nav .bar{display:flex;align-items:center;justify-content:space-between;height:68px}
-  header.nav.scrolled{background:rgba(246,248,248,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
-  .brand{display:flex;align-items:center;gap:11px;font-family:var(--disp);font-weight:700;font-size:20px;letter-spacing:-.01em;color:var(--text)}
-  .brand .mark{flex:0 0 auto}
-  .nav-links{display:flex;align-items:center;gap:30px;font-size:15px;color:var(--muted);font-weight:500}
-  .nav-links a:hover{color:var(--text)}
+  header.nav.scrolled{background:rgba(246,248,248,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);--navfg:var(--text);--navmuted:var(--muted);--markfg:#016f60}
+  .brand{display:flex;align-items:center;gap:11px;font-family:var(--disp);font-weight:700;font-size:20px;letter-spacing:-.01em;color:var(--navfg);transition:color .25s ease}
+  .brand .mark{flex:0 0 auto;display:flex;color:var(--markfg);transition:color .25s ease}
+  .nav-links{display:flex;align-items:center;gap:30px;font-size:15px;color:var(--navmuted);font-weight:500}
+  .nav-links a:hover{color:var(--navfg)}
   .nav-cta{display:flex;align-items:center;gap:14px}
-  .nav-cta .login{font-size:15px;font-weight:500;color:var(--muted)}
-  .nav-cta .login:hover{color:var(--text)}
-  .menu-btn{display:none;background:none;border:0;cursor:pointer;color:var(--text);font-size:24px}
+  .nav-cta .login{font-size:15px;font-weight:500;color:var(--navmuted)}
+  .nav-cta .login:hover{color:var(--navfg)}
+  .menu-btn{display:none;background:none;border:0;cursor:pointer;color:var(--navfg);font-size:24px}
 
   /* hero */
   .hero{position:relative;background:var(--ink);color:#eaf6f3;overflow:hidden;padding:128px 0 92px}
@@ -292,10 +292,15 @@
   <div class="wrap bar">
     <a class="brand" href="#top" aria-label="CLARA home">
       <span class="mark" aria-hidden="true">
-        <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
-          <circle cx="13" cy="13" r="10.5" stroke="#016f60" stroke-width="2" stroke-dasharray="44 14" stroke-linecap="round"/>
-          <circle cx="13" cy="2.5" r="3" fill="#e0a24a"/>
-          <circle cx="13" cy="13" r="2.2" fill="#1bb89e"/>
+        <svg width="27" height="27" viewBox="0 0 100 100" fill="none">
+          <g stroke="currentColor" stroke-width="10">
+            <path d="M70.07 27.71 A30 30 0 0 0 46.86 20.16"/>
+            <path d="M43.76 20.66 A30 30 0 0 0 24.02 35.00"/>
+            <path d="M22.59 37.80 A30 30 0 0 0 22.59 62.20"/>
+            <path d="M24.02 65.00 A30 30 0 0 0 43.76 79.34"/>
+            <path d="M46.86 79.84 A30 30 0 0 0 70.07 72.29"/>
+          </g>
+          <path d="M74.27 32.37 A30 30 0 0 1 74.27 67.63" stroke="#e0a24a" stroke-width="10" stroke-linecap="round"/>
         </svg>
       </span>
       CLARA
@@ -689,10 +694,15 @@
       <div>
         <a class="brand" href="#top">
           <span class="mark" aria-hidden="true">
-            <svg width="24" height="24" viewBox="0 0 26 26" fill="none">
-              <circle cx="13" cy="13" r="10.5" stroke="#1bb89e" stroke-width="2" stroke-dasharray="44 14" stroke-linecap="round"/>
-              <circle cx="13" cy="2.5" r="3" fill="#e0a24a"/>
-              <circle cx="13" cy="13" r="2.2" fill="#4dd0b8"/>
+            <svg width="25" height="25" viewBox="0 0 100 100" fill="none">
+              <g stroke="#1bb89e" stroke-width="10">
+                <path d="M70.07 27.71 A30 30 0 0 0 46.86 20.16"/>
+                <path d="M43.76 20.66 A30 30 0 0 0 24.02 35.00"/>
+                <path d="M22.59 37.80 A30 30 0 0 0 22.59 62.20"/>
+                <path d="M24.02 65.00 A30 30 0 0 0 43.76 79.34"/>
+                <path d="M46.86 79.84 A30 30 0 0 0 70.07 72.29"/>
+              </g>
+              <path d="M74.27 32.37 A30 30 0 0 1 74.27 67.63" stroke="#e0a24a" stroke-width="10" stroke-linecap="round"/>
             </svg>
           </span>
           CLARA
