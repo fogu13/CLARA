@@ -36,7 +36,7 @@ def _mock_ai_env(monkeypatch: pytest.MonkeyPatch) -> None:
     importlib.reload(graph_mod)
 
 
-def _mock_enrich_signals(signals: list[dict]) -> list[dict]:
+def _mock_enrich_signals(signals: list[dict], **_kwargs) -> list[dict]:
     """Mock enrichment that adds sentiment/urgency/tags to each signal."""
     return [
         {

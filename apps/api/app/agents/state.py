@@ -22,6 +22,7 @@ class TriageState(TypedDict, total=False):
     signals: list[dict[str, Any]]  # raw signals to process
     db_connection: Any  # optional psycopg connection for taxonomy mapping
     context_data: dict[str, Any]  # optional B2B context for 8-factor severity
+    learnings: list[dict[str, Any]]  # past learnings to inform synthesis (outcome loop)
 
     # --- After enrich ---
     enriched_signals: list[dict[str, Any]]  # signals with sentiment/urgency/tags

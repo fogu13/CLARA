@@ -1,0 +1,3 @@
+# Local eval run artifacts (the loop's commits are the durable record).
+reports/
+history.jsonl

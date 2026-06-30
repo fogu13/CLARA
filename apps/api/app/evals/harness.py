@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 from dataclasses import dataclass, field
+from math import comb
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +59,10 @@ class EnrichmentEvalResult:
     tag_precision: float = 0.0
     tag_recall: float = 0.0
     tag_f1: float = 0.0
+    # Strict exact-match tag scores, reported alongside the fuzzy primaries above.
+    tag_precision_exact: float = 0.0
+    tag_recall_exact: float = 0.0
+    tag_f1_exact: float = 0.0
     hallucination_rate: float = 0.0
     pii_leak_count: int = 0
     avg_latency_ms: float = 0.0
@@ -68,9 +74,9 @@ class EnrichmentEvalResult:
             f"Signals evaluated: {self.total_signals}",
             f"Sentiment accuracy: {self.sentiment_accuracy:.2%}",
             f"Urgency accuracy: {self.urgency_accuracy:.2%}",
-            f"Tag precision: {self.tag_precision:.2%}",
-            f"Tag recall: {self.tag_recall:.2%}",
-            f"Tag F1: {self.tag_f1:.2%}",
+            f"Tag precision: {self.tag_precision:.2%} (exact {self.tag_precision_exact:.2%})",
+            f"Tag recall: {self.tag_recall:.2%} (exact {self.tag_recall_exact:.2%})",
+            f"Tag F1: {self.tag_f1:.2%} (exact {self.tag_f1_exact:.2%})",
             f"Hallucination rate: {self.hallucination_rate:.2%}",
             f"PII leaks: {self.pii_leak_count}",
             f"Avg latency: {self.avg_latency_ms:.0f}ms",
@@ -101,31 +107,68 @@ class SynthesisEvalResult:
         return "\n".join(lines)
 
 
-def load_golden_set() -> list[dict[str, Any]]:
-    """Load the golden set of labeled signals for evaluation."""
+def load_golden_set(split: str | None = None) -> list[dict[str, Any]]:
+    """Load the golden set of labeled signals for evaluation.
+
+    Pass split="optimization" (items the loop may tune on) or split="held_out"
+    (locked guardrail set, never optimized against) to filter. Default returns
+    all items.
+    """
     if not GOLDEN_SET_PATH.exists():
         return []
     with open(GOLDEN_SET_PATH) as f:
-        return json.load(f)
+        data = json.load(f)
+    if split is not None:
+        return [item for item in data if item.get("split") == split]
+    return data
+
+
+def _tag_tokens(tag: str) -> set[str]:
+    """Tokens of a snake_case tag worth matching on (drops short filler tokens)."""
+    return {t for t in tag.lower().split("_") if len(t) >= 4}
+
+
+def _tags_match(a: str, b: str) -> bool:
+    """Fuzzy tag equality: exact, or sharing a >=4-char token.
+
+    # ponytail: lexical stem match — `payment_error` ~ `payment_failure` via the
+    # shared `payment` token. Swap for embedding cosine if it proves too loose.
+    """
+    if a == b:
+        return True
+    return bool(_tag_tokens(a) & _tag_tokens(b))
 
 
 def _precision_recall_f1(
     predicted: list[str],
     golden: list[str],
+    *,
+    fuzzy: bool = False,
 ) -> tuple[float, float, float]:
-    """Compute precision, recall, and F1 for tag sets."""
+    """Compute precision, recall, and F1 for tag sets.
+
+    With fuzzy=True a predicted/golden tag counts as matched when it shares a
+    stem token with any tag on the other side (see _tags_match) — so a real
+    LLM isn't zeroed for near-miss tags like payment_failure vs payment_error.
+    """
     pred_set = set(predicted)
     golden_set = set(golden)
 
     if not pred_set and not golden_set:
         return 1.0, 1.0, 1.0
 
-    tp = len(pred_set & golden_set)
-    fp = len(pred_set - golden_set)
-    fn = len(golden_set - pred_set)
+    if fuzzy:
+        matched_pred = sum(1 for p in pred_set if any(_tags_match(p, g) for g in golden_set))
+        matched_golden = sum(1 for g in golden_set if any(_tags_match(g, p) for p in pred_set))
+        precision = matched_pred / len(pred_set) if pred_set else 0.0
+        recall = matched_golden / len(golden_set) if golden_set else 0.0
+    else:
+        tp = len(pred_set & golden_set)
+        fp = len(pred_set - golden_set)
+        fn = len(golden_set - pred_set)
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
 
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
     return precision, recall, f1
@@ -178,6 +221,56 @@ def check_hallucination(
     return False
 
 
+def bootstrap_ci(
+    per_item: list[float],
+    *,
+    n_resamples: int = 2000,
+    ci: float = 0.95,
+    seed: int = 12345,
+) -> tuple[float, float]:
+    """Bootstrap confidence interval for the MEAN of per-item scores.
+
+    Resamples the per-item scores (e.g. 0/1 correctness) with replacement to
+    estimate uncertainty. On a 10-item golden set the CI is honestly wide
+    (~±0.3) — that width is the point: it stops the loop chasing noise.
+    Deterministic (fixed seed) so the eval is reproducible.
+    """
+    n = len(per_item)
+    if n == 0:
+        return (0.0, 0.0)
+    rng = random.Random(seed)
+    means = sorted(
+        sum(per_item[rng.randrange(n)] for _ in range(n)) / n
+        for _ in range(n_resamples)
+    )
+    lo_i = int((1 - ci) / 2 * n_resamples)
+    hi_i = min(n_resamples - 1, int((1 + ci) / 2 * n_resamples))
+    return (means[lo_i], means[hi_i])
+
+
+def mcnemar_exact(
+    a_correct: list[bool],
+    b_correct: list[bool],
+) -> tuple[int, int, float]:
+    """Exact McNemar test on two classifiers' PAIRED per-item correctness.
+
+    Use to decide whether variant B is significantly better than A on the same
+    items (the right test for tiny eval sets — far better than comparing raw
+    accuracies). Returns (b, c, p_value):
+      b = A right & B wrong, c = A wrong & B right,
+      p = two-sided exact binomial(n=b+c, 0.5).
+    A small p with c > b means B is significantly better.
+    """
+    b = sum(1 for x, y in zip(a_correct, b_correct) if x and not y)
+    c = sum(1 for x, y in zip(a_correct, b_correct) if y and not x)
+    n = b + c
+    if n == 0:
+        return b, c, 1.0
+    k = min(b, c)
+    tail = sum(comb(n, i) for i in range(k + 1)) / (2 ** n)
+    return b, c, min(1.0, 2 * tail)
+
+
 class EvalHarness:
     """Evaluation harness for the triage pipeline.
 
@@ -209,6 +302,8 @@ class EvalHarness:
         urgency_correct = 0
         tag_precisions: list[float] = []
         tag_recalls: list[float] = []
+        tag_precisions_exact: list[float] = []
+        tag_recalls_exact: list[float] = []
         hallucination_count = 0
         pii_count = 0
         latencies: list[float] = []
@@ -233,9 +328,12 @@ class EvalHarness:
             # Tag precision/recall
             pred_tags = actual_enrichment.get("tags", [])
             golden_tags = golden_enrichment.get("tags", [])
-            p, r, f1 = _precision_recall_f1(pred_tags, golden_tags)
+            p, r, _ = _precision_recall_f1(pred_tags, golden_tags, fuzzy=True)
             tag_precisions.append(p)
             tag_recalls.append(r)
+            pe, re_, _ = _precision_recall_f1(pred_tags, golden_tags, fuzzy=False)
+            tag_precisions_exact.append(pe)
+            tag_recalls_exact.append(re_)
 
             # Hallucination check
             if check_hallucination(actual_enrichment, item.get("text", "")):
@@ -259,6 +357,14 @@ class EvalHarness:
             2 * result.tag_precision * result.tag_recall
             / (result.tag_precision + result.tag_recall)
             if (result.tag_precision + result.tag_recall) > 0
+            else 0
+        )
+        result.tag_precision_exact = sum(tag_precisions_exact) / n if n > 0 else 0
+        result.tag_recall_exact = sum(tag_recalls_exact) / n if n > 0 else 0
+        result.tag_f1_exact = (
+            2 * result.tag_precision_exact * result.tag_recall_exact
+            / (result.tag_precision_exact + result.tag_recall_exact)
+            if (result.tag_precision_exact + result.tag_recall_exact) > 0
             else 0
         )
         result.hallucination_rate = hallucination_count / n if n > 0 else 0
@@ -302,8 +408,10 @@ class EvalHarness:
         """
         result = SynthesisEvalResult()
 
-        if not insights:
-            # Use golden set to compute expected metrics
+        # insights is None  -> legacy/offline self-comparison: derive from golden labels.
+        # insights == []     -> a real run produced ZERO clusters: report that honestly,
+        #                       never silently fabricate golden-set numbers.
+        if insights is None:
             insights = [
                 {
                     "category": item.get("expected", {}).get("category", "ux_friction"),
@@ -368,6 +476,9 @@ class EvalHarness:
                 "tag_precision": enrichment.tag_precision,
                 "tag_recall": enrichment.tag_recall,
                 "tag_f1": enrichment.tag_f1,
+                "tag_precision_exact": enrichment.tag_precision_exact,
+                "tag_recall_exact": enrichment.tag_recall_exact,
+                "tag_f1_exact": enrichment.tag_f1_exact,
                 "hallucination_rate": enrichment.hallucination_rate,
                 "pii_leak_count": enrichment.pii_leak_count,
                 "avg_latency_ms": enrichment.avg_latency_ms,

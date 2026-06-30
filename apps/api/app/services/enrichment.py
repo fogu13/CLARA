@@ -14,15 +14,22 @@ import logging
 from typing import Any
 
 from app.services.ai import AIProviderError, call_tool
+from app.services.exemplar_store import format_fewshot
 
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are a customer-feedback analyst. For each feedback item you receive, extract:
 - sentiment: one of positive | neutral | negative | mixed
 - sentiment_score: number from -1 (very negative) to 1 (very positive)
-- urgency: one of low | medium | high | critical
-- tags: 1-3 short snake_case theme tags (e.g. checkout_failure, late_delivery,
-  onboarding_friction, pricing_unclear)
+- urgency: one of low | medium | high | critical. Judge by impact and time-sensitivity:
+  - critical: data loss, a security or compliance breach, a full outage, or explicit cancellation/churn intent
+  - high: a broken core flow (checkout, login, payment) or a strongly negative experience needing prompt action
+  - medium: a notable problem that has a workaround, or friction that is annoying but not blocking
+  - low: praise, a general question, or a minor/cosmetic issue
+- tags: exactly 2 concise snake_case theme tags naming the specific problem or topic
+  (e.g. checkout_failure, payment_error). Add a 3rd only if it is a clearly distinct theme.
+  Do not pad with a tag that merely restates the sentiment (e.g. positive_feedback,
+  customer_satisfaction) or a generic catch-all.
 Return one enrichment per input item, preserving its id."""
 
 ENRICHMENT_TOOL = {
@@ -64,6 +71,7 @@ def enrich_signals(
     signals: list[dict[str, Any]],
     *,
     batch_size: int = 25,
+    exemplars: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Enrich a list of qualitative signal dicts with LLM-extracted metadata.
 
@@ -71,12 +79,17 @@ def enrich_signals(
     Returns a list of enrichment dicts:
     {id, sentiment, sentiment_score, urgency, tags}.
 
+    When ``exemplars`` (labelled few-shot examples) are passed, they are prepended
+    to the prompt to pin the model to the project's tag vocabulary and urgency
+    calibration. Exemplars are plain text, so this stays model-agnostic.
+
     Signals are batched to stay within context windows. Errors on individual
     batches are logged and skipped (partial enrichment is better than none).
     """
     if not signals:
         return []
 
+    fewshot = format_fewshot(exemplars) + "\n\n" if exemplars else ""
     all_enrichments: list[dict[str, Any]] = []
 
     for i in range(0, len(signals), batch_size):
@@ -86,7 +99,7 @@ def enrich_signals(
         try:
             result = call_tool(
                 system=SYSTEM_PROMPT,
-                user="Enrich these feedback items:\n\n" + json.dumps(items, indent=2),
+                user=fewshot + "Enrich these feedback items:\n\n" + json.dumps(items, indent=2),
                 tool=ENRICHMENT_TOOL,
                 tool_name="submit_enrichments",
                 trace_name="enrich_signals",
