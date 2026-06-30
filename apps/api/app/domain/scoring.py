@@ -13,27 +13,30 @@ _DEFAULT_WEIGHTS: dict[str, float] = {
     "regulatory_risk": 1.1,
     "evidence_confidence": 1.0,
 }
+# Public, read-only view for industry_profiles to merge overrides onto.
+DEFAULT_IMPACT_WEIGHTS: dict[str, float] = dict(_DEFAULT_WEIGHTS)
 
 _IMPACT_WEIGHTS: dict[str, float] | None = None
 
 
 def _load_weights() -> dict[str, float]:
-    """Load impact weights from env vars, falling back to defaults.
+    """Resolve impact weights: industry-profile baseline, then env overrides.
 
-    Env vars: SCORING_WEIGHT_CUSTOMER_REACH, SCORING_WEIGHT_SEVERITY, etc.
-    Weights are loaded once and cached; call reload_weights() to refresh.
+    Precedence (lowest to highest): default weights -> active INDUSTRY_PROFILE
+    overrides -> explicit SCORING_WEIGHT_* env vars. Loaded once and cached;
+    call reload_weights() to refresh (e.g. after changing the profile).
     """
-    weights: dict[str, float] = {}
-    for key, default in _DEFAULT_WEIGHTS.items():
-        env_key = f"SCORING_WEIGHT_{key.upper()}"
-        val = os.getenv(env_key)
+    # Lazy import avoids a module-load cycle (industry_profiles imports scoring).
+    from app.domain.industry_profiles import resolve_profile_name, weights_for_profile
+
+    weights = dict(weights_for_profile(resolve_profile_name()))
+    for key in _DEFAULT_WEIGHTS:
+        val = os.getenv(f"SCORING_WEIGHT_{key.upper()}")
         if val is not None:
             try:
                 weights[key] = float(val)
             except ValueError:
-                weights[key] = default
-        else:
-            weights[key] = default
+                pass  # invalid env -> keep the profile/default value
     return weights
 
 
@@ -55,9 +58,18 @@ def clamp(value: float, minimum: float = 0.0, maximum: float = 1.0) -> float:
     return max(minimum, min(maximum, value))
 
 
-def normalized_impact_score(factors: Mapping[str, float]) -> float:
-    """Return a weighted impact score between 0 and 1."""
-    weights = get_impact_weights()
+def normalized_impact_score(
+    factors: Mapping[str, float],
+    *,
+    weights: Mapping[str, float] | None = None,
+) -> float:
+    """Return a weighted impact score between 0 and 1.
+
+    ``weights`` overrides the active (profile + env) weights for one call — used
+    to score a signal under a specific industry profile without changing the
+    global selection (e.g. weights_for_profile("fintech")).
+    """
+    weights = weights if weights is not None else get_impact_weights()
     total_weight = sum(weights.values())
     weighted_score = 0.0
 

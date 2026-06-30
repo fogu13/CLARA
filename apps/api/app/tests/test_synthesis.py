@@ -25,7 +25,9 @@ def _mock_ai_env(monkeypatch: pytest.MonkeyPatch) -> None:
     importlib.reload(syn_mod)
 
 
-NOW = datetime(2026, 6, 24, 12, 0, 0, tzinfo=UTC)
+# Relative to the real clock so trend_label() (which compares to the live now)
+# stays correct — a hardcoded date silently goes stale and breaks "new" trends.
+NOW = datetime.now(UTC)
 
 
 def _synth_response(tag: str) -> dict[str, Any]:
