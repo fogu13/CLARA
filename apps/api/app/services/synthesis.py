@@ -24,6 +24,7 @@ from collections import Counter, defaultdict
 from typing import Any
 
 from app.services.ai import AIProviderError, call_tool
+from app.services.learning_engine import rank_learnings
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,34 @@ def _jaccard_similarity(set_a: set[str], set_b: set[str]) -> float:
     return len(intersection) / len(union) if union else 0.0
 
 
+# Generic state/quality modifier tokens — dropped before token clustering so they
+# don't bridge unrelated themes (e.g. slow_support <-> slow_delivery). Theme nouns
+# stay, so near-synonym tags collapse onto a shared theme and cluster.
+_CLUSTER_STOP_TOKENS = {
+    "slow", "poor", "bad", "good", "great", "nice", "missing", "failed", "failure",
+    "error", "errors", "issue", "issues", "problem", "problems", "broken", "wrong",
+    "unable", "denied", "delay", "delays", "late", "incorrect", "lack", "blocked",
+    "unavailable", "unresponsive", "unreachable", "false", "true", "status",
+    "general", "other", "misc", "concern", "concerns", "experience", "again",
+}
+
+
+def _theme_tokens(tags: list[str]) -> set[str]:
+    """Significant theme tokens of a signal's tags (>=4 chars, non-generic).
+
+    Collapses near-synonym tags onto shared theme nouns so they cluster:
+    support_unresponsive / support_unavailable / slow_support -> {"support"}.
+    This is what lets real, freely-worded LLM tags aggregate into themes — exact
+    tag overlap (the old behaviour) leaves synonyms unclustered.
+    """
+    out: set[str] = set()
+    for tag in tags:
+        for tok in tag.lower().split("_"):
+            if len(tok) >= 4 and tok not in _CLUSTER_STOP_TOKENS:
+                out.add(tok)
+    return out
+
+
 def cluster_signals(
     signals: list[dict[str, Any]],
     *,
@@ -140,15 +169,16 @@ def cluster_signals(
 ) -> list[tuple[str, list[dict[str, Any]]]]:
     """Cluster signals by multi-tag Jaccard similarity + optional semantic fallback.
 
-    Replaces the old cluster_by_tag() which only used tags[0].
-    Two signals with ["checkout_failure", "payment_error"] and
-    ["payment_error", "checkout_failure"] now end up in the same cluster.
+    Clusters on THEME TOKENS (not exact tags), so near-synonym tags the LLM
+    invents — support_unresponsive / support_unavailable / slow_support — collapse
+    onto {"support"} and group together. Exact-tag overlap left them apart, which
+    is why real scraped feedback barely clustered.
 
-    If embeddings are provided, signals with no tag overlap but high cosine
+    If embeddings are provided, signals with no token overlap but high cosine
     similarity (>= semantic_threshold) are also grouped.
 
     Returns a list of (cluster_label, signals) tuples, where cluster_label
-    is the most common tag across member signals.
+    is the most common (actual) tag across member signals.
     """
     if not signals:
         return []
@@ -156,7 +186,7 @@ def cluster_signals(
     n = len(signals)
     uf = _UnionFind(n)
 
-    tag_sets = [set(s.get("tags", [])) for s in signals]
+    tag_sets = [_theme_tokens(s.get("tags", [])) for s in signals]
 
     # Phase 1: Jaccard similarity on tag sets
     for i in range(n):
@@ -338,8 +368,32 @@ def compute_severity(
 # ============================================================
 
 
-def synthesize_cluster(tag: str, signals: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Call the LLM to synthesize a single insight from a cluster of signals."""
+def _format_learnings(learnings: list[dict[str, Any]]) -> str:
+    """Render retrieved past learnings as a compact prompt block."""
+    lines = []
+    for learn in learnings:
+        status = learn.get("learning_status", "")
+        fresh = learn.get("freshness", "")
+        badge = f"{status}/{fresh}" if fresh else status
+        topic = learn.get("topic", "")
+        summary = learn.get("summary") or learn.get("pattern", "")
+        lines.append(f"- [{badge}] {topic}: {summary}")
+    return "\n".join(lines)
+
+
+def synthesize_cluster(
+    tag: str,
+    signals: list[dict[str, Any]],
+    *,
+    learnings: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """Call the LLM to synthesize a single insight from a cluster of signals.
+
+    When ``learnings`` (relevant, confidence-ranked past outcomes) are passed,
+    they are added to the prompt so the model prefers actions that previously
+    worked and avoids ones that did not — Reflexion grounded in measured
+    outcomes. Closes the outcome -> learning -> retrieval loop.
+    """
     evidence = [
         s.get("text", s.get("feedback_text", ""))
         for s in signals
@@ -348,10 +402,18 @@ def synthesize_cluster(tag: str, signals: list[dict[str, Any]]) -> dict[str, Any
     if not evidence:
         return None
 
+    user = f"Theme: {tag}\nSignals ({len(signals)}):\n" + json.dumps(evidence, indent=2)
+    if learnings:
+        user += (
+            "\n\nRelevant past learnings for this theme (prefer suggested_actions "
+            "like ones that WORKED; avoid ones that DID NOT WORK):\n"
+            + _format_learnings(learnings)
+        )
+
     try:
         result = call_tool(
             system=SYSTEM_PROMPT,
-            user=f"Theme: {tag}\nSignals ({len(signals)}):\n" + json.dumps(evidence, indent=2),
+            user=user,
             tool=SYNTHESIS_TOOL,
             tool_name="submit_insight",
             trace_name=f"synthesize:{tag}",
@@ -369,8 +431,13 @@ def synthesize_insights(
     min_sources: int = CLUSTER_MIN_SOURCES,
     context_data: dict[str, Any] | None = None,
     embeddings: list[list[float]] | None = None,
+    learnings: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Cluster enriched signals and synthesize an insight per cluster.
+
+    When ``learnings`` are passed, the top-k relevant past outcomes per cluster
+    are retrieved (``rank_learnings``) and fed into the synthesis prompt, and
+    their topics are recorded in each insight's audit block.
 
     Uses multi-tag Jaccard clustering (not first-tag-only). Severity uses the
     full 8-factor model when context_data is provided. Frequency analysis
@@ -411,7 +478,10 @@ def synthesize_insights(
         # Severity (8-factor if context available, simple otherwise)
         sev = compute_severity(sigs, context_data=context_data, frequency_data=freq)
 
-        generated = synthesize_cluster(tag, sigs)
+        # Retrieve relevant past learnings for this theme (outcome-grounded loop)
+        relevant_learnings = rank_learnings(learnings, tag, k=3) if learnings else []
+
+        generated = synthesize_cluster(tag, sigs, learnings=relevant_learnings)
         if generated is None:
             continue
 
@@ -443,12 +513,15 @@ def synthesize_insights(
             "max_urgency": max_urgency,
             "source_count": len(sources),
             "tag": tag,
-            "cluster_method": "jaccard" if embeddings is None else "jaccard+semantic",
+            "cluster_method": "token_jaccard" if embeddings is None else "token_jaccard+semantic",
             "status": "new",
             "audit": {
                 "model": AI_MODEL,
                 "source": "llm_synthesis",
                 "severity_source": sev["method"],
+                "applied_learnings": [
+                    learn.get("topic", "") for learn in relevant_learnings
+                ],
                 "limitations": [
                     "LLM-synthesized; not human-validated",
                     "Severity is deterministic; LLM was instructed not to set it",

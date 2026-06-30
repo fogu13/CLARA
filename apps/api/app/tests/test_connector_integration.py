@@ -37,7 +37,7 @@ def _mock_ai_env(monkeypatch: pytest.MonkeyPatch) -> None:
     importlib.reload(graph_mod)
 
 
-def _mock_enrich(signals: list[dict]) -> list[dict]:
+def _mock_enrich(signals: list[dict], **_kwargs) -> list[dict]:
     return [
         {
             "id": s["id"],

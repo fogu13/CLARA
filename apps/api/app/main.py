@@ -179,6 +179,17 @@ def default_rule_store():
     return SQLiteRuleStore(default_db_path())
 
 
+def default_learning_store():
+    """Local-first learning store (SQLite). Feeds rank_learnings into synthesis.
+
+    The Postgres learning_conclusions table (migration 005) is the production
+    counterpart; the SQLite store is the local/offline path the thesis runs on.
+    """
+    from app.services.learning_store import SQLiteLearningStore
+
+    return SQLiteLearningStore(default_db_path())
+
+
 def to_summary(problem: ProblemRecord) -> ProblemSummary:
     return ProblemSummary(
         problem_id=problem.problem_id,
@@ -1175,6 +1186,14 @@ def create_app(
         # Optional context data for 8-factor severity
         context_data = body.get("context_data")
 
+        # Past learnings inform synthesis (outcome-grounded self-improvement loop).
+        # ponytail: best-effort — synthesis works fine without learnings, so a
+        # store/DB hiccup degrades gracefully rather than failing the triage run.
+        try:
+            learnings = default_learning_store().load(workspace_id=1)
+        except Exception:
+            learnings = []
+
         graph = build_triage_graph(checkpointer=MemorySaver())
         config = {"configurable": {"thread_id": f"triage-{utc_now()}"}}
 
@@ -1183,6 +1202,7 @@ def create_app(
                 "signals": raw_signals,
                 "connector_configs": conn_configs,
                 "context_data": context_data,
+                "learnings": learnings,
             },
             config=config,
         )

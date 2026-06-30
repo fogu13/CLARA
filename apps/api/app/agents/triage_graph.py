@@ -80,7 +80,12 @@ def enrich_node(state: TriageState) -> dict[str, Any]:
     if not items:
         return {"enriched_signals": [], "enrichment_count": 0}
 
-    enrichments = enrich_signals(items)
+    # Few-shot exemplars pin the model to the project's tag vocabulary + urgency
+    # calibration (Phase B). On by default; disable with ENRICH_FEWSHOT=0.
+    from app.services.exemplar_store import fewshot_enabled, load_exemplars
+
+    exemplars = load_exemplars() if fewshot_enabled() else None
+    enrichments = enrich_signals(items, exemplars=exemplars)
 
     # Merge enrichments back into signals
     enrichment_map = {e["id"]: e for e in enrichments}
@@ -162,7 +167,11 @@ def synthesize_node(state: TriageState) -> dict[str, Any]:
         return {"insights": [], "status": "synthesized"}
 
     context_data = state.get("context_data")
-    insights = synthesize_insights(enriched, context_data=context_data)
+    insights = synthesize_insights(
+        enriched,
+        context_data=context_data,
+        learnings=state.get("learnings"),
+    )
 
     errors = list(state.get("errors", []))
     if not insights and enriched:

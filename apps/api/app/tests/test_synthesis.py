@@ -196,16 +196,35 @@ class TestClusterSignals:
         assert len(clusters) == 1
 
     def test_high_jaccard_threshold_separates_partial(self, _mock_ai_env: None) -> None:
-        """High threshold keeps partial-overlap signals separate."""
+        """High threshold keeps low-token-overlap signals separate."""
         from app.services.synthesis import cluster_signals
 
         signals = [
             {"id": "s1", "tags": ["checkout_failure", "payment_error"]},
-            {"id": "s2", "tags": ["checkout_failure", "bug"]},
+            {"id": "s2", "tags": ["checkout_failure", "billing_dispute"]},
         ]
-        # Jaccard = 0.333; threshold 0.50 keeps them separate
+        # theme tokens {checkout,payment} vs {checkout,billing,dispute}:
+        # Jaccard = 1/4 = 0.25; threshold 0.50 keeps them separate
         clusters = cluster_signals(signals, jaccard_threshold=0.50)
         assert len(clusters) == 2
+
+    def test_synonym_tags_cluster_on_theme_token(self, _mock_ai_env: None) -> None:
+        """Near-synonym tags collapse onto a shared theme token and group.
+
+        This is the real-data fix: GLM writes support_unresponsive /
+        support_unavailable / slow_support for one theme; exact-tag overlap left
+        them apart, theme-token overlap merges them.
+        """
+        from app.services.synthesis import cluster_signals
+
+        signals = [
+            {"id": "s1", "tags": ["support_unresponsive"]},
+            {"id": "s2", "tags": ["support_unavailable"]},
+            {"id": "s3", "tags": ["slow_support"]},
+        ]
+        clusters = cluster_signals(signals)
+        assert len(clusters) == 1
+        assert len(clusters[0][1]) == 3
 
     def test_no_tags_separate(self, _mock_ai_env: None) -> None:
         from app.services.synthesis import cluster_signals
@@ -290,7 +309,7 @@ class TestSynthesizeInsights:
         assert insight["frequency"]["raw_count"] == 3
         assert insight["frequency"]["trend"] in ("rising", "falling", "stable", "new")
         assert insight["source_count"] == 1
-        assert insight["cluster_method"] == "jaccard"
+        assert insight["cluster_method"] == "token_jaccard"
         assert insight["audit"]["severity_source"] == "simple_urgency_volume"
 
     def test_skips_clusters_below_min_size(self, _mock_ai_env: None) -> None:

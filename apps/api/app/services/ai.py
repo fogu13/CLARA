@@ -22,11 +22,19 @@ import json
 import logging
 import os
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import httpx
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+
+# Auto-load apps/api/.env so the API + eval scripts pick up AI_* config without a
+# manual `source`. override=False so real exported env vars (and test monkeypatches)
+# always win over the file. ai.py is the single module that reads AI_* at import,
+# so loading here covers every entrypoint.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 # --- Configuration (read once at import; mirror _shared/ai.ts) ---
 AI_BASE_URL = (os.getenv("AI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
@@ -133,6 +141,14 @@ def call_tool(
         "tools": [tool],
         "tool_choice": {"type": "function", "function": {"name": tool_name}},
     }
+    # Pin sampling when AI_TEMPERATURE is set (eval determinism). Unset = provider
+    # default, so normal runtime behaviour is unchanged.
+    _temp = os.getenv("AI_TEMPERATURE")
+    if _temp:
+        try:
+            body["temperature"] = float(_temp)
+        except ValueError:
+            logger.warning("Ignoring non-numeric AI_TEMPERATURE=%r", _temp)
 
     lf = _get_langfuse()
     obs = None
