@@ -136,6 +136,9 @@ class WorkspaceSettings(BaseModel):
     notification_email: str = ""
     measurement_window_days: int = 14
     learning_half_life_days: int = 180
+    # Industry profile retunes impact prioritisation (see industry_profiles.py).
+    # Persisted per workspace; the active global scorer reads env INDUSTRY_PROFILE.
+    industry_profile: str = "default"
 
 
 class SystemConfig(BaseModel):
