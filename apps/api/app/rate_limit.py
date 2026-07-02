@@ -16,6 +16,7 @@ from collections import defaultdict
 
 from fastapi import Depends, HTTPException
 
+import app.auth as auth
 from app.auth import UserContext, get_current_user
 from app.billing import Plan
 
@@ -40,6 +41,12 @@ def rate_limiter(user: UserContext = Depends(get_current_user)) -> None:  # noqa
         ):
             ...
     """
+    # Rate limiting is off when auth is disabled (local dev / tests are single-user
+    # and would otherwise trip the per-minute cap during fast test runs). Referenced
+    # live (not import-bound) so it tracks auth (re)configuration.
+    if not auth.AUTH_ENABLED:
+        return
+
     current_minute = int(time.time() // 60)
     key = (user.workspace_id, current_minute)
 

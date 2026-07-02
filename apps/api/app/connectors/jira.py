@@ -23,7 +23,7 @@ from typing import Any
 
 import httpx
 
-from app.connectors.base import ConnectorError
+from app.connectors.base import ConnectorError, validate_external_url
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,7 @@ class JiraDestinationConnector:
                 "Missing Jira config (base_url, email, api_token, project_key required)",
                 connector="jira",
             )
+        validate_external_url(base_url, connector="jira")  # SSRF guard on user-supplied URL
 
         # Build the issue payload from the action + insight context
         payload = self._build_issue_payload(action, project_key)

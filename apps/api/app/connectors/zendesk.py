@@ -28,6 +28,8 @@ import logging
 from datetime import datetime
 from typing import Any
 
+import re
+
 import httpx
 
 from app.connectors.base import ConnectorError
@@ -53,6 +55,12 @@ class ZendeskSourceConnector:
             raise ConnectorError(
                 "Missing Zendesk credentials (subdomain, email, api_token required)",
                 connector="zendesk",
+            )
+        # SSRF guard: subdomain is interpolated into the host, so restrict it to the
+        # Zendesk subdomain charset (letters/digits/hyphen) — no dots, slashes, @, etc.
+        if not re.fullmatch(r"[A-Za-z0-9-]+", subdomain):
+            raise ConnectorError(
+                f"Invalid Zendesk subdomain '{subdomain}'", connector="zendesk"
             )
 
         field_map = config.get("field_map", {})
