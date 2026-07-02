@@ -7,6 +7,7 @@ import {
   recordOutcomeMeasurement
 } from "../../lib/client-api";
 import type { LearningStatus, OutcomeContract, OutcomeSnapshot } from "../../lib/types";
+import { formatMetric } from "@/lib/format";
 
 type PanelState = {
   status: "loading" | "ready" | "saving" | "error";
@@ -29,11 +30,6 @@ const learningStatuses: LearningStatus[] = [
   "measurement_invalid"
 ];
 
-function formatMetric(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "None";
-  if (value < 1) return `${Math.round(value * 100)}%`;
-  return String(value);
-}
 
 function directionLabel(direction: OutcomeSnapshot["improvement_direction"] | undefined): string {
   if (!direction) return "Direction loading";

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getOutcomeBoard } from "../../lib/client-api";
 import type { OutcomeBoard, OutcomeBoardItem } from "../../lib/types";
 import { StateNotice } from "./state-notice";
+import { formatMetric, percent } from "@/lib/format";
 
 type BoardState = {
   status: "loading" | "ready" | "error";
@@ -18,15 +19,7 @@ const outcomeLabels: Record<OutcomeBoardItem["outcome_status"], string> = {
   not_improved: "Not improved"
 };
 
-function formatMetric(value: number | null | undefined): string {
-  if (value === null || value === undefined) return "None";
-  if (Math.abs(value) < 1) return `${Math.round(value * 100)}%`;
-  return String(value);
-}
 
-function percent(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
 
 function directionLabel(direction: OutcomeBoardItem["improvement_direction"]): string {
   return direction === "increase" ? "Higher is better" : "Lower is better";

@@ -15,6 +15,7 @@ import type {
   CustomerContextValidationReport
 } from "../../lib/types";
 import { StateNotice } from "./state-notice";
+import { percent } from "@/lib/format";
 
 type ContextState = {
   status: "loading" | "ready" | "saving" | "error";
@@ -59,9 +60,6 @@ function contextStats(records: CustomerContextRecord[]) {
   };
 }
 
-function percent(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
 
 function readinessLabel(value: string): string {
   return value.replaceAll("_", " ");
