@@ -23,6 +23,17 @@ async function fetchJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+// Sample/demo data must be OPT-IN. Silently substituting it on any API error made a
+// broken/unreachable backend look like real customer data. When the flag is off we log
+// and re-throw so the failure is visible instead of faked.
+const ALLOW_SAMPLE_DATA = process.env.NEXT_PUBLIC_ALLOW_SAMPLE_DATA === "true";
+
+function onApiError<T>(context: string, error: unknown, sample: T): T {
+  console.error(`[api] ${context} failed`, error);
+  if (ALLOW_SAMPLE_DATA) return sample;
+  throw error instanceof Error ? error : new Error(String(error));
+}
+
 export async function getActionQueueProblems(): Promise<ProblemRecord[]> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -31,8 +42,8 @@ export async function getActionQueueProblems(): Promise<ProblemRecord[]> {
     return Promise.all(
       summaries.map((problem) => fetchJson<ProblemRecord>(`${apiUrl}/problems/${problem.problem_id}`))
     );
-  } catch {
-    return fallbackProblems;
+  } catch (error) {
+    return onApiError("getActionQueueProblems", error, fallbackProblems);
   }
 }
 
@@ -41,8 +52,8 @@ export async function getPolicyRules(): Promise<PolicyRule[]> {
 
   try {
     return await fetchJson<PolicyRule[]>(`${apiUrl}/policy-rules`);
-  } catch {
-    return fallbackPolicyRules;
+  } catch (error) {
+    return onApiError("getPolicyRules", error, fallbackPolicyRules);
   }
 }
 
@@ -51,8 +62,8 @@ export async function getTaxonomies(): Promise<TaxonomyCatalog[]> {
 
   try {
     return await fetchJson<TaxonomyCatalog[]>(`${apiUrl}/taxonomies`);
-  } catch {
-    return fallbackTaxonomies;
+  } catch (error) {
+    return onApiError("getTaxonomies", error, fallbackTaxonomies);
   }
 }
 
@@ -61,8 +72,8 @@ export async function getTerminologyDictionary(): Promise<TerminologyDictionaryE
 
   try {
     return await fetchJson<TerminologyDictionaryEntry[]>(`${apiUrl}/terminology-dictionary`);
-  } catch {
-    return fallbackTerminologyDictionary;
+  } catch (error) {
+    return onApiError("getTerminologyDictionary", error, fallbackTerminologyDictionary);
   }
 }
 
@@ -71,7 +82,7 @@ export async function getEmergingProblems(): Promise<EmergingProblemReport> {
 
   try {
     return await fetchJson<EmergingProblemReport>(`${apiUrl}/emerging-problems`);
-  } catch {
-    return fallbackEmergingProblems;
+  } catch (error) {
+    return onApiError("getEmergingProblems", error, fallbackEmergingProblems);
   }
 }

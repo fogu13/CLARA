@@ -38,54 +38,71 @@ function normalizeHeader(value: string): string {
   return value.trim().toLowerCase().replace(/[\s-]+/g, "_");
 }
 
-function parseCsvLine(line: string): string[] {
-  const cells: string[] = [];
-  let current = "";
+// Single-pass tokenizer that tracks quote state across newlines, so a quoted field
+// containing a newline (valid RFC-4180 CSV) is kept intact instead of being split
+// into corrupt rows. Returns rows of raw (untrimmed) cells.
+function tokenizeCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let cell = "";
+  let row: string[] = [];
   let insideQuote = false;
 
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    const nextCharacter = line[index + 1];
-
-    if (character === '"' && insideQuote && nextCharacter === '"') {
-      current += '"';
-      index += 1;
-      continue;
-    }
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    const nextCharacter = text[index + 1];
 
     if (character === '"') {
-      insideQuote = !insideQuote;
+      if (insideQuote && nextCharacter === '"') {
+        cell += '"';
+        index += 1; // escaped quote
+      } else {
+        insideQuote = !insideQuote;
+      }
       continue;
     }
 
     if (character === "," && !insideQuote) {
-      cells.push(current);
-      current = "";
+      row.push(cell);
+      cell = "";
       continue;
     }
 
-    current += character;
+    if ((character === "\n" || character === "\r") && !insideQuote) {
+      if (character === "\r" && nextCharacter === "\n") {
+        index += 1; // treat CRLF as one break
+      }
+      row.push(cell);
+      rows.push(row);
+      cell = "";
+      row = [];
+      continue;
+    }
+
+    cell += character;
   }
 
-  cells.push(current);
-  return cells.map((cell) => cell.trim());
+  // Flush a trailing cell/row (unless the text ended exactly on a row break).
+  if (cell !== "" || row.length > 0) {
+    row.push(cell);
+    rows.push(row);
+  }
+
+  return rows;
 }
 
 export function parseCsv(csvText: string): ParsedCsv {
-  const lines = csvText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const trimmed = tokenizeCsv(csvText)
+    .map((cells) => cells.map((cell) => cell.trim()))
+    .filter((cells) => cells.some((cell) => cell !== "")); // drop fully-empty rows
 
-  if (lines.length === 0) {
+  if (trimmed.length === 0) {
     return { headers: [], rows: [] };
   }
 
-  const headers = parseCsvLine(lines[0]);
-  const rows = lines.slice(1).map((line) => {
-    const cells = parseCsvLine(line);
-    return Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? ""]));
-  });
+  const headers = trimmed[0];
+  const rows = trimmed.slice(1).map((cells) =>
+    Object.fromEntries(headers.map((header, index) => [header, cells[index] ?? ""]))
+  );
 
   return { headers, rows };
 }
