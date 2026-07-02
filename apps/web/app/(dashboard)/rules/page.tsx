@@ -139,7 +139,10 @@ export default function RulesPage() {
                   type="number"
                   className="mt-1 w-24"
                   value={draft.priority}
-                  onChange={(event) => setDraft({ ...draft, priority: Number(event.target.value) })}
+                  onChange={(event) => {
+                    // Don't coerce an empty field to 0 (Number("") === 0).
+                    if (event.target.value !== "") setDraft({ ...draft, priority: Number(event.target.value) });
+                  }}
                 />
               </div>
               <label className="flex items-center gap-2 text-sm">
