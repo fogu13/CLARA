@@ -38,11 +38,20 @@ def parse_metadata(value: str | None) -> dict[str, str]:
     return {str(key): str(item) for key, item in parsed.items()} if isinstance(parsed, dict) else {}
 
 
+def _parse_duration(value: str | None) -> float | None:
+    """Parse duration_seconds, tolerating blank/non-numeric cells (no HTTP 500)."""
+    if not value or not str(value).strip():
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None
+
+
 def parse_journey_event_csv(csv_text: str) -> list[JourneyEventRecord]:
     reader = csv.DictReader(io.StringIO(csv_text.strip()))
     events: list[JourneyEventRecord] = []
     for index, row in enumerate(reader, start=1):
-        duration = row.get("duration_seconds") or None
         events.append(
             JourneyEventRecord(
                 event_id=row.get("event_id") or f"JEV-CSV-{index:04d}",
@@ -54,7 +63,7 @@ def parse_journey_event_csv(csv_text: str) -> list[JourneyEventRecord]:
                 event_type=row.get("event_type") or "behavior",
                 timestamp=row.get("timestamp") or "1970-01-01T00:00:00Z",
                 success=parse_bool(row.get("success")),
-                duration_seconds=float(duration) if duration else None,
+                duration_seconds=_parse_duration(row.get("duration_seconds")),
                 metadata=parse_metadata(row.get("metadata")),
             )
         )

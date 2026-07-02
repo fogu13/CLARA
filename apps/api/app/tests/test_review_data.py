@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 from app.evals.harness import EvalHarness
 from app.services.contexts import parse_context_csv
+from app.services.frequency import _parse_timestamp, frequency_factors
+from app.services.journeys import parse_journey_event_csv
 from app.services.postgres import _next_id
 from app.services.signals import parse_signal_csv
 
@@ -53,3 +55,28 @@ class TestContextCsvProductOwner:
         csv = "customer_id,account_id,product_owner\nc1,a1,Jane Doe\n"
         rec = parse_context_csv(csv)[0]
         assert rec.product_owner == "Jane Doe"
+
+
+class TestFrequencyTimestampCoercion:
+    def test_timestamps_are_always_aware(self) -> None:
+        # both naive-input and aware-input coerce to tz-aware, so min()/max() is safe
+        assert _parse_timestamp("2024-01-01T00:00:00").tzinfo is not None
+        assert _parse_timestamp("2024-01-01T00:00:00Z").tzinfo is not None
+
+    def test_mixed_naive_and_aware_signals_do_not_crash(self) -> None:
+        signals = [
+            {"source": "a", "timestamp": "2024-01-01T00:00:00"},   # naive input
+            {"source": "b", "timestamp": "2024-02-01T00:00:00Z"},  # aware input
+        ]
+        result = frequency_factors(signals)  # previously raised TypeError
+        assert result["first_seen"] is not None and result["last_seen"] is not None
+
+
+class TestJourneyCsvBadDuration:
+    def test_non_numeric_duration_does_not_raise(self) -> None:
+        csv = ("event_id,customer_id,event_name,duration_seconds\n"
+               "e1,c1,login,not-a-number\n"
+               "e2,c2,logout,12.5\n")
+        events = parse_journey_event_csv(csv)  # previously raised ValueError -> HTTP 500
+        assert events[0].duration_seconds is None
+        assert events[1].duration_seconds == 12.5

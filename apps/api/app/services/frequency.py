@@ -29,9 +29,13 @@ def _parse_timestamp(ts: str | None) -> datetime | None:
     if not ts:
         return None
     try:
-        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
     except (ValueError, TypeError):
         return None
+    # Coerce to tz-aware UTC. Timestamps without an offset parse as naive, and mixing
+    # naive + aware in min()/max() (frequency_factors) raises TypeError; the decay math
+    # also compares against an aware `now`.
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
 def _signal_timestamp(signal: dict[str, Any]) -> datetime | None:
