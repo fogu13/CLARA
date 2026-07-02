@@ -5,25 +5,40 @@ import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Lightbulb, AlertCircle } from "lucide-react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getProblems } from "@/lib/client-api";
 
 export default function InsightsPage() {
   const [problems, setProblems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`${API_URL}/problems`);
-        if (res.ok) setProblems(await res.json());
-      } catch { /* API not running */ }
-      finally { setLoading(false); }
+        // getProblems() sends the auth headers and throws on a non-2xx response, so a
+        // failure surfaces as an error instead of being masked as "No insights yet".
+        setProblems(await getProblems());
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load insights");
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
 
   if (loading) return <div className="text-muted-foreground">Loading insights...</div>;
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="text-center py-12">
+          <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">Failed to load insights: {error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const columns = [
     { key: "validation_required", label: "Validation", statuses: ["validation_required"] },

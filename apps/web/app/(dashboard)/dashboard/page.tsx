@@ -202,7 +202,9 @@ function approvedActionIds(approvals: ApprovalRecord[]): Set<string> {
 
 async function getConnectors(): Promise<ConnectorSummary[]> {
   const response = await fetch(`${apiBaseUrl()}/connectors`, { headers: apiHeaders() });
-  if (!response.ok) return [];
+  // Throw on a non-ok status so the caller's .catch records it as a partial source;
+  // returning [] here silently hid connector HTTP errors from the "partial data" notice.
+  if (!response.ok) throw new Error(`connectors request failed (${response.status})`);
   return response.json() as Promise<ConnectorSummary[]>;
 }
 
