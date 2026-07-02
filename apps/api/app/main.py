@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from collections import Counter
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -115,7 +116,7 @@ from app.services.signals import (
     validate_signal_csv,
 )
 from app.services.taxonomies import TaxonomyStore, TerminologyStore, classify_candidate
-from app.services.workflow import SQLiteWorkflowStore, utc_now
+from app.services.workflow import SQLiteWorkflowStore
 from app.services.workspace import SQLiteWorkspaceStore
 
 
@@ -1146,22 +1147,29 @@ def create_app(
         raise HTTPException(status_code=400, detail=f"Unknown connector type: {connector_type}")
 
     # ====== Triage pipeline endpoint ======
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.types import Command
+
+    from app.agents.triage_graph import build_triage_graph
+
+    # App-scoped graph + checkpointer so a run that pauses at the human-approval
+    # interrupt can be RESUMED by a later request (POST /triage/resume). Previously the
+    # endpoint built a fresh per-request MemorySaver and discarded it, so the paused
+    # state was lost and action/measure/learn never ran for consequential actions —
+    # the whole outcome loop was unreachable in production.
+    # ponytail: in-process MemorySaver — resume works within one worker. Multi-worker
+    # durability needs PostgresSaver (langgraph-checkpoint-postgres is already a dep).
+    triage_graph = build_triage_graph(checkpointer=MemorySaver())
 
     @api.post("/triage/run", dependencies=[Depends(require_role(Role.editor)), Depends(rate_limiter)])
     def run_triage_pipeline(body: dict, user: UserContext = Depends(get_current_user)) -> dict:  # noqa: B008
         """Run the LangGraph triage pipeline on signals.
 
-        Input: { "signals": [...], "connector_configs": {...}, "context_data": {...} }
-        Output: { "insights": [...], "status": "synthesized", "errors": [...] }
-
-        The pipeline runs ingest -> enrich -> classify -> synthesize and
-        returns insights. The human-in-the-loop approval interrupt is handled
-        separately via the Actions page.
+        Runs ingest -> enrich -> classify -> synthesize -> governance -> approval.
+        When consequential actions require human approval the graph PAUSES at the
+        approval interrupt and this returns status="awaiting_approval" with a
+        thread_id; resume via POST /triage/resume to run action -> measure -> learn.
         """
-        from langgraph.checkpoint.memory import MemorySaver
-
-        from app.agents.triage_graph import build_triage_graph
-
         raw_signals = body.get("signals", [])
         if not raw_signals:
             # If no signals provided, pull from the signal store
@@ -1201,10 +1209,10 @@ def create_app(
         except Exception:
             learnings = []
 
-        graph = build_triage_graph(checkpointer=MemorySaver())
-        config = {"configurable": {"thread_id": f"triage-{utc_now()}"}}
+        thread_id = f"triage-{uuid4().hex}"
+        config = {"configurable": {"thread_id": thread_id}}
 
-        result = graph.invoke(
+        result = triage_graph.invoke(
             {
                 "signals": raw_signals,
                 "connector_configs": conn_configs,
@@ -1214,10 +1222,54 @@ def create_app(
             config=config,
         )
 
+        # A non-empty `next` means the graph paused at the approval interrupt.
+        if triage_graph.get_state(config).next:
+            return {
+                "status": "awaiting_approval",
+                "thread_id": thread_id,
+                "insights": result.get("insights", []),
+                "enriched_count": result.get("enrichment_count", 0),
+                "errors": result.get("errors", []),
+            }
+
+        # Ran to completion (no consequential actions / approval skipped).
         return {
             "insights": result.get("insights", []),
             "enriched_count": result.get("enrichment_count", 0),
             "status": result.get("status", "unknown"),
+            "errors": result.get("errors", []),
+            "thread_id": thread_id,
+        }
+
+    @api.post("/triage/resume", dependencies=[Depends(require_role(Role.editor)), Depends(rate_limiter)])
+    def resume_triage_pipeline(body: dict, user: UserContext = Depends(get_current_user)) -> dict:  # noqa: B008
+        """Resume a paused triage run after human approval.
+
+        Input: { "thread_id": "...", "decision": "approved" | "rejected" }. On
+        approval the graph runs action -> measure -> learn (closing the outcome loop).
+        """
+        thread_id = body.get("thread_id")
+        decision = (body.get("decision") or "approved").strip().lower()
+        if not thread_id:
+            raise HTTPException(status_code=422, detail="thread_id is required")
+        if decision not in ("approved", "rejected"):
+            raise HTTPException(status_code=422, detail="decision must be 'approved' or 'rejected'")
+
+        config = {"configurable": {"thread_id": thread_id}}
+        if not triage_graph.get_state(config).next:
+            raise HTTPException(
+                status_code=404,
+                detail="No triage run awaiting approval for that thread_id (expired or already resumed)",
+            )
+
+        result = triage_graph.invoke(Command(resume=decision), config=config)
+        return {
+            "status": result.get("status", "unknown"),
+            "approval_decision": result.get("approval_decision"),
+            "approved_insights": result.get("approved_insights", []),
+            "action_results": result.get("action_results", []),
+            "outcome": result.get("outcome"),
+            "learning": result.get("learning"),
             "errors": result.get("errors", []),
         }
 

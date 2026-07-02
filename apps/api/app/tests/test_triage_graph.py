@@ -365,12 +365,9 @@ class TestEnrichNodeProvenance:
         assert s["signal_type"] == "quantitative"  # real type preserved, not hardcoded
 
 
-def test_main_imports_utc_now() -> None:
-    """Regression: /triage/run called utc_now() without importing it (NameError -> 500)."""
-    import app.main as main_mod
-
-    assert callable(main_mod.utc_now)
-    assert main_mod.utc_now()  # the f"triage-{utc_now()}" call site no longer NameErrors
+# (Removed test_main_imports_utc_now: /triage/run now generates its thread_id via
+# uuid4, and test_review_outcome_loop.py exercises the endpoint end-to-end, which
+# would catch any NameError in the run path.)
 
 
 class TestSemanticTaxonomy:
