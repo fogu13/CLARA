@@ -101,23 +101,36 @@ export default function IntegrationsPage() {
     if (!editingConnector) return;
     setSaving(true);
     try {
-      await fetch(`${API_URL}/connectors/${editingConnector}`, {
+      const res = await fetch(`${API_URL}/connectors/${editingConnector}`, {
         method: "PUT",
         headers: apiHeaders(),
         body: JSON.stringify(formData),
       });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => null);
+        throw new Error(detail?.detail ?? `Save failed (${res.status})`);
+      }
       await loadConnectors();
       setEditingConnector(null);
-    } catch {
-      // ignore
+    } catch (e) {
+      // Previously swallowed — a failed save (e.g. 403 for non-admins) looked successful.
+      alert(`Save failed: ${e instanceof Error ? e.message : "unknown"}`);
     } finally {
       setSaving(false);
     }
   }
 
   async function deleteConnector(type: string) {
-    await fetch(`${API_URL}/connectors/${type}`, { method: "DELETE", headers: apiHeaders() });
-    await loadConnectors();
+    try {
+      const res = await fetch(`${API_URL}/connectors/${type}`, { method: "DELETE", headers: apiHeaders() });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => null);
+        throw new Error(detail?.detail ?? `Delete failed (${res.status})`);
+      }
+      await loadConnectors();
+    } catch (e) {
+      alert(`Delete failed: ${e instanceof Error ? e.message : "unknown"}`);
+    }
   }
 
   async function testConnector() {
@@ -150,7 +163,10 @@ export default function IntegrationsPage() {
         headers: apiHeaders(),
         body: JSON.stringify({}),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.detail ?? `Pull failed (${res.status})`);
+      }
       alert(`Pulled ${data.pulled} signals from Zendesk`);
     } catch (e) {
       alert(`Pull failed: ${e instanceof Error ? e.message : "unknown"}`);
