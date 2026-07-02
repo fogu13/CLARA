@@ -59,6 +59,32 @@ class TestZendeskPull:
         assert signals[0]["customer_id"] == "5001"
         assert signals[0]["metadata"]["external_id"] == "101"
 
+    def test_follows_pagination(self, httpx_mock: Any) -> None:
+        """Regression: pull must follow next_page, not cap at the first ~100 tickets."""
+        from app.connectors.zendesk import ZendeskSourceConnector
+
+        next_url = "https://company.zendesk.com/api/v2/tickets.json?per_page=100&page=2"
+        httpx_mock.add_response(
+            url="https://company.zendesk.com/api/v2/tickets.json?per_page=100",
+            method="GET",
+            json={"tickets": [_make_ticket(101), _make_ticket(102)], "next_page": next_url},
+        )
+        httpx_mock.add_response(
+            url=next_url,
+            method="GET",
+            json={"tickets": [_make_ticket(103)], "next_page": None},
+        )
+
+        connector = ZendeskSourceConnector()
+        signals = connector.pull({
+            "subdomain": "company",
+            "email": "user@company.com",
+            "api_token": "secret-token",
+        })
+
+        assert len(signals) == 3  # both pages, not capped at page 1
+        assert {s["signal_id"] for s in signals} == {"zd-101", "zd-102", "zd-103"}
+
     def test_uses_basic_auth_header(self, httpx_mock: Any) -> None:
         from app.connectors.zendesk import ZendeskSourceConnector
 

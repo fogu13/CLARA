@@ -84,51 +84,65 @@ class ZendeskSourceConnector:
             "Accept": "application/json",
         }
 
+        # Follow pagination instead of silently capping at the first page (~100 tickets).
+        # Offset pages return a `next_page` URL; incremental cursor pages return
+        # `after_url` + `end_of_stream`. Bound the loop so a huge/looping account can't
+        # run away. ponytail: MAX_PAGES=100 (~10k tickets/pull); raise if needed.
+        MAX_PAGES = 100
+        signals: list[dict[str, Any]] = []
+        latest = ""
+        next_url: str | None = url
+        next_params: dict[str, Any] | None = params
+
         try:
             with httpx.Client(timeout=30.0) as client:
-                resp = client.get(url, headers=headers, params=params)
+                for _ in range(MAX_PAGES):
+                    if next_url is None:
+                        break
+                    resp = client.get(next_url, headers=headers, params=next_params)
+
+                    if resp.status_code == 401:
+                        raise ConnectorError(
+                            "Zendesk auth failed — check email and api_token",
+                            connector="zendesk",
+                            status=401,
+                        )
+                    if resp.status_code == 429:
+                        raise ConnectorError(
+                            "Zendesk rate limit exceeded — retry later",
+                            connector="zendesk",
+                            status=429,
+                        )
+                    if resp.status_code != 200:
+                        raise ConnectorError(
+                            f"Zendesk API error {resp.status_code}: {resp.text[:200]}",
+                            connector="zendesk",
+                            status=resp.status_code,
+                        )
+
+                    data = resp.json()
+                    tickets = data.get("tickets", [])
+                    for ticket in tickets:
+                        signal = self._map_ticket(ticket, field_map, config)
+                        if signal:
+                            signals.append(signal)
+                    if tickets:
+                        latest = max(latest, max(t.get("updated_at", "") for t in tickets))
+
+                    # Advance: stop at end-of-stream, else follow the API's next URL.
+                    if data.get("end_of_stream"):
+                        break
+                    next_url = data.get("next_page") or data.get("after_url")
+                    next_params = None  # the next/after URL already carries its params
         except httpx.RequestError as exc:
             raise ConnectorError(
                 f"Zendesk API unreachable: {exc}",
                 connector="zendesk",
             ) from exc
 
-        if resp.status_code == 401:
-            raise ConnectorError(
-                "Zendesk auth failed — check email and api_token",
-                connector="zendesk",
-                status=401,
-            )
-        if resp.status_code == 429:
-            raise ConnectorError(
-                "Zendesk rate limit exceeded — retry later",
-                connector="zendesk",
-                status=429,
-            )
-        if resp.status_code != 200:
-            raise ConnectorError(
-                f"Zendesk API error {resp.status_code}: {resp.text[:200]}",
-                connector="zendesk",
-                status=resp.status_code,
-            )
-
-        data = resp.json()
-        tickets = data.get("tickets", [])
-        if not tickets:
-            return []
-
-        # Map tickets to canonical signal dicts
-        signals: list[dict[str, Any]] = []
-        for ticket in tickets:
-            signal = self._map_ticket(ticket, field_map, config)
-            if signal:
-                signals.append(signal)
-
-        # Return the latest timestamp for incremental sync
-        if tickets:
-            latest = max(t.get("updated_at", "") for t in tickets)
-            if signals:
-                signals[0].setdefault("_sync_metadata", {})["last_synced_at"] = latest
+        # Attach the latest timestamp so the caller can persist last_synced_at.
+        if signals and latest:
+            signals[0].setdefault("_sync_metadata", {})["last_synced_at"] = latest
 
         return signals
 

@@ -90,11 +90,20 @@ class TestTrendLabel:
         assert trend_label(sigs, recent_window_days=7, baseline_window_days=30, now=NOW) == "falling"
 
     def test_stable_trend(self) -> None:
-        # Similar counts in both windows
+        # Similar per-day RATE in both windows: 2 signals / 7 days (~0.29) vs
+        # 8 signals / 30 days (~0.27) -> ratio ~1.07 -> stable.
+        recent = [_signal(0), _signal(1)]
+        baseline = [_signal(d) for d in range(8, 16)]
+        sigs = recent + baseline
+        assert trend_label(sigs, recent_window_days=7, baseline_window_days=30, now=NOW) == "stable"
+
+    def test_equal_counts_unequal_windows_is_rising_not_stable(self) -> None:
+        # Regression: equal COUNTS in a 7-day vs 30-day window is a ~4x rate increase.
+        # The old count-ratio logic wrongly called this "stable".
         recent = [_signal(d) for d in range(0, 5)]
         baseline = [_signal(d) for d in range(8, 13)]
         sigs = recent + baseline
-        assert trend_label(sigs, recent_window_days=7, baseline_window_days=30, now=NOW) == "stable"
+        assert trend_label(sigs, recent_window_days=7, baseline_window_days=30, now=NOW) == "rising"
 
     def test_no_timestamp_treated_as_recent(self) -> None:
         sigs = [{"id": "s1", "text": "no ts"}, {"id": "s2", "text": "no ts"}]

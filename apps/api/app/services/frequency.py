@@ -149,7 +149,12 @@ def trend_label(
     if not has_baseline or baseline_count == 0:
         return "new" if recent_count > 0 else "stable"
 
-    ratio = recent_count / baseline_count
+    # Normalize to per-day RATES before comparing — the recent window (e.g. 7 days) is
+    # shorter than the baseline window (e.g. 30 days), so comparing raw counts made a
+    # steady stream look like it was "falling" (7/30 < 0.5).
+    recent_rate = recent_count / recent_window_days
+    baseline_rate = baseline_count / baseline_window_days
+    ratio = recent_rate / baseline_rate
 
     if ratio >= 1.5:
         return "rising"
