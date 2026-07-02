@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getAffectedContext } from "../../lib/client-api";
 import type { AffectedContextExplorer, CustomerContextRecord } from "../../lib/types";
 import { StateNotice } from "./state-notice";
+import { percent } from "@/lib/format";
 
 type ExplorerState = {
   status: "loading" | "ready" | "error";
@@ -19,9 +20,6 @@ function formatCurrency(value: number): string {
   }).format(value);
 }
 
-function percent(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
 
 function joinOrDash(values: string[]): string {
   return values.length ? values.join(", ") : "-";

@@ -19,6 +19,7 @@ import {
 import { apiBaseUrl, apiHeaders, getApprovals, getExecutions, getOutcomeBoard, getProblems } from "@/lib/client-api";
 import { fallbackProblems } from "@/lib/sample-data";
 import type { ActionClass, ApprovalRecord, ExecutionRecord, OutcomeBoard, OutcomeBoardItem, ProblemSummary } from "@/lib/types";
+import { percent } from "@/lib/format";
 
 type ConnectorSummary = { connector_type: string; is_active: boolean };
 
@@ -58,9 +59,6 @@ function label(value: string): string {
   return value.replaceAll("_", " ");
 }
 
-function percent(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
 
 function compact(value: number): string {
   return new Intl.NumberFormat("en", { notation: "compact" }).format(value);

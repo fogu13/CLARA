@@ -27,6 +27,7 @@ import type {
   SignalValidationReport
 } from "../../lib/types";
 import { StateNotice } from "./state-notice";
+import { percent } from "@/lib/format";
 
 type IntakeState = {
   status: "loading" | "ready" | "saving" | "error";
@@ -48,9 +49,6 @@ type ValidationState = {
   report: SignalValidationReport;
 };
 
-function percent(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
 
 const candidateStatusLabels: Record<ProblemCandidate["review_status"], string> = {
   pending: "Pending",

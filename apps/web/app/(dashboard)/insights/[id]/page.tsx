@@ -11,6 +11,7 @@ import { EvidencePanel } from "@/app/components/evidence-panel";
 import { OutcomeMeasurementPanel } from "@/app/components/outcome-measurement-panel";
 import { ProblemLifecyclePanel } from "@/app/components/problem-lifecycle-panel";
 import { getActionQueueProblems, getPolicyRules } from "@/lib/api";
+import { percent } from "@/lib/format";
 import type {
   ActionClass,
   ActionProposal,
@@ -21,9 +22,6 @@ import type {
   ProblemRecord
 } from "@/lib/types";
 
-function percent(value: number | undefined): string {
-  return `${Math.round((value ?? 0) * 100)}%`;
-}
 
 function label(value: string): string {
   return value.replaceAll("_", " ");
