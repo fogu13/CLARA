@@ -186,8 +186,14 @@ def call_tool(
             obs.end(level="ERROR", status_message=str(err), usage_details={})
         raise err
 
-    arguments = tool_calls[0]["function"]["arguments"]
-    parsed = json.loads(arguments)
+    try:
+        arguments = tool_calls[0]["function"]["arguments"]
+        parsed = json.loads(arguments)
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+        err = NoStructuredResponseError(f"Malformed tool-call arguments from AI: {exc}")
+        if obs is not None:
+            obs.end(level="ERROR", status_message=str(err), usage_details={})
+        raise err from exc
 
     if obs is not None:
         usage = data.get("usage", {})

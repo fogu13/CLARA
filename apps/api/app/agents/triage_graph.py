@@ -87,14 +87,16 @@ def enrich_node(state: TriageState) -> dict[str, Any]:
     exemplars = load_exemplars() if fewshot_enabled() else None
     enrichments = enrich_signals(items, exemplars=exemplars)
 
-    # Merge enrichments back into signals
-    enrichment_map = {e["id"]: e for e in enrichments}
+    # Merge enrichments back into signals. Guard e.get("id") — a record missing its
+    # id would otherwise KeyError and crash the whole pipeline.
+    enrichment_map = {e["id"]: e for e in enrichments if e.get("id") is not None}
     enriched = []
+    success = 0
     for item in items:
         enr = enrichment_map.get(item["id"])
         if enr:
-            merged = merge_enrichment_into_signal(item, enr)
-            enriched.append(merged)
+            enriched.append(merge_enrichment_into_signal(item, enr))
+            success += 1
         else:
             # No enrichment returned — pass through with defaults
             enriched.append({
@@ -106,13 +108,15 @@ def enrich_node(state: TriageState) -> dict[str, Any]:
                 "enriched": False,
             })
 
+    # Compare successfully-enriched vs total. `enriched` always == len(items) (we
+    # append a fallback for every item), so the old len(enriched) check was dead code.
     errors = list(state.get("errors", []))
-    if len(enriched) < len(items):
-        errors.append(f"Enriched {len(enriched)}/{len(items)} signals (partial)")
+    if success < len(items):
+        errors.append(f"Enriched {success}/{len(items)} signals (partial)")
 
     return {
         "enriched_signals": enriched,
-        "enrichment_count": len(enriched),
+        "enrichment_count": success,
         "status": "enriched",
         "errors": errors,
     }

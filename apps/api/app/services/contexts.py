@@ -340,6 +340,7 @@ def parse_context_csv(csv_text: str) -> list[CustomerContextRecord]:
                 consent_status=parse_optional(row.get("consent_status")) or "unknown",
                 health_score=parse_number(row.get("health_score")),
                 owner=parse_optional(row.get("owner")),
+                product_owner=parse_optional(row.get("product_owner")),
                 region=parse_optional(row.get("region")),
             )
         )

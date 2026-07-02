@@ -378,6 +378,11 @@ def classify_signals(
     for catalog in catalogs:
         scored = []
         for category in catalog.categories:
+            # Skip retired categories — merged/split ones are superseded and must not
+            # win classification. (Locking uses a separate flag, so locked categories
+            # keep status "active" and still classify.)
+            if category.status in ("merged", "split"):
+                continue
             matched_signal_ids: set[str] = set()
             matched_terms: set[str] = set()
             for term in terms_for_category(catalog, category, dictionary_entries):

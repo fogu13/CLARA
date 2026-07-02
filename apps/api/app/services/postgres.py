@@ -497,7 +497,9 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         self._closure_records = closure_records
         self._approval_ids = count(_next_id(approvals, "decision_id", "DEC") + 1)
         self._execution_ids = count(_next_id(executions, "execution_id", "EXE") + 1)
-        self._jira_draft_ids = count(_next_id(jira_drafts, "draft_id", "JIRA") + 1)
+        # draft_id format is "JIRA-DRAFT-%04d" (workflow.py) — the prefix must match
+        # exactly or _next_id never resumes and regenerates colliding IDs after restart.
+        self._jira_draft_ids = count(_next_id(jira_drafts, "draft_id", "JIRA-DRAFT") + 1)
         self._transition_ids = count(_next_id(transitions, "transition_id", "TRN") + 1)
         self._closure_ids = count(_next_id(closure_records, "closure_id", "CLR") + 1)
 
