@@ -1317,6 +1317,39 @@ def create_app(
             ),
         }
 
+    @api.post("/digest/slack", dependencies=[Depends(require_role(Role.admin))])
+    def send_slack_digest() -> dict:
+        """Build the weekly digest and push it to the configured Slack channel.
+
+        Trigger from an external cron (weekly) or manually. Without an active
+        Slack connector this still returns the digest text as a preview.
+        """
+        from app.connectors import get_destination
+        from app.connectors.base import ConnectorError
+        from app.services.digest import build_digest
+
+        digest_text = build_digest(
+            emerging=build_emerging_problem_report(current_candidates()),
+            outcome_board=build_outcome_board(active_problem_store.list_problems(), workflow_store),
+            measurement_plans=measurement_plan_store.list_plans(),
+        )
+
+        slack_config = connector_config_store.get_config("slack")
+        if slack_config is None or not slack_config.is_active:
+            return {"pushed": False, "reason": "No active Slack connector", "preview": digest_text}
+
+        connector = get_destination("slack")
+        try:
+            result = connector.push(
+                {"title": "CLARA weekly digest", "description": digest_text},
+                slack_config.config,
+            )
+        except ConnectorError as exc:
+            return {"pushed": False, "reason": str(exc)[:200], "preview": digest_text}
+
+        telemetry_store.record("digest_sent", metadata={"channel": "slack"})
+        return {"pushed": True, "external_id": result.get("external_id"), "preview": digest_text}
+
     @api.get("/telemetry", dependencies=[Depends(require_role(Role.admin))])
     def get_telemetry(limit: int = 200) -> dict:
         """Product-metric events (admin): counts by type + recent events.
@@ -1437,9 +1470,9 @@ def create_app(
         if src is None:
             raise HTTPException(status_code=400, detail="Zendesk connector not available")
 
+        stored = connector_config_store.get_config("zendesk")
         pull_config = config or {}
         if not pull_config:
-            stored = connector_config_store.get_config("zendesk")
             if stored is None:
                 raise HTTPException(
                     status_code=400,
@@ -1448,14 +1481,47 @@ def create_app(
             pull_config = stored.config
 
         try:
-            signals = src.pull(pull_config)
+            raw_signals = src.pull(pull_config)
         except ConnectorError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+        # Import into the signal store (dedup by zd-<id>) — previously the pull
+        # only RETURNED the tickets and they never landed in /signals.
+        last_synced_at = None
+        records = []
+        for item in raw_signals:
+            sync_meta = item.pop("_sync_metadata", None)
+            if sync_meta and sync_meta.get("last_synced_at"):
+                last_synced_at = sync_meta["last_synced_at"]
+            metadata = {
+                key: value if isinstance(value, str) else json.dumps(value)
+                for key, value in (item.get("metadata") or {}).items()
+            }
+            records.append(SignalRecord.model_validate({**item, "metadata": metadata}))
+        result = signal_store.import_signals(records)
+
+        # Persist the incremental cursor so the next pull fetches only new/updated
+        # tickets (the connector uses config["last_synced_at"] for the cursor API).
+        # Only when pulling with the STORED config — ad-hoc test pulls don't move it.
+        if not config and stored is not None and last_synced_at:
+            stored.config["last_synced_at"] = last_synced_at
+            connector_config_store.upsert_config(stored)
+
         telemetry_store.record(
-            "signals_imported", metadata={"source": "zendesk", "imported": len(signals)}
+            "signals_imported",
+            metadata={
+                "source": "zendesk",
+                "imported": result.imported,
+                "skipped": result.skipped_duplicates,
+            },
         )
-        return {"pulled": len(signals), "signals": signals[:10]}
+        return {
+            "pulled": len(records),
+            "imported": result.imported,
+            "skipped_duplicates": result.skipped_duplicates,
+            "last_synced_at": last_synced_at,
+            "signals": raw_signals[:10],
+        }
 
     @api.post("/connectors/test/{connector_type}", dependencies=[Depends(require_role(Role.admin))])
     def test_connector(connector_type: str, config: dict) -> dict:
