@@ -34,6 +34,7 @@ import type {
   SignalRecord,
   SignalValidationReport,
   SystemConfig,
+  TaxonomyBootstrapReport,
   TaxonomyCatalog,
   TaxonomyType,
   TerminologyDictionaryEntry,
@@ -258,6 +259,25 @@ export async function lockTaxonomyCategory(
   return requestJson<TaxonomyCatalog>(
     `${apiBaseUrl()}/taxonomies/${taxonomyType}/categories/lock`,
     { method: "POST", body: JSON.stringify({ category_id: categoryId }) }
+  );
+}
+
+export async function bootstrapTaxonomy(
+  body: { taxonomy_type?: TaxonomyType; limit?: number } = {}
+): Promise<TaxonomyBootstrapReport> {
+  return requestJson<TaxonomyBootstrapReport>(`${apiBaseUrl()}/taxonomy/bootstrap`, {
+    method: "POST",
+    body: JSON.stringify(body)
+  });
+}
+
+export async function reviewTaxonomyCategory(
+  taxonomyType: TaxonomyType,
+  body: { category_id: string; decision: "accept" | "reject" }
+): Promise<TaxonomyCatalog> {
+  return requestJson<TaxonomyCatalog>(
+    `${apiBaseUrl()}/taxonomies/${taxonomyType}/categories/review`,
+    { method: "POST", body: JSON.stringify(body) }
   );
 }
 

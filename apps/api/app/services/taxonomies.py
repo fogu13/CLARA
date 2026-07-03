@@ -4,6 +4,8 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+from fastapi import HTTPException
+
 from app.domain.models import (
     ProblemCandidate,
     RootCauseAnalysis,
@@ -104,6 +106,79 @@ class TaxonomyStore:
             item.model_copy(
                 update={
                     "locked": True,
+                    "change_history": [*item.change_history, change],
+                }
+            )
+            if item.category_id == category_id
+            else item
+            for item in catalog.categories
+        ]
+        return self._replace_catalog(catalog_index, catalog, categories)
+
+    def propose_category(
+        self,
+        taxonomy_type: TaxonomyType,
+        *,
+        category_id: str,
+        label: str,
+        description: str,
+        terms: list[str],
+        confidence: float,
+        evidence_count: int,
+        actor: str,
+    ) -> TaxonomyCatalog:
+        """Add a bootstrap-discovered category as status='proposed' (human review pending)."""
+        catalog_index, catalog = self._catalog(taxonomy_type)
+        if any(item.category_id == category_id for item in catalog.categories):
+            raise HTTPException(status_code=409, detail=f"Category {category_id} already exists")
+
+        change = self._change(
+            TaxonomyOperation.propose,
+            f"Proposed from signal clustering (confidence {confidence:.2f}, {evidence_count} signals).",
+            actor,
+        )
+        proposed = TaxonomyCategory(
+            category_id=category_id,
+            label=label,
+            description=description,
+            terms=terms,
+            status="proposed",
+            confidence=round(confidence, 3),
+            evidence_count=evidence_count,
+            change_history=[change],
+        )
+        return self._replace_catalog(catalog_index, catalog, [*catalog.categories, proposed])
+
+    def review_category(
+        self,
+        taxonomy_type: TaxonomyType,
+        *,
+        category_id: str,
+        decision: str,
+        actor: str,
+    ) -> TaxonomyCatalog:
+        """Accept or reject a proposed category. Accept -> active; reject -> rejected."""
+        if decision not in ("accept", "reject"):
+            raise HTTPException(status_code=422, detail="decision must be 'accept' or 'reject'")
+
+        catalog_index, catalog = self._catalog(taxonomy_type)
+        category = self._category(catalog, category_id)
+        if category.status != "proposed":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Category {category_id} is not awaiting review (status={category.status})",
+            )
+
+        new_status = "active" if decision == "accept" else "rejected"
+        change = self._change(
+            TaxonomyOperation.review,
+            f"{'Accepted' if decision == 'accept' else 'Rejected'} proposed category {category.label}.",
+            actor,
+        )
+        categories = [
+            item.model_copy(
+                update={
+                    "status": new_status,
                     "change_history": [*item.change_history, change],
                 }
             )
@@ -380,8 +455,9 @@ def classify_signals(
         for category in catalog.categories:
             # Skip retired categories — merged/split ones are superseded and must not
             # win classification. (Locking uses a separate flag, so locked categories
-            # keep status "active" and still classify.)
-            if category.status in ("merged", "split"):
+            # keep status "active" and still classify.) Proposed categories must not
+            # classify until a human accepts them; rejected ones never do.
+            if category.status in ("merged", "split", "proposed", "rejected"):
                 continue
             matched_signal_ids: set[str] = set()
             matched_terms: set[str] = set()

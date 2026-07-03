@@ -5,13 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tags, Lock, GitBranch, Languages, Pencil } from "lucide-react";
+import { Tags, Lock, GitBranch, Languages, Pencil, Sparkles, Check, X } from "lucide-react";
 import {
+  bootstrapTaxonomy,
   getLanguageQuality,
   getTaxonomies,
   getTerminologyDictionary,
   lockTaxonomyCategory,
-  renameTaxonomyCategory
+  renameTaxonomyCategory,
+  reviewTaxonomyCategory
 } from "@/lib/client-api";
 import { fallbackTaxonomies, fallbackTerminologyDictionary } from "@/lib/sample-data";
 import type {
@@ -94,6 +96,39 @@ export default function TaxonomyPage() {
     }
   }
 
+  async function runBootstrap() {
+    setBusy(true);
+    setAction(null);
+    try {
+      const report = await bootstrapTaxonomy();
+      const catalogs = await getTaxonomies();
+      setState((current) => ({ ...current, catalogs }));
+      setAction({
+        tone: "ok",
+        message:
+          report.proposed > 0
+            ? `Proposed ${report.proposed} theme${report.proposed === 1 ? "" : "s"} from ${report.scanned} signals — review below.`
+            : `Scanned ${report.scanned} signals — no new themes above the confidence threshold.`
+      });
+    } catch (error) {
+      setAction({ tone: "error", message: error instanceof Error ? error.message : "Bootstrap failed." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reviewCategory(type: TaxonomyType, categoryId: string, decision: "accept" | "reject") {
+    setBusy(true);
+    try {
+      applyCatalog(await reviewTaxonomyCategory(type, { category_id: categoryId, decision }));
+      setAction({ tone: "ok", message: decision === "accept" ? "Theme accepted into the taxonomy." : "Theme rejected (kept in audit history)." });
+    } catch (error) {
+      setAction({ tone: "error", message: error instanceof Error ? error.message : "Review failed." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     async function load() {
       try {
@@ -138,10 +173,18 @@ export default function TaxonomyPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Taxonomy</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Versioned product, journey, contact-reason, marketing and compliance taxonomy catalogs.
-        </p>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Taxonomy</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Versioned product, journey, contact-reason, marketing and compliance taxonomy catalogs.
+            </p>
+          </div>
+          <Button disabled={busy} onClick={() => void runBootstrap()}>
+            <Sparkles className="mr-1 h-4 w-4" />
+            {busy ? "Working…" : "Bootstrap themes from signals"}
+          </Button>
+        </div>
       </div>
 
       {state.status === "error" ? <div className="text-sm text-destructive">{state.message}</div> : null}
@@ -258,7 +301,14 @@ export default function TaxonomyPage() {
                           <strong className="text-sm">{category.label}</strong>
                           <div className="flex gap-1">
                             {category.locked ? <Badge variant="secondary"><Lock className="mr-1 h-3 w-3" />Locked</Badge> : null}
-                            {category.status !== "active" ? <Badge variant="outline">{category.status}</Badge> : null}
+                            {category.status !== "active" ? (
+                              <Badge variant={category.status === "proposed" ? "warning" : "outline"}>{category.status}</Badge>
+                            ) : null}
+                            {category.status === "proposed" && category.confidence != null ? (
+                              <Badge variant="outline">
+                                {Math.round(category.confidence * 100)}% conf · {category.evidence_count ?? 0} signals
+                              </Badge>
+                            ) : null}
                           </div>
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">{category.description}</p>
@@ -298,6 +348,24 @@ export default function TaxonomyPage() {
                                 Cancel
                               </Button>
                             </div>
+                          </div>
+                        ) : category.status === "proposed" ? (
+                          <div className="mt-3 flex gap-2">
+                            <Button
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => reviewCategory(catalog.taxonomy_type, category.category_id, "accept")}
+                            >
+                              <Check className="mr-1 h-3 w-3" /> Accept
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={busy}
+                              onClick={() => reviewCategory(catalog.taxonomy_type, category.category_id, "reject")}
+                            >
+                              <X className="mr-1 h-3 w-3" /> Reject
+                            </Button>
                           </div>
                         ) : (
                           <div className="mt-3 flex gap-2">

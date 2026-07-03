@@ -29,6 +29,8 @@ class TaxonomyOperation(str, Enum):
     split = "split"
     rename = "rename"
     lock = "lock"
+    propose = "propose"
+    review = "review"
 
 
 class TaxonomyChange(BaseModel):
@@ -48,6 +50,10 @@ class TaxonomyCategory(BaseModel):
     locked: bool = False
     status: str = "active"
     change_history: list[TaxonomyChange] = Field(default_factory=list)
+    # Set on bootstrap-proposed categories: cluster cohesion (0..1) and how many
+    # signals back the proposal. None for seed/manual categories.
+    confidence: float | None = None
+    evidence_count: int | None = None
 
 
 class TaxonomyCatalog(BaseModel):
@@ -101,6 +107,12 @@ class TaxonomyRenameRequest(BaseModel):
     category_id: str
     label: str = Field(min_length=1)
     description: str | None = None
+    actor: str = "taxonomy_owner"
+
+
+class TaxonomyReviewRequest(BaseModel):
+    category_id: str
+    decision: str  # "accept" | "reject" (validated in the store)
     actor: str = "taxonomy_owner"
 
 

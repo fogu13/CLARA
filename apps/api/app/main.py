@@ -63,6 +63,7 @@ from app.domain.models import (
     TaxonomyLockRequest,
     TaxonomyMergeRequest,
     TaxonomyRenameRequest,
+    TaxonomyReviewRequest,
     TaxonomySplitRequest,
     TaxonomyType,
     TerminologyDictionaryEntry,
@@ -758,6 +759,59 @@ def create_app(
     @api.get("/language-quality", dependencies=[read_dep])
     def get_language_quality() -> dict:
         return build_language_quality_report(signal_store.list_signals(), terminology_store.list_entries())
+
+    @api.post("/taxonomy/bootstrap", dependencies=[Depends(require_role(Role.editor))])
+    def bootstrap_taxonomy_from_signals(body: dict | None = None) -> dict:
+        """Cluster the workspace's signals into proposed taxonomy categories.
+
+        The governed "no taxonomy to build" path: embeddings cluster the signals,
+        the LLM names each cluster, and proposals land as status='proposed'
+        categories (confidence-scored) awaiting human accept/reject.
+        """
+        from app.services.taxonomy_bootstrap import bootstrap_taxonomy
+
+        body = body or {}
+        taxonomy_type = TaxonomyType(body.get("taxonomy_type", "contact_reason"))
+        limit = min(int(body.get("limit", 200)), 1000)
+
+        report = bootstrap_taxonomy(
+            signal_store.list_signals(),
+            taxonomy_store,
+            taxonomy_type=taxonomy_type,
+            limit=limit,
+        )
+        if report.get("error") == "embedding_failed":
+            raise HTTPException(
+                status_code=502,
+                detail="Embedding provider unavailable — taxonomy bootstrap aborted (no partial writes)",
+            )
+        telemetry_store.record(
+            "taxonomy_bootstrapped",
+            metadata={
+                "taxonomy_type": taxonomy_type.value,
+                "scanned": report["scanned"],
+                "proposed": report["proposed"],
+            },
+        )
+        return report
+
+    @api.post("/taxonomies/{taxonomy_type}/categories/review", response_model=TaxonomyCatalog, dependencies=[Depends(require_role(Role.editor))])
+    def review_taxonomy_category(
+        taxonomy_type: TaxonomyType,
+        request: TaxonomyReviewRequest,
+    ) -> TaxonomyCatalog:
+        catalog = taxonomy_store.review_category(
+            taxonomy_type,
+            category_id=request.category_id,
+            decision=request.decision,
+            actor=request.actor,
+        )
+        telemetry_store.record(
+            "taxonomy_reviewed",
+            entity_id=request.category_id,
+            metadata={"decision": request.decision},
+        )
+        return catalog
 
     @api.post("/taxonomies/{taxonomy_type}/categories/rename", response_model=TaxonomyCatalog, dependencies=[Depends(require_role(Role.editor))])
     def rename_taxonomy_category(
