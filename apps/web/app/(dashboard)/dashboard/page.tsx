@@ -79,9 +79,6 @@ function label(value: string): string {
   return value.replaceAll("_", " ");
 }
 
-function percent(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
 
 function compact(value: number): string {
   return new Intl.NumberFormat("en", { notation: "compact" }).format(value);
@@ -240,7 +237,9 @@ function signalTrendSeries(signals: SignalRecord[], days = 30): { day: string; c
 
 async function getConnectors(): Promise<ConnectorSummary[]> {
   const response = await fetch(`${apiBaseUrl()}/connectors`, { headers: apiHeaders() });
-  if (!response.ok) return [];
+  // Throw on a non-ok status so the caller's .catch records it as a partial source;
+  // returning [] here silently hid connector HTTP errors from the "partial data" notice.
+  if (!response.ok) throw new Error(`connectors request failed (${response.status})`);
   return response.json() as Promise<ConnectorSummary[]>;
 }
 

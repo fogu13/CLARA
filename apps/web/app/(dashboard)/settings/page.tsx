@@ -119,7 +119,10 @@ export default function SettingsPage() {
               type="number"
               className="mt-1"
               value={settings.measurement_window_days}
-              onChange={(event) => update("measurement_window_days", Number(event.target.value))}
+              onChange={(event) => {
+                // Don't coerce an empty field to 0 (Number("") === 0) — leave it unchanged.
+                if (event.target.value !== "") update("measurement_window_days", Number(event.target.value));
+              }}
             />
           </div>
           <div>
@@ -129,7 +132,9 @@ export default function SettingsPage() {
               type="number"
               className="mt-1"
               value={settings.learning_half_life_days}
-              onChange={(event) => update("learning_half_life_days", Number(event.target.value))}
+              onChange={(event) => {
+                if (event.target.value !== "") update("learning_half_life_days", Number(event.target.value));
+              }}
             />
           </div>
           <Button onClick={save} disabled={busy}>

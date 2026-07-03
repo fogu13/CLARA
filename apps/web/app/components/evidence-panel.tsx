@@ -1,8 +1,6 @@
 import type { AffectedCohort, Evidence } from "../../lib/types";
+import { percent } from "@/lib/format";
 
-function percent(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
 
 function formatDate(timestamp: string): string {
   const date = new Date(timestamp);

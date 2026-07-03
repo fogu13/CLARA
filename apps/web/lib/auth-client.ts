@@ -50,7 +50,10 @@ export function isAuthenticated(): boolean {
   const token = window.localStorage.getItem(TOKEN_KEY);
   if (!token) return false;
   const exp = decodeExp(token);
-  // ponytail: no silent auto-refresh; an expired access token (~1h) re-routes to /auth to
-  // sign in again. Add refresh_token rotation here if longer sessions are needed.
-  return exp === null ? true : exp * 1000 > Date.now();
+  // Fail closed: a token whose exp we can't decode (malformed / not a real JWT) is
+  // untrustworthy and must NOT count as authenticated. Supabase access tokens always
+  // carry exp, so requiring a valid, future exp is correct.
+  // ponytail: no silent auto-refresh; an expired access token (~1h) re-routes to /auth.
+  // Add refresh_token rotation here if longer sessions are needed.
+  return exp !== null && exp * 1000 > Date.now();
 }
