@@ -214,7 +214,9 @@ Exit criteria:
 
 ## Phase 6 - EU Governance and Policy Engine
 
-Status: planned.
+Status: planned. A thin slice is pulled forward into the current sequence: an in-product
+compliance/governance pack (audit-export UI, model card, data-residency statement) plus a
+GDPR Art. 17/20 per-customer deletion/export endpoint. The full policy engine remains post-funding.
 
 Goal: make governance a product module, not documentation pasted on top.
 
@@ -271,7 +273,10 @@ Exit criteria:
 
 ## Phase 8 - Outcome Learning Engine
 
-Status: planned.
+Status: planned; partially pulled forward. Scheduled outcome re-measurement (T+7/T+30 jobs with
+significance testing reused from the eval harness) and learning-repository surfacing in the UI are
+now in the current sequence, because a completed outcome contract on real (non-simulated) data is
+the strongest proof point the product can produce. The rest of this phase stays planned.
 
 Goal: build the defensible moat: reusable knowledge of which actions worked in which contexts.
 
@@ -296,7 +301,10 @@ Exit criteria:
 
 ## Phase 9 - Packaging and Industry Packs
 
-Status: planned.
+Status: planned. SSO/SCIM and certification work are explicitly deferred to post-funding: pilots do
+not require SAML, and audit export + RLS + the governance pack substitute for certifications at
+pilot deal sizes. Connector expansion is demand-driven only (built against signed pilots, never
+speculatively).
 
 Goal: make CLARA easier to buy and implement.
 
@@ -351,14 +359,36 @@ These are implementation details, not separate product phases unless a phase exp
 - Do not make chat the primary interface.
 - Do not start with autonomous customer-facing execution.
 - Do not compete with Adobe/Braze delivery infrastructure; generate governed intervention drafts and push to those systems.
+- Do not build a custom report builder; audit-ready evidence-pack exports answer the reporting need.
+- Do not build warehouse ingestion (Snowflake/BigQuery sync); a generic webhook plus CSV covers pilot ingestion, and warehouse EXPORT can come later.
+- Do not build an LLM model switcher in any Q&A surface; confidence scores and citations are the differentiator.
+- Do not build a broad connector catalog speculatively; connectors follow signed customer demand.
 
 ## Current Next Step
 
-Finish Phase 5 v1, then move to Phase 7 customer closure.
+Resequenced 2026-07-03 for the pilot window (6 Jul - 27 Sep). Principle: prove the governed
+outcome loop end-to-end first, wire dormant assets before building new ones, and only build the
+minimum credible ingest/understand surface. Ordered sequence:
 
-Remaining useful Phase 7 slice:
-
-1. Add execution accepted/completed/released state transitions.
-2. Add real Jira status sync or Zendesk/HubSpot task draft connectors.
-3. Add affected-customer closure lists from context where consent permits.
-4. Keep customer contact as draft-plus-human-approval; do not send messages from CLARA.
+1. Merge the pending review branches (triage resume endpoint, rate-limiter wiring, read-route
+   auth, frontend fixes) - closes the approval -> action -> measure -> learn loop over HTTP.
+   Do this before any other change to `main.py` / `workflow.py`.
+2. Real action push in the normal approval flow (Phase 7 slice): on approval, call the Jira/Slack
+   connectors with an idempotency key, failure states, and external-ID audit write-back. Draft
+   mode stays as the un-configured fallback. Keep customer contact as draft-plus-human-approval;
+   do not send messages from CLARA.
+3. Instrument a `product_events` table (append-only, tenant-scoped under RLS) so time-to-first-
+   insight, auto-triage rate, approval-cycle time, outcome-completion rate (with a
+   real-vs-simulated data flag) and learning-reuse rate accrue from the first pilot onward.
+4. Wire the dormant embedding-taxonomy bootstrap (`discover_themes`/`apply_governance` behind a
+   `POST /taxonomy/bootstrap` endpoint, confidence-scored proposals, accept/reject review UI);
+   expose merge/split in the taxonomy UI (backend already supports them).
+5. Time-series charts (recharts is installed and unused) and an emerging-problems panel
+   surfacing the already-wired emerging scoring.
+6. Language detection at ingestion; stop hardcoding "en" in the Zendesk connector.
+7. Generic HMAC webhook intake reusing the CSV validation pipeline; persist connector config to
+   Postgres (currently in-memory).
+8. Scheduled outcome re-measurement (Phase 8 pull-forward) and per-problem evidence-pack export
+   (signals -> taxonomy with confidence -> action + policy trail -> outcome delta).
+9. Governance pack slice (Phase 6 pull-forward), Zendesk incremental sync, learning-repository
+   surfacing, then a scoped citation-grounded Q&A over signals/problems.
