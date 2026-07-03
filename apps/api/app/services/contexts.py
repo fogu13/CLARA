@@ -381,6 +381,10 @@ class CustomerContextStore:
     def existing_customer_ids(self) -> set[str]:
         return set(self._records.keys())
 
+    def delete_by_customer(self, customer_id: str) -> int:
+        """GDPR Art. 17: remove the customer's context record."""
+        return 1 if self._records.pop(customer_id, None) is not None else 0
+
 
 class SQLiteCustomerContextStore:
     def __init__(self, path: Path) -> None:
@@ -441,6 +445,14 @@ class SQLiteCustomerContextStore:
             "SELECT * FROM customer_context ORDER BY account_id, customer_id"
         ).fetchall()
         return [self._context_from_row(row) for row in rows]
+
+    def delete_by_customer(self, customer_id: str) -> int:
+        """GDPR Art. 17: remove the customer's context record."""
+        cursor = self._connection.execute(
+            "DELETE FROM customer_context WHERE customer_id = ?", (customer_id,)
+        )
+        self._connection.commit()
+        return cursor.rowcount
 
     def import_context(
         self,

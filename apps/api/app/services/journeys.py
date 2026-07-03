@@ -155,6 +155,13 @@ class JourneyEventStore:
     def list_events(self) -> list[JourneyEventRecord]:
         return sorted(self._events.values(), key=lambda event: event.timestamp)
 
+    def delete_by_customer(self, customer_id: str) -> int:
+        """GDPR Art. 17: remove every journey event belonging to a customer."""
+        doomed = [eid for eid, e in self._events.items() if e.customer_id == customer_id]
+        for event_id in doomed:
+            del self._events[event_id]
+        return len(doomed)
+
     def import_events(self, events: list[JourneyEventRecord]) -> JourneyEventImportResult:
         imported = 0
         skipped = 0
@@ -196,6 +203,21 @@ class SQLiteJourneyEventStore:
             "SELECT payload FROM journey_events ORDER BY event_id"
         ).fetchall()
         return [JourneyEventRecord.model_validate(json.loads(row["payload"])) for row in rows]
+
+    def delete_by_customer(self, customer_id: str) -> int:
+        """GDPR Art. 17: remove every journey event belonging to a customer.
+
+        Events are stored as JSON payloads, so match in Python (small scale).
+        """
+        doomed = [
+            event.event_id for event in self.list_events() if event.customer_id == customer_id
+        ]
+        for event_id in doomed:
+            self._connection.execute(
+                "DELETE FROM journey_events WHERE event_id = ?", (event_id,)
+            )
+        self._connection.commit()
+        return len(doomed)
 
     def import_events(self, events: list[JourneyEventRecord]) -> JourneyEventImportResult:
         imported = 0
