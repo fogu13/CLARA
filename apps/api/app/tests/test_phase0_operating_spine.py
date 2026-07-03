@@ -109,12 +109,17 @@ def test_phase0_operating_spine_end_to_end() -> None:
     assert approval.status_code == 200
     assert approval.json()["decision"] == "approved"
 
+    # Promoted problems carry an auto-captured signal-rate contract; the manual
+    # measurement must use the contract's own metric (mismatches are rejected).
+    contract_snapshot = client.get(f"/problems/{problem_id}/outcome").json()
+    assert contract_snapshot["metric"].startswith("signal_rate_per_day:")
+
     outcome = client.post(
         f"/problems/{problem_id}/outcomes",
         json={
             "problem_id": problem_id,
-            "metric": "payment_completion_7d",
-            "observed_value": 0.2,
+            "metric": contract_snapshot["metric"],
+            "observed_value": 0.0,  # complaint inflow stopped entirely
             "measured_at": "2026-07-21T12:00:00Z",
             "notes": "Phase 0 closeout smoke test.",
         },
