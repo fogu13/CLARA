@@ -13,6 +13,7 @@ import type {
   TerminologyDictionaryEntry,
   TaxonomyCatalog
 } from "./types";
+import { apiBaseUrl } from "./client-api";
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { cache: "no-store" });
@@ -35,7 +36,7 @@ function onApiError<T>(context: string, error: unknown, sample: T): T {
 }
 
 export async function getActionQueueProblems(): Promise<ProblemRecord[]> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const apiUrl = apiBaseUrl();
 
   try {
     const summaries = await fetchJson<ProblemSummary[]>(`${apiUrl}/problems`);
@@ -48,7 +49,7 @@ export async function getActionQueueProblems(): Promise<ProblemRecord[]> {
 }
 
 export async function getPolicyRules(): Promise<PolicyRule[]> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const apiUrl = apiBaseUrl();
 
   try {
     return await fetchJson<PolicyRule[]>(`${apiUrl}/policy-rules`);
@@ -58,7 +59,7 @@ export async function getPolicyRules(): Promise<PolicyRule[]> {
 }
 
 export async function getTaxonomies(): Promise<TaxonomyCatalog[]> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const apiUrl = apiBaseUrl();
 
   try {
     return await fetchJson<TaxonomyCatalog[]>(`${apiUrl}/taxonomies`);
@@ -68,7 +69,7 @@ export async function getTaxonomies(): Promise<TaxonomyCatalog[]> {
 }
 
 export async function getTerminologyDictionary(): Promise<TerminologyDictionaryEntry[]> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const apiUrl = apiBaseUrl();
 
   try {
     return await fetchJson<TerminologyDictionaryEntry[]>(`${apiUrl}/terminology-dictionary`);
@@ -78,7 +79,7 @@ export async function getTerminologyDictionary(): Promise<TerminologyDictionaryE
 }
 
 export async function getEmergingProblems(): Promise<EmergingProblemReport> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const apiUrl = apiBaseUrl();
 
   try {
     return await fetchJson<EmergingProblemReport>(`${apiUrl}/emerging-problems`);
