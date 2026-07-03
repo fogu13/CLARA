@@ -6,7 +6,6 @@ import io
 import json
 import sqlite3
 from collections import Counter, defaultdict
-from datetime import UTC, datetime
 from pathlib import Path
 
 from app.domain.models import (
@@ -27,10 +26,7 @@ from app.domain.models import (
     SignalValidationReport,
 )
 from app.domain.scoring import approval_pressure, impact_band, normalized_impact_score
-
-
-def utc_now() -> str:
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+from app.services.common import utc_now  # re-exported for existing importers
 
 
 def normalize_label(value: str) -> str:
