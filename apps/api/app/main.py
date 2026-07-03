@@ -455,6 +455,7 @@ def create_app(
     workspace=None,
     feedback_rules=None,
     telemetry=None,
+    measurement_plans=None,
 ) -> FastAPI:
     api = FastAPI(
         title="CLARA API",
@@ -495,6 +496,26 @@ def create_app(
     workspace_store = workspace or default_workspace_store()
     rule_store = feedback_rules or default_rule_store()
     telemetry_store = telemetry or SQLiteTelemetryStore(default_db_path())
+    from app.services.measurement_scheduler import (
+        SQLiteMeasurementPlanStore,
+        attach_measurement_loop,
+        run_due_measurements,
+        schedule_measurements,
+    )
+
+    measurement_plan_store = measurement_plans or SQLiteMeasurementPlanStore(default_db_path())
+
+    def _run_due_measurements(now: str | None = None) -> dict[str, int]:
+        return run_due_measurements(
+            plan_store=measurement_plan_store,
+            problem_lookup=active_problem_store.get_problem,
+            signal_store=signal_store,
+            workflow_store=workflow_store,
+            telemetry=telemetry_store,
+            now=now,
+        )
+
+    attach_measurement_loop(api, _run_due_measurements)
     url = database_url()
     taxonomy_store = taxonomies or (PostgresTaxonomyStore(url) if url else TaxonomyStore())
     terminology_store = terminology or (
@@ -1068,6 +1089,23 @@ def create_app(
                 except Exception:  # noqa: BLE001 — approval already recorded; push is best-effort
                     logger.exception("Action push failed unexpectedly for %s", decision.action_id)
 
+                # Close-the-loop clock starts now: schedule T+7 / T+window
+                # re-measurement checkpoints for this problem's outcome contract.
+                try:
+                    kinds = schedule_measurements(
+                        measurement_plan_store,
+                        problem=problem,
+                        execution_id=execution.execution_id,
+                        executed_at=execution.created_at,
+                    )
+                    telemetry_store.record(
+                        "measurement_scheduled",
+                        entity_id=problem_id,
+                        metadata={"kinds": kinds, "execution_id": execution.execution_id},
+                    )
+                except Exception:  # noqa: BLE001 — scheduling is best-effort too
+                    logger.exception("Measurement scheduling failed for %s", problem_id)
+
         return record
 
     @api.get("/problems/{problem_id}/workflow", response_model=WorkflowState, dependencies=[read_dep])
@@ -1174,6 +1212,19 @@ def create_app(
     @api.get("/jira-drafts", response_model=list[JiraIssueDraft], dependencies=[read_dep])
     def list_jira_drafts() -> list[JiraIssueDraft]:
         return workflow_store.list_jira_issue_drafts()
+
+    @api.get("/measurements", dependencies=[read_dep])
+    def list_measurement_plans() -> list[dict]:
+        """Scheduled outcome re-measurement checkpoints (pending/done/manual_required)."""
+        return measurement_plan_store.list_plans()
+
+    @api.post("/measurements/run-due", dependencies=[Depends(require_role(Role.editor))])
+    def run_due_measurement_plans(body: dict | None = None) -> dict:
+        """Process due checkpoints now (the background loop does this every 15 min).
+
+        Optional body {"now": "<iso>"} lets demos/tests advance the clock.
+        """
+        return _run_due_measurements(now=(body or {}).get("now"))
 
     @api.get("/telemetry", dependencies=[Depends(require_role(Role.admin))])
     def get_telemetry(limit: int = 200) -> dict:

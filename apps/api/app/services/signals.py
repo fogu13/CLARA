@@ -6,6 +6,7 @@ import io
 import json
 import sqlite3
 from collections import Counter, defaultdict
+from datetime import datetime
 from pathlib import Path
 
 from app.domain.models import (
@@ -381,6 +382,17 @@ def intervention_brief_for_candidate(candidate: ProblemCandidate, *, channel: st
     )
 
 
+def _signal_rate_baseline(candidate: ProblemCandidate) -> float:
+    """Signals per day over the candidate's observed window (auto-captured baseline)."""
+    try:
+        first = datetime.fromisoformat(candidate.first_seen.replace("Z", "+00:00"))
+        last = datetime.fromisoformat(candidate.last_seen.replace("Z", "+00:00"))
+        observed_days = max((last - first).total_seconds() / 86_400, 1.0)
+    except (ValueError, AttributeError):
+        observed_days = 1.0
+    return round(candidate.signal_count / observed_days, 4)
+
+
 def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
     journey_token = candidate.journey.upper().replace(" ", "-")
     stage_token = candidate.journey_stage.upper().replace(" ", "-")
@@ -552,11 +564,19 @@ def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
             ),
         ],
         outcome_contract=OutcomeContract(
-            primary_metric=f"{candidate.journey_stage.lower().replace(' ', '_')}_completion_7d",
-            baseline=0.0,
-            success_threshold=0.1,
+            # Signal-derived metric with an AUTO-CAPTURED baseline: complaint inflow
+            # per day for this journey/stage, computed from the candidate's own
+            # signals. CLARA can re-measure this itself after the action executes
+            # (scheduled T+7/T+window), so promoted problems get real, non-simulated
+            # outcome data. Success = halving the complaint rate.
+            primary_metric=(
+                f"signal_rate_per_day:{candidate.journey.lower().replace(' ', '_')}"
+                f"/{candidate.journey_stage.lower().replace(' ', '_')}"
+            ),
+            baseline=_signal_rate_baseline(candidate),
+            success_threshold=round(_signal_rate_baseline(candidate) * 0.5, 4),
             measurement_window_days=28,
-            comparison_method="baseline_required",
+            comparison_method="pre_post_signal_rate",
             guardrail_metrics=["repeat_signal_rate", "support_contact_rate"],
             responsible_owner=candidate.suggested_owner,
         ),

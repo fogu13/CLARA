@@ -18,3 +18,6 @@ from pathlib import Path
 
 _TEST_DB_DIR = tempfile.mkdtemp(prefix="clara_test_db_")
 os.environ["CLARA_DB_PATH"] = str(Path(_TEST_DB_DIR) / "clara_test.db")
+
+# No background measurement loop during tests — run_due is exercised explicitly.
+os.environ["CLARA_SCHEDULER_ENABLED"] = "0"
