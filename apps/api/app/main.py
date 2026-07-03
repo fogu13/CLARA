@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from collections import Counter
 from pathlib import Path
@@ -13,6 +14,7 @@ from app.domain.models import (
     ActionProposalUpdateRequest,
     AffectedContextExplorer,
     ApprovalDecision,
+    ApprovalDecisionStatus,
     ApprovalRecord,
     CandidateDecisionStatus,
     CandidateReviewRequest,
@@ -116,8 +118,11 @@ from app.services.signals import (
     validate_signal_csv,
 )
 from app.services.taxonomies import TaxonomyStore, TerminologyStore, classify_candidate
+from app.services.telemetry import SQLiteTelemetryStore
 from app.services.workflow import SQLiteWorkflowStore
 from app.services.workspace import SQLiteWorkspaceStore
+
+logger = logging.getLogger(__name__)
 
 
 def default_db_path() -> Path:
@@ -443,6 +448,7 @@ def create_app(
     journeys=None,
     workspace=None,
     feedback_rules=None,
+    telemetry=None,
 ) -> FastAPI:
     api = FastAPI(
         title="CLARA API",
@@ -482,6 +488,7 @@ def create_app(
     policy_store = policies or default_policy_store()
     workspace_store = workspace or default_workspace_store()
     rule_store = feedback_rules or default_rule_store()
+    telemetry_store = telemetry or SQLiteTelemetryStore(default_db_path())
     url = database_url()
     taxonomy_store = taxonomies or (PostgresTaxonomyStore(url) if url else TaxonomyStore())
     terminology_store = terminology or (
@@ -572,7 +579,10 @@ def create_app(
 
     @api.get("/problems/{problem_id}", response_model=ProblemRecord, dependencies=[read_dep])
     def get_problem(problem_id: str) -> ProblemRecord:
-        return enrich_problem_for_response(require_problem(problem_id))
+        problem = enrich_problem_for_response(require_problem(problem_id))
+        # time-to-first-insight numerator: first insight viewed after first ingest.
+        telemetry_store.record("insight_viewed", entity_id=problem_id)
+        return problem
 
     @api.get(
         "/problems/{problem_id}/affected-context",
@@ -667,7 +677,12 @@ def create_app(
         if not report.valid:
             raise HTTPException(status_code=422, detail=report.model_dump(mode="json"))
 
-        return signal_store.import_signals(parse_signal_csv(request.csv_text))
+        result = signal_store.import_signals(parse_signal_csv(request.csv_text))
+        telemetry_store.record(
+            "signals_imported",
+            metadata={"source": "csv", "imported": result.imported, "skipped": result.skipped_duplicates},
+        )
+        return result
 
     @api.post("/signals/validate-csv", response_model=SignalValidationReport)
     def validate_signal_csv_import(request: SignalCsvImportRequest) -> SignalValidationReport:
@@ -892,7 +907,52 @@ def create_app(
     @api.post("/problems/{problem_id}/approvals", response_model=ApprovalRecord, dependencies=[Depends(require_role(Role.editor))])
     def record_approval(problem_id: str, decision: ApprovalDecision) -> ApprovalRecord:
         problem = require_problem(problem_id)
-        return workflow_store.record_approval(problem=problem, decision=decision)
+        record = workflow_store.record_approval(problem=problem, decision=decision)
+        # approval-cycle-time denominator + decision mix.
+        telemetry_store.record(
+            "approval_recorded",
+            entity_id=decision.action_id,
+            metadata={"problem_id": problem_id, "decision": record.decision.value},
+        )
+
+        # Real action push: an approved action fires its destination connector
+        # (Jira/Slack) when one is configured; otherwise the draft stands. Push
+        # failures are recorded on the execution and never fail the approval.
+        if record.decision == ApprovalDecisionStatus.approved:
+            from app.services.action_push import push_approved_action
+            from app.services.workflow import find_action
+
+            execution = next(
+                (
+                    e
+                    for e in reversed(workflow_store.list_executions())
+                    if e.problem_id == problem_id and e.action_id == decision.action_id
+                ),
+                None,
+            )
+            if execution is not None:
+                try:
+                    pushed = push_approved_action(
+                        problem=problem,
+                        action=find_action(problem, decision.action_id),
+                        execution=execution,
+                        config_store=connector_config_store,
+                        workflow_store=workflow_store,
+                    )
+                    if pushed.status.value in ("pushed", "push_failed"):
+                        telemetry_store.record(
+                            f"action_{pushed.status.value}",
+                            entity_id=pushed.execution_id,
+                            metadata={
+                                "problem_id": problem_id,
+                                "destination": pushed.destination,
+                                "external_ref": pushed.external_ref,
+                            },
+                        )
+                except Exception:  # noqa: BLE001 — approval already recorded; push is best-effort
+                    logger.exception("Action push failed unexpectedly for %s", decision.action_id)
+
+        return record
 
     @api.get("/problems/{problem_id}/workflow", response_model=WorkflowState, dependencies=[read_dep])
     def get_workflow_state(
@@ -914,7 +974,15 @@ def create_app(
         if measurement.problem_id != problem_id:
             raise HTTPException(status_code=422, detail="Outcome problem_id must match the route")
 
-        return workflow_store.record_outcome(problem=problem, measurement=measurement)
+        recorded = workflow_store.record_outcome(problem=problem, measurement=measurement)
+        # real_data_source flag: manual API entry, NOT the simulated eval path —
+        # simulated and real outcome data must never mix in a metrics chart.
+        telemetry_store.record(
+            "outcome_recorded",
+            entity_id=problem_id,
+            metadata={"source": "api", "real_data_source": True},
+        )
+        return recorded
 
     @api.post("/problems/{problem_id}/closure", response_model=ClosureRecord, dependencies=[Depends(require_role(Role.editor))])
     def record_closure(
@@ -947,12 +1015,20 @@ def create_app(
                 detail="Outcome must be measured before recording a learning conclusion",
             )
 
-        return workflow_store.record_learning_conclusion(
+        learning = workflow_store.record_learning_conclusion(
             problem=problem,
             conclusion=conclusion,
             tenant_id=identity.tenant_id,
             actor=identity.actor_id,
         )
+        # learning-reuse-rate numerator source: every reviewed conclusion is a
+        # candidate for retrieval into future proposals.
+        telemetry_store.record(
+            "learning_recorded",
+            entity_id=problem_id,
+            metadata={"status": conclusion.learning_status.value},
+        )
+        return learning
 
     @api.get("/problems/{problem_id}/outcome", response_model=OutcomeSnapshot, dependencies=[read_dep])
     def get_outcome_snapshot(problem_id: str) -> OutcomeSnapshot:
@@ -982,6 +1058,18 @@ def create_app(
     @api.get("/jira-drafts", response_model=list[JiraIssueDraft], dependencies=[read_dep])
     def list_jira_drafts() -> list[JiraIssueDraft]:
         return workflow_store.list_jira_issue_drafts()
+
+    @api.get("/telemetry", dependencies=[Depends(require_role(Role.admin))])
+    def get_telemetry(limit: int = 200) -> dict:
+        """Product-metric events (admin): counts by type + recent events.
+
+        Powers the pilot/VC metrics: time-to-first-insight, approval-cycle time,
+        outcome-completion rate, learning-reuse rate. Data never leaves this DB.
+        """
+        return {
+            "counts": telemetry_store.counts_by_type(),
+            "events": telemetry_store.list_events(limit=min(limit, 1000)),
+        }
 
     @api.get("/audit-export", dependencies=[Depends(require_role(Role.admin))])
     def export_audit_log() -> dict:
@@ -1106,6 +1194,9 @@ def create_app(
         except ConnectorError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+        telemetry_store.record(
+            "signals_imported", metadata={"source": "zendesk", "imported": len(signals)}
+        )
         return {"pulled": len(signals), "signals": signals[:10]}
 
     @api.post("/connectors/test/{connector_type}", dependencies=[Depends(require_role(Role.admin))])
@@ -1233,6 +1324,14 @@ def create_app(
             }
 
         # Ran to completion (no consequential actions / approval skipped).
+        telemetry_store.record(
+            "triage_completed",
+            metadata={
+                "status": result.get("status", "unknown"),
+                "insights": len(result.get("insights", [])),
+                "enriched": result.get("enrichment_count", 0),
+            },
+        )
         return {
             "insights": result.get("insights", []),
             "enriched_count": result.get("enrichment_count", 0),

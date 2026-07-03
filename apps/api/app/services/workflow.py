@@ -308,6 +308,23 @@ class WorkflowStore:
     def list_executions(self) -> list[ExecutionRecord]:
         return self._executions
 
+    def update_execution(
+        self,
+        execution_id: str,
+        *,
+        status: ExecutionStatus,
+        external_ref: str | None = None,
+        detail: str | None = None,
+    ) -> ExecutionRecord:
+        for index, execution in enumerate(self._executions):
+            if execution.execution_id == execution_id:
+                updated = execution.model_copy(
+                    update={"status": status, "external_ref": external_ref, "detail": detail}
+                )
+                self._executions[index] = updated
+                return updated
+        raise HTTPException(status_code=404, detail="Execution not found")
+
     def list_jira_issue_drafts(self) -> list[JiraIssueDraft]:
         return self._jira_issue_drafts
 
@@ -662,7 +679,9 @@ class SQLiteWorkflowStore:
                 status TEXT NOT NULL,
                 owner TEXT NOT NULL,
                 summary TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                external_ref TEXT,
+                detail TEXT
             );
 
             CREATE TABLE IF NOT EXISTS jira_issue_drafts (
@@ -725,6 +744,8 @@ class SQLiteWorkflowStore:
         self._ensure_column("approvals", "action_diff", "TEXT NOT NULL DEFAULT '[]'")
         self._ensure_column("learning_conclusions", "tenant_id", "TEXT NOT NULL DEFAULT 'legacy'")
         self._ensure_column("learning_conclusions", "retention_expires_at", "TEXT NOT NULL DEFAULT ''")
+        self._ensure_column("executions", "external_ref", "TEXT")
+        self._ensure_column("executions", "detail", "TEXT")
         self._connection.commit()
 
     def _ensure_column(self, table: str, column: str, definition: str) -> None:
@@ -738,6 +759,32 @@ class SQLiteWorkflowStore:
     def list_approvals(self) -> list[ApprovalRecord]:
         rows = self._connection.execute("SELECT * FROM approvals ORDER BY id").fetchall()
         return [self._approval_from_row(row) for row in rows]
+
+    def update_execution(
+        self,
+        execution_id: str,
+        *,
+        status: ExecutionStatus,
+        external_ref: str | None = None,
+        detail: str | None = None,
+    ) -> ExecutionRecord:
+        # execution_id is derived as EXE-{rowid:04d}; map back to the numeric row id.
+        try:
+            row_id = int(execution_id.removeprefix("EXE-"))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail="Execution not found") from exc
+
+        cursor = self._connection.execute(
+            "UPDATE executions SET status = ?, external_ref = ?, detail = ? WHERE id = ?",
+            (status.value, external_ref, detail, row_id),
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Execution not found")
+        self._connection.commit()
+        row = self._connection.execute(
+            "SELECT * FROM executions WHERE id = ?", (row_id,)
+        ).fetchone()
+        return self._execution_from_row(row)
 
     def list_executions(self) -> list[ExecutionRecord]:
         rows = self._connection.execute("SELECT * FROM executions ORDER BY id").fetchall()
@@ -1197,6 +1244,8 @@ class SQLiteWorkflowStore:
             owner=row["owner"],
             summary=row["summary"],
             created_at=row["created_at"],
+            external_ref=row["external_ref"],
+            detail=row["detail"],
         )
 
     @staticmethod
