@@ -27,6 +27,7 @@ import {
   getProblems,
   getSignals
 } from "@/lib/client-api";
+import { percent } from "@/lib/format";
 import { fallbackProblems } from "@/lib/sample-data";
 import type {
   ActionClass,
