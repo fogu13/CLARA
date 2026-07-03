@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib
+import os
 import time
 
 import jwt
+import pytest
 from fastapi.testclient import TestClient
 
 from app.services.problems import ProblemStore
@@ -12,6 +14,23 @@ from app.services.signals import SignalStore
 from app.services.workflow import WorkflowStore
 
 SECRET = "test-secret-32-chars-minimum-length!"
+
+
+@pytest.fixture(autouse=True)
+def _reset_auth_modules_after_each_test():
+    """Root fix for cross-file pollution: make_auth_client reloads app modules with
+    a JWT secret set, which leaves AUTH_ENABLED=True for every later test FILE
+    (surfaced first as 401s on gated reads, then as the rate limiter enforcing on
+    /ask). Reset at the SOURCE so no downstream file inherits a gated app."""
+    yield
+    os.environ.pop("SUPABASE_JWT_SECRET", None)
+    import app.auth
+    import app.main
+    import app.rate_limit
+    import app.rbac
+
+    for mod in (app.auth, app.rbac, app.rate_limit, app.main):
+        importlib.reload(mod)
 
 
 def token(role: str) -> str:

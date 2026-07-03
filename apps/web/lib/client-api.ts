@@ -217,6 +217,31 @@ export type MeasurementPlan = {
   created_at: string;
 };
 
+export type AskAnswer = {
+  refused: boolean;
+  reason?: string;
+  answer: string | null;
+  confidence: number;
+  model_confidence?: number;
+  retrieval_strength?: number;
+  matches?: number;
+  citations: {
+    signal_id: string;
+    source: string;
+    language: string;
+    timestamp: string;
+    excerpt: string;
+    similarity: number;
+  }[];
+};
+
+export async function askClara(question: string): Promise<AskAnswer> {
+  return requestJson<AskAnswer>(`${apiBaseUrl()}/ask`, {
+    method: "POST",
+    body: JSON.stringify({ question })
+  });
+}
+
 export async function getMeasurements(): Promise<MeasurementPlan[]> {
   return requestJson<MeasurementPlan[]>(`${apiBaseUrl()}/measurements`);
 }

@@ -1317,6 +1317,34 @@ def create_app(
             ),
         }
 
+    @api.post("/ask", dependencies=[read_dep, Depends(rate_limiter)])
+    def ask_clara_endpoint(body: dict) -> dict:
+        """Grounded Q&A over the workspace's signals — citations, confidence,
+        and an explicit refusal when the evidence is thin. No chat memory."""
+        from app.services import ai as ai_module
+        from app.services.ask import ask_clara
+
+        question = (body.get("question") or "").strip()
+        if not question:
+            raise HTTPException(status_code=422, detail="question is required")
+        if len(question) > 500:
+            raise HTTPException(status_code=422, detail="question must be under 500 characters")
+
+        try:
+            result = ask_clara(question, signal_store.list_signals())
+        except ai_module.AIProviderError as exc:
+            raise HTTPException(status_code=502, detail="AI provider unavailable") from exc
+
+        telemetry_store.record(
+            "question_asked",
+            metadata={
+                "refused": result["refused"],
+                "matches": result.get("matches", 0),
+                "confidence": result.get("confidence", 0.0),
+            },
+        )
+        return result
+
     @api.post("/digest/slack", dependencies=[Depends(require_role(Role.admin))])
     def send_slack_digest() -> dict:
         """Build the weekly digest and push it to the configured Slack channel.
