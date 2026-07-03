@@ -310,12 +310,16 @@ class EvalHarness:
 
         for item in self.golden_set:
             golden_enrichment = item.get("expected", {})
-            actual_enrichment = (
-                next(
-                    (e for e in (enrichments or []) if e.get("id") == item["id"]),
-                    golden_enrichment,
+            # enrichments is None -> self-comparison mode (golden vs golden = 100%, the
+            # metric-definition baseline). enrichments provided but MISSING this item ->
+            # a real run dropped it: score against {} (wrong), never fall back to the
+            # golden labels, which would silently inflate accuracy to 100%.
+            if enrichments is None:
+                actual_enrichment = golden_enrichment
+            else:
+                actual_enrichment = next(
+                    (e for e in enrichments if e.get("id") == item["id"]), {}
                 )
-            )
 
             # Sentiment accuracy
             if actual_enrichment.get("sentiment") == golden_enrichment.get("sentiment"):

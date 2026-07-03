@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import sqlite3
 from collections import Counter, defaultdict
-from datetime import UTC, datetime
 from pathlib import Path
 
 from app.domain.models import (
@@ -26,10 +26,7 @@ from app.domain.models import (
     SignalValidationReport,
 )
 from app.domain.scoring import approval_pressure, impact_band, normalized_impact_score
-
-
-def utc_now() -> str:
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+from app.services.common import utc_now  # re-exported for existing importers
 
 
 def normalize_label(value: str) -> str:
@@ -129,7 +126,9 @@ def validate_signal_csv(
             )
 
     for row_index, row in enumerate(rows, start=2):
-        signal_id = row.get("signal_id", "").strip()
+        # Use the same content-hash fallback the importer uses, so the preview's
+        # duplicate detection matches what import will actually do for no-id rows.
+        signal_id = row.get("signal_id", "").strip() or _fallback_signal_id(row)
         row_has_error = False
 
         for field in REQUIRED_SIGNAL_FIELDS:
@@ -197,6 +196,21 @@ def validate_signal_csv(
     )
 
 
+def _fallback_signal_id(row: dict) -> str:
+    """Deterministic content-based id for rows with no signal_id.
+
+    The old positional id (``CSV-{index}``) collided across different files, so a
+    second no-signal_id import silently deduped to zero rows (data loss). Hashing
+    the row content instead lets different files coexist while re-importing the SAME
+    file stays idempotent.
+    """
+    basis = "|".join(
+        (row.get(field) or "").strip()
+        for field in ("feedback_text", "customer_id", "timestamp", "source", "journey_stage")
+    )
+    return "CSV-" + hashlib.sha256(basis.encode("utf-8")).hexdigest()[:12]
+
+
 def parse_signal_csv(csv_text: str) -> list[SignalRecord]:
     reader = csv.DictReader(io.StringIO(csv_text.strip()))
     signals: list[SignalRecord] = []
@@ -210,7 +224,7 @@ def parse_signal_csv(csv_text: str) -> list[SignalRecord]:
         }
         signals.append(
             SignalRecord(
-                signal_id=row.get("signal_id") or f"CSV-{index:04d}",
+                signal_id=row.get("signal_id") or _fallback_signal_id(row),
                 customer_id=row.get("customer_id") or "unknown_customer",
                 account_id=row.get("account_id") or "unknown_account",
                 source=row.get("source") or "csv_upload",

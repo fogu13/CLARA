@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from collections import Counter
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -67,6 +68,7 @@ from app.domain.models import (
     WorkspaceSettings,
     pseudonymized_identifier,
 )
+from app.rate_limit import rate_limiter
 from app.rbac import Role, require_role
 from app.services.context_impact import (
     build_affected_context_explorer,
@@ -114,7 +116,7 @@ from app.services.signals import (
     validate_signal_csv,
 )
 from app.services.taxonomies import TaxonomyStore, TerminologyStore, classify_candidate
-from app.services.workflow import SQLiteWorkflowStore, utc_now
+from app.services.workflow import SQLiteWorkflowStore
 from app.services.workspace import SQLiteWorkspaceStore
 
 
@@ -463,6 +465,10 @@ def create_app(
         allow_headers=["*"],
     )
 
+    # Read access: any authenticated user (viewer+). In dev (auth disabled)
+    # get_current_user returns a default owner context, so tests/local are unaffected.
+    read_dep = Depends(require_role(Role.viewer))
+
     active_problem_store = problem_store
     if active_problem_store is None and problems is not None:
         active_problem_store = ProblemStore(list(problems.values()))
@@ -550,7 +556,7 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @api.get("/problems", response_model=list[ProblemSummary])
+    @api.get("/problems", response_model=list[ProblemSummary], dependencies=[read_dep])
     def list_problems(status: ProblemStatus | None = None) -> list[ProblemSummary]:
         current_problems = list_enriched_problems()
         if status is not None:
@@ -564,13 +570,14 @@ def create_app(
             reverse=True,
         )
 
-    @api.get("/problems/{problem_id}", response_model=ProblemRecord)
+    @api.get("/problems/{problem_id}", response_model=ProblemRecord, dependencies=[read_dep])
     def get_problem(problem_id: str) -> ProblemRecord:
         return enrich_problem_for_response(require_problem(problem_id))
 
     @api.get(
         "/problems/{problem_id}/affected-context",
         response_model=AffectedContextExplorer,
+        dependencies=[read_dep],
     )
     def get_affected_context(problem_id: str) -> AffectedContextExplorer:
         return build_affected_context_explorer(
@@ -643,7 +650,7 @@ def create_app(
             note=transition.note,
         )
 
-    @api.get("/signals", response_model=list[SignalRecord])
+    @api.get("/signals", response_model=list[SignalRecord], dependencies=[read_dep])
     def list_signals() -> list[SignalRecord]:
         return signal_store.list_signals()
 
@@ -669,7 +676,7 @@ def create_app(
             existing_signal_ids=signal_store.existing_signal_ids(),
         )
 
-    @api.get("/journey-events", response_model=list[JourneyEventRecord])
+    @api.get("/journey-events", response_model=list[JourneyEventRecord], dependencies=[read_dep])
     def list_journey_events() -> list[JourneyEventRecord]:
         return journey_event_store.list_events()
 
@@ -681,13 +688,14 @@ def create_app(
     def import_journey_event_csv(request: JourneyEventCsvImportRequest) -> JourneyEventImportResult:
         return journey_event_store.import_events(parse_journey_event_csv(request.csv_text))
 
-    @api.get("/customer-context", response_model=list[CustomerContextRecord])
+    @api.get("/customer-context", response_model=list[CustomerContextRecord], dependencies=[read_dep])
     def list_customer_context() -> list[CustomerContextRecord]:
         return context_store.list_context()
 
     @api.get(
         "/customer-context/completeness",
         response_model=CustomerContextCompletenessReport,
+        dependencies=[read_dep],
     )
     def get_customer_context_completeness() -> CustomerContextCompletenessReport:
         return context_completeness_report(context_store.list_context())
@@ -720,19 +728,19 @@ def create_app(
             existing_customer_ids=context_store.existing_customer_ids(),
         )
 
-    @api.get("/policy-rules", response_model=list[PolicyRule])
+    @api.get("/policy-rules", response_model=list[PolicyRule], dependencies=[read_dep])
     def list_policy_rules() -> list[PolicyRule]:
         return policy_store.list_rules()
 
-    @api.get("/taxonomies", response_model=list[TaxonomyCatalog])
+    @api.get("/taxonomies", response_model=list[TaxonomyCatalog], dependencies=[read_dep])
     def list_taxonomies() -> list[TaxonomyCatalog]:
         return taxonomy_store.list_catalogs()
 
-    @api.get("/terminology-dictionary", response_model=list[TerminologyDictionaryEntry])
+    @api.get("/terminology-dictionary", response_model=list[TerminologyDictionaryEntry], dependencies=[read_dep])
     def list_terminology_dictionary() -> list[TerminologyDictionaryEntry]:
         return terminology_store.list_entries()
 
-    @api.get("/language-quality")
+    @api.get("/language-quality", dependencies=[read_dep])
     def get_language_quality() -> dict:
         return build_language_quality_report(signal_store.list_signals(), terminology_store.list_entries())
 
@@ -798,7 +806,7 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @api.get("/policy-rules/{rule_id}", response_model=PolicyRule)
+    @api.get("/policy-rules/{rule_id}", response_model=PolicyRule, dependencies=[read_dep])
     def get_policy_rule(rule_id: str) -> PolicyRule:
         policy_rule = policy_store.get_rule(rule_id)
         if policy_rule is None:
@@ -806,7 +814,7 @@ def create_app(
 
         return policy_rule
 
-    @api.get("/demo-datasets", response_model=list[DemoDatasetSummary])
+    @api.get("/demo-datasets", response_model=list[DemoDatasetSummary], dependencies=[read_dep])
     def list_demo_datasets() -> list[DemoDatasetSummary]:
         return [to_demo_dataset_summary(dataset) for dataset in active_demo_datasets]
 
@@ -822,11 +830,11 @@ def create_app(
             customer_context=context_result,
         )
 
-    @api.get("/problem-candidates", response_model=list[ProblemCandidate])
+    @api.get("/problem-candidates", response_model=list[ProblemCandidate], dependencies=[read_dep])
     def list_problem_candidates() -> list[ProblemCandidate]:
         return current_candidates()
 
-    @api.get("/emerging-problems", response_model=EmergingProblemReport)
+    @api.get("/emerging-problems", response_model=EmergingProblemReport, dependencies=[read_dep])
     def list_emerging_problems() -> EmergingProblemReport:
         return build_emerging_problem_report(current_candidates())
 
@@ -886,7 +894,7 @@ def create_app(
         problem = require_problem(problem_id)
         return workflow_store.record_approval(problem=problem, decision=decision)
 
-    @api.get("/problems/{problem_id}/workflow", response_model=WorkflowState)
+    @api.get("/problems/{problem_id}/workflow", response_model=WorkflowState, dependencies=[read_dep])
     def get_workflow_state(
         problem_id: str,
         x_tenant_id: str | None = Header(default=None, alias="x-tenant-id"),
@@ -946,12 +954,12 @@ def create_app(
             actor=identity.actor_id,
         )
 
-    @api.get("/problems/{problem_id}/outcome", response_model=OutcomeSnapshot)
+    @api.get("/problems/{problem_id}/outcome", response_model=OutcomeSnapshot, dependencies=[read_dep])
     def get_outcome_snapshot(problem_id: str) -> OutcomeSnapshot:
         problem = require_problem(problem_id)
         return workflow_store.outcome_snapshot(problem)
 
-    @api.get("/outcome-board", response_model=OutcomeBoard)
+    @api.get("/outcome-board", response_model=OutcomeBoard, dependencies=[read_dep])
     def get_outcome_board(
         x_tenant_id: str | None = Header(default=None, alias="x-tenant-id"),
     ) -> OutcomeBoard:
@@ -963,15 +971,15 @@ def create_app(
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
         return build_outcome_board(list_enriched_problems(), workflow_store, tenant_id=tenant_id)
 
-    @api.get("/approvals", response_model=list[ApprovalRecord])
+    @api.get("/approvals", response_model=list[ApprovalRecord], dependencies=[read_dep])
     def list_approvals() -> list[ApprovalRecord]:
         return workflow_store.list_approvals()
 
-    @api.get("/executions", response_model=list[ExecutionRecord])
+    @api.get("/executions", response_model=list[ExecutionRecord], dependencies=[read_dep])
     def list_executions() -> list[ExecutionRecord]:
         return workflow_store.list_executions()
 
-    @api.get("/jira-drafts", response_model=list[JiraIssueDraft])
+    @api.get("/jira-drafts", response_model=list[JiraIssueDraft], dependencies=[read_dep])
     def list_jira_drafts() -> list[JiraIssueDraft]:
         return workflow_store.list_jira_issue_drafts()
 
@@ -990,7 +998,7 @@ def create_app(
             ],
         }
 
-    @api.get("/workspace", response_model=WorkspaceSettings)
+    @api.get("/workspace", response_model=WorkspaceSettings, dependencies=[read_dep])
     def get_workspace(user: UserContext = Depends(get_current_user)) -> WorkspaceSettings:  # noqa: B008
         return workspace_store.get(user.workspace_id)
 
@@ -1005,7 +1013,7 @@ def create_app(
     ) -> WorkspaceSettings:
         return workspace_store.put(user.workspace_id, settings)
 
-    @api.get("/system-config", response_model=SystemConfig)
+    @api.get("/system-config", response_model=SystemConfig, dependencies=[read_dep])
     def get_system_config() -> SystemConfig:
         from app.auth import AUTH_ENABLED
 
@@ -1015,7 +1023,7 @@ def create_app(
             auth_enabled=AUTH_ENABLED,
         )
 
-    @api.get("/rules", response_model=list[FeedbackRule])
+    @api.get("/rules", response_model=list[FeedbackRule], dependencies=[read_dep])
     def list_rules() -> list[FeedbackRule]:
         return rule_store.list_rules()
 
@@ -1139,22 +1147,29 @@ def create_app(
         raise HTTPException(status_code=400, detail=f"Unknown connector type: {connector_type}")
 
     # ====== Triage pipeline endpoint ======
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.types import Command
 
-    @api.post("/triage/run", dependencies=[Depends(require_role(Role.editor))])
-    def run_triage_pipeline(body: dict) -> dict:
+    from app.agents.triage_graph import build_triage_graph
+
+    # App-scoped graph + checkpointer so a run that pauses at the human-approval
+    # interrupt can be RESUMED by a later request (POST /triage/resume). Previously the
+    # endpoint built a fresh per-request MemorySaver and discarded it, so the paused
+    # state was lost and action/measure/learn never ran for consequential actions —
+    # the whole outcome loop was unreachable in production.
+    # ponytail: in-process MemorySaver — resume works within one worker. Multi-worker
+    # durability needs PostgresSaver (langgraph-checkpoint-postgres is already a dep).
+    triage_graph = build_triage_graph(checkpointer=MemorySaver())
+
+    @api.post("/triage/run", dependencies=[Depends(require_role(Role.editor)), Depends(rate_limiter)])
+    def run_triage_pipeline(body: dict, user: UserContext = Depends(get_current_user)) -> dict:  # noqa: B008
         """Run the LangGraph triage pipeline on signals.
 
-        Input: { "signals": [...], "connector_configs": {...}, "context_data": {...} }
-        Output: { "insights": [...], "status": "synthesized", "errors": [...] }
-
-        The pipeline runs ingest -> enrich -> classify -> synthesize and
-        returns insights. The human-in-the-loop approval interrupt is handled
-        separately via the Actions page.
+        Runs ingest -> enrich -> classify -> synthesize -> governance -> approval.
+        When consequential actions require human approval the graph PAUSES at the
+        approval interrupt and this returns status="awaiting_approval" with a
+        thread_id; resume via POST /triage/resume to run action -> measure -> learn.
         """
-        from langgraph.checkpoint.memory import MemorySaver
-
-        from app.agents.triage_graph import build_triage_graph
-
         raw_signals = body.get("signals", [])
         if not raw_signals:
             # If no signals provided, pull from the signal store
@@ -1190,14 +1205,14 @@ def create_app(
         # ponytail: best-effort — synthesis works fine without learnings, so a
         # store/DB hiccup degrades gracefully rather than failing the triage run.
         try:
-            learnings = default_learning_store().load(workspace_id=1)
+            learnings = default_learning_store().load(workspace_id=user.workspace_id)
         except Exception:
             learnings = []
 
-        graph = build_triage_graph(checkpointer=MemorySaver())
-        config = {"configurable": {"thread_id": f"triage-{utc_now()}"}}
+        thread_id = f"triage-{uuid4().hex}"
+        config = {"configurable": {"thread_id": thread_id}}
 
-        result = graph.invoke(
+        result = triage_graph.invoke(
             {
                 "signals": raw_signals,
                 "connector_configs": conn_configs,
@@ -1207,10 +1222,54 @@ def create_app(
             config=config,
         )
 
+        # A non-empty `next` means the graph paused at the approval interrupt.
+        if triage_graph.get_state(config).next:
+            return {
+                "status": "awaiting_approval",
+                "thread_id": thread_id,
+                "insights": result.get("insights", []),
+                "enriched_count": result.get("enrichment_count", 0),
+                "errors": result.get("errors", []),
+            }
+
+        # Ran to completion (no consequential actions / approval skipped).
         return {
             "insights": result.get("insights", []),
             "enriched_count": result.get("enrichment_count", 0),
             "status": result.get("status", "unknown"),
+            "errors": result.get("errors", []),
+            "thread_id": thread_id,
+        }
+
+    @api.post("/triage/resume", dependencies=[Depends(require_role(Role.editor)), Depends(rate_limiter)])
+    def resume_triage_pipeline(body: dict, user: UserContext = Depends(get_current_user)) -> dict:  # noqa: B008
+        """Resume a paused triage run after human approval.
+
+        Input: { "thread_id": "...", "decision": "approved" | "rejected" }. On
+        approval the graph runs action -> measure -> learn (closing the outcome loop).
+        """
+        thread_id = body.get("thread_id")
+        decision = (body.get("decision") or "approved").strip().lower()
+        if not thread_id:
+            raise HTTPException(status_code=422, detail="thread_id is required")
+        if decision not in ("approved", "rejected"):
+            raise HTTPException(status_code=422, detail="decision must be 'approved' or 'rejected'")
+
+        config = {"configurable": {"thread_id": thread_id}}
+        if not triage_graph.get_state(config).next:
+            raise HTTPException(
+                status_code=404,
+                detail="No triage run awaiting approval for that thread_id (expired or already resumed)",
+            )
+
+        result = triage_graph.invoke(Command(resume=decision), config=config)
+        return {
+            "status": result.get("status", "unknown"),
+            "approval_decision": result.get("approval_decision"),
+            "approved_insights": result.get("approved_insights", []),
+            "action_results": result.get("action_results", []),
+            "outcome": result.get("outcome"),
+            "learning": result.get("learning"),
             "errors": result.get("errors", []),
         }
 

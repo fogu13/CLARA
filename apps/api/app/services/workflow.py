@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import UTC, datetime
 from itertools import count
 from pathlib import Path
 from uuid import uuid4
@@ -32,10 +31,7 @@ from app.domain.models import (
     WorkflowState,
     retention_expires_at,
 )
-
-
-def utc_now() -> str:
-    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+from app.services.common import action_snapshot, utc_now  # re-exported for importers
 
 
 UNRESOLVED_GOVERNANCE_STATUSES = {"fail", "review_required"}
@@ -88,10 +84,6 @@ def find_action(problem: ProblemRecord, action_id: str):
         raise HTTPException(status_code=404, detail="Action proposal not found")
 
     return action
-
-
-def action_snapshot(action: ActionProposal) -> ActionProposalSnapshot:
-    return ActionProposalSnapshot.model_validate(action.model_dump(by_alias=True))
 
 
 def _diff_value(value) -> str:

@@ -6,13 +6,13 @@ from pathlib import Path
 
 from app.domain.models import (
     ActionProposal,
-    ActionProposalSnapshot,
     ActionProposalUpdateRequest,
     ProblemRecord,
     ProblemStatus,
     ProblemUpdateRequest,
 )
 from app.domain.scoring import approval_pressure
+from app.services.common import action_snapshot  # re-exported for existing importers
 
 
 def with_approval_pressure(problem: ProblemRecord) -> ProblemRecord:
@@ -30,10 +30,6 @@ def with_approval_pressure(problem: ProblemRecord) -> ProblemRecord:
 def apply_problem_update(problem: ProblemRecord, update: ProblemUpdateRequest) -> ProblemRecord:
     updates = update.model_dump(exclude_unset=True, exclude_none=True)
     return with_approval_pressure(problem.model_copy(update=updates))
-
-
-def action_snapshot(action: ActionProposal) -> ActionProposalSnapshot:
-    return ActionProposalSnapshot.model_validate(action.model_dump(by_alias=True))
 
 
 def apply_action_proposal_update(
