@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from collections import Counter
 from pathlib import Path
@@ -13,6 +14,7 @@ from app.domain.models import (
     ActionProposalUpdateRequest,
     AffectedContextExplorer,
     ApprovalDecision,
+    ApprovalDecisionStatus,
     ApprovalRecord,
     CandidateDecisionStatus,
     CandidateReviewRequest,
@@ -118,6 +120,8 @@ from app.services.signals import (
 from app.services.taxonomies import TaxonomyStore, TerminologyStore, classify_candidate
 from app.services.workflow import SQLiteWorkflowStore
 from app.services.workspace import SQLiteWorkspaceStore
+
+logger = logging.getLogger(__name__)
 
 
 def default_db_path() -> Path:
@@ -892,7 +896,36 @@ def create_app(
     @api.post("/problems/{problem_id}/approvals", response_model=ApprovalRecord, dependencies=[Depends(require_role(Role.editor))])
     def record_approval(problem_id: str, decision: ApprovalDecision) -> ApprovalRecord:
         problem = require_problem(problem_id)
-        return workflow_store.record_approval(problem=problem, decision=decision)
+        record = workflow_store.record_approval(problem=problem, decision=decision)
+
+        # Real action push: an approved action fires its destination connector
+        # (Jira/Slack) when one is configured; otherwise the draft stands. Push
+        # failures are recorded on the execution and never fail the approval.
+        if record.decision == ApprovalDecisionStatus.approved:
+            from app.services.action_push import push_approved_action
+            from app.services.workflow import find_action
+
+            execution = next(
+                (
+                    e
+                    for e in reversed(workflow_store.list_executions())
+                    if e.problem_id == problem_id and e.action_id == decision.action_id
+                ),
+                None,
+            )
+            if execution is not None:
+                try:
+                    push_approved_action(
+                        problem=problem,
+                        action=find_action(problem, decision.action_id),
+                        execution=execution,
+                        config_store=connector_config_store,
+                        workflow_store=workflow_store,
+                    )
+                except Exception:  # noqa: BLE001 — approval already recorded; push is best-effort
+                    logger.exception("Action push failed unexpectedly for %s", decision.action_id)
+
+        return record
 
     @api.get("/problems/{problem_id}/workflow", response_model=WorkflowState, dependencies=[read_dep])
     def get_workflow_state(

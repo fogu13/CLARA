@@ -179,6 +179,8 @@ class ExecutionStatus(str, Enum):
     blocked = "blocked"
     not_started = "not_started"
     completed = "completed"
+    pushed = "pushed"
+    push_failed = "push_failed"
 
 
 class LearningStatus(str, Enum):
@@ -496,6 +498,10 @@ class ExecutionRecord(BaseModel):
     owner: str
     summary: str
     created_at: str
+    # Real-push audit trail: the external system's id (e.g. Jira issue key) and a
+    # human-readable outcome/error note. None while the execution is a local draft.
+    external_ref: str | None = None
+    detail: str | None = None
 
 
 class JiraIssueDraft(BaseModel):
