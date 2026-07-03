@@ -205,6 +205,26 @@ export async function getEmergingProblems(): Promise<EmergingProblemReport> {
   return requestJson<EmergingProblemReport>(`${apiBaseUrl()}/emerging-problems`);
 }
 
+export type MeasurementPlan = {
+  id: number;
+  problem_id: string;
+  execution_id: string;
+  executed_at: string;
+  due_at: string;
+  kind: string;
+  status: string;
+  note?: string | null;
+  created_at: string;
+};
+
+export async function getMeasurements(): Promise<MeasurementPlan[]> {
+  return requestJson<MeasurementPlan[]>(`${apiBaseUrl()}/measurements`);
+}
+
+export async function runDueMeasurements(): Promise<{ measured: number; manual_required: number; skipped: number }> {
+  return requestJson(`${apiBaseUrl()}/measurements/run-due`, { method: "POST", body: JSON.stringify({}) });
+}
+
 export async function getJourneyEvents(): Promise<JourneyEventRecord[]> {
   return requestJson<JourneyEventRecord[]>(`${apiBaseUrl()}/journey-events`);
 }

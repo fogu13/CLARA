@@ -1,3 +1,4 @@
+import { MeasurementCheckpointsPanel } from "../../components/measurement-checkpoints-panel";
 import { OutcomeBoardPanel } from "../../components/outcome-board-panel";
 
 export default function LearningsPage() {
@@ -10,6 +11,7 @@ export default function LearningsPage() {
         </p>
       </div>
 
+      <MeasurementCheckpointsPanel />
       <OutcomeBoardPanel />
     </div>
   );
