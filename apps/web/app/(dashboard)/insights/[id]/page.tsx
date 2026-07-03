@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { FileDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ActionDecisionPanel } from "@/app/components/action-decision-panel";
@@ -354,12 +355,20 @@ export default async function InsightDetailPage({
             {problem.journey} / {problem.journey_stage} / owner: {problem.owner}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge variant={problem.status === "blocked_by_policy" ? "destructive" : "secondary"}>
             {label(problem.status)}
           </Badge>
           <Badge variant="outline">Impact {percent(score)}</Badge>
           <Badge variant="outline">Evidence {percent(problem.evidence_confidence)}</Badge>
+          <a
+            href={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/problems/${problem.problem_id}/evidence-pack`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted"
+          >
+            <FileDown className="mr-1 h-3 w-3" /> Evidence pack
+          </a>
         </div>
       </div>
 
