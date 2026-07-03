@@ -212,37 +212,38 @@ def _fallback_signal_id(row: dict) -> str:
     return "CSV-" + hashlib.sha256(basis.encode("utf-8")).hexdigest()[:12]
 
 
+def signal_from_row(row: dict[str, str], *, default_source: str = "csv_upload") -> SignalRecord:
+    """Build a SignalRecord from a flat field mapping (CSV row or webhook payload).
+
+    Unknown keys are preserved as metadata; missing fields get the same defaults
+    everywhere so CSV and webhook ingestion behave identically.
+    """
+    metadata = {
+        key: (value or "").strip()
+        for key, value in row.items()
+        if key and key not in KNOWN_SIGNAL_COLUMNS and (value or "").strip()
+    }
+    return SignalRecord(
+        signal_id=row.get("signal_id") or _fallback_signal_id(row),
+        customer_id=row.get("customer_id") or "unknown_customer",
+        account_id=row.get("account_id") or "unknown_account",
+        source=row.get("source") or default_source,
+        journey=row.get("journey") or "unknown_journey",
+        journey_stage=row.get("journey_stage") or "unknown_stage",
+        campaign_exposure=split_multi_value(row.get("campaign_exposure")),
+        product_events=split_multi_value(row.get("product_events")),
+        feedback_text=row.get("feedback_text") or "",
+        # No language field -> detect from the text (DE/EN heuristic), so
+        # German handling fires on real imports instead of "unknown".
+        language=row.get("language") or detect_language(row.get("feedback_text") or ""),
+        timestamp=row.get("timestamp") or "1970-01-01T00:00:00Z",
+        metadata=metadata,
+    )
+
+
 def parse_signal_csv(csv_text: str) -> list[SignalRecord]:
     reader = csv.DictReader(io.StringIO(csv_text.strip()))
-    signals: list[SignalRecord] = []
-
-    for index, row in enumerate(reader, start=1):
-        # Any column that isn't a canonical signal field is preserved as metadata.
-        metadata = {
-            key: (value or "").strip()
-            for key, value in row.items()
-            if key and key not in KNOWN_SIGNAL_COLUMNS and (value or "").strip()
-        }
-        signals.append(
-            SignalRecord(
-                signal_id=row.get("signal_id") or _fallback_signal_id(row),
-                customer_id=row.get("customer_id") or "unknown_customer",
-                account_id=row.get("account_id") or "unknown_account",
-                source=row.get("source") or "csv_upload",
-                journey=row.get("journey") or "unknown_journey",
-                journey_stage=row.get("journey_stage") or "unknown_stage",
-                campaign_exposure=split_multi_value(row.get("campaign_exposure")),
-                product_events=split_multi_value(row.get("product_events")),
-                feedback_text=row.get("feedback_text") or "",
-                # No language column -> detect from the text (DE/EN heuristic), so
-                # German handling fires on real imports instead of "unknown".
-                language=row.get("language") or detect_language(row.get("feedback_text") or ""),
-                timestamp=row.get("timestamp") or "1970-01-01T00:00:00Z",
-                metadata=metadata,
-            )
-        )
-
-    return signals
+    return [signal_from_row(row) for row in reader]
 
 
 def build_candidates(signals: list[SignalRecord]) -> list[ProblemCandidate]:

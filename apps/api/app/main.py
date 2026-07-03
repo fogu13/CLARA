@@ -6,7 +6,11 @@ from collections import Counter
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+import hashlib
+import hmac
+import json
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import UserContext, get_current_user
@@ -115,6 +119,7 @@ from app.services.seed import (
 from app.services.signals import (
     SQLiteSignalStore,
     parse_signal_csv,
+    signal_from_row,
     promote_candidate,
     validate_signal_csv,
 )
@@ -496,9 +501,10 @@ def create_app(
         PostgresTerminologyStore(url) if url else TerminologyStore()
     )
     active_demo_datasets = demo_datasets or load_demo_datasets()
-    from app.connectors.config_store import default_connector_config_store
+    from app.connectors.config_store import SQLiteConnectorConfigStore
 
-    connector_config_store = connector_configs or default_connector_config_store()
+    # Persistent by default: a pilot's Jira/Zendesk credentials must survive restarts.
+    connector_config_store = connector_configs or SQLiteConnectorConfigStore(default_db_path())
     if not signal_store.list_signals():
         signal_store.import_signals(load_seed_signals())
     if not context_store.list_context():
@@ -682,6 +688,62 @@ def create_app(
         telemetry_store.record(
             "signals_imported",
             metadata={"source": "csv", "imported": result.imported, "skipped": result.skipped_duplicates},
+        )
+        return result
+
+    @api.post("/ingest/webhook", response_model=SignalImportResult)
+    async def ingest_webhook(request: Request) -> SignalImportResult:
+        """Generic push ingestion: anything that can POST JSON can feed CLARA.
+
+        Auth is the HMAC signature (X-Clara-Signature: sha256=<hex>) computed over
+        the raw body with the shared secret from the "webhook" connector config —
+        external systems don't hold user JWTs, so this route deliberately carries
+        no role dependency. Body: {"signals": [{...flat fields...}]} or a bare list;
+        rows get the same defaults/dedup/language handling as CSV import.
+        """
+        webhook_config = connector_config_store.get_config("webhook")
+        secret = (webhook_config.config.get("secret") if webhook_config else "") or ""
+        if webhook_config is None or not webhook_config.is_active or not secret:
+            raise HTTPException(
+                status_code=400,
+                detail="No active webhook configured — set a secret via PUT /connectors/webhook",
+            )
+
+        raw_body = await request.body()
+        expected = "sha256=" + hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+        provided = request.headers.get("x-clara-signature", "")
+        if not hmac.compare_digest(expected, provided):
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+        try:
+            payload = json.loads(raw_body)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Body must be valid JSON") from exc
+        rows = payload.get("signals") if isinstance(payload, dict) else payload
+        if not isinstance(rows, list) or not rows:
+            raise HTTPException(
+                status_code=422,
+                detail='Expected {"signals": [...]} or a non-empty JSON array',
+            )
+        if len(rows) > 1000:
+            raise HTTPException(status_code=422, detail="Max 1000 signals per webhook call")
+
+        records = [
+            signal_from_row(
+                {key: str(value) for key, value in row.items() if value is not None},
+                default_source="webhook",
+            )
+            for row in rows
+            if isinstance(row, dict)
+        ]
+        records = [record for record in records if record.feedback_text.strip()]
+        if not records:
+            raise HTTPException(status_code=422, detail="No rows with feedback_text")
+
+        result = signal_store.import_signals(records)
+        telemetry_store.record(
+            "signals_imported",
+            metadata={"source": "webhook", "imported": result.imported, "skipped": result.skipped_duplicates},
         )
         return result
 

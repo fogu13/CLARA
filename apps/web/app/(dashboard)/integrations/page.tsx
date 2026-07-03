@@ -32,6 +32,15 @@ const CONNECTOR_CATALOG = [
     ],
   },
   {
+    type: "webhook",
+    name: "Webhook",
+    category: "Source (Pull)",
+    description: "Push signals from any system via signed HTTP POST to /ingest/webhook",
+    fields: [
+      { key: "secret", label: "Shared Secret (HMAC-SHA256)", placeholder: "generate a long random string" },
+    ],
+  },
+  {
     type: "jira",
     name: "Jira",
     category: "Destination (Push)",

@@ -38,11 +38,16 @@ def make_auth_client(monkeypatch) -> TestClient:
     importlib.reload(rbac_mod)
     importlib.reload(main_mod)
 
+    from app.connectors.config_store import ConnectorConfigStore
+
     return TestClient(
         main_mod.create_app(
             problem_store=ProblemStore(load_seed_problems()),
             signals=SignalStore(),
             workflows=WorkflowStore(),
+            # Isolated in-memory store: the connector PUT test must not persist a
+            # half-configured Jira into the shared DB and trip later approval tests.
+            connector_configs=ConnectorConfigStore(),
         )
     )
 
