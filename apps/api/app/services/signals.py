@@ -594,6 +594,13 @@ class SignalStore:
     def list_signals(self) -> list[SignalRecord]:
         return sorted(self._signals.values(), key=lambda signal: signal.timestamp)
 
+    def delete_by_customer(self, customer_id: str) -> int:
+        """GDPR Art. 17: remove every signal belonging to a customer."""
+        doomed = [sid for sid, s in self._signals.items() if s.customer_id == customer_id]
+        for signal_id in doomed:
+            del self._signals[signal_id]
+        return len(doomed)
+
     def import_signals(self, signals: list[SignalRecord]) -> SignalImportResult:
         imported = 0
         skipped = 0
@@ -687,6 +694,14 @@ class SQLiteSignalStore:
     def list_signals(self) -> list[SignalRecord]:
         rows = self._connection.execute("SELECT * FROM signals ORDER BY timestamp").fetchall()
         return [self._signal_from_row(row) for row in rows]
+
+    def delete_by_customer(self, customer_id: str) -> int:
+        """GDPR Art. 17: remove every signal belonging to a customer."""
+        cursor = self._connection.execute(
+            "DELETE FROM signals WHERE customer_id = ?", (customer_id,)
+        )
+        self._connection.commit()
+        return cursor.rowcount
 
     def import_signals(self, signals: list[SignalRecord]) -> SignalImportResult:
         imported = 0

@@ -63,6 +63,26 @@ def apply_problem_status(problem: ProblemRecord, status: ProblemStatus) -> Probl
     return with_approval_pressure(problem.model_copy(update={"status": status}))
 
 
+GDPR_ERASED = "[erased under GDPR Art. 17]"
+
+
+def scrub_customer_evidence(problem: ProblemRecord, customer_id: str) -> ProblemRecord | None:
+    """Erase a customer's personal content from a problem's evidence.
+
+    The evidence entry stays (aggregate counts remain honest) but the excerpt and
+    customer identifier are removed. Returns None when nothing matched.
+    """
+    if not any(evidence.customer_id == customer_id for evidence in problem.evidence):
+        return None
+    scrubbed = [
+        evidence.model_copy(update={"customer_id": "erased", "excerpt": GDPR_ERASED})
+        if evidence.customer_id == customer_id
+        else evidence
+        for evidence in problem.evidence
+    ]
+    return problem.model_copy(update={"evidence": scrubbed})
+
+
 class ProblemStore:
     def __init__(self, seed_problems: list[ProblemRecord]) -> None:
         self._seed_problems = {problem.problem_id: problem for problem in seed_problems}
@@ -81,6 +101,16 @@ class ProblemStore:
 
         self._draft_problems[problem.problem_id] = problem
         return problem
+
+    def scrub_customer(self, customer_id: str) -> int:
+        """GDPR Art. 17: erase a customer's evidence content from draft problems."""
+        scrubbed = 0
+        for problem_id, problem in list(self._draft_problems.items()):
+            updated = scrub_customer_evidence(problem, customer_id)
+            if updated is not None:
+                self._draft_problems[problem_id] = updated
+                scrubbed += 1
+        return scrubbed
 
     def update_problem(
         self,
@@ -187,6 +217,26 @@ class SQLiteProblemStore:
         )
         self._connection.commit()
         return problem
+
+    def scrub_customer(self, customer_id: str) -> int:
+        """GDPR Art. 17: erase a customer's evidence content from draft problems."""
+        rows = self._connection.execute(
+            "SELECT problem_id, payload FROM draft_problems"
+        ).fetchall()
+        scrubbed = 0
+        for row in rows:
+            problem = ProblemRecord.model_validate(json.loads(row["payload"]))
+            updated = scrub_customer_evidence(problem, customer_id)
+            if updated is None:
+                continue
+            self._connection.execute(
+                "UPDATE draft_problems SET payload = ?, updated_at = CURRENT_TIMESTAMP"
+                " WHERE problem_id = ?",
+                (json.dumps(updated.model_dump(mode="json", by_alias=True)), row["problem_id"]),
+            )
+            scrubbed += 1
+        self._connection.commit()
+        return scrubbed
 
     def update_problem(
         self,
