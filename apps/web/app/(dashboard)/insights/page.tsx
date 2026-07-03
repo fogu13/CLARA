@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Lightbulb, AlertCircle } from "lucide-react";
 import { getProblems } from "@/lib/client-api";
+import { AskClaraPanel } from "../../components/ask-clara-panel";
 
 export default function InsightsPage() {
   const [problems, setProblems] = useState<any[]>([]);
@@ -53,6 +54,8 @@ export default function InsightsPage() {
         <h1 className="text-2xl font-bold">Insights</h1>
         <p className="text-sm text-muted-foreground mt-1">AI-synthesized problem insights from customer signals</p>
       </div>
+
+      <AskClaraPanel />
 
       {problems.length === 0 ? (
         <Card>
