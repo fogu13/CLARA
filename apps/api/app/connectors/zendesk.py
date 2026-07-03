@@ -33,6 +33,7 @@ import re
 import httpx
 
 from app.connectors.base import ConnectorError
+from app.services.language import detect_language
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +198,9 @@ class ZendeskSourceConnector:
             "campaign_exposure": [],
             "product_events": [],
             "feedback_text": text[:2000],  # cap for LLM context
-            "language": "en",  # Zendesk doesn't reliably provide this
+            # Zendesk doesn't reliably provide the language; detect from the text
+            # so German tickets stop arriving tagged as English.
+            "language": detect_language(text),
             "timestamp": recorded_at,
             "metadata": {
                 "external_id": external_id,

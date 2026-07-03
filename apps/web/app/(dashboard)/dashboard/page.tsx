@@ -16,9 +16,28 @@ import {
   TrendingUp,
   Users
 } from "lucide-react";
-import { apiBaseUrl, apiHeaders, getApprovals, getExecutions, getOutcomeBoard, getProblems } from "@/lib/client-api";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  apiBaseUrl,
+  apiHeaders,
+  getApprovals,
+  getEmergingProblems,
+  getExecutions,
+  getOutcomeBoard,
+  getProblems,
+  getSignals
+} from "@/lib/client-api";
 import { fallbackProblems } from "@/lib/sample-data";
-import type { ActionClass, ApprovalRecord, ExecutionRecord, OutcomeBoard, OutcomeBoardItem, ProblemSummary } from "@/lib/types";
+import type {
+  ActionClass,
+  ApprovalRecord,
+  EmergingProblemReport,
+  ExecutionRecord,
+  OutcomeBoard,
+  OutcomeBoardItem,
+  ProblemSummary,
+  SignalRecord
+} from "@/lib/types";
 
 type ConnectorSummary = { connector_type: string; is_active: boolean };
 
@@ -28,6 +47,8 @@ type DashboardData = {
   approvals: ApprovalRecord[];
   executions: ExecutionRecord[];
   connectors: ConnectorSummary[];
+  signals: SignalRecord[];
+  emerging: EmergingProblemReport | null;
   usingFallback: boolean;
   partialSources: string[];
 };
@@ -202,6 +223,21 @@ function approvedActionIds(approvals: ApprovalRecord[]): Set<string> {
   return new Set(approvals.filter((approval) => approval.decision === "approved").map((approval) => approval.action_id));
 }
 
+// Signals per day over the trailing window — the dashboard's time axis.
+function signalTrendSeries(signals: SignalRecord[], days = 30): { day: string; count: number }[] {
+  const now = Date.now();
+  const dayMs = 86_400_000;
+  const buckets = new Map<string, number>();
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    buckets.set(new Date(now - offset * dayMs).toISOString().slice(0, 10), 0);
+  }
+  for (const signal of signals) {
+    const day = (signal.timestamp || "").slice(0, 10);
+    if (buckets.has(day)) buckets.set(day, (buckets.get(day) ?? 0) + 1);
+  }
+  return [...buckets.entries()].map(([day, count]) => ({ day: day.slice(5), count }));
+}
+
 async function getConnectors(): Promise<ConnectorSummary[]> {
   const response = await fetch(`${apiBaseUrl()}/connectors`, { headers: apiHeaders() });
   if (!response.ok) return [];
@@ -248,7 +284,7 @@ export default function DashboardPage() {
       try {
         const [problems, outcomeBoard] = await Promise.all([getProblems(), getOutcomeBoard()]);
         const partialSources: string[] = [];
-        const [approvals, executions, connectors] = await Promise.all([
+        const [approvals, executions, connectors, signals, emerging] = await Promise.all([
           getApprovals().catch(() => {
             partialSources.push("approvals");
             return [];
@@ -260,9 +296,17 @@ export default function DashboardPage() {
           getConnectors().catch(() => {
             partialSources.push("connectors");
             return [];
+          }),
+          getSignals().catch(() => {
+            partialSources.push("signals");
+            return [] as SignalRecord[];
+          }),
+          getEmergingProblems().catch(() => {
+            partialSources.push("emerging problems");
+            return null;
           })
         ]);
-        setData({ problems, outcomeBoard, approvals, executions, connectors, usingFallback: false, partialSources });
+        setData({ problems, outcomeBoard, approvals, executions, connectors, signals, emerging, usingFallback: false, partialSources });
       } catch {
         setData({
           problems: fallbackSummaries(),
@@ -270,6 +314,8 @@ export default function DashboardPage() {
           approvals: [],
           executions: [],
           connectors: [],
+          signals: [],
+          emerging: null,
           usingFallback: true,
           partialSources: []
         });
@@ -288,6 +334,9 @@ export default function DashboardPage() {
   const approvals = data?.approvals ?? [];
   const executions = data?.executions ?? [];
   const connectors = data?.connectors ?? [];
+  const signals = data?.signals ?? [];
+  const emerging = data?.emerging ?? null;
+  const trendSeries = signalTrendSeries(signals);
   const actionClassCount = problems.reduce((total, problem) => total + problem.top_action_classes.length, 0);
   const approvedActions = approvedActionIds(approvals);
   const blockedProblems = problems.filter((problem) => blockingChecks(problem) > 0);
@@ -348,6 +397,63 @@ export default function DashboardPage() {
         <MetricCard title="Pending Decisions" value={pendingDecisionProblems.length} detail={`${approvals.length} approval decisions recorded`} tone={pendingDecisionProblems.length > 0 ? "warn" : "good"} />
         <MetricCard title="Outcomes improving" value={`${improvingOutcomes}/${outcomeBoard.total}`} detail={`${measuredOutcomes} measured, ${outcomeBoard.not_measured} pending`} tone={improvingOutcomes > 0 ? "good" : "neutral"} />
         <MetricCard title="Connectors" value={`${activeConnectors}/${connectors.length}`} detail="Active integrations" tone={activeConnectors > 0 ? "good" : "neutral"} />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_0.8fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <TrendingUp className="h-5 w-5 text-primary" /> Signal volume (30 days)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {signals.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No timestamped signals yet — import feedback to see the trend.</p>
+            ) : (
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={trendSeries} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="day" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={24} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip formatter={(value) => [`${value} signals`, "Volume"]} labelFormatter={(day) => `Day ${day}`} />
+                    <Area type="monotone" dataKey="count" stroke="hsl(173 58% 39%)" fill="hsl(173 58% 39% / 0.15)" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Sparkles className="h-5 w-5 text-amber-500" /> Emerging problems
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!emerging || emerging.signals.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No emerging candidates right now.</p>
+            ) : (
+              emerging.signals.slice(0, 5).map((item) => (
+                <div key={item.candidate_id} className="rounded-md border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium leading-tight">{item.title}</p>
+                    <Badge variant={item.trend_label === "action" ? "destructive" : "warning"}>
+                      {item.trend_label}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {label(item.journey)} / {label(item.journey_stage)} · score {Math.round(item.emerging_score * 100)}%
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {item.signal_count} signals · {item.customer_count} customers · {item.source_count} sources
+                  </p>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.4fr_0.8fr]">
