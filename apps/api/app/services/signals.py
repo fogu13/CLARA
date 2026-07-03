@@ -27,6 +27,7 @@ from app.domain.models import (
 )
 from app.domain.scoring import approval_pressure, impact_band, normalized_impact_score
 from app.services.common import utc_now  # re-exported for existing importers
+from app.services.language import detect_language
 
 
 def normalize_label(value: str) -> str:
@@ -233,7 +234,9 @@ def parse_signal_csv(csv_text: str) -> list[SignalRecord]:
                 campaign_exposure=split_multi_value(row.get("campaign_exposure")),
                 product_events=split_multi_value(row.get("product_events")),
                 feedback_text=row.get("feedback_text") or "",
-                language=row.get("language") or "unknown",
+                # No language column -> detect from the text (DE/EN heuristic), so
+                # German handling fires on real imports instead of "unknown".
+                language=row.get("language") or detect_language(row.get("feedback_text") or ""),
                 timestamp=row.get("timestamp") or "1970-01-01T00:00:00Z",
                 metadata=metadata,
             )

@@ -12,6 +12,7 @@ import type {
   CustomerContextValidationReport,
   DemoDatasetImportResult,
   DemoDatasetSummary,
+  EmergingProblemReport,
   ExecutionRecord,
   FeedbackRule,
   JiraIssueDraft,
@@ -198,6 +199,10 @@ export async function recordLearningConclusion(
 
 export async function getSignals(): Promise<SignalRecord[]> {
   return requestJson<SignalRecord[]>(`${apiBaseUrl()}/signals`);
+}
+
+export async function getEmergingProblems(): Promise<EmergingProblemReport> {
+  return requestJson<EmergingProblemReport>(`${apiBaseUrl()}/emerging-problems`);
 }
 
 export async function getJourneyEvents(): Promise<JourneyEventRecord[]> {
