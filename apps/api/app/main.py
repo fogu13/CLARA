@@ -972,10 +972,39 @@ def create_app(
         return [to_demo_dataset_summary(dataset) for dataset in active_demo_datasets]
 
     @api.post("/demo-datasets/{dataset_id}/import", response_model=DemoDatasetImportResult, dependencies=[Depends(require_role(Role.editor))])
-    def import_demo_dataset(dataset_id: str) -> DemoDatasetImportResult:
+    def import_demo_dataset(dataset_id: str, body: dict | None = None) -> DemoDatasetImportResult:
         dataset = require_demo_dataset(dataset_id)
-        signal_result = signal_store.import_signals(dataset.signals)
+        signals_to_import = dataset.signals
+        # Evergreen demos: shift timestamps so the newest signal lands yesterday,
+        # preserving relative spacing — the trend chart, emerging radar and
+        # signal-rate baselines stay meaningful whenever the demo runs.
+        # Opt out with {"rebase": false} for reproducible fixed-date imports.
+        if (body or {}).get("rebase", True):
+            from datetime import UTC, datetime, timedelta
+
+            parsed = []
+            for signal in signals_to_import:
+                try:
+                    parsed.append(datetime.fromisoformat(signal.timestamp.replace("Z", "+00:00")))
+                except ValueError:
+                    parsed.append(None)
+            valid = [ts for ts in parsed if ts is not None]
+            if valid:
+                shift = (datetime.now(UTC) - timedelta(days=1)) - max(valid)
+                signals_to_import = [
+                    signal.model_copy(
+                        update={"timestamp": (ts + shift).isoformat().replace("+00:00", "Z")}
+                    )
+                    if ts is not None
+                    else signal
+                    for signal, ts in zip(signals_to_import, parsed)
+                ]
+        signal_result = signal_store.import_signals(signals_to_import)
         context_result = context_store.import_context(dataset.customer_context)
+        telemetry_store.record(
+            "signals_imported",
+            metadata={"source": "demo_dataset", "dataset": dataset_id, "imported": signal_result.imported},
+        )
         return DemoDatasetImportResult(
             dataset_id=dataset.dataset_id,
             title=dataset.title,

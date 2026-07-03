@@ -1,0 +1,494 @@
+{
+  "dataset_id": "fintech_identity",
+  "title": "Fintech identity, payouts and support (DACH)",
+  "description": "Regulated DACH fintech scenario: identity-verification failures during onboarding, delayed withdrawals, and unresponsive support. German/English mix, multi-source (Zendesk, app store, webhook, Trustpilot) — sized so taxonomy bootstrap, the emerging radar and the outcome loop all light up in a live demo.",
+  "industry": "fintech",
+  "signals": [
+    {
+      "signal_id": "DEMO-FIN-001",
+      "customer_id": "C-FIN-101",
+      "account_id": "A-FIN-04",
+      "source": "zendesk",
+      "journey": "customer_onboarding",
+      "journey_stage": "identity_verification",
+      "campaign_exposure": [],
+      "product_events": [
+        "signup_completed",
+        "verification_started",
+        "verification_failed"
+      ],
+      "feedback_text": "Ich hänge seit vier Tagen in der Identitätsprüfung fest und niemand antwortet.",
+      "language": "de",
+      "timestamp": "2026-06-12T09:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-002",
+      "customer_id": "C-FIN-102",
+      "account_id": "A-FIN-05",
+      "source": "app_store",
+      "journey": "customer_onboarding",
+      "journey_stage": "identity_verification",
+      "campaign_exposure": [],
+      "product_events": [
+        "signup_completed",
+        "verification_started",
+        "verification_failed"
+      ],
+      "feedback_text": "Video-Ident bricht jedes Mal bei Schritt 3 ab. So kann ich kein Konto eröffnen.",
+      "language": "de",
+      "timestamp": "2026-06-14T10:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-003",
+      "customer_id": "C-FIN-103",
+      "account_id": "A-FIN-06",
+      "source": "webhook",
+      "journey": "customer_onboarding",
+      "journey_stage": "identity_verification",
+      "campaign_exposure": [],
+      "product_events": [
+        "signup_completed",
+        "verification_started",
+        "verification_failed"
+      ],
+      "feedback_text": "Identity verification has been pending for a week. I uploaded my passport twice.",
+      "language": "en",
+      "timestamp": "2026-06-16T11:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-004",
+      "customer_id": "C-FIN-104",
+      "account_id": "A-FIN-07",
+      "source": "zendesk",
+      "journey": "customer_onboarding",
+      "journey_stage": "identity_verification",
+      "campaign_exposure": [],
+      "product_events": [
+        "signup_completed",
+        "verification_started",
+        "verification_failed"
+      ],
+      "feedback_text": "Die App sagt nur 'Verifizierung läuft' — seit sechs Tagen. Was ist da los?",
+      "language": "de",
+      "timestamp": "2026-06-18T12:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-005",
+      "customer_id": "C-FIN-105",
+      "account_id": "A-FIN-01",
+      "source": "app_store",
+      "journey": "customer_onboarding",
+      "journey_stage": "identity_verification",
+      "campaign_exposure": [],
+      "product_events": [
+        "signup_completed",
+        "verification_started",
+        "verification_failed"
+      ],
+      "feedback_text": "Verification rejected my ID card with no reason given. Second attempt also failed.",
+      "language": "en",
+      "timestamp": "2026-06-20T13:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-006",
+      "customer_id": "C-FIN-106",
+      "account_id": "A-FIN-02",
+      "source": "webhook",
+      "journey": "customer_onboarding",
+      "journey_stage": "identity_verification",
+      "campaign_exposure": [],
+      "product_events": [
+        "signup_completed",
+        "verification_started",
+        "verification_failed"
+      ],
+      "feedback_text": "Warum brauche ich drei Anläufe für die Verifizierung? Konkurrenz schafft das in Minuten.",
+      "language": "de",
+      "timestamp": "2026-06-22T14:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-007",
+      "customer_id": "C-FIN-107",
+      "account_id": "A-FIN-03",
+      "source": "zendesk",
+      "journey": "customer_onboarding",
+      "journey_stage": "identity_verification",
+      "campaign_exposure": [],
+      "product_events": [
+        "signup_completed",
+        "verification_started",
+        "verification_failed"
+      ],
+      "feedback_text": "Stuck at identity check. Support says wait, but I want to trade before earnings week.",
+      "language": "en",
+      "timestamp": "2026-06-24T15:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-008",
+      "customer_id": "C-FIN-108",
+      "account_id": "A-FIN-04",
+      "source": "app_store",
+      "journey": "customer_onboarding",
+      "journey_stage": "identity_verification",
+      "campaign_exposure": [],
+      "product_events": [
+        "signup_completed",
+        "verification_started",
+        "verification_failed"
+      ],
+      "feedback_text": "Der Verifizierungslink aus der E-Mail funktioniert nicht, Fehler 403.",
+      "language": "de",
+      "timestamp": "2026-06-26T16:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-009",
+      "customer_id": "C-FIN-109",
+      "account_id": "A-FIN-05",
+      "source": "webhook",
+      "journey": "customer_onboarding",
+      "journey_stage": "identity_verification",
+      "campaign_exposure": [],
+      "product_events": [
+        "signup_completed",
+        "verification_started",
+        "verification_failed"
+      ],
+      "feedback_text": "Verification loop: app asks for documents I already submitted. Extremely frustrating.",
+      "language": "en",
+      "timestamp": "2026-06-28T09:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-010",
+      "customer_id": "C-FIN-110",
+      "account_id": "A-FIN-06",
+      "source": "zendesk",
+      "journey": "payments",
+      "journey_stage": "withdrawal",
+      "campaign_exposure": [],
+      "product_events": [
+        "withdrawal_requested",
+        "withdrawal_pending"
+      ],
+      "feedback_text": "Meine Auszahlung ist seit fünf Werktagen 'in Bearbeitung'. Das ist mein Geld!",
+      "language": "de",
+      "timestamp": "2026-06-18T08:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-011",
+      "customer_id": "C-FIN-111",
+      "account_id": "A-FIN-07",
+      "source": "webhook",
+      "journey": "payments",
+      "journey_stage": "withdrawal",
+      "campaign_exposure": [],
+      "product_events": [
+        "withdrawal_requested",
+        "withdrawal_pending"
+      ],
+      "feedback_text": "Withdrawal initiated 6 days ago, still nothing on my bank account. No status updates.",
+      "language": "en",
+      "timestamp": "2026-06-19T09:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-012",
+      "customer_id": "C-FIN-112",
+      "account_id": "A-FIN-01",
+      "source": "trustpilot",
+      "journey": "payments",
+      "journey_stage": "withdrawal",
+      "campaign_exposure": [],
+      "product_events": [
+        "withdrawal_requested",
+        "withdrawal_pending"
+      ],
+      "feedback_text": "Auszahlung über 2.000 € hängt fest und der Chat-Bot dreht sich im Kreis.",
+      "language": "de",
+      "timestamp": "2026-06-20T10:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-013",
+      "customer_id": "C-FIN-113",
+      "account_id": "A-FIN-02",
+      "source": "zendesk",
+      "journey": "payments",
+      "journey_stage": "withdrawal",
+      "campaign_exposure": [],
+      "product_events": [
+        "withdrawal_requested",
+        "withdrawal_pending"
+      ],
+      "feedback_text": "Second time my payout got delayed past the promised 2 days. Losing trust fast.",
+      "language": "en",
+      "timestamp": "2026-06-21T11:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-014",
+      "customer_id": "C-FIN-114",
+      "account_id": "A-FIN-03",
+      "source": "webhook",
+      "journey": "payments",
+      "journey_stage": "withdrawal",
+      "campaign_exposure": [],
+      "product_events": [
+        "withdrawal_requested",
+        "withdrawal_pending"
+      ],
+      "feedback_text": "Wo ist meine Überweisung? App zeigt 'abgeschlossen', Bank zeigt nichts.",
+      "language": "de",
+      "timestamp": "2026-06-22T12:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-015",
+      "customer_id": "C-FIN-115",
+      "account_id": "A-FIN-04",
+      "source": "trustpilot",
+      "journey": "payments",
+      "journey_stage": "withdrawal",
+      "campaign_exposure": [],
+      "product_events": [
+        "withdrawal_requested",
+        "withdrawal_pending"
+      ],
+      "feedback_text": "Payout stuck in review with zero explanation. This is a regulated product, act like it.",
+      "language": "en",
+      "timestamp": "2026-06-23T13:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-016",
+      "customer_id": "C-FIN-116",
+      "account_id": "A-FIN-05",
+      "source": "zendesk",
+      "journey": "payments",
+      "journey_stage": "withdrawal",
+      "campaign_exposure": [],
+      "product_events": [
+        "withdrawal_requested",
+        "withdrawal_pending"
+      ],
+      "feedback_text": "Auszahlungen dauern neuerdings eine Woche statt 48 Stunden. Was hat sich geändert?",
+      "language": "de",
+      "timestamp": "2026-06-24T14:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-017",
+      "customer_id": "C-FIN-117",
+      "account_id": "A-FIN-06",
+      "source": "webhook",
+      "journey": "payments",
+      "journey_stage": "withdrawal",
+      "campaign_exposure": [],
+      "product_events": [
+        "withdrawal_requested",
+        "withdrawal_pending"
+      ],
+      "feedback_text": "I need my funds for rent and the withdrawal has been pending for four days.",
+      "language": "en",
+      "timestamp": "2026-06-25T15:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-018",
+      "customer_id": "C-FIN-118",
+      "account_id": "A-FIN-07",
+      "source": "zendesk",
+      "journey": "support",
+      "journey_stage": "response_time",
+      "campaign_exposure": [],
+      "product_events": [
+        "ticket_opened",
+        "ticket_unanswered"
+      ],
+      "feedback_text": "Drei E-Mails, zwei Chats — keine einzige Antwort vom Support in zehn Tagen.",
+      "language": "de",
+      "timestamp": "2026-06-22T10:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-019",
+      "customer_id": "C-FIN-119",
+      "account_id": "A-FIN-01",
+      "source": "app_store",
+      "journey": "support",
+      "journey_stage": "response_time",
+      "campaign_exposure": [],
+      "product_events": [
+        "ticket_opened",
+        "ticket_unanswered"
+      ],
+      "feedback_text": "Support ticket open for 11 days on a blocked account. This is unacceptable for a bank.",
+      "language": "en",
+      "timestamp": "2026-06-23T11:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-020",
+      "customer_id": "C-FIN-120",
+      "account_id": "A-FIN-02",
+      "source": "trustpilot",
+      "journey": "support",
+      "journey_stage": "response_time",
+      "campaign_exposure": [],
+      "product_events": [
+        "ticket_opened",
+        "ticket_unanswered"
+      ],
+      "feedback_text": "Der Chat verspricht 'Antwort innerhalb von 24 Stunden'. Es sind jetzt neun Tage.",
+      "language": "de",
+      "timestamp": "2026-06-24T12:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-021",
+      "customer_id": "C-FIN-121",
+      "account_id": "A-FIN-03",
+      "source": "zendesk",
+      "journey": "support",
+      "journey_stage": "response_time",
+      "campaign_exposure": [],
+      "product_events": [
+        "ticket_opened",
+        "ticket_unanswered"
+      ],
+      "feedback_text": "No human support reachable. Bot loops, email auto-replies, nothing else.",
+      "language": "en",
+      "timestamp": "2026-06-25T13:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-022",
+      "customer_id": "C-FIN-122",
+      "account_id": "A-FIN-04",
+      "source": "app_store",
+      "journey": "support",
+      "journey_stage": "response_time",
+      "campaign_exposure": [],
+      "product_events": [
+        "ticket_opened",
+        "ticket_unanswered"
+      ],
+      "feedback_text": "Konto gesperrt, Support unerreichbar, Geld eingefroren. Ich eskaliere zur BaFin.",
+      "language": "de",
+      "timestamp": "2026-06-26T14:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-023",
+      "customer_id": "C-FIN-123",
+      "account_id": "A-FIN-05",
+      "source": "trustpilot",
+      "journey": "support",
+      "journey_stage": "response_time",
+      "campaign_exposure": [],
+      "product_events": [
+        "ticket_opened",
+        "ticket_unanswered"
+      ],
+      "feedback_text": "Your support answered after 8 days and closed the ticket without solving anything.",
+      "language": "en",
+      "timestamp": "2026-06-27T15:00:00Z"
+    },
+    {
+      "signal_id": "DEMO-FIN-024",
+      "customer_id": "C-FIN-124",
+      "account_id": "A-FIN-06",
+      "source": "zendesk",
+      "journey": "support",
+      "journey_stage": "response_time",
+      "campaign_exposure": [],
+      "product_events": [
+        "ticket_opened",
+        "ticket_unanswered"
+      ],
+      "feedback_text": "Warteschleife, Bot, Formular, Stille. Ich fühle mich mit meinem Problem allein gelassen.",
+      "language": "de",
+      "timestamp": "2026-06-28T16:00:00Z"
+    }
+  ],
+  "customer_context": [
+    {
+      "customer_id": "C-FIN-103",
+      "account_id": "A-FIN-01",
+      "account_name": "Retail cohort 1",
+      "segment": "retail_investor",
+      "lifecycle_stage": "active",
+      "plan_tier": "premium",
+      "account_value": 1200.0,
+      "consent_status": "granted",
+      "health_score": 0.62,
+      "owner": "cx_operations",
+      "region": "DE"
+    },
+    {
+      "customer_id": "C-FIN-106",
+      "account_id": "A-FIN-02",
+      "account_name": "Retail cohort 2",
+      "segment": "retail_investor",
+      "lifecycle_stage": "active",
+      "plan_tier": "basic",
+      "account_value": 18000.0,
+      "consent_status": "granted",
+      "health_score": 0.48,
+      "owner": "cx_operations",
+      "region": "DE"
+    },
+    {
+      "customer_id": "C-FIN-109",
+      "account_id": "A-FIN-03",
+      "account_name": "Retail cohort 3",
+      "segment": "retail_investor",
+      "lifecycle_stage": "at_risk",
+      "plan_tier": "premium",
+      "account_value": 5400.0,
+      "consent_status": "granted",
+      "health_score": 0.71,
+      "owner": "cx_operations",
+      "region": "DE"
+    },
+    {
+      "customer_id": "C-FIN-112",
+      "account_id": "A-FIN-04",
+      "account_name": "Retail cohort 4",
+      "segment": "retail_investor",
+      "lifecycle_stage": "onboarding",
+      "plan_tier": "basic",
+      "account_value": 42000.0,
+      "consent_status": "pending",
+      "health_score": 0.33,
+      "owner": "cx_operations",
+      "region": "DE"
+    },
+    {
+      "customer_id": "C-FIN-115",
+      "account_id": "A-FIN-05",
+      "account_name": "Retail cohort 5",
+      "segment": "retail_investor",
+      "lifecycle_stage": "active",
+      "plan_tier": "premium",
+      "account_value": 8800.0,
+      "consent_status": "granted",
+      "health_score": 0.55,
+      "owner": "cx_operations",
+      "region": "DE"
+    },
+    {
+      "customer_id": "C-FIN-118",
+      "account_id": "A-FIN-06",
+      "account_name": "Retail cohort 6",
+      "segment": "retail_investor",
+      "lifecycle_stage": "active",
+      "plan_tier": "basic",
+      "account_value": 2600.0,
+      "consent_status": "granted",
+      "health_score": 0.68,
+      "owner": "cx_operations",
+      "region": "DE"
+    },
+    {
+      "customer_id": "C-FIN-121",
+      "account_id": "A-FIN-07",
+      "account_name": "Retail cohort 7",
+      "segment": "retail_investor",
+      "lifecycle_stage": "at_risk",
+      "plan_tier": "premium",
+      "account_value": 31000.0,
+      "consent_status": "granted",
+      "health_score": 0.41,
+      "owner": "cx_operations",
+      "region": "DE"
+    }
+  ]
+}
