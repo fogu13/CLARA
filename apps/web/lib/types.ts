@@ -39,6 +39,24 @@ export type TaxonomyCategory = {
   locked: boolean;
   status: string;
   change_history: TaxonomyChange[];
+  confidence?: number | null;
+  evidence_count?: number | null;
+};
+
+export type TaxonomyBootstrapReport = {
+  scanned: number;
+  clusters: number;
+  proposed: number;
+  skipped: number;
+  proposals: {
+    category_id: string;
+    label: string;
+    description: string;
+    confidence: number;
+    evidence_count: number;
+    signal_ids: string[];
+    samples: string[];
+  }[];
 };
 
 export type TaxonomyCatalog = {
