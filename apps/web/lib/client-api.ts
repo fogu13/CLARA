@@ -286,6 +286,34 @@ export async function reviewTaxonomyCategory(
   );
 }
 
+export async function mergeTaxonomyCategories(
+  taxonomyType: TaxonomyType,
+  body: {
+    source_category_ids: string[];
+    target_category_id: string;
+    target_label?: string;
+    target_description?: string;
+  }
+): Promise<TaxonomyCatalog> {
+  return requestJson<TaxonomyCatalog>(
+    `${apiBaseUrl()}/taxonomies/${taxonomyType}/categories/merge`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function splitTaxonomyCategory(
+  taxonomyType: TaxonomyType,
+  body: {
+    source_category_id: string;
+    categories: { category_id: string; label: string; description: string }[];
+  }
+): Promise<TaxonomyCatalog> {
+  return requestJson<TaxonomyCatalog>(
+    `${apiBaseUrl()}/taxonomies/${taxonomyType}/categories/split`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
 export async function getTerminologyDictionary(): Promise<TerminologyDictionaryEntry[]> {
   return requestJson<TerminologyDictionaryEntry[]>(`${apiBaseUrl()}/terminology-dictionary`);
 }

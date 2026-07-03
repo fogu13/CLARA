@@ -5,15 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tags, Lock, GitBranch, Languages, Pencil, Sparkles, Check, X } from "lucide-react";
+import { Tags, Lock, GitBranch, GitMerge, Languages, Pencil, Scissors, Sparkles, Check, X } from "lucide-react";
 import {
   bootstrapTaxonomy,
   getLanguageQuality,
   getTaxonomies,
   getTerminologyDictionary,
   lockTaxonomyCategory,
+  mergeTaxonomyCategories,
   renameTaxonomyCategory,
-  reviewTaxonomyCategory
+  reviewTaxonomyCategory,
+  splitTaxonomyCategory
 } from "@/lib/client-api";
 import { fallbackTaxonomies, fallbackTerminologyDictionary } from "@/lib/sample-data";
 import type {
@@ -48,6 +50,15 @@ export default function TaxonomyPage() {
   const [renameDescription, setRenameDescription] = useState("");
   const [action, setAction] = useState<{ tone: "ok" | "error"; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [merging, setMerging] = useState<TaxonomyType | null>(null);
+  const [mergeSelection, setMergeSelection] = useState<string[]>([]);
+  const [mergeLabel, setMergeLabel] = useState("");
+  const [mergeDescription, setMergeDescription] = useState("");
+  const [splitting, setSplitting] = useState<{ type: TaxonomyType; categoryId: string } | null>(null);
+  const [splitParts, setSplitParts] = useState<{ label: string; description: string }[]>([
+    { label: "", description: "" },
+    { label: "", description: "" }
+  ]);
 
   function applyCatalog(updated: TaxonomyCatalog) {
     setState((current) => ({
@@ -124,6 +135,83 @@ export default function TaxonomyPage() {
       setAction({ tone: "ok", message: decision === "accept" ? "Theme accepted into the taxonomy." : "Theme rejected (kept in audit history)." });
     } catch (error) {
       setAction({ tone: "error", message: error instanceof Error ? error.message : "Review failed." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function slugId(labelText: string): string {
+    return labelText.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  }
+
+  function toggleMergeMode(type: TaxonomyType) {
+    setMerging((current) => (current === type ? null : type));
+    setMergeSelection([]);
+    setMergeLabel("");
+    setMergeDescription("");
+    setSplitting(null);
+    setAction(null);
+  }
+
+  function toggleMergeSelect(categoryId: string) {
+    setMergeSelection((current) =>
+      current.includes(categoryId) ? current.filter((id) => id !== categoryId) : [...current, categoryId]
+    );
+  }
+
+  async function submitMerge(type: TaxonomyType) {
+    const targetId = slugId(mergeLabel);
+    if (mergeSelection.length < 2 || !targetId) return;
+    setBusy(true);
+    try {
+      applyCatalog(
+        await mergeTaxonomyCategories(type, {
+          source_category_ids: mergeSelection,
+          target_category_id: targetId,
+          target_label: mergeLabel.trim(),
+          target_description: mergeDescription.trim() || undefined
+        })
+      );
+      setAction({ tone: "ok", message: `Merged ${mergeSelection.length} categories into “${mergeLabel.trim()}”.` });
+      setMerging(null);
+      setMergeSelection([]);
+    } catch (error) {
+      setAction({ tone: "error", message: error instanceof Error ? error.message : "Merge failed." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startSplit(type: TaxonomyType, categoryId: string) {
+    setSplitting({ type, categoryId });
+    setSplitParts([
+      { label: "", description: "" },
+      { label: "", description: "" }
+    ]);
+    setMerging(null);
+    setAction(null);
+  }
+
+  async function submitSplit() {
+    if (!splitting) return;
+    const parts = splitParts.filter((part) => part.label.trim() && part.description.trim());
+    if (parts.length < 2) return;
+    setBusy(true);
+    try {
+      applyCatalog(
+        await splitTaxonomyCategory(splitting.type, {
+          source_category_id: splitting.categoryId,
+          categories: parts.map((part) => ({
+            category_id: slugId(part.label),
+            label: part.label.trim(),
+            description: part.description.trim()
+          }))
+        })
+      );
+      setAction({ tone: "ok", message: `Split into ${parts.length} categories.` });
+      setSplitting(null);
+    } catch (error) {
+      setAction({ tone: "error", message: error instanceof Error ? error.message : "Split failed." });
     } finally {
       setBusy(false);
     }
@@ -287,18 +375,70 @@ export default function TaxonomyPage() {
                       <h2 className="text-sm font-semibold capitalize">{label(catalog.taxonomy_type)}</h2>
                       <p className="text-xs text-muted-foreground">Version {catalog.version}</p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {catalog.locale_support.map((locale) => (
                         <Badge key={locale} variant="outline">{locale}</Badge>
                       ))}
+                      <Button
+                        size="sm"
+                        variant={merging === catalog.taxonomy_type ? "secondary" : "outline"}
+                        disabled={busy}
+                        onClick={() => toggleMergeMode(catalog.taxonomy_type)}
+                      >
+                        <GitMerge className="mr-1 h-3 w-3" />
+                        {merging === catalog.taxonomy_type ? "Cancel merge" : "Merge…"}
+                      </Button>
                     </div>
                   </div>
+
+                  {merging === catalog.taxonomy_type ? (
+                    <div className="mt-3 rounded-md border border-dashed p-3">
+                      <p className="text-xs text-muted-foreground">
+                        Select two or more categories below, then name the merged category.
+                        {mergeSelection.length > 0 ? ` Selected: ${mergeSelection.length}.` : ""}
+                      </p>
+                      {mergeSelection.length >= 2 ? (
+                        <div className="mt-2 space-y-2">
+                          <Input
+                            value={mergeLabel}
+                            onChange={(event) => setMergeLabel(event.target.value)}
+                            placeholder="Merged category label"
+                            className="h-8 text-sm"
+                          />
+                          <Input
+                            value={mergeDescription}
+                            onChange={(event) => setMergeDescription(event.target.value)}
+                            placeholder="Description (optional)"
+                            className="h-8 text-sm"
+                          />
+                          <Button
+                            size="sm"
+                            disabled={busy || !mergeLabel.trim()}
+                            onClick={() => submitMerge(catalog.taxonomy_type)}
+                          >
+                            <GitMerge className="mr-1 h-3 w-3" /> Merge {mergeSelection.length} categories
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div className="mt-3 grid gap-2 md:grid-cols-2">
                     {catalog.categories.map((category) => (
                       <div key={category.category_id} className="rounded-md bg-muted/40 p-3">
                         <div className="flex items-center justify-between gap-2">
-                          <strong className="text-sm">{category.label}</strong>
+                          <span className="flex items-center gap-2">
+                            {merging === catalog.taxonomy_type && category.status === "active" && !category.locked ? (
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 accent-primary"
+                                checked={mergeSelection.includes(category.category_id)}
+                                onChange={() => toggleMergeSelect(category.category_id)}
+                                aria-label={`Select ${category.label} for merge`}
+                              />
+                            ) : null}
+                            <strong className="text-sm">{category.label}</strong>
+                          </span>
                           <div className="flex gap-1">
                             {category.locked ? <Badge variant="secondary"><Lock className="mr-1 h-3 w-3" />Locked</Badge> : null}
                             {category.status !== "active" ? (
@@ -387,8 +527,62 @@ export default function TaxonomyPage() {
                                 <Lock className="mr-1 h-3 w-3" /> Lock
                               </Button>
                             ) : null}
+                            {!category.locked && category.status === "active" ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={busy}
+                                onClick={() => startSplit(catalog.taxonomy_type, category.category_id)}
+                              >
+                                <Scissors className="mr-1 h-3 w-3" /> Split
+                              </Button>
+                            ) : null}
                           </div>
                         )}
+                        {splitting?.categoryId === category.category_id &&
+                        splitting?.type === catalog.taxonomy_type ? (
+                          <div className="mt-3 space-y-2 rounded-md border border-dashed p-3">
+                            <p className="text-xs text-muted-foreground">
+                              Split “{category.label}” into two categories (both need a label and description):
+                            </p>
+                            {splitParts.map((part, index) => (
+                              <div key={index} className="grid gap-2 md:grid-cols-2">
+                                <Input
+                                  value={part.label}
+                                  onChange={(event) =>
+                                    setSplitParts((current) =>
+                                      current.map((p, i) => (i === index ? { ...p, label: event.target.value } : p))
+                                    )
+                                  }
+                                  placeholder={`Category ${index + 1} label`}
+                                  className="h-8 text-sm"
+                                />
+                                <Input
+                                  value={part.description}
+                                  onChange={(event) =>
+                                    setSplitParts((current) =>
+                                      current.map((p, i) => (i === index ? { ...p, description: event.target.value } : p))
+                                    )
+                                  }
+                                  placeholder="Description"
+                                  className="h-8 text-sm"
+                                />
+                              </div>
+                            ))}
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                disabled={busy || splitParts.filter((p) => p.label.trim() && p.description.trim()).length < 2}
+                                onClick={() => void submitSplit()}
+                              >
+                                <Scissors className="mr-1 h-3 w-3" /> Split
+                              </Button>
+                              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setSplitting(null)}>
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
