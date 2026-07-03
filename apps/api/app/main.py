@@ -1108,6 +1108,24 @@ def create_app(
 
         return record
 
+    @api.get("/problems/{problem_id}/evidence-pack", dependencies=[read_dep])
+    def export_evidence_pack(problem_id: str, format: str = "html"):
+        """Audit-ready export of one problem: evidence -> actions -> policy trail ->
+        approvals -> executions -> outcome -> learning. HTML (print-to-PDF) or JSON."""
+        from fastapi.responses import HTMLResponse
+
+        from app.services.evidence_pack import build_evidence_pack, render_evidence_pack_html
+
+        problem = enrich_problem_for_response(require_problem(problem_id))
+        state = workflow_store.state_for_problem(problem)
+        pack = build_evidence_pack(problem, state, measurement_plan_store.list_plans())
+        telemetry_store.record(
+            "evidence_pack_exported", entity_id=problem_id, metadata={"format": format}
+        )
+        if format == "json":
+            return pack
+        return HTMLResponse(render_evidence_pack_html(pack))
+
     @api.get("/problems/{problem_id}/workflow", response_model=WorkflowState, dependencies=[read_dep])
     def get_workflow_state(
         problem_id: str,
