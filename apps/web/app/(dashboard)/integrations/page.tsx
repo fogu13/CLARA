@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { apiBaseUrl, apiHeaders } from "@/lib/client-api";
 import { Plug, Trash2, CheckCircle, Loader2 } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 const API_URL = apiBaseUrl();
 
@@ -24,7 +25,7 @@ const CONNECTOR_CATALOG = [
     type: "zendesk",
     name: "Zendesk",
     category: "Source (Pull)",
-    description: "Pull support tickets as customer feedback signals",
+    descKey: "descZendesk" as const,
     fields: [
       { key: "subdomain", label: "Subdomain", placeholder: "company" },
       { key: "email", label: "Email", placeholder: "user@company.com" },
@@ -35,7 +36,7 @@ const CONNECTOR_CATALOG = [
     type: "app_store",
     name: "App Store Reviews",
     category: "Source (Pull)",
-    description: "Listen to your app's public App Store reviews (Apple's official feed — no scraping)",
+    descKey: "descAppStore" as const,
     fields: [
       { key: "app_id", label: "App Store ID", placeholder: "1279625243" },
       { key: "countries", label: "Countries (comma-separated)", placeholder: "de,at,ch" },
@@ -45,7 +46,7 @@ const CONNECTOR_CATALOG = [
     type: "webhook",
     name: "Webhook",
     category: "Source (Pull)",
-    description: "Push signals from any system via signed HTTP POST to /ingest/webhook",
+    descKey: "descWebhook" as const,
     fields: [
       { key: "secret", label: "Shared Secret (HMAC-SHA256)", placeholder: "generate a long random string" },
     ],
@@ -54,7 +55,7 @@ const CONNECTOR_CATALOG = [
     type: "jira",
     name: "Jira",
     category: "Destination (Push)",
-    description: "Create issues from approved actions",
+    descKey: "descJira" as const,
     fields: [
       { key: "base_url", label: "Base URL", placeholder: "https://company.atlassian.net" },
       { key: "email", label: "Email", placeholder: "user@company.com" },
@@ -66,7 +67,7 @@ const CONNECTOR_CATALOG = [
     type: "slack",
     name: "Slack",
     category: "Destination (Push)",
-    description: "Post notifications to channels on approved actions",
+    descKey: "descSlack" as const,
     fields: [
       { key: "bot_token", label: "Bot Token", placeholder: "xoxb-..." },
       { key: "channel", label: "Channel", placeholder: "#customer-feedback" },
@@ -75,6 +76,7 @@ const CONNECTOR_CATALOG = [
 ];
 
 export default function IntegrationsPage() {
+  const { t } = useI18n();
   const [connectors, setConnectors] = useState<ConnectorConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingConnector, setEditingConnector] = useState<string | null>(null);
@@ -199,22 +201,22 @@ export default function IntegrationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Integrations</h1>
+        <h1 className="text-2xl font-bold">{t.integrations.title}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Configure source and destination connectors to close the feedback loop
+          {t.integrations.subtitle}
         </p>
       </div>
 
       <Tabs value="connectors">
         <TabsList>
-          <TabsTrigger value="connectors">Connectors</TabsTrigger>
-          <TabsTrigger value="api-keys">API Keys</TabsTrigger>
+          <TabsTrigger value="connectors">{t.integrations.connectors}</TabsTrigger>
+          <TabsTrigger value="api-keys">{t.integrations.apiKeys}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="connectors" className="space-y-4">
           {categories.map(category => (
             <div key={category}>
-              <h2 className="text-sm font-semibold text-muted-foreground mb-3">{category}</h2>
+              <h2 className="text-sm font-semibold text-muted-foreground mb-3">{category === "Source (Pull)" ? t.integrations.sourcePull : t.integrations.destinationPush}</h2>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {CONNECTOR_CATALOG.filter(c => c.category === category).map(connector => {
                   const configured = connectors.find(c => c.connector_type === connector.type);
@@ -230,13 +232,13 @@ export default function IntegrationsPage() {
                           {configured ? (
                             <Badge variant="success">
                               <CheckCircle className="h-3 w-3 mr-1" />
-                              Connected
+                              {t.integrations.connected}
                             </Badge>
                           ) : (
-                            <Badge variant="outline">Not configured</Badge>
+                            <Badge variant="outline">{t.integrations.notConfigured}</Badge>
                           )}
                         </div>
-                        <CardDescription>{connector.description}</CardDescription>
+                        <CardDescription>{t.integrations[connector.descKey]}</CardDescription>
                       </CardHeader>
                       <CardContent>
                         {isEditing ? (
@@ -254,15 +256,15 @@ export default function IntegrationsPage() {
                             ))}
                             {testResult && (
                               <div className={`text-xs ${testResult === "success" ? "text-emerald-600" : "text-destructive"}`}>
-                                {testResult === "success" ? "Connection successful!" : testResult}
+                                {testResult === "success" ? t.integrations.connectionOk : testResult}
                               </div>
                             )}
                             <div className="flex gap-2">
                               <Button size="sm" onClick={saveConnector} disabled={saving}>
-                                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+                                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : t.common.save}
                               </Button>
                               <Button size="sm" variant="outline" onClick={testConnector} disabled={testing}>
-                                {testing ? <Loader2 className="h-3 w-3 animate-spin" /> : "Test"}
+                                {testing ? <Loader2 className="h-3 w-3 animate-spin" /> : t.integrations.test}
                               </Button>
                               <Button size="sm" variant="ghost" onClick={() => setEditingConnector(null)}>
                                 Cancel
@@ -273,7 +275,7 @@ export default function IntegrationsPage() {
                           <div className="space-y-2">
                             {configured && (connector.type === "zendesk" || connector.type === "app_store") && (
                               <Button size="sm" variant="outline" onClick={() => pullSource(connector.type)}>
-                                Pull now
+                                {t.integrations.pullNow}
                               </Button>
                             )}
                             <Button
@@ -307,8 +309,8 @@ export default function IntegrationsPage() {
         <TabsContent value="api-keys">
           <Card>
             <CardHeader>
-              <CardTitle>API Keys</CardTitle>
-              <CardDescription>Keys for programmatic API access</CardDescription>
+              <CardTitle>{t.integrations.apiKeys}</CardTitle>
+              <CardDescription>{t.integrations.apiKeysHint}</CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
