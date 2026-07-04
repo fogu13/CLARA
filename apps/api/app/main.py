@@ -107,6 +107,7 @@ from app.services.postgres import (
     PostgresTelemetryStore,
     PostgresMeasurementPlanStore,
     PostgresConnectorConfigStore,
+    PostgresApiKeyStore,
     database_url,
 )
 from app.services.problems import ProblemStore, SQLiteProblemStore
@@ -462,6 +463,7 @@ def create_app(
     feedback_rules=None,
     telemetry=None,
     measurement_plans=None,
+    api_keys=None,
 ) -> FastAPI:
     api = FastAPI(
         title="CLARA API",
@@ -562,6 +564,13 @@ def create_app(
     connector_config_store = connector_configs or (
         PostgresConnectorConfigStore(_pg_url) if _pg_url else SQLiteConnectorConfigStore(default_db_path())
     )
+    from app.auth import set_api_key_verifier
+    from app.services.api_keys import SQLiteApiKeyStore
+
+    api_key_store = api_keys or (
+        PostgresApiKeyStore(_pg_url) if _pg_url else SQLiteApiKeyStore(default_db_path())
+    )
+    set_api_key_verifier(api_key_store.verify)
     if not signal_store.list_signals():
         signal_store.import_signals(load_seed_signals())
     if not context_store.list_context():
@@ -1495,6 +1504,30 @@ def create_app(
         """Run the proactive alert sweep immediately (demo/testing; the
         background loop runs the same sweep hourly)."""
         return _run_alert_sweep()
+
+    @api.post("/api-keys", dependencies=[Depends(require_role(Role.admin))])
+    def create_api_key(body: dict) -> dict:
+        """Mint an API key. The plaintext is returned ONCE and never stored."""
+        role = str(body.get("role", "viewer"))
+        try:
+            record, plaintext = api_key_store.create_key(
+                name=str(body.get("name", "")), role=role
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        telemetry_store.record("api_key_created", entity_id=str(record["id"]), metadata={"role": role})
+        return {**record, "key": plaintext}
+
+    @api.get("/api-keys", dependencies=[Depends(require_role(Role.admin))])
+    def list_api_keys() -> list[dict]:
+        return api_key_store.list_keys()
+
+    @api.delete("/api-keys/{key_id}", dependencies=[Depends(require_role(Role.admin))])
+    def revoke_api_key(key_id: int) -> dict:
+        if not api_key_store.revoke(key_id):
+            raise HTTPException(status_code=404, detail="Key not found or already revoked")
+        telemetry_store.record("api_key_revoked", entity_id=str(key_id))
+        return {"revoked": key_id}
 
     @api.get("/telemetry", dependencies=[Depends(require_role(Role.admin))])
     def get_telemetry(limit: int = 200) -> dict:

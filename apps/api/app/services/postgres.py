@@ -148,6 +148,17 @@ CREATE TABLE IF NOT EXISTS clara_connector_configs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS clara_api_keys (
+    id BIGSERIAL PRIMARY KEY,
+    workspace_id BIGINT NOT NULL DEFAULT 1,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    key_hash TEXT NOT NULL UNIQUE,
+    key_prefix TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at TIMESTAMPTZ
+);
 """
 
 
@@ -234,6 +245,20 @@ class PostgresConnectionMixin:
                     """
                     CREATE INDEX IF NOT EXISTS clara_workflow_tenant_problem_idx
                     ON clara_workflow_records (tenant_id, problem_id, record_type)
+                    """
+                )
+                # api-keys RLS is applied here (not only migration 010) so a boot
+                # against a DB that predates the migration self-heals the policy -
+                # the 007-era lesson: never leave a clara_ table without RLS.
+                cursor.execute("ALTER TABLE clara_api_keys ENABLE ROW LEVEL SECURITY")
+                cursor.execute(
+                    "DROP POLICY IF EXISTS clara_api_keys_workspace_isolation ON clara_api_keys"
+                )
+                cursor.execute(
+                    """
+                    CREATE POLICY clara_api_keys_workspace_isolation ON clara_api_keys
+                    USING (workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint)
+                    WITH CHECK (workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint)
                     """
                 )
                 cursor.execute("ALTER TABLE clara_workflow_records ENABLE ROW LEVEL SECURITY")
@@ -1046,3 +1071,64 @@ class PostgresConnectorConfigStore(PostgresConnectionMixin):
                 (connector_type,),
             ).fetchone()
         return row is not None
+
+
+class PostgresApiKeyStore(PostgresConnectionMixin):
+    """Postgres-backed API keys (parity with SQLiteApiKeyStore)."""
+
+    def create_key(self, *, name: str, role: str):
+        from app.services.api_keys import VALID_ROLES, _hash, generate_plaintext
+
+        if role not in VALID_ROLES:
+            raise ValueError(f"role must be one of {VALID_ROLES}")
+        plaintext = generate_plaintext()
+        clean_name = name.strip() or "unnamed"
+        with self._connect() as conn:
+            row = conn.execute(
+                "INSERT INTO clara_api_keys (name, role, key_hash, key_prefix)"
+                " VALUES (%s, %s, %s, %s) RETURNING id, created_at",
+                (clean_name, role, _hash(plaintext), plaintext[:14]),
+            ).fetchone()
+        record = {
+            "id": row["id"],
+            "name": clean_name,
+            "role": role,
+            "key_prefix": plaintext[:14],
+            "created_at": str(row["created_at"]),
+            "revoked_at": None,
+        }
+        return record, plaintext
+
+    def list_keys(self) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, name, role, key_prefix, created_at, revoked_at"
+                " FROM clara_api_keys ORDER BY id DESC"
+            ).fetchall()
+        return [
+            {**dict(row), "created_at": str(row["created_at"]),
+             "revoked_at": str(row["revoked_at"]) if row["revoked_at"] else None}
+            for row in rows
+        ]
+
+    def revoke(self, key_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "UPDATE clara_api_keys SET revoked_at = now()"
+                " WHERE id = %s AND revoked_at IS NULL RETURNING id",
+                (key_id,),
+            ).fetchone()
+        return row is not None
+
+    def verify(self, plaintext: str):
+        from app.services.api_keys import KEY_PREFIX, _hash
+
+        if not plaintext.startswith(KEY_PREFIX):
+            return None
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, name, role FROM clara_api_keys"
+                " WHERE key_hash = %s AND revoked_at IS NULL",
+                (_hash(plaintext),),
+            ).fetchone()
+        return dict(row) if row else None
