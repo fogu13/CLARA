@@ -6,10 +6,10 @@ from pathlib import Path
 
 import json
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.auth import AUTH_ENABLED, UserContext, get_current_user
+from app.auth import AUTH_ENABLED
 import app.services.ai as ai
 from app.domain.models import (
     CandidateDecisionStatus,
@@ -17,18 +17,15 @@ from app.domain.models import (
     ProblemCandidate,
     ProblemRecord,
     SignalRecord,
-    SystemConfig,
-    WorkspaceSettings,
 )
-from app.rate_limit import rate_limiter
-from app.rbac import Role, require_role
 from app.routers import connectors as connectors_routes
 from app.routers import governance as governance_routes
 from app.routers import measurement as measurement_routes
 from app.routers import problems as problems_routes
 from app.routers import signals as signals_routes
+from app.routers import system as system_routes
 from app.routers import taxonomy as taxonomy_routes
-from app.routers.problems import build_outcome_board, to_summary
+from app.routers.problems import build_outcome_board
 from app.services.context_impact import (
     enrich_problem_with_context,
 )
@@ -267,10 +264,6 @@ def create_app(
         allow_headers=["*"],
     )
 
-    # Read access: any authenticated user (viewer+). In dev (auth disabled)
-    # get_current_user returns a default owner context, so tests/local are unaffected.
-    read_dep = Depends(require_role(Role.viewer))
-
     active_problem_store = problem_store
     if active_problem_store is None and problems is not None:
         active_problem_store = ProblemStore(list(problems.values()))
@@ -405,185 +398,6 @@ def create_app(
 
         return candidate
 
-    @api.get("/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
-
-    @api.post("/ask", dependencies=[read_dep, Depends(rate_limiter)])
-    def ask_clara_endpoint(body: dict) -> dict:
-        """Grounded Q&A over the workspace's signals; citations, confidence,
-        and an explicit refusal when the evidence is thin. No chat memory."""
-        from app.services import ai as ai_module
-        from app.services.ask import ask_clara
-
-        question = (body.get("question") or "").strip()
-        if not question:
-            raise HTTPException(status_code=422, detail="question is required")
-        if len(question) > 500:
-            raise HTTPException(status_code=422, detail="question must be under 500 characters")
-
-        try:
-            result = ask_clara(question, signal_store.list_signals())
-        except ai_module.AIProviderError as exc:
-            raise HTTPException(status_code=502, detail="AI provider unavailable") from exc
-
-        telemetry_store.record(
-            "question_asked",
-            metadata={
-                "refused": result["refused"],
-                "matches": result.get("matches", 0),
-                "confidence": result.get("confidence", 0.0),
-            },
-        )
-        return result
-
-    @api.post("/api-keys", dependencies=[Depends(require_role(Role.admin))])
-    def create_api_key(body: dict) -> dict:
-        """Mint an API key. The plaintext is returned ONCE and never stored."""
-        role = str(body.get("role", "viewer"))
-        try:
-            record, plaintext = api_key_store.create_key(
-                name=str(body.get("name", "")), role=role
-            )
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        telemetry_store.record("api_key_created", entity_id=str(record["id"]), metadata={"role": role})
-        return {**record, "key": plaintext}
-
-    @api.get("/api-keys", dependencies=[Depends(require_role(Role.admin))])
-    def list_api_keys() -> list[dict]:
-        return api_key_store.list_keys()
-
-    @api.delete("/api-keys/{key_id}", dependencies=[Depends(require_role(Role.admin))])
-    def revoke_api_key(key_id: int) -> dict:
-        if not api_key_store.revoke(key_id):
-            raise HTTPException(status_code=404, detail="Key not found or already revoked")
-        telemetry_store.record("api_key_revoked", entity_id=str(key_id))
-        return {"revoked": key_id}
-
-    @api.get("/telemetry", dependencies=[Depends(require_role(Role.admin))])
-    def get_telemetry(limit: int = 200) -> dict:
-        """Product-metric events (admin): counts by type + recent events.
-
-        Powers the pilot/VC metrics: time-to-first-insight, approval-cycle time,
-        outcome-completion rate, learning-reuse rate. Data never leaves this DB.
-        """
-        return {
-            "counts": telemetry_store.counts_by_type(),
-            "events": telemetry_store.list_events(limit=min(limit, 1000)),
-        }
-
-    @api.get("/export/{entity}.csv", dependencies=[Depends(require_role(Role.admin))])
-    def export_entity_csv(entity: str):
-        """BI-friendly CSV exports (warehouse EXPORT, not sync): signals,
-        problems, outcomes, telemetry. Cells are formula-injection-neutralized."""
-        from fastapi.responses import PlainTextResponse
-
-        from app.services import exports
-
-        builders = {
-            "signals": lambda: exports.signals_csv(signal_store.list_signals()),
-            "problems": lambda: exports.problems_csv(
-                [to_summary(enrich_problem_for_response(p)) for p in active_problem_store.list_problems()]
-            ),
-            "outcomes": lambda: exports.outcomes_csv(
-                build_outcome_board(active_problem_store.list_problems(), workflow_store)
-            ),
-            "telemetry": lambda: exports.telemetry_csv(telemetry_store.list_events(limit=1000)),
-        }
-        builder = builders.get(entity)
-        if builder is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Unknown export '{entity}'. Available: {', '.join(sorted(builders))}",
-            )
-        telemetry_store.record("csv_exported", metadata={"entity": entity})
-        return PlainTextResponse(
-            builder(),
-            media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="clara-{entity}.csv"'},
-        )
-
-    @api.get("/workspace", response_model=WorkspaceSettings, dependencies=[read_dep])
-    def get_workspace(user: UserContext = Depends(get_current_user)) -> WorkspaceSettings:  # noqa: B008
-        return workspace_store.get(user.workspace_id)
-
-    @api.put(
-        "/workspace",
-        response_model=WorkspaceSettings,
-        dependencies=[Depends(require_role(Role.editor))],
-    )
-    def update_workspace(
-        settings: WorkspaceSettings,
-        user: UserContext = Depends(get_current_user),  # noqa: B008
-    ) -> WorkspaceSettings:
-        return workspace_store.put(user.workspace_id, settings)
-
-    @api.put("/settings/ai", dependencies=[Depends(require_role(Role.admin))])
-    def update_ai_settings(body: dict) -> dict:
-        """Point CLARA at any OpenAI-compatible endpoint (cloud or local) at
-        runtime. Empty api_key keeps the previously stored key; empty base_url/
-        model fall back to the server env. The key is stored like every other
-        connector secret and redacted on read."""
-        from app.connectors.config_store import ConnectorConfig
-
-        stored = connector_config_store.get_config("ai")
-        base_url = str(body.get("base_url") or "").strip()
-        model = str(body.get("model") or "").strip()
-        api_key = str(body.get("api_key") or "").strip()
-        if base_url and not base_url.startswith(("http://", "https://")):
-            raise HTTPException(status_code=422, detail="base_url must be http(s)")
-        if not api_key and stored:
-            api_key = stored.config.get("api_key", "")
-
-        config = {"base_url": base_url, "model": model, "api_key": api_key}
-        connector_config_store.upsert_config(
-            ConnectorConfig(connector_type="ai", config=config, display_name="AI endpoint")
-        )
-        ai.set_runtime_config(base_url=base_url, model=model, api_key=api_key)
-        telemetry_store.record("ai_config_changed", metadata={"base_url": base_url or "env", "model": model or "env"})
-        return {
-            "ai_base_url": ai.effective_base_url(),
-            "ai_model": ai.effective_model(),
-            "key_set": bool(ai.effective_api_key()),
-        }
-
-    @api.post("/settings/ai/test", dependencies=[Depends(require_role(Role.admin))])
-    def test_ai_settings() -> dict:
-        """One tiny completion against the EFFECTIVE endpoint - proves the
-        pasted config works before anyone trusts triage to it."""
-        try:
-            result = ai.call_tool(
-                system="Reply by calling the tool.",
-                user="ping",
-                tool_name="pong",
-                tool={
-                    "type": "function",
-                    "function": {
-                        "name": "pong",
-                        "description": "Acknowledge the ping.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {"ok": {"type": "boolean"}},
-                            "required": ["ok"],
-                        },
-                    },
-                },
-                timeout=30.0,
-            )
-            return {"ok": True, "model": ai.effective_model(), "echo": result}
-        except ai.AIProviderError as exc:
-            return {"ok": False, "model": ai.effective_model(), "error": str(exc)[:300]}
-
-    @api.get("/system-config", response_model=SystemConfig, dependencies=[read_dep])
-    def get_system_config() -> SystemConfig:
-        from app.auth import AUTH_ENABLED
-
-        return SystemConfig(
-            ai_base_url=ai.effective_base_url(),
-            ai_model=ai.effective_model(),
-            auth_enabled=AUTH_ENABLED,
-        )
 
     def _pull_source_and_import(connector_type: str, config: dict | None = None) -> dict:
         """Shared pull->import->cursor logic for every registered SOURCE connector.
@@ -716,6 +530,18 @@ def create_app(
 
     # ====== Domain routers (composition root: stores/closures passed explicitly) ======
 
+    api.include_router(
+        system_routes.build_router(
+            signal_store=signal_store,
+            active_problem_store=active_problem_store,
+            workflow_store=workflow_store,
+            workspace_store=workspace_store,
+            api_key_store=api_key_store,
+            telemetry_store=telemetry_store,
+            connector_config_store=connector_config_store,
+            enrich_problem_for_response=enrich_problem_for_response,
+        )
+    )
     api.include_router(
         problems_routes.build_router(
             active_problem_store=active_problem_store,
