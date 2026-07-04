@@ -263,6 +263,24 @@ export default function CompliancePage() {
       </Card>
 
       <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Download className="h-4 w-4" /> Data exports (BI)</CardTitle>
+          <CardDescription>Flat CSVs for your own warehouse or BI tool — export, not sync</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2 text-sm">
+          {["signals", "problems", "outcomes", "telemetry"].map((entity) => (
+            <a
+              key={entity}
+              href={`${apiBaseUrl()}/export/${entity}.csv`}
+              className="inline-flex items-center rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted"
+            >
+              <Download className="mr-1 h-3 w-3" /> {entity}.csv
+            </a>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader><CardTitle>Governance Architecture</CardTitle></CardHeader>
         <CardContent>
           <div className="grid gap-3 text-sm md:grid-cols-2">

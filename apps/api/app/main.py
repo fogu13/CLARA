@@ -1439,6 +1439,37 @@ def create_app(
             "events": telemetry_store.list_events(limit=min(limit, 1000)),
         }
 
+    @api.get("/export/{entity}.csv", dependencies=[Depends(require_role(Role.admin))])
+    def export_entity_csv(entity: str):
+        """BI-friendly CSV exports (warehouse EXPORT, not sync): signals,
+        problems, outcomes, telemetry. Cells are formula-injection-neutralized."""
+        from fastapi.responses import PlainTextResponse
+
+        from app.services import exports
+
+        builders = {
+            "signals": lambda: exports.signals_csv(signal_store.list_signals()),
+            "problems": lambda: exports.problems_csv(
+                [to_summary(enrich_problem_for_response(p)) for p in active_problem_store.list_problems()]
+            ),
+            "outcomes": lambda: exports.outcomes_csv(
+                build_outcome_board(active_problem_store.list_problems(), workflow_store)
+            ),
+            "telemetry": lambda: exports.telemetry_csv(telemetry_store.list_events(limit=1000)),
+        }
+        builder = builders.get(entity)
+        if builder is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown export '{entity}'. Available: {', '.join(sorted(builders))}",
+            )
+        telemetry_store.record("csv_exported", metadata={"entity": entity})
+        return PlainTextResponse(
+            builder(),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="clara-{entity}.csv"'},
+        )
+
     @api.get("/audit-export", dependencies=[Depends(require_role(Role.admin))])
     def export_audit_log() -> dict:
         return {
