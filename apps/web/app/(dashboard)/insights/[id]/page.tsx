@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { FileDown } from "lucide-react";
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { AlertCircle, FileDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ActionDecisionPanel } from "@/app/components/action-decision-panel";
@@ -11,8 +14,9 @@ import { DraftProblemEditor } from "@/app/components/draft-problem-editor";
 import { EvidencePanel } from "@/app/components/evidence-panel";
 import { OutcomeMeasurementPanel } from "@/app/components/outcome-measurement-panel";
 import { ProblemLifecyclePanel } from "@/app/components/problem-lifecycle-panel";
-import { getActionQueueProblems, getPolicyRules } from "@/lib/api";
+import { apiBaseUrl, getPolicyRules, getProblem } from "@/lib/client-api";
 import { percent } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 import type {
   ActionClass,
   ActionProposal,
@@ -30,36 +34,16 @@ function label(value: string): string {
 
 type PortfolioArea = {
   actionClass: ActionClass;
-  title: string;
-  intent: string;
+  titleKey: "areaStructural" | "areaRecovery" | "areaIntervention" | "areaResearch" | "areaGovernance";
+  intentKey: "areaStructuralIntent" | "areaRecoveryIntent" | "areaInterventionIntent" | "areaResearchIntent" | "areaGovernanceIntent";
 };
 
 const portfolioAreas: PortfolioArea[] = [
-  {
-    actionClass: "structural",
-    title: "Product Fix",
-    intent: "Structural work that removes the root cause."
-  },
-  {
-    actionClass: "customer_recovery",
-    title: "Customer Recovery",
-    intent: "Immediate recovery for affected customers."
-  },
-  {
-    actionClass: "journey_intervention",
-    title: "Journey Intervention",
-    intent: "Governed audience or lifecycle intervention draft."
-  },
-  {
-    actionClass: "research",
-    title: "Research",
-    intent: "Validation work for uncertain causes or solutions."
-  },
-  {
-    actionClass: "governance",
-    title: "Governance",
-    intent: "Policy, evidence and approval readiness work."
-  }
+  { actionClass: "structural", titleKey: "areaStructural", intentKey: "areaStructuralIntent" },
+  { actionClass: "customer_recovery", titleKey: "areaRecovery", intentKey: "areaRecoveryIntent" },
+  { actionClass: "journey_intervention", titleKey: "areaIntervention", intentKey: "areaInterventionIntent" },
+  { actionClass: "research", titleKey: "areaResearch", intentKey: "areaResearchIntent" },
+  { actionClass: "governance", titleKey: "areaGovernance", intentKey: "areaGovernanceIntent" }
 ];
 
 function matchingRules(action: ActionProposal, rules: PolicyRule[]): PolicyRule[] {
@@ -96,92 +80,95 @@ function readinessVariant(readiness: AudienceReadiness): "success" | "warning" |
 }
 
 function AudienceReadinessCard({ readiness }: { readiness: AudienceReadiness }) {
+  const { t } = useI18n();
   return (
     <div className="mt-3 rounded-lg border bg-muted/20 p-3">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
-          <p className="font-medium text-foreground">Audience readiness</p>
-          <p className="mt-1">Export target: {readiness.export_destination} / {readiness.export_format}</p>
+          <p className="font-medium text-foreground">{t.detail.audienceReadiness}</p>
+          <p className="mt-1">{t.detail.exportTarget}: {readiness.export_destination} / {readiness.export_format}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge variant={readinessVariant(readiness)}>{label(readiness.readiness_status)}</Badge>
           <Badge variant={readiness.over_contact_risk === "high" ? "destructive" : "outline"}>
-            {readiness.over_contact_risk} contact risk
+            {readiness.over_contact_risk} {t.detail.contactRisk}
           </Badge>
         </div>
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-5">
         <div className="rounded-md border bg-background p-2">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">estimated</p>
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{t.detail.estimated}</p>
           <p className="text-lg font-semibold text-foreground">{readiness.estimated_audience_size}</p>
         </div>
         <div className="rounded-md border bg-background p-2">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">eligible</p>
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{t.detail.eligible}</p>
           <p className="text-lg font-semibold text-foreground">{readiness.eligible_customers}</p>
         </div>
         <div className="rounded-md border bg-background p-2">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">excluded</p>
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{t.detail.excluded}</p>
           <p className="text-lg font-semibold text-foreground">{readiness.excluded_customers}</p>
         </div>
         <div className="rounded-md border bg-background p-2">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">consent ready</p>
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{t.detail.consentReady}</p>
           <p className="text-lg font-semibold text-foreground">{readiness.consent_ready_customers}</p>
         </div>
         <div className="rounded-md border bg-background p-2">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">suppressed</p>
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{t.detail.suppressed}</p>
           <p className="text-lg font-semibold text-foreground">{readiness.suppression_excluded_customers}</p>
         </div>
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <BriefList title="Readiness reasons" items={readiness.readiness_reasons} />
-        <BriefList title="Activation constraints" items={readiness.activation_constraints} />
-        <BriefList title="Export fields" items={readiness.export_fields} />
+        <BriefList title={t.detail.readinessReasons} items={readiness.readiness_reasons} />
+        <BriefList title={t.detail.activationConstraints} items={readiness.activation_constraints} />
+        <BriefList title={t.detail.exportFields} items={readiness.export_fields} />
       </div>
     </div>
   );
 }
 
 function InterventionBriefCard({ brief }: { brief: InterventionBrief }) {
+  const { t } = useI18n();
   return (
     <div className="mt-3 rounded-md border bg-background p-3 text-xs text-muted-foreground">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
-          <p className="font-medium text-foreground">Governed intervention brief</p>
+          <p className="font-medium text-foreground">{t.detail.interventionBrief}</p>
           <p className="mt-1">{brief.audience_summary}</p>
         </div>
         <Badge variant="outline">{brief.recommended_channel}</Badge>
       </div>
       {brief.audience_readiness ? <AudienceReadinessCard readiness={brief.audience_readiness} /> : null}
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <BriefList title="Include" items={brief.inclusion_criteria} />
-        <BriefList title="Exclude" items={brief.exclusion_criteria} />
+        <BriefList title={t.detail.include} items={brief.inclusion_criteria} />
+        <BriefList title={t.detail.exclude} items={brief.exclusion_criteria} />
         <div>
-          <p className="font-medium text-foreground">Trigger</p>
+          <p className="font-medium text-foreground">{t.detail.trigger}</p>
           <p className="mt-1">{brief.trigger}</p>
         </div>
         <div>
-          <p className="font-medium text-foreground">Content brief</p>
+          <p className="font-medium text-foreground">{t.detail.contentBrief}</p>
           <p className="mt-1">{brief.content_brief}</p>
         </div>
-        <BriefList title="Personalization" items={brief.personalization_variables} />
+        <BriefList title={t.detail.personalization} items={brief.personalization_variables} />
         <div>
-          <p className="font-medium text-foreground">Measurement</p>
-          <p className="mt-1">Primary: {brief.primary_success_metric}</p>
-          <p className="mt-1">Control: {brief.control_group}</p>
+          <p className="font-medium text-foreground">{t.detail.measurement}</p>
+          <p className="mt-1">{t.detail.primary}: {brief.primary_success_metric}</p>
+          <p className="mt-1">{t.detail.control}: {brief.control_group}</p>
         </div>
-        <BriefList title="Guardrails" items={brief.guardrail_metrics} />
-        <BriefList title="Consent" items={brief.consent_notes} />
-        <BriefList title="Governance" items={brief.governance_notes} />
+        <BriefList title={t.detail.guardrails} items={brief.guardrail_metrics} />
+        <BriefList title={t.detail.consent} items={brief.consent_notes} />
+        <BriefList title={t.detail.governance} items={brief.governance_notes} />
       </div>
     </div>
   );
 }
 
 function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord; policyRules: PolicyRule[] }) {
+  const { t } = useI18n();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Action Portfolio</CardTitle>
+        <CardTitle>{t.detail.actionPortfolio}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {portfolioAreas.map((area) => {
@@ -191,10 +178,10 @@ function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord;
             <section key={area.actionClass} className="rounded-lg border p-4">
               <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold">{area.title}</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">{area.intent}</p>
+                  <h2 className="text-sm font-semibold">{t.detail[area.titleKey]}</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">{t.detail[area.intentKey]}</p>
                 </div>
-                <Badge variant="outline">{actions.length || "no"} draft{actions.length === 1 ? "" : "s"}</Badge>
+                <Badge variant="outline">{actions.length || t.detail.noDraft} {actions.length === 1 ? t.detail.draft : t.detail.drafts}</Badge>
               </div>
 
               {actions.length > 0 ? (
@@ -223,11 +210,13 @@ function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord;
                         ) : null}
                         <div className="mt-3 grid gap-3 text-xs text-muted-foreground md:grid-cols-2">
                           <p>
-                            Evidence: {problem.evidence.length} excerpts / confidence{" "}
-                            {percent(problem.evidence_confidence)} / {problem.affected_cohort.customers} customers
+                            {t.detail.evidenceLine
+                              .replace("{n}", String(problem.evidence.length))
+                              .replace("{c}", percent(problem.evidence_confidence))
+                              .replace("{k}", String(problem.affected_cohort.customers))}
                           </p>
                           <div>
-                            <p className="font-medium text-foreground">Dependencies</p>
+                            <p className="font-medium text-foreground">{t.detail.dependencies}</p>
                             {action.depends_on && action.depends_on.length > 0 ? (
                               <ul className="mt-1 space-y-1">
                                 {action.depends_on.map((dependencyId) => {
@@ -243,11 +232,11 @@ function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord;
                                 })}
                               </ul>
                             ) : (
-                              <p className="mt-1">None - can be approved independently.</p>
+                              <p className="mt-1">{t.detail.noDependencies}</p>
                             )}
                           </div>
                           <div>
-                            <p className="font-medium text-foreground">Policy checks</p>
+                            <p className="font-medium text-foreground">{t.detail.policyChecks}</p>
                             {rules.length > 0 ? (
                               <ul className="mt-1 space-y-1">
                                 {rules.map((rule) => {
@@ -255,14 +244,14 @@ function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord;
 
                                   return (
                                     <li key={rule.rule_id}>
-                                      {rule.title}: {check ? label(check.status) : "not evaluated"}
-                                      {check?.blocking ? " / blocking" : ""}
+                                      {rule.title}: {check ? label(check.status) : t.detail.notEvaluated}
+                                      {check?.blocking ? t.detail.blockingSuffix : ""}
                                     </li>
                                   );
                                 })}
                               </ul>
                             ) : (
-                              <p className="mt-1">No matching policy rule attached yet.</p>
+                              <p className="mt-1">{t.detail.noPolicyRule}</p>
                             )}
                           </div>
                         </div>
@@ -273,7 +262,7 @@ function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord;
                   })}
                 </div>
               ) : (
-                <p className="mt-4 text-sm text-muted-foreground">No {area.title.toLowerCase()} draft yet.</p>
+                <p className="mt-4 text-sm text-muted-foreground">{t.detail.noAreaDraftYet.replace("{area}", t.detail[area.titleKey])}</p>
               )}
             </section>
           );
@@ -283,32 +272,33 @@ function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord;
   );
 }
 
-function JourneyImpactCard({ problem }: { problem: Awaited<ReturnType<typeof getActionQueueProblems>>[number] }) {
+function JourneyImpactCard({ problem }: { problem: ProblemRecord }) {
+  const { t } = useI18n();
   const impact = problem.journey_impact;
   if (!impact) return null;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Journey Intelligence</CardTitle>
+        <CardTitle>{t.detail.journeyIntelligence}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-4">
           <div>
             <div className="text-2xl font-bold">{impact.matched_events}</div>
-            <p className="text-xs text-muted-foreground">matched events</p>
+            <p className="text-xs text-muted-foreground">{t.detail.matchedEvents}</p>
           </div>
           <div>
             <div className="text-2xl font-bold">{impact.friction_events}</div>
-            <p className="text-xs text-muted-foreground">friction events</p>
+            <p className="text-xs text-muted-foreground">{t.detail.frictionEvents}</p>
           </div>
           <div>
             <div className="text-2xl font-bold">{percent(impact.deviation_score)}</div>
-            <p className="text-xs text-muted-foreground">deviation score</p>
+            <p className="text-xs text-muted-foreground">{t.detail.deviationScore}</p>
           </div>
           <div>
             <div className="text-2xl font-bold">{impact.matched_accounts}</div>
-            <p className="text-xs text-muted-foreground">accounts</p>
+            <p className="text-xs text-muted-foreground">{t.detail.accounts}</p>
           </div>
         </div>
         {impact.top_event_names.length > 0 ? (
@@ -330,16 +320,60 @@ function JourneyImpactCard({ problem }: { problem: Awaited<ReturnType<typeof get
   );
 }
 
-export default async function InsightDetailPage({
-  params
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
-  const [problems, policyRules] = await Promise.all([getActionQueueProblems(), getPolicyRules()]);
-  const problem = problems.find((item) => item.problem_id === id);
+export default function InsightDetailPage() {
+  const { t } = useI18n();
+  const params = useParams<{ id: string }>();
+  const id = params.id;
+  const [problem, setProblem] = useState<ProblemRecord | null>(null);
+  const [policyRules, setPolicyRules] = useState<PolicyRule[]>([]);
+  const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading");
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
 
-  if (!problem) notFound();
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [loadedProblem, loadedRules] = await Promise.all([getProblem(id), getPolicyRules()]);
+        if (cancelled) return;
+        setProblem(loadedProblem);
+        setPolicyRules(loadedRules);
+        setStatus("ready");
+      } catch (error) {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "";
+        // client-api surfaces the backend detail ("Problem not found") rather
+        // than the numeric status, so match both forms.
+        if (message.includes("404") || /not found/i.test(message)) {
+          setStatus("missing");
+        } else {
+          setErrorDetail(message);
+          setStatus("error");
+        }
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (status === "loading") return <div className="text-muted-foreground">{t.common.loading}</div>;
+
+  if (status === "missing" || status === "error" || !problem) {
+    return (
+      <Card>
+        <CardContent className="text-center py-12">
+          <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">
+            {status === "missing" ? t.detail.notFound : `${t.detail.loadFailed}${errorDetail ? `: ${errorDetail}` : ""}`}
+          </p>
+          <Link href="/insights" className="mt-3 inline-block text-sm text-primary hover:underline">
+            {t.detail.back}
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const score = problem.impact_score ?? 0;
 
@@ -348,26 +382,26 @@ export default async function InsightDetailPage({
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <Link href="/insights" className="text-sm text-muted-foreground hover:text-foreground">
-            Back to insights
+            {t.detail.back}
           </Link>
           <h1 className="mt-2 text-2xl font-bold">{problem.title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {problem.journey} / {problem.journey_stage} / owner: {problem.owner}
+            {problem.journey} / {problem.journey_stage} / {t.detail.ownerLabel}: {problem.owner}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={problem.status === "blocked_by_policy" ? "destructive" : "secondary"}>
             {label(problem.status)}
           </Badge>
-          <Badge variant="outline">Impact {percent(score)}</Badge>
-          <Badge variant="outline">Evidence {percent(problem.evidence_confidence)}</Badge>
+          <Badge variant="outline">{t.detail.impact} {percent(score)}</Badge>
+          <Badge variant="outline">{t.detail.evidence} {percent(problem.evidence_confidence)}</Badge>
           <a
-            href={`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/problems/${problem.problem_id}/evidence-pack`}
+            href={`${apiBaseUrl()}/problems/${problem.problem_id}/evidence-pack`}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted"
           >
-            <FileDown className="mr-1 h-3 w-3" /> Evidence pack
+            <FileDown className="mr-1 h-3 w-3" /> {t.detail.evidencePack}
           </a>
         </div>
       </div>
@@ -375,7 +409,7 @@ export default async function InsightDetailPage({
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Impact Band</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">{t.detail.impactBand}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{problem.impact_band ?? "unknown"}</div>
@@ -384,23 +418,23 @@ export default async function InsightDetailPage({
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Affected Cohort</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">{t.detail.affectedCohort}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{problem.affected_cohort.customers}</div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {problem.affected_cohort.accounts} accounts / {problem.affected_cohort.high_value_accounts} high value
+              {problem.affected_cohort.accounts} {t.detail.accountsHighValue.replace("{n}", String(problem.affected_cohort.high_value_accounts))}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">Outcome Contract</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">{t.detail.outcomeContract}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-sm font-semibold">{problem.outcome_contract.primary_metric}</div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {problem.outcome_contract.comparison_method} / {problem.outcome_contract.measurement_window_days} days
+              {problem.outcome_contract.comparison_method} / {problem.outcome_contract.measurement_window_days} {t.detail.days}
             </p>
           </CardContent>
         </Card>
@@ -408,17 +442,17 @@ export default async function InsightDetailPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Problem Statement</CardTitle>
+          <CardTitle>{t.detail.problemStatement}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm">{problem.statement}</p>
           <div>
-            <h2 className="text-sm font-semibold">Root-cause hypothesis</h2>
+            <h2 className="text-sm font-semibold">{t.detail.rootCause}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{problem.root_cause_hypothesis}</p>
           </div>
           {problem.known_limitations.length > 0 ? (
             <div>
-              <h2 className="text-sm font-semibold">Known limitations</h2>
+              <h2 className="text-sm font-semibold">{t.detail.knownLimitations}</h2>
               <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
                 {problem.known_limitations.map((item) => (
                   <li key={item}>{item}</li>
@@ -445,7 +479,7 @@ export default async function InsightDetailPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Governance Checks</CardTitle>
+          <CardTitle>{t.detail.governanceChecks}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
@@ -454,7 +488,7 @@ export default async function InsightDetailPage({
                 <div className="flex items-center justify-between gap-3">
                   <strong className="text-sm">{check.rule}</strong>
                   <Badge variant={check.blocking ? "destructive" : "secondary"}>
-                    {label(check.status)}{check.blocking ? " / blocking" : ""}
+                    {label(check.status)}{check.blocking ? t.detail.blockingSuffix : ""}
                   </Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">{check.reason}</p>
