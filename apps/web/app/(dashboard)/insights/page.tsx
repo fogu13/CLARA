@@ -8,6 +8,7 @@ import { Lightbulb, AlertCircle } from "lucide-react";
 import { getProblems } from "@/lib/client-api";
 import { AskClaraPanel } from "../../components/ask-clara-panel";
 import { useI18n } from "@/lib/i18n";
+import { PageSkeleton } from "@/components/ui/page-skeleton";
 
 export default function InsightsPage() {
   const { t } = useI18n();
@@ -30,7 +31,7 @@ export default function InsightsPage() {
     load();
   }, []);
 
-  if (loading) return <div className="text-muted-foreground">{t.common.loading}</div>;
+  if (loading) return <PageSkeleton cards={3} />;
 
   if (error) {
     return (
