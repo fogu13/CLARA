@@ -879,6 +879,26 @@ def create_app(
         )
         return report
 
+    @api.post("/taxonomy/hygiene", dependencies=[Depends(require_role(Role.editor))])
+    def run_taxonomy_hygiene() -> dict:
+        """Report-only taxonomy health check: near-duplicate active categories,
+        stale unreviewed proposals, and categories drifting away from recent
+        signals. Humans act via the existing merge/review/rename flows —
+        nothing is auto-applied."""
+        from app.services.taxonomy_hygiene import run_hygiene
+
+        report = run_hygiene(taxonomy_store.list_catalogs(), signal_store.list_signals())
+        telemetry_store.record(
+            "taxonomy_hygiene_run",
+            metadata={
+                "duplicates": len(report["duplicates"]),
+                "stale_proposals": len(report["stale_proposals"]),
+                "drifted": len(report["drifted_categories"]),
+                "healthy": report["healthy"],
+            },
+        )
+        return report
+
     @api.post("/taxonomies/{taxonomy_type}/categories/review", response_model=TaxonomyCatalog, dependencies=[Depends(require_role(Role.editor))])
     def review_taxonomy_category(
         taxonomy_type: TaxonomyType,
