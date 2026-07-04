@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authConfigured, signIn } from "@/lib/auth-client";
 
-export default function AuthPage() {
+function AuthForm() {
   const router = useRouter();
+  const reason = useSearchParams().get("reason");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +43,12 @@ export default function AuthPage() {
             NEXT_PUBLIC_SUPABASE_ANON_KEY to enable sign-in.
           </p>
         )}
+      {reason === "expired" ? (
+        <p role="status" className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Your session expired. Please sign in again.
+        </p>
+      ) : null}
+
 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
@@ -80,5 +87,14 @@ export default function AuthPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+
+export default function AuthPage() {
+  return (
+    <Suspense fallback={null}>
+      <AuthForm />
+    </Suspense>
   );
 }

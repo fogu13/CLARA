@@ -53,9 +53,49 @@ export function isAuthenticated(): boolean {
   // Fail closed: a token whose exp we can't decode (malformed / not a real JWT) is
   // untrustworthy and must NOT count as authenticated. Supabase access tokens always
   // carry exp, so requiring a valid, future exp is correct.
-  // ponytail: no silent auto-refresh; an expired access token (~1h) re-routes to /auth.
-  // Add refresh_token rotation here if longer sessions are needed.
   return exp !== null && exp * 1000 > Date.now();
+}
+
+export function sessionExpiresInMs(): number | null {
+  if (typeof window === "undefined") return null;
+  const token = window.localStorage.getItem(TOKEN_KEY);
+  if (!token) return null;
+  const exp = decodeExp(token);
+  return exp === null ? null : exp * 1000 - Date.now();
+}
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+export async function refreshSession(): Promise<boolean> {
+  // Rotate the access token with the stored refresh token. Deduplicated:
+  // GoTrue rotates refresh tokens on use, so two parallel refreshes would
+  // invalidate each other.
+  if (typeof window === "undefined" || !authConfigured) return false;
+  if (refreshInFlight) return refreshInFlight;
+  const refreshToken = window.localStorage.getItem(REFRESH_KEY);
+  if (!refreshToken) return false;
+
+  refreshInFlight = (async () => {
+    try {
+      const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken })
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.access_token) return false;
+      window.localStorage.setItem(TOKEN_KEY, data.access_token);
+      if (data.refresh_token) {
+        window.localStorage.setItem(REFRESH_KEY, data.refresh_token);
+      }
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
 }
 
 export function currentUserEmail(): string | null {

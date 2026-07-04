@@ -344,6 +344,11 @@ const en = {
     impact: "Impact",
     evidence: "Evidence",
     evidencePack: "Evidence pack",
+    navStatement: "Statement",
+    navEvidence: "Evidence",
+    navPortfolio: "Actions",
+    navGovernance: "Governance",
+    navOutcome: "Outcome",
     notFound: "Insight not found.",
     loadFailed: "Failed to load this insight",
     impactBand: "Impact Band",
@@ -749,6 +754,11 @@ const de: Dict = {
     impact: "Impact",
     evidence: "Evidenz",
     evidencePack: "Evidenzpaket",
+    navStatement: "Beschreibung",
+    navEvidence: "Evidenz",
+    navPortfolio: "Maßnahmen",
+    navGovernance: "Governance",
+    navOutcome: "Ergebnis",
     notFound: "Erkenntnis nicht gefunden.",
     loadFailed: "Diese Erkenntnis konnte nicht geladen werden",
     impactBand: "Impact-Stufe",
@@ -825,15 +835,28 @@ const I18nContext = createContext<I18nContextValue>({
   setLocale: () => undefined,
 });
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("en");
+export function I18nProvider({
+  children,
+  initialLocale = "en",
+}: {
+  children: ReactNode;
+  initialLocale?: Locale;
+}) {
+  // initialLocale comes from the clara_locale cookie read server-side, so
+  // German users get German HTML on first paint - no EN flash. localStorage
+  // remains a fallback for sessions from before the cookie existed.
+  const [locale, setLocaleState] = useState<Locale>(initialLocale);
 
   useEffect(() => {
     try {
+      const hasCookie = document.cookie.includes(`${STORAGE_KEY}=`);
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored === "de" || stored === "en") setLocaleState(stored);
+      if (!hasCookie && (stored === "de" || stored === "en")) {
+        setLocaleState(stored);
+        document.cookie = `${STORAGE_KEY}=${stored};path=/;max-age=31536000;samesite=lax`;
+      }
     } catch {
-      // localStorage unavailable; stay on the default
+      // storage unavailable; stay on the initial
     }
   }, []);
 
@@ -845,6 +868,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     setLocaleState(next);
     try {
       window.localStorage.setItem(STORAGE_KEY, next);
+      document.cookie = `${STORAGE_KEY}=${next};path=/;max-age=31536000;samesite=lax`;
     } catch {
       // non-fatal
     }
