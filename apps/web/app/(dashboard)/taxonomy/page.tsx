@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tags, Lock, GitBranch, GitMerge, Languages, Pencil, Scissors, Sparkles, Check, X } from "lucide-react";
+import { Tags, Lock, GitBranch, GitMerge, Languages, Pencil, Scissors, Sparkles, Stethoscope, Check, X } from "lucide-react";
 import {
   bootstrapTaxonomy,
   getLanguageQuality,
@@ -15,8 +15,10 @@ import {
   mergeTaxonomyCategories,
   renameTaxonomyCategory,
   reviewTaxonomyCategory,
+  runTaxonomyHygiene,
   splitTaxonomyCategory
 } from "@/lib/client-api";
+import type { TaxonomyHygieneReport } from "@/lib/client-api";
 import { fallbackTaxonomies, fallbackTerminologyDictionary } from "@/lib/sample-data";
 import type {
   LanguageQualityReport,
@@ -123,6 +125,27 @@ export default function TaxonomyPage() {
       });
     } catch (error) {
       setAction({ tone: "error", message: error instanceof Error ? error.message : "Bootstrap failed." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const [hygiene, setHygiene] = useState<TaxonomyHygieneReport | null>(null);
+
+  async function runHygiene() {
+    setBusy(true);
+    setAction(null);
+    try {
+      const report = await runTaxonomyHygiene();
+      setHygiene(report);
+      setAction({
+        tone: "ok",
+        message: report.healthy
+          ? "Hygiene check passed — no duplicates, stale proposals or drifted categories."
+          : `Hygiene check: ${report.duplicates.length} duplicate pair(s), ${report.stale_proposals.length} stale proposal(s), ${report.drifted_categories.length} drifted categor${report.drifted_categories.length === 1 ? "y" : "ies"}.`
+      });
+    } catch (error) {
+      setAction({ tone: "error", message: error instanceof Error ? error.message : "Hygiene check failed." });
     } finally {
       setBusy(false);
     }
@@ -268,10 +291,15 @@ export default function TaxonomyPage() {
               Versioned product, journey, contact-reason, marketing and compliance taxonomy catalogs.
             </p>
           </div>
-          <Button disabled={busy} onClick={() => void runBootstrap()}>
-            <Sparkles className="mr-1 h-4 w-4" />
-            {busy ? "Working…" : "Bootstrap themes from signals"}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" disabled={busy} onClick={() => void runHygiene()}>
+              <Stethoscope className="mr-1 h-4 w-4" /> Hygiene check
+            </Button>
+            <Button disabled={busy} onClick={() => void runBootstrap()}>
+              <Sparkles className="mr-1 h-4 w-4" />
+              {busy ? "Working…" : "Bootstrap themes from signals"}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -292,6 +320,52 @@ export default function TaxonomyPage() {
         >
           {action.message}
         </div>
+      ) : null}
+
+      {hygiene && !hygiene.healthy ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Stethoscope className="h-4 w-4" /> Hygiene findings
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {hygiene.duplicates_skipped ? (
+              <p className="text-xs text-amber-700">Duplicate check skipped — embedding provider unavailable.</p>
+            ) : null}
+            {hygiene.duplicates.length > 0 ? (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Possible duplicates</p>
+                {hygiene.duplicates.map((d, i) => (
+                  <p key={i} className="mt-1">
+                    <Badge variant="warning" className="mr-2">{Math.round(d.similarity * 100)}%</Badge>
+                    “{d.label_a}” ↔ “{d.label_b}” <span className="text-xs text-muted-foreground">({d.taxonomy_type}) — use Merge… above</span>
+                  </p>
+                ))}
+              </div>
+            ) : null}
+            {hygiene.stale_proposals.length > 0 ? (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Stale proposals</p>
+                {hygiene.stale_proposals.map((sp) => (
+                  <p key={sp.category_id} className="mt-1">
+                    “{sp.label}” <span className="text-xs text-muted-foreground">unreviewed for {sp.age_days} days — accept or reject below</span>
+                  </p>
+                ))}
+              </div>
+            ) : null}
+            {hygiene.drifted_categories.length > 0 ? (
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Drifting categories</p>
+                {hygiene.drifted_categories.map((dc) => (
+                  <p key={dc.category_id} className="mt-1">
+                    “{dc.label}” <span className="text-xs text-muted-foreground">no matching signals in {dc.window_days} days — update terms, rename, or retire</span>
+                  </p>
+                ))}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-4">

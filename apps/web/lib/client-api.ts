@@ -321,6 +321,30 @@ export async function bootstrapTaxonomy(
   });
 }
 
+export type TaxonomyHygieneReport = {
+  generated_at: string;
+  duplicates: {
+    taxonomy_type: string;
+    category_a: string;
+    label_a: string;
+    category_b: string;
+    label_b: string;
+    similarity: number;
+    suggestion: string;
+  }[];
+  duplicates_skipped: boolean;
+  stale_proposals: { taxonomy_type: string; category_id: string; label: string; age_days: number; suggestion: string }[];
+  drifted_categories: { taxonomy_type: string; category_id: string; label: string; window_days: number; suggestion: string }[];
+  healthy: boolean;
+};
+
+export async function runTaxonomyHygiene(): Promise<TaxonomyHygieneReport> {
+  return requestJson<TaxonomyHygieneReport>(`${apiBaseUrl()}/taxonomy/hygiene`, {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+}
+
 export async function reviewTaxonomyCategory(
   taxonomyType: TaxonomyType,
   body: { category_id: string; decision: "accept" | "reject" }
