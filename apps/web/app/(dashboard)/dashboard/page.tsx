@@ -553,7 +553,7 @@ export default function DashboardPage() {
                 <div key={load.owner} className="rounded-lg border p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div><p className="font-medium">{label(load.owner)}</p><p className="mt-1 text-xs text-muted-foreground">{t.dashboard.topIssue}: {load.topProblem.title}</p></div>
-                    <Badge variant={load.blocked > 0 ? "destructive" : "secondary"}>{load.problems} {t.dashboard.issues}</Badge>
+                    <Badge variant={load.blocked > 0 ? "destructive" : "secondary"}>{t.dashboard.issues}: {load.problems}</Badge>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">{compact(load.affectedCustomers)} affected customers / {load.blocked} blocked</p>
                 </div>

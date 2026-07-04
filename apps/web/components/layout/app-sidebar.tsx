@@ -58,12 +58,26 @@ const NAV_GROUPS: {
   },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ open = false, onClose }: { open?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const { t } = useI18n();
 
   return (
-    <aside className="flex w-64 flex-col border-r bg-card">
+    <>
+      {open ? (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          aria-hidden="true"
+          onClick={onClose}
+        />
+      ) : null}
+      <aside
+        className={cn(
+          "w-64 flex-col border-r bg-card",
+          "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-xl",
+          open ? "flex" : "hidden md:flex"
+        )}
+      >
       <div className="flex h-14 items-center gap-2 border-b px-6">
         <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
           <span className="text-sm font-bold text-primary-foreground">C</span>
@@ -91,6 +105,7 @@ export function AppSidebar() {
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground"
                   )}
+                  onClick={onClose}
                 >
                   <Icon className="h-4 w-4" />
                   {t.nav[item.key]}
@@ -103,6 +118,7 @@ export function AppSidebar() {
       <div className="border-t p-4">
         <p className="text-xs text-muted-foreground">{t.nav.tagline}</p>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
