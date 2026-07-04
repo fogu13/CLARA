@@ -366,29 +366,29 @@ These are implementation details, not separate product phases unless a phase exp
 
 ## Current Next Step
 
-Resequenced 2026-07-03 for the pilot window (6 Jul - 27 Sep). Principle: prove the governed
-outcome loop end-to-end first, wire dormant assets before building new ones, and only build the
-minimum credible ingest/understand surface. Ordered sequence:
+Refreshed 2026-07-04. The 2026-07-03 sequence is COMPLETE: all nine items shipped as tested,
+merged PRs (real Jira/Slack push with idempotency and audit write-back, telemetry, taxonomy
+bootstrap + merge/split UI, time-series + emerging radar, DE/EN language detection, HMAC
+webhook + SQLite-persisted connector config, scheduled re-measurement with a background loop,
+evidence-pack export, governance/GDPR pack, Zendesk incremental sync, learnings surfacing,
+grounded Ask endpoint). Beyond that sequence, also shipped: App Store reviews listening with
+scheduled source sync, BI CSV exports, taxonomy hygiene, a read-only MCP server, a bilingual
+EN/DE interface, a marketing landing page, and three adversarial review cycles (code, copy,
+UX: 44 + 72 agents; every HIGH fixed) including serialized SQLite access under FastAPI's
+threadpool and a mobile navigation drawer.
 
-1. Merge the pending review branches (triage resume endpoint, rate-limiter wiring, read-route
-   auth, frontend fixes) - closes the approval -> action -> measure -> learn loop over HTTP.
-   Do this before any other change to `main.py` / `workflow.py`.
-2. Real action push in the normal approval flow (Phase 7 slice): on approval, call the Jira/Slack
-   connectors with an idempotency key, failure states, and external-ID audit write-back. Draft
-   mode stays as the un-configured fallback. Keep customer contact as draft-plus-human-approval;
-   do not send messages from CLARA.
-3. Instrument a `product_events` table (append-only, tenant-scoped under RLS) so time-to-first-
-   insight, auto-triage rate, approval-cycle time, outcome-completion rate (with a
-   real-vs-simulated data flag) and learning-reuse rate accrue from the first pilot onward.
-4. Wire the dormant embedding-taxonomy bootstrap (`discover_themes`/`apply_governance` behind a
-   `POST /taxonomy/bootstrap` endpoint, confidence-scored proposals, accept/reject review UI);
-   expose merge/split in the taxonomy UI (backend already supports them).
-5. Time-series charts (recharts is installed and unused) and an emerging-problems panel
-   surfacing the already-wired emerging scoring.
-6. Language detection at ingestion; stop hardcoding "en" in the Zendesk connector.
-7. Generic HMAC webhook intake reusing the CSV validation pipeline; persist connector config to
-   Postgres (currently in-memory).
-8. Scheduled outcome re-measurement (Phase 8 pull-forward) and per-problem evidence-pack export
-   (signals -> taxonomy with confidence -> action + policy trail -> outcome delta).
-9. Governance pack slice (Phase 6 pull-forward), Zendesk incremental sync, learning-repository
-   surfacing, then a scoped citation-grounded Q&A over signals/problems.
+What remains is externally gated, in dependency order:
+
+1. Hosted deployment recovery (Render + Supabase): diagnosis complete (paused project or
+   IPv6-only direct hostname; use the Session Pooler URL). Needs a live DB session.
+2. Postgres store parity in that same session: tenant enforcement on list/read routes,
+   update_execution, GDPR delete/scrub, telemetry + measurement-plan + connector-config
+   stores on Postgres, then pg_cron for multi-worker measurement claims.
+3. Pilot-driven work: Trustpilot connector (first design partner with a business account),
+   learning aggregation v2 (needs >= 5 real measured outcomes), statistical hardening of
+   scheduled measurements (needs measurement volume).
+4. UX follow-ups deferred with reasons in the review PRs: session refresh rotation,
+   insight-detail sectioning (tabs), skeleton loaders, tab ARIA semantics, cookie-based
+   SSR locale to remove the EN flash on German hard loads.
+5. Post-funding (unchanged): SSO/SAML + SCIM, demand-driven connectors, industry packs,
+   ISO 27001 readiness, per-tenant EU LLM routing.
