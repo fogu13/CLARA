@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 import {
   LayoutDashboard,
   MessageSquare,
@@ -17,43 +18,49 @@ import {
   Settings,
 } from "lucide-react";
 
+type NavKey =
+  | "dashboard" | "signals" | "insights" | "actions" | "learnings"
+  | "sources" | "integrations" | "taxonomy" | "rules" | "compliance" | "settings";
+type GroupKey = "work" | "setup" | "govern";
+
 const NAV_GROUPS: {
-  label: string | null;
-  items: { href: string; label: string; icon: typeof LayoutDashboard }[];
+  label: GroupKey | null;
+  items: { href: string; key: NavKey; icon: typeof LayoutDashboard }[];
 }[] = [
   {
     label: null,
-    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
+    items: [{ href: "/dashboard", key: "dashboard", icon: LayoutDashboard }],
   },
   {
-    label: "Work",
+    label: "work",
     items: [
-      { href: "/signals", label: "Signals", icon: MessageSquare },
-      { href: "/insights", label: "Insights", icon: Lightbulb },
-      { href: "/actions", label: "Actions", icon: CheckCircle },
-      { href: "/learnings", label: "Learnings", icon: GraduationCap },
+      { href: "/signals", key: "signals", icon: MessageSquare },
+      { href: "/insights", key: "insights", icon: Lightbulb },
+      { href: "/actions", key: "actions", icon: CheckCircle },
+      { href: "/learnings", key: "learnings", icon: GraduationCap },
     ],
   },
   {
-    label: "Setup",
+    label: "setup",
     items: [
-      { href: "/sources", label: "Sources", icon: Database },
-      { href: "/integrations", label: "Integrations", icon: Plug },
-      { href: "/taxonomy", label: "Taxonomy", icon: Tags },
-      { href: "/rules", label: "Rules", icon: ScrollText },
+      { href: "/sources", key: "sources", icon: Database },
+      { href: "/integrations", key: "integrations", icon: Plug },
+      { href: "/taxonomy", key: "taxonomy", icon: Tags },
+      { href: "/rules", key: "rules", icon: ScrollText },
     ],
   },
   {
-    label: "Govern",
+    label: "govern",
     items: [
-      { href: "/compliance", label: "Compliance", icon: ShieldCheck },
-      { href: "/settings", label: "Settings", icon: Settings },
+      { href: "/compliance", key: "compliance", icon: ShieldCheck },
+      { href: "/settings", key: "settings", icon: Settings },
     ],
   },
 ];
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { t } = useI18n();
 
   return (
     <aside className="flex w-64 flex-col border-r bg-card">
@@ -68,7 +75,7 @@ export function AppSidebar() {
           <div key={group.label ?? `group-${groupIndex}`} className="space-y-1">
             {group.label ? (
               <p className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
-                {group.label}
+                {t.nav[group.label]}
               </p>
             ) : null}
             {group.items.map((item) => {
@@ -86,7 +93,7 @@ export function AppSidebar() {
                   )}
                 >
                   <Icon className="h-4 w-4" />
-                  {item.label}
+                  {t.nav[item.key]}
                 </Link>
               );
             })}
@@ -94,7 +101,7 @@ export function AppSidebar() {
         ))}
       </nav>
       <div className="border-t p-4">
-        <p className="text-xs text-muted-foreground">Feedback-to-Action Platform</p>
+        <p className="text-xs text-muted-foreground">{t.nav.tagline}</p>
       </div>
     </aside>
   );

@@ -19,6 +19,7 @@ import {
   splitTaxonomyCategory
 } from "@/lib/client-api";
 import type { TaxonomyHygieneReport } from "@/lib/client-api";
+import { useI18n } from "@/lib/i18n";
 import { fallbackTaxonomies, fallbackTerminologyDictionary } from "@/lib/sample-data";
 import type {
   LanguageQualityReport,
@@ -41,6 +42,7 @@ function label(value: string): string {
 }
 
 export default function TaxonomyPage() {
+  const { t } = useI18n();
   const [state, setState] = useState<TaxonomyState>({
     status: "loading",
     message: "Loading taxonomy catalogs...",
@@ -286,18 +288,18 @@ export default function TaxonomyPage() {
       <div>
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Taxonomy</h1>
+            <h1 className="text-2xl font-bold">{t.taxonomy.title}</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Versioned product, journey, contact-reason, marketing and compliance taxonomy catalogs.
+              {t.taxonomy.subtitle}
             </p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" disabled={busy} onClick={() => void runHygiene()}>
-              <Stethoscope className="mr-1 h-4 w-4" /> Hygiene check
+              <Stethoscope className="mr-1 h-4 w-4" /> {t.taxonomy.hygiene}
             </Button>
             <Button disabled={busy} onClick={() => void runBootstrap()}>
               <Sparkles className="mr-1 h-4 w-4" />
-              {busy ? "Working…" : "Bootstrap themes from signals"}
+              {busy ? t.common.working : t.taxonomy.bootstrap}
             </Button>
           </div>
         </div>
@@ -326,40 +328,40 @@ export default function TaxonomyPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              <Stethoscope className="h-4 w-4" /> Hygiene findings
+              <Stethoscope className="h-4 w-4" /> {t.taxonomy.hygieneFindings}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             {hygiene.duplicates_skipped ? (
-              <p className="text-xs text-amber-700">Duplicate check skipped — embedding provider unavailable.</p>
+              <p className="text-xs text-amber-700">{t.taxonomy.duplicatesSkipped}</p>
             ) : null}
             {hygiene.duplicates.length > 0 ? (
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Possible duplicates</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t.taxonomy.possibleDuplicates}</p>
                 {hygiene.duplicates.map((d, i) => (
                   <p key={i} className="mt-1">
                     <Badge variant="warning" className="mr-2">{Math.round(d.similarity * 100)}%</Badge>
-                    “{d.label_a}” ↔ “{d.label_b}” <span className="text-xs text-muted-foreground">({d.taxonomy_type}) — use Merge… above</span>
+                    “{d.label_a}” ↔ “{d.label_b}” <span className="text-xs text-muted-foreground">({d.taxonomy_type}) — {t.taxonomy.useMergeAbove}</span>
                   </p>
                 ))}
               </div>
             ) : null}
             {hygiene.stale_proposals.length > 0 ? (
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Stale proposals</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t.taxonomy.staleProposals}</p>
                 {hygiene.stale_proposals.map((sp) => (
                   <p key={sp.category_id} className="mt-1">
-                    “{sp.label}” <span className="text-xs text-muted-foreground">unreviewed for {sp.age_days} days — accept or reject below</span>
+                    “{sp.label}” <span className="text-xs text-muted-foreground">{t.taxonomy.unreviewedFor} {sp.age_days} {t.taxonomy.daysAcceptOrReject}</span>
                   </p>
                 ))}
               </div>
             ) : null}
             {hygiene.drifted_categories.length > 0 ? (
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Drifting categories</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t.taxonomy.driftingCategories}</p>
                 {hygiene.drifted_categories.map((dc) => (
                   <p key={dc.category_id} className="mt-1">
-                    “{dc.label}” <span className="text-xs text-muted-foreground">no matching signals in {dc.window_days} days — update terms, rename, or retire</span>
+                    “{dc.label}” <span className="text-xs text-muted-foreground">{t.taxonomy.driftHint} ({dc.window_days}d)</span>
                   </p>
                 ))}
               </div>
@@ -370,19 +372,19 @@ export default function TaxonomyPage() {
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Catalogs</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{t.taxonomy.catalogs}</CardTitle></CardHeader>
           <CardContent><div className="text-2xl font-bold">{state.catalogs.length}</div></CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Active Nodes</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{t.taxonomy.activeNodes}</CardTitle></CardHeader>
           <CardContent><div className="text-2xl font-bold">{activeNodes}</div></CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Changed Nodes</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{t.taxonomy.changedNodes}</CardTitle></CardHeader>
           <CardContent><div className="text-2xl font-bold">{changedNodes}</div></CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Locked Nodes</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">{t.taxonomy.lockedNodes}</CardTitle></CardHeader>
           <CardContent><div className="text-2xl font-bold">{lockedNodes}</div></CardContent>
         </Card>
       </div>
@@ -447,7 +449,7 @@ export default function TaxonomyPage() {
                   <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                     <div>
                       <h2 className="text-sm font-semibold capitalize">{label(catalog.taxonomy_type)}</h2>
-                      <p className="text-xs text-muted-foreground">Version {catalog.version}</p>
+                      <p className="text-xs text-muted-foreground">{t.taxonomy.version} {catalog.version}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {catalog.locale_support.map((locale) => (
@@ -460,7 +462,7 @@ export default function TaxonomyPage() {
                         onClick={() => toggleMergeMode(catalog.taxonomy_type)}
                       >
                         <GitMerge className="mr-1 h-3 w-3" />
-                        {merging === catalog.taxonomy_type ? "Cancel merge" : "Merge…"}
+                        {merging === catalog.taxonomy_type ? t.taxonomy.cancelMerge : `${t.common.merge}…`}
                       </Button>
                     </div>
                   </div>
@@ -468,21 +470,21 @@ export default function TaxonomyPage() {
                   {merging === catalog.taxonomy_type ? (
                     <div className="mt-3 rounded-md border border-dashed p-3">
                       <p className="text-xs text-muted-foreground">
-                        Select two or more categories below, then name the merged category.
-                        {mergeSelection.length > 0 ? ` Selected: ${mergeSelection.length}.` : ""}
+                        {t.taxonomy.mergeHint}
+                        {mergeSelection.length > 0 ? ` ${t.taxonomy.selected}: ${mergeSelection.length}.` : ""}
                       </p>
                       {mergeSelection.length >= 2 ? (
                         <div className="mt-2 space-y-2">
                           <Input
                             value={mergeLabel}
                             onChange={(event) => setMergeLabel(event.target.value)}
-                            placeholder="Merged category label"
+                            placeholder={t.taxonomy.mergedLabelPlaceholder}
                             className="h-8 text-sm"
                           />
                           <Input
                             value={mergeDescription}
                             onChange={(event) => setMergeDescription(event.target.value)}
-                            placeholder="Description (optional)"
+                            placeholder={t.taxonomy.descriptionPlaceholder}
                             className="h-8 text-sm"
                           />
                           <Button
@@ -490,7 +492,7 @@ export default function TaxonomyPage() {
                             disabled={busy || !mergeLabel.trim()}
                             onClick={() => submitMerge(catalog.taxonomy_type)}
                           >
-                            <GitMerge className="mr-1 h-3 w-3" /> Merge {mergeSelection.length} categories
+                            <GitMerge className="mr-1 h-3 w-3" /> {t.taxonomy.mergeCount.replace("{n}", String(mergeSelection.length))}
                           </Button>
                         </div>
                       ) : null}
@@ -514,7 +516,7 @@ export default function TaxonomyPage() {
                             <strong className="text-sm">{category.label}</strong>
                           </span>
                           <div className="flex gap-1">
-                            {category.locked ? <Badge variant="secondary"><Lock className="mr-1 h-3 w-3" />Locked</Badge> : null}
+                            {category.locked ? <Badge variant="secondary"><Lock className="mr-1 h-3 w-3" />{t.common.locked}</Badge> : null}
                             {category.status !== "active" ? (
                               <Badge variant={category.status === "proposed" ? "warning" : "outline"}>{category.status}</Badge>
                             ) : null}
@@ -527,7 +529,7 @@ export default function TaxonomyPage() {
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">{category.description}</p>
                         {category.terms.length > 0 ? (
-                          <p className="mt-2 text-xs text-muted-foreground">Terms: {category.terms.slice(0, 5).join(", ")}</p>
+                          <p className="mt-2 text-xs text-muted-foreground">{t.taxonomy.terms}: {category.terms.slice(0, 5).join(", ")}</p>
                         ) : null}
                         {category.change_history[0] ? (
                           <p className="mt-2 text-xs text-muted-foreground">
@@ -541,7 +543,7 @@ export default function TaxonomyPage() {
                             <Input
                               value={renameLabel}
                               onChange={(event) => setRenameLabel(event.target.value)}
-                              placeholder="Label"
+                              placeholder={t.taxonomy.labelPlaceholder}
                               className="h-8 text-sm"
                             />
                             <Input
@@ -570,7 +572,7 @@ export default function TaxonomyPage() {
                               disabled={busy}
                               onClick={() => reviewCategory(catalog.taxonomy_type, category.category_id, "accept")}
                             >
-                              <Check className="mr-1 h-3 w-3" /> Accept
+                              <Check className="mr-1 h-3 w-3" /> {t.common.accept}
                             </Button>
                             <Button
                               size="sm"
@@ -578,7 +580,7 @@ export default function TaxonomyPage() {
                               disabled={busy}
                               onClick={() => reviewCategory(catalog.taxonomy_type, category.category_id, "reject")}
                             >
-                              <X className="mr-1 h-3 w-3" /> Reject
+                              <X className="mr-1 h-3 w-3" /> {t.common.reject}
                             </Button>
                           </div>
                         ) : (
@@ -589,7 +591,7 @@ export default function TaxonomyPage() {
                               disabled={busy || category.locked}
                               onClick={() => startRename(catalog.taxonomy_type, category)}
                             >
-                              <Pencil className="mr-1 h-3 w-3" /> Rename
+                              <Pencil className="mr-1 h-3 w-3" /> {t.common.rename}
                             </Button>
                             {!category.locked ? (
                               <Button
@@ -598,7 +600,7 @@ export default function TaxonomyPage() {
                                 disabled={busy}
                                 onClick={() => lockCategory(catalog.taxonomy_type, category.category_id)}
                               >
-                                <Lock className="mr-1 h-3 w-3" /> Lock
+                                <Lock className="mr-1 h-3 w-3" /> {t.common.lock}
                               </Button>
                             ) : null}
                             {!category.locked && category.status === "active" ? (
@@ -608,7 +610,7 @@ export default function TaxonomyPage() {
                                 disabled={busy}
                                 onClick={() => startSplit(catalog.taxonomy_type, category.category_id)}
                               >
-                                <Scissors className="mr-1 h-3 w-3" /> Split
+                                <Scissors className="mr-1 h-3 w-3" /> {t.common.split}
                               </Button>
                             ) : null}
                           </div>
@@ -617,7 +619,7 @@ export default function TaxonomyPage() {
                         splitting?.type === catalog.taxonomy_type ? (
                           <div className="mt-3 space-y-2 rounded-md border border-dashed p-3">
                             <p className="text-xs text-muted-foreground">
-                              Split “{category.label}” into two categories (both need a label and description):
+                              {t.taxonomy.splitHint}
                             </p>
                             {splitParts.map((part, index) => (
                               <div key={index} className="grid gap-2 md:grid-cols-2">

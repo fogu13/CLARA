@@ -1,14 +1,16 @@
+"use client";
+
 import { MeasurementCheckpointsPanel } from "../../components/measurement-checkpoints-panel";
 import { OutcomeBoardPanel } from "../../components/outcome-board-panel";
+import { useI18n } from "@/lib/i18n";
 
 export default function LearningsPage() {
+  const { t } = useI18n();
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Learnings</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Track whether approved actions improved outcomes and capture reviewed learning conclusions.
-        </p>
+        <h1 className="text-2xl font-bold">{t.learnings.title}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t.learnings.subtitle}</p>
       </div>
 
       <MeasurementCheckpointsPanel />

@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { ShieldCheck, FileText, AlertTriangle, CheckCircle, Download, Cpu, Globe, UserX } from "lucide-react";
 import { apiBaseUrl, apiHeaders, getSystemConfig } from "@/lib/client-api";
 import type { SystemConfig } from "@/lib/types";
+import { useI18n } from "@/lib/i18n";
 
 export default function CompliancePage() {
+  const { t } = useI18n();
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -51,15 +53,15 @@ export default function CompliancePage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Compliance</h1>
+          <h1 className="text-2xl font-bold">{t.compliance.title}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            EU AI Act + GDPR assessment for customer feedback AI processing
+            {t.compliance.subtitle}
           </p>
         </div>
         <div className="flex flex-col items-end gap-1">
           <Button onClick={() => void downloadAuditLog()} disabled={exporting}>
             <Download className="mr-1 h-4 w-4" />
-            {exporting ? "Exporting…" : "Download audit log"}
+            {exporting ? t.compliance.exporting : t.compliance.downloadAudit}
           </Button>
           {exportError ? <p className="text-xs text-destructive">{exportError}</p> : null}
         </div>
@@ -69,13 +71,13 @@ export default function CompliancePage() {
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm text-muted-foreground">Overall Score</CardTitle>
+              <CardTitle className="text-sm text-muted-foreground">{t.compliance.overallScore}</CardTitle>
               <ShieldCheck className="h-4 w-4 text-emerald-500" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-emerald-600">87</div>
-            <p className="text-xs text-muted-foreground mt-1">out of 100</p>
+            <p className="text-xs text-muted-foreground mt-1">{t.compliance.outOf}</p>
           </CardContent>
         </Card>
         <Card>
@@ -97,18 +99,18 @@ export default function CompliancePage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Cpu className="h-4 w-4" /> Model card</CardTitle>
-            <CardDescription>Live configuration of the AI layer — read from the running API</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Cpu className="h-4 w-4" /> {t.compliance.modelCard}</CardTitle>
+            <CardDescription>{t.compliance.modelCardSubtitle}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             {config ? (
               <>
-                <div className="flex justify-between"><span className="text-muted-foreground">Model</span><code className="bg-muted px-2 py-0.5 rounded">{config.ai_model}</code></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Inference endpoint</span><code className="bg-muted px-2 py-0.5 rounded">{aiHost}</code></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">API authentication</span><Badge variant={config.auth_enabled ? "success" : "warning"}>{config.auth_enabled ? "enabled" : "disabled (dev)"}</Badge></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">{t.compliance.model}</span><code className="bg-muted px-2 py-0.5 rounded">{config.ai_model}</code></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">{t.compliance.endpoint}</span><code className="bg-muted px-2 py-0.5 rounded">{aiHost}</code></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">{t.compliance.apiAuth}</span><Badge variant={config.auth_enabled ? "success" : "warning"}>{config.auth_enabled ? t.compliance.enabled : t.compliance.disabledDev}</Badge></div>
               </>
             ) : (
-              <p className="text-muted-foreground">System config unavailable.</p>
+              <p className="text-muted-foreground">{t.compliance.configUnavailable}</p>
             )}
             <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
               <li>• Purpose: classify + summarize customer feedback; propose (never execute) actions.</li>
@@ -122,8 +124,8 @@ export default function CompliancePage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Globe className="h-4 w-4" /> Data residency</CardTitle>
-            <CardDescription>Where customer data lives and what it never touches</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Globe className="h-4 w-4" /> {t.compliance.residency}</CardTitle>
+            <CardDescription>{t.compliance.residencySubtitle}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>Feedback, context and outcomes stay in the deployment&apos;s own database (local-first SQLite or your EU Postgres).</span></div>
@@ -136,8 +138,8 @@ export default function CompliancePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><UserX className="h-4 w-4" /> Data-subject rights (GDPR Art. 17 / Art. 20)</CardTitle>
-          <CardDescription>Built into the product — no support ticket required</CardDescription>
+          <CardTitle className="flex items-center gap-2"><UserX className="h-4 w-4" /> {t.compliance.rights}</CardTitle>
+          <CardDescription>{t.compliance.rightsSubtitle}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div className="rounded-md border p-3">
@@ -158,8 +160,8 @@ export default function CompliancePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Compliance Assessment</CardTitle>
-          <CardDescription>Key requirements for AI-powered customer feedback processing</CardDescription>
+          <CardTitle>{t.compliance.assessment}</CardTitle>
+          <CardDescription>{t.compliance.assessmentSubtitle}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -264,8 +266,8 @@ export default function CompliancePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Download className="h-4 w-4" /> Data exports (BI)</CardTitle>
-          <CardDescription>Flat CSVs for your own warehouse or BI tool — export, not sync</CardDescription>
+          <CardTitle className="flex items-center gap-2"><Download className="h-4 w-4" /> {t.compliance.exportsBi}</CardTitle>
+          <CardDescription>{t.compliance.exportsBiSubtitle}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2 text-sm">
           {["signals", "problems", "outcomes", "telemetry"].map((entity) => (
@@ -281,7 +283,7 @@ export default function CompliancePage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Governance Architecture</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t.compliance.governanceArchitecture}</CardTitle></CardHeader>
         <CardContent>
           <div className="grid gap-3 text-sm md:grid-cols-2">
             <div className="flex items-center gap-2">

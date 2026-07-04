@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CalendarClock, Play } from "lucide-react";
 import { getMeasurements, runDueMeasurements, type MeasurementPlan } from "@/lib/client-api";
+import { useI18n } from "@/lib/i18n";
 
 function statusVariant(status: string): "success" | "warning" | "secondary" | "outline" {
   if (status === "done") return "success";
@@ -15,6 +16,7 @@ function statusVariant(status: string): "success" | "warning" | "secondary" | "o
 }
 
 export function MeasurementCheckpointsPanel() {
+  const { t } = useI18n();
   const [plans, setPlans] = useState<MeasurementPlan[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -53,29 +55,27 @@ export function MeasurementCheckpointsPanel() {
       <CardHeader className="flex flex-row items-start justify-between space-y-0">
         <div>
           <CardTitle className="flex items-center gap-2 text-base">
-            <CalendarClock className="h-4 w-4" /> Measurement checkpoints
+            <CalendarClock className="h-4 w-4" /> {t.learnings.checkpoints}
           </CardTitle>
           <CardDescription>
-            Scheduled automatically when an action is approved (T+7 and T+window). Signal-derived
-            metrics are measured by CLARA from real data; business metrics become human tasks.
+            {t.learnings.checkpointsSubtitle}
           </CardDescription>
         </div>
         <Button size="sm" disabled={busy} onClick={() => void runDue()}>
-          <Play className="mr-1 h-3 w-3" /> {busy ? "Running…" : "Run due now"}
+          <Play className="mr-1 h-3 w-3" /> {busy ? t.learnings.running : t.learnings.runDue}
         </Button>
       </CardHeader>
       <CardContent className="space-y-3">
         {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
         {plans.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No checkpoints yet — approve an action to start the clock.
+            {t.learnings.noCheckpoints}
           </p>
         ) : (
           <>
             {manual.length > 0 ? (
               <p className="text-xs text-amber-700">
-                {manual.length} checkpoint{manual.length === 1 ? "" : "s"} waiting for a
-                human-recorded measurement (CLARA never invents values for business metrics).
+                {manual.length} {t.learnings.manualNote}
               </p>
             ) : null}
             <div className="space-y-2">
@@ -84,7 +84,7 @@ export function MeasurementCheckpointsPanel() {
                   <div>
                     <span className="font-medium">{plan.problem_id}</span>
                     <span className="ml-2 text-xs text-muted-foreground">
-                      {plan.kind === "t7" ? "T+7 check" : "window close"} · due {plan.due_at.slice(0, 10)}
+                      {plan.kind === "t7" ? t.learnings.t7Check : t.learnings.windowClose} · {t.learnings.due} {plan.due_at.slice(0, 10)}
                     </span>
                     {plan.note ? (
                       <p className="mt-0.5 text-xs text-muted-foreground">{plan.note}</p>
@@ -96,7 +96,7 @@ export function MeasurementCheckpointsPanel() {
             </div>
             {pending.length > 0 ? (
               <p className="text-xs text-muted-foreground">
-                {pending.length} pending — the background scheduler processes them automatically.
+                {pending.length} {t.learnings.pendingNote}
               </p>
             ) : null}
           </>
