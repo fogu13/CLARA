@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { getSystemConfig, getWorkspace, updateWorkspace } from "@/lib/client-api";
 import type { SystemConfig, WorkspaceSettings } from "@/lib/types";
+import { useI18n } from "@/lib/i18n";
 
 const DEFAULTS: WorkspaceSettings = {
   name: "My Workspace",
@@ -19,6 +20,7 @@ const DEFAULTS: WorkspaceSettings = {
 type Status = { tone: "idle" | "busy" | "ok" | "error"; message: string };
 
 export default function SettingsPage() {
+  const { t } = useI18n();
   const [settings, setSettings] = useState<WorkspaceSettings>(DEFAULTS);
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [status, setStatus] = useState<Status>({ tone: "idle", message: "" });
@@ -33,12 +35,12 @@ export default function SettingsPage() {
   }
 
   async function save() {
-    setStatus({ tone: "busy", message: "Saving…" });
+    setStatus({ tone: "busy", message: t.settings.saving });
     try {
       setSettings(await updateWorkspace(settings));
-      setStatus({ tone: "ok", message: "Settings saved." });
+      setStatus({ tone: "ok", message: t.settings.saved });
     } catch (error) {
-      setStatus({ tone: "error", message: error instanceof Error ? error.message : "Couldn't save settings." });
+      setStatus({ tone: "error", message: error instanceof Error ? error.message : t.settings.saveFailed });
     }
   }
 
@@ -47,8 +49,8 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Workspace configuration</p>
+        <h1 className="text-2xl font-bold">{t.settings.title}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t.settings.subtitle}</p>
       </div>
 
       {status.message ? (
@@ -67,12 +69,12 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Workspace</CardTitle>
-          <CardDescription>General workspace settings</CardDescription>
+          <CardTitle>{t.settings.workspace}</CardTitle>
+          <CardDescription>{t.settings.workspaceSubtitle}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label htmlFor="name">Workspace Name</Label>
+            <Label htmlFor="name">{t.settings.workspaceName}</Label>
             <Input
               id="name"
               className="mt-1"
@@ -81,7 +83,7 @@ export default function SettingsPage() {
             />
           </div>
           <div>
-            <Label htmlFor="slug">Slug</Label>
+            <Label htmlFor="slug">{t.settings.slug}</Label>
             <Input
               id="slug"
               className="mt-1"
@@ -90,7 +92,7 @@ export default function SettingsPage() {
             />
           </div>
           <div>
-            <Label htmlFor="email">Notification Email</Label>
+            <Label htmlFor="email">{t.settings.notificationEmail}</Label>
             <Input
               id="email"
               type="email"
@@ -101,19 +103,19 @@ export default function SettingsPage() {
             />
           </div>
           <Button onClick={save} disabled={busy}>
-            {busy ? "Saving…" : "Save Changes"}
+            {busy ? t.settings.saving : t.settings.saveChanges}
           </Button>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Measurement</CardTitle>
-          <CardDescription>Outcome measurement defaults</CardDescription>
+          <CardTitle>{t.settings.measurement}</CardTitle>
+          <CardDescription>{t.settings.measurementSubtitle}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label htmlFor="window">Default Measurement Window (days)</Label>
+            <Label htmlFor="window">{t.settings.windowDays}</Label>
             <Input
               id="window"
               type="number"
@@ -126,7 +128,7 @@ export default function SettingsPage() {
             />
           </div>
           <div>
-            <Label htmlFor="half-life">Learning Half-Life (days)</Label>
+            <Label htmlFor="half-life">{t.settings.halfLifeDays}</Label>
             <Input
               id="half-life"
               type="number"
@@ -138,15 +140,15 @@ export default function SettingsPage() {
             />
           </div>
           <Button onClick={save} disabled={busy}>
-            {busy ? "Saving…" : "Save Changes"}
+            {busy ? t.settings.saving : t.settings.saveChanges}
           </Button>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>AI Configuration</CardTitle>
-          <CardDescription>Provider-agnostic LLM settings — managed via env vars on the API server</CardDescription>
+          <CardTitle>{t.settings.aiConfig}</CardTitle>
+          <CardDescription>{t.settings.aiConfigSubtitle}</CardDescription>
         </CardHeader>
         <CardContent>
           {config ? (
@@ -160,15 +162,15 @@ export default function SettingsPage() {
                 <code className="bg-muted px-2 py-0.5 rounded">{config.ai_model}</code>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Authentication</span>
-                <code className="bg-muted px-2 py-0.5 rounded">{config.auth_enabled ? "enabled" : "disabled"}</code>
+                <span className="text-muted-foreground">{t.settings.authLabel}</span>
+                <code className="bg-muted px-2 py-0.5 rounded">{config.auth_enabled ? t.compliance.enabled : "disabled"}</code>
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">System config unavailable.</p>
+            <p className="text-sm text-muted-foreground">{t.compliance.configUnavailable}</p>
           )}
           <p className="text-xs text-muted-foreground mt-3">
-            These are read from the API server&apos;s environment and can&apos;t be changed here.
+            {t.settings.aiConfigNote}
           </p>
         </CardContent>
       </Card>
