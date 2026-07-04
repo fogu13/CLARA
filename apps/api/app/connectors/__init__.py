@@ -12,6 +12,7 @@ from app.connectors.base import ConnectorError, DestinationConnector, SourceConn
 from app.connectors.jira import JiraDestinationConnector
 from app.connectors.slack import SlackDestinationConnector
 from app.connectors.app_store import AppStoreSourceConnector
+from app.connectors.google_business import GoogleBusinessSourceConnector
 from app.connectors.google_play import GooglePlaySourceConnector
 from app.connectors.trustpilot import TrustpilotSourceConnector
 from app.connectors.zendesk import ZendeskSourceConnector
@@ -22,6 +23,7 @@ SOURCES: dict[str, SourceConnector] = {
     "app_store": AppStoreSourceConnector(),
     "trustpilot": TrustpilotSourceConnector(),
     "google_play": GooglePlaySourceConnector(),
+    "google_business": GoogleBusinessSourceConnector(),
 }
 
 DESTINATIONS: dict[str, DestinationConnector] = {
@@ -71,6 +73,7 @@ __all__ = [
     "AppStoreSourceConnector",
     "TrustpilotSourceConnector",
     "GooglePlaySourceConnector",
+    "GoogleBusinessSourceConnector",
     "JiraDestinationConnector",
     "SlackDestinationConnector",
     "SOURCES",
