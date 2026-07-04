@@ -16,11 +16,12 @@ import {
   Plug,
   ShieldCheck,
   Settings,
+  Rocket,
 } from "lucide-react";
 
 type NavKey =
   | "dashboard" | "signals" | "insights" | "actions" | "learnings"
-  | "sources" | "integrations" | "taxonomy" | "rules" | "compliance" | "settings";
+  | "onboarding" | "sources" | "integrations" | "taxonomy" | "rules" | "compliance" | "settings";
 type GroupKey = "work" | "setup" | "govern";
 
 const NAV_GROUPS: {
@@ -43,6 +44,7 @@ const NAV_GROUPS: {
   {
     label: "setup",
     items: [
+      { href: "/onboarding", key: "onboarding", icon: Rocket },
       { href: "/sources", key: "sources", icon: Database },
       { href: "/integrations", key: "integrations", icon: Plug },
       { href: "/taxonomy", key: "taxonomy", icon: Tags },
