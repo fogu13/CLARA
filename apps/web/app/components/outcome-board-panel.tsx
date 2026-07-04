@@ -5,6 +5,7 @@ import { getOutcomeBoard } from "../../lib/client-api";
 import type { OutcomeBoard, OutcomeBoardItem } from "../../lib/types";
 import { StateNotice } from "./state-notice";
 import { formatMetric, percent } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 
 type BoardState = {
   status: "loading" | "ready" | "error";
@@ -12,24 +13,27 @@ type BoardState = {
   board?: OutcomeBoard;
 };
 
-const outcomeLabels: Record<OutcomeBoardItem["outcome_status"], string> = {
-  not_measured: "Not measured",
-  target_met: "Target met",
-  improving: "Improving",
-  not_improved: "Not improved"
-};
-
-
-
-function directionLabel(direction: OutcomeBoardItem["improvement_direction"]): string {
-  return direction === "increase" ? "Higher is better" : "Lower is better";
+function outcomeLabels(t: ReturnType<typeof useI18n>["t"]): Record<OutcomeBoardItem["outcome_status"], string> {
+  return {
+    not_measured: t.outcomeBoard.notMeasured,
+    target_met: t.outcomeBoard.targetMet,
+    improving: t.outcomeBoard.improving,
+    not_improved: t.outcomeBoard.notImproved
+  };
 }
 
-function learningLabel(status: OutcomeBoardItem["latest_learning_status"]): string {
-  return status ? status.replaceAll("_", " ") : "Not reviewed";
+
+
+function directionLabel(direction: OutcomeBoardItem["improvement_direction"], t: ReturnType<typeof useI18n>["t"]): string {
+  return direction === "increase" ? t.outcomeBoard.higherBetter : t.outcomeBoard.lowerBetter;
+}
+
+function learningLabel(status: OutcomeBoardItem["latest_learning_status"], t: ReturnType<typeof useI18n>["t"]): string {
+  return status ? status.replaceAll("_", " ") : t.outcomeBoard.notReviewed;
 }
 
 export function OutcomeBoardPanel() {
+  const { t } = useI18n();
   const [state, setState] = useState<BoardState>({
     status: "loading",
     message: "Loading outcome board..."
@@ -67,7 +71,7 @@ export function OutcomeBoardPanel() {
       <header className="outcome-board-header">
         <div>
           <p className="eyebrow">Outcome Learning</p>
-          <h2>Outcome Board</h2>
+          <h2>{t.outcomeBoard.title}</h2>
         </div>
         <div className="outcome-board-actions">
           <p className={`outcome-board-message outcome-board-message-${state.status}`}>{state.message}</p>
@@ -78,13 +82,13 @@ export function OutcomeBoardPanel() {
       </header>
 
       {state.status === "loading" && !board ? (
-        <StateNotice tone="loading" title="Loading outcome board">
+        <StateNotice tone="loading" title={t.outcomeBoard.loading}>
           Reading the latest outcome contracts and measurements from the API.
         </StateNotice>
       ) : null}
 
       {state.status === "error" ? (
-        <StateNotice tone="error" title="Outcome board unavailable">
+        <StateNotice tone="error" title={t.outcomeBoard.unavailable}>
           {state.message}
         </StateNotice>
       ) : null}
@@ -124,7 +128,7 @@ export function OutcomeBoardPanel() {
             <li key={item.problem_id}>
               <div className="outcome-board-item-main">
                 <span className={`outcome-status outcome-${item.outcome_status}`}>
-                  {outcomeLabels[item.outcome_status]}
+                  {outcomeLabels(t)[item.outcome_status]}
                 </span>
                 <div>
                   <strong>{item.title}</strong>
@@ -135,41 +139,41 @@ export function OutcomeBoardPanel() {
               </div>
               <dl className="outcome-board-metrics">
                 <div>
-                  <dt>Impact</dt>
+                  <dt>{t.outcomeBoard.impact}</dt>
                   <dd>
                     {percent(item.impact_score)} {item.impact_band}
                   </dd>
                 </div>
                 <div>
-                  <dt>Metric</dt>
+                  <dt>{t.outcomeBoard.metric}</dt>
                   <dd>{item.metric}</dd>
                 </div>
                 <div>
-                  <dt>Latest</dt>
+                  <dt>{t.outcomeBoard.latest}</dt>
                   <dd>{formatMetric(item.latest_value)}</dd>
                 </div>
                 <div>
-                  <dt>Target</dt>
+                  <dt>{t.outcomeBoard.target}</dt>
                   <dd>{formatMetric(item.success_threshold)}</dd>
                 </div>
                 <div>
-                  <dt>Direction</dt>
-                  <dd>{directionLabel(item.improvement_direction)}</dd>
+                  <dt>{t.outcomeBoard.direction}</dt>
+                  <dd>{directionLabel(item.improvement_direction, t)}</dd>
                 </div>
                 <div>
-                  <dt>Owner</dt>
+                  <dt>{t.common.owner}</dt>
                   <dd>{item.responsible_owner}</dd>
                 </div>
                 <div>
-                  <dt>Learning</dt>
-                  <dd>{learningLabel(item.latest_learning_status)}</dd>
+                  <dt>{t.outcomeBoard.learning}</dt>
+                  <dd>{learningLabel(item.latest_learning_status, t)}</dd>
                 </div>
               </dl>
             </li>
           ))}
         </ul>
       ) : state.status === "ready" ? (
-        <StateNotice tone="empty" title="No outcome contracts available">
+        <StateNotice tone="empty" title={t.outcomeBoard.empty}>
           Create or import problems with outcome contracts before using the outcome board.
         </StateNotice>
       ) : null}
