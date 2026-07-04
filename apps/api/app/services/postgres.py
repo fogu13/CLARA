@@ -921,6 +921,23 @@ class PostgresTelemetryStore(PostgresConnectionMixin):
             ).fetchall()
         return {row["event_type"]: row["n"] for row in rows}
 
+    def has_event(self, event_type: str, entity_id: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM clara_telemetry WHERE event_type = %s AND entity_id = %s LIMIT 1",
+                (event_type, entity_id),
+            ).fetchone()
+        return row is not None
+
+    def latest_event_at(self, event_type: str) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT created_at FROM clara_telemetry WHERE event_type = %s"
+                " ORDER BY id DESC LIMIT 1",
+                (event_type,),
+            ).fetchone()
+        return str(row["created_at"]) if row else None
+
 
 class PostgresMeasurementPlanStore(PostgresConnectionMixin):
     """Postgres-backed measurement checkpoints (parity with the SQLite store)."""

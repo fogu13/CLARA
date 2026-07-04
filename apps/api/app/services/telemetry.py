@@ -87,6 +87,21 @@ class SQLiteTelemetryStore:
             for row in rows
         ]
 
+    def has_event(self, event_type: str, entity_id: str) -> bool:
+        row = self._connection.execute(
+            "SELECT 1 FROM telemetry_events WHERE event_type = ? AND entity_id = ? LIMIT 1",
+            (event_type, entity_id),
+        ).fetchone()
+        return row is not None
+
+    def latest_event_at(self, event_type: str) -> str | None:
+        row = self._connection.execute(
+            "SELECT created_at FROM telemetry_events WHERE event_type = ?"
+            " ORDER BY id DESC LIMIT 1",
+            (event_type,),
+        ).fetchone()
+        return row["created_at"] if row else None
+
     def counts_by_type(self) -> dict[str, int]:
         rows = self._connection.execute(
             "SELECT event_type, COUNT(*) AS n FROM telemetry_events GROUP BY event_type"
