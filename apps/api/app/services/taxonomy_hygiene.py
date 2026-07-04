@@ -34,6 +34,11 @@ STALE_PROPOSAL_DAYS = 14
 DRIFT_WINDOW_DAYS = 30
 
 
+
+def _as_utc(parsed: datetime) -> datetime:
+    """Naive timestamps must not crash the hygiene sweep with TypeError."""
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
 def _category_text(category: Any) -> str:
     return " ".join([category.label, category.description, *category.terms]).strip()
 
@@ -42,7 +47,7 @@ def _proposed_at(category: Any) -> datetime | None:
     for change in category.change_history:
         if change.operation.value == "propose":
             try:
-                return datetime.fromisoformat(change.changed_at.replace("Z", "+00:00"))
+                return _as_utc(datetime.fromisoformat(change.changed_at.replace("Z", "+00:00")))
             except ValueError:
                 return None
     return None
@@ -65,11 +70,11 @@ def run_hygiene(
     recent_texts: list[str] = []
     for signal in signals:
         try:
-            ts = datetime.fromisoformat(signal.timestamp.replace("Z", "+00:00"))
+            ts = _as_utc(datetime.fromisoformat(signal.timestamp.replace("Z", "+00:00")))
         except ValueError:
             continue
         if ts >= cutoff:
-            recent_texts.append(searchable_text(signal).lower())
+            recent_texts.append(searchable_text(signal).lower().replace("_", " "))
 
     duplicates: list[dict[str, Any]] = []
     stale_proposals: list[dict[str, Any]] = []
@@ -124,7 +129,14 @@ def run_hygiene(
             for category in active:
                 if category.locked:
                     continue  # locked = deliberate; not flagged
-                terms = [t.lower() for t in [category.label, *category.terms] if t.strip()]
+                # searchable_text joins free text with spaces; category terms often use
+                # underscores ("identity_verification"). Normalize so a term matches
+                # the text it was minted from instead of chronically drifting.
+                terms = [
+                    t.lower().replace("_", " ")
+                    for t in [category.label, *category.terms]
+                    if t.strip()
+                ]
                 if terms and not any(
                     term in text for term in terms for text in recent_texts
                 ):

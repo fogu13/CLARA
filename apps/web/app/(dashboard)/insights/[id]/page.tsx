@@ -14,7 +14,7 @@ import { DraftProblemEditor } from "@/app/components/draft-problem-editor";
 import { EvidencePanel } from "@/app/components/evidence-panel";
 import { OutcomeMeasurementPanel } from "@/app/components/outcome-measurement-panel";
 import { ProblemLifecyclePanel } from "@/app/components/problem-lifecycle-panel";
-import { apiBaseUrl, getPolicyRules, getProblem } from "@/lib/client-api";
+import { apiBaseUrl, apiHeaders, getPolicyRules, getProblem } from "@/lib/client-api";
 import { percent } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import type {
@@ -395,14 +395,28 @@ export default function InsightDetailPage() {
           </Badge>
           <Badge variant="outline">{t.detail.impact} {percent(score)}</Badge>
           <Badge variant="outline">{t.detail.evidence} {percent(problem.evidence_confidence)}</Badge>
-          <a
-            href={`${apiBaseUrl()}/problems/${problem.problem_id}/evidence-pack`}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            type="button"
+            onClick={async () => {
+              // Anchor in a new tab would 401 when auth is on: fetch with the
+              // session headers and open the blob instead.
+              try {
+                const res = await fetch(
+                  `${apiBaseUrl()}/problems/${problem.problem_id}/evidence-pack`,
+                  { headers: apiHeaders() }
+                );
+                if (!res.ok) throw new Error(`${res.status}`);
+                const url = URL.createObjectURL(await res.blob());
+                window.open(url, "_blank", "noopener");
+                setTimeout(() => URL.revokeObjectURL(url), 60_000);
+              } catch {
+                window.alert(t.detail.loadFailed);
+              }
+            }}
             className="inline-flex items-center rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted"
           >
             <FileDown className="mr-1 h-3 w-3" /> {t.detail.evidencePack}
-          </a>
+          </button>
         </div>
       </div>
 
@@ -412,8 +426,8 @@ export default function InsightDetailPage() {
             <CardTitle className="text-sm text-muted-foreground">{t.detail.impactBand}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{problem.impact_band ?? "unknown"}</div>
-            <p className="mt-1 text-xs text-muted-foreground">{problem.approval_pressure ?? "ready"}</p>
+            <div className="text-2xl font-bold">{problem.impact_band ?? t.common.unknown}</div>
+            <p className="mt-1 text-xs text-muted-foreground">{problem.approval_pressure ?? t.common.ready}</p>
           </CardContent>
         </Card>
         <Card>

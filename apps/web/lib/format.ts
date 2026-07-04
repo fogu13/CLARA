@@ -1,4 +1,4 @@
-// Shared formatting helpers — consolidated from copies that had drifted
+// Shared formatting helpers, consolidated from copies that had drifted
 // (formatMetric used `value < 1` in one place, rendering negative metrics as huge
 // percentages; the correct check is Math.abs(value) < 1).
 

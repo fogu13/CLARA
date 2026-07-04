@@ -21,8 +21,19 @@ export function MeasurementCheckpointsPanel() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [loadFailed, setLoadFailed] = useState(false);
+
   const load = useCallback(() => {
-    getMeasurements().then(setPlans).catch(() => setPlans([]));
+    getMeasurements()
+      .then((data) => {
+        setPlans(data);
+        setLoadFailed(false);
+      })
+      .catch(() => {
+        // A fetch failure must not masquerade as "no checkpoints yet".
+        setPlans([]);
+        setLoadFailed(true);
+      });
   }, []);
 
   useEffect(() => {
@@ -67,7 +78,9 @@ export function MeasurementCheckpointsPanel() {
       </CardHeader>
       <CardContent className="space-y-3">
         {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
-        {plans.length === 0 ? (
+        {loadFailed ? (
+          <p className="text-sm text-destructive">{t.common.error}</p>
+        ) : plans.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t.learnings.noCheckpoints}
           </p>

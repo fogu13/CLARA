@@ -44,6 +44,20 @@ _STOPWORDS = frozenset(
 )
 
 
+
+def _signal_sort_ts(signal) -> str:
+    # Normalize Z/offset forms so string sort equals chronological sort.
+    ts = getattr(signal, "timestamp", "") or ""
+    try:
+        from datetime import datetime, timezone
+
+        parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.isoformat()
+    except ValueError:
+        return ""
+
 def _cluster_terms(texts: list[str], label: str) -> list[str]:
     """Terms that actually occur in the cluster, so substring classification matches.
 
@@ -91,7 +105,9 @@ def bootstrap_taxonomy(
     Returns {scanned, clusters, proposed, skipped, proposals[], error?}.
     Embedding failure aborts cleanly (error="embedding_failed") — no partial writes.
     """
-    scoped = signals[:limit]
+    # Most recent first: bootstrapping themes from the oldest rows would
+    # propose last year's taxonomy.
+    scoped = sorted(signals, key=_signal_sort_ts, reverse=True)[:limit]
     texts = [searchable_text(signal) for signal in scoped]
     pairs = [(signal, text) for signal, text in zip(scoped, texts) if text.strip()]
     if len(pairs) < MIN_CLUSTER:

@@ -88,7 +88,7 @@ class AppStoreSourceConnector:
         cursor = config.get("last_synced_at")
 
         signals: list[dict[str, Any]] = []
-        latest = ""
+        latest_by_country: dict[str, str] = {}
         try:
             with httpx.Client(timeout=30.0) as client:
                 for country in countries:
@@ -127,7 +127,9 @@ class AppStoreSourceConnector:
                             if signal:
                                 signals.append(signal)
                                 if updated:
-                                    latest = max(latest, updated)
+                                    latest_by_country[country] = max(
+                                        latest_by_country.get(country, ""), updated
+                                    )
                         if stop_country:
                             break
         except httpx.RequestError as exc:
@@ -135,8 +137,12 @@ class AppStoreSourceConnector:
                 f"App Store feed unreachable: {exc}", connector="app_store"
             ) from exc
 
-        if signals and latest:
-            signals[0].setdefault("_sync_metadata", {})["last_synced_at"] = latest
+        if signals and latest_by_country:
+            # One shared cursor across countries: advance to the SLOWEST
+            # country's newest review. max() would skip reviews in quieter
+            # stores; min() never drops anything (dedup absorbs re-fetches).
+            cursor_value = min(latest_by_country.values())
+            signals[0].setdefault("_sync_metadata", {})["last_synced_at"] = cursor_value
         return signals
 
     def _map_review(self, entry: dict[str, Any], *, country: str) -> dict[str, Any] | None:

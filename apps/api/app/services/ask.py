@@ -65,6 +65,20 @@ SYSTEM_PROMPT = (
 )
 
 
+
+def _recency_key(signal) -> str:
+    """Chronological key that survives mixed Z / +02:00 / -07:00 timestamps
+    (App Store reviews arrive with Apple's -07:00 offset)."""
+    from datetime import datetime, timezone
+
+    try:
+        parsed = datetime.fromisoformat((signal.timestamp or "").replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc).isoformat()
+    except ValueError:
+        return ""
+
 def _refusal(reason: str, matches: int) -> dict[str, Any]:
     return {
         "refused": True,
@@ -89,7 +103,7 @@ def ask_clara(
     Raises ai.AIProviderError upward (route maps it to 502) — a degraded answer
     is worse than a visible failure.
     """
-    scoped = sorted(signals, key=lambda s: s.timestamp, reverse=True)[:MAX_SIGNALS]
+    scoped = sorted(signals, key=_recency_key, reverse=True)[:MAX_SIGNALS]
     pairs = [(s, searchable_text(s)) for s in scoped]
     pairs = [(s, text) for s, text in pairs if text.strip()]
     if not pairs:
