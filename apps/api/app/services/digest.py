@@ -1,4 +1,4 @@
-"""Weekly digest — CLARA shows up in Slack whether anyone logs in or not.
+"""Weekly digest; CLARA shows up in Slack whether anyone logs in or not.
 
 Summarizes: emerging problems (what's heating up), open loops (approved actions
 whose outcome is not yet measured), and measured outcomes (wins/losses). Built
@@ -27,7 +27,7 @@ def build_digest(
         lines.append("*Emerging problems*")
         for item in emerging_signals[:3]:
             lines.append(
-                f"• {item.title} — {item.trend_label} "
+                f"• {item.title}. {item.trend_label} "
                 f"(score {round(item.emerging_score * 100)}%, {item.signal_count} signals, "
                 f"{item.customer_count} customers)"
             )

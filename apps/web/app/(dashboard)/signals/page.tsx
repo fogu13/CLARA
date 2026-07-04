@@ -79,7 +79,7 @@ export default function SignalsPage() {
   async function importMapped() {
     if (!fileCsv) return;
     if (!fileCsv.mapping[essentialSignalCsvField]) {
-      setStatus({ tone: "error", message: "Map the column that holds the feedback text — it's the only required field." });
+      setStatus({ tone: "error", message: "Map the column that holds the feedback text. It's the only required field." });
       return;
     }
     setStatus({ tone: "busy", message: `Importing ${fileCsv.rows.length} row(s)…` });
@@ -172,7 +172,7 @@ export default function SignalsPage() {
       {fileCsv ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Map columns — {fileCsv.fileName}</CardTitle>
+            <CardTitle className="text-base">Map columns: {fileCsv.fileName}</CardTitle>
             <p className="text-sm text-muted-foreground">
               Match your columns to CLARA&apos;s fields. Only <strong>Feedback text</strong> is required;
               unmapped canonical fields use a default, and any other column in your file is kept as metadata.
@@ -193,7 +193,7 @@ export default function SignalsPage() {
                       value={fileCsv.mapping[field] ?? ""}
                       onChange={(event) => updateMapping(field, event.target.value)}
                     >
-                      <option value="">— Not mapped —</option>
+                      <option value="">Not mapped</option>
                       {fileCsv.headers.map((header) => (
                         <option key={header} value={header}>{header}</option>
                       ))}

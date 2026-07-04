@@ -1,4 +1,4 @@
-"""Connector interface — sources (pull) and destinations (push).
+"""Connector interface; sources (pull) and destinations (push).
 
 First connectors to prove the brief's headline
 ("connects to sources ... pushes insights to other platforms"):
@@ -49,7 +49,7 @@ class DestinationConnector(Protocol):
 
 
 class ConnectorError(RuntimeError):
-    """Base error for connector failures. Non-fatal — logged, not raised."""
+    """Base error for connector failures. Non-fatal; logged, not raised."""
 
     def __init__(self, message: str, connector: str = "", status: int | None = None) -> None:
         super().__init__(message)

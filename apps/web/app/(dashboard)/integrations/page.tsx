@@ -97,7 +97,7 @@ export default function IntegrationsPage() {
         setConnectors(data);
       }
     } catch {
-      // API not running — show empty state
+      // API not running; show empty state
     } finally {
       setLoading(false);
     }
@@ -109,7 +109,7 @@ export default function IntegrationsPage() {
     const initial: Record<string, string> = {};
     fields.forEach(f => {
       // The API masks secret values as "***redacted***"; never hydrate those into
-      // editable inputs — leave them blank so the operator re-enters to change them.
+      // editable inputs; leave them blank so the operator re-enters to change them.
       const value = existing?.config[f.key];
       initial[f.key] = !value || value === "***redacted***" ? "" : value;
     });
@@ -134,7 +134,7 @@ export default function IntegrationsPage() {
       await loadConnectors();
       setEditingConnector(null);
     } catch (e) {
-      // Previously swallowed — a failed save (e.g. 403 for non-admins) looked successful.
+      // Previously swallowed: a failed save (e.g. 403 for non-admins) looked successful.
       alert(`Save failed: ${e instanceof Error ? e.message : "unknown"}`);
     } finally {
       setSaving(false);

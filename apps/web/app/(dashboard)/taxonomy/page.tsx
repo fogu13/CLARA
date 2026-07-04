@@ -122,8 +122,8 @@ export default function TaxonomyPage() {
         tone: "ok",
         message:
           report.proposed > 0
-            ? `Proposed ${report.proposed} theme${report.proposed === 1 ? "" : "s"} from ${report.scanned} signals — review below.`
-            : `Scanned ${report.scanned} signals — no new themes above the confidence threshold.`
+            ? `Proposed ${report.proposed} theme${report.proposed === 1 ? "" : "s"} from ${report.scanned} signals. Review below.`
+            : `Scanned ${report.scanned} signals. No new themes above the confidence threshold.`
       });
     } catch (error) {
       setAction({ tone: "error", message: error instanceof Error ? error.message : "Bootstrap failed." });
@@ -143,7 +143,7 @@ export default function TaxonomyPage() {
       setAction({
         tone: "ok",
         message: report.healthy
-          ? "Hygiene check passed — no duplicates, stale proposals or drifted categories."
+          ? "Hygiene check passed. No duplicates, stale proposals or drifted categories."
           : `Hygiene check: ${report.duplicates.length} duplicate pair(s), ${report.stale_proposals.length} stale proposal(s), ${report.drifted_categories.length} drifted categor${report.drifted_categories.length === 1 ? "y" : "ies"}.`
       });
     } catch (error) {
@@ -260,7 +260,7 @@ export default function TaxonomyPage() {
       } catch {
         setState({
           status: "fallback",
-          message: "API unreachable — showing sample taxonomy data.",
+          message: "API unreachable. Showing sample taxonomy data.",
           catalogs: fallbackTaxonomies,
           terms: fallbackTerminologyDictionary
         });
@@ -341,7 +341,7 @@ export default function TaxonomyPage() {
                 {hygiene.duplicates.map((d, i) => (
                   <p key={i} className="mt-1">
                     <Badge variant="warning" className="mr-2">{Math.round(d.similarity * 100)}%</Badge>
-                    “{d.label_a}” ↔ “{d.label_b}” <span className="text-xs text-muted-foreground">({d.taxonomy_type}) — {t.taxonomy.useMergeAbove}</span>
+                    “{d.label_a}” ↔ “{d.label_b}” <span className="text-xs text-muted-foreground">({d.taxonomy_type}): {t.taxonomy.useMergeAbove}</span>
                   </p>
                 ))}
               </div>
