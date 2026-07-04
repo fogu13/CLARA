@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import math
 import sqlite3
 
 from app.services.common import SerializedConnection
@@ -276,6 +277,8 @@ def validate_context_csv(
 
             try:
                 parsed_value = float(raw_value)
+                if not math.isfinite(parsed_value):  # 'nan'/'inf' parse but poison sums
+                    raise ValueError(raw_value)
             except ValueError:
                 errors.append(
                     SignalValidationIssue(

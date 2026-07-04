@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from app.domain.models import ApprovalDecision, ClosureRecordRequest, LearningConclusionRequest, OutcomeMeasurement
 from fastapi import HTTPException
 from app.services.seed import load_seed_problems
@@ -106,6 +108,69 @@ def test_sqlite_store_blocks_approval_until_dependency_approved(tmp_path: Path) 
         ),
     )
     assert follow_up.decision.value == "approved"
+
+
+def test_rejection_revokes_dependency_and_repeat_approval_is_blocked(tmp_path: Path) -> None:
+    problem = load_seed_problems()[0]
+    independent = problem.action_proposals[0].model_copy(update={"depends_on": []})
+    dependent = problem.action_proposals[0].model_copy(
+        update={"action_id": "ACT-501-DEP", "depends_on": ["ACT-501"]}
+    )
+    problem = problem.model_copy(update={"action_proposals": [independent, dependent]})
+    store = SQLiteWorkflowStore(tmp_path / "workflow.db")
+
+    store.record_approval(
+        problem=problem,
+        decision=ApprovalDecision(action_id="ACT-501", decision="approved", reviewer="r"),
+    )
+
+    # Re-approving an already-approved action must 409, not mint a second execution.
+    with pytest.raises(HTTPException) as exc_info:
+        store.record_approval(
+            problem=problem,
+            decision=ApprovalDecision(action_id="ACT-501", decision="approved", reviewer="r"),
+        )
+    assert exc_info.value.status_code == 409
+    assert len(store.state_for_problem(problem).executions) == 1
+
+    # A corrective rejection is the LATEST decision, so the dependency gate
+    # must treat ACT-501 as no longer approved.
+    store.record_approval(
+        problem=problem,
+        decision=ApprovalDecision(action_id="ACT-501", decision="rejected", reviewer="r"),
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        store.record_approval(
+            problem=problem,
+            decision=ApprovalDecision(action_id="ACT-501-DEP", decision="approved", reviewer="r"),
+        )
+    assert exc_info.value.status_code == 409
+    assert "dependencies are approved" in exc_info.value.detail
+
+
+def test_stale_measurement_cannot_overwrite_newer_one(tmp_path: Path) -> None:
+    problem = load_seed_problems()[1]
+    store = SQLiteWorkflowStore(tmp_path / "workflow.db")
+    metric = problem.outcome_contract.primary_metric
+
+    def measurement(value: float, measured_at: str) -> OutcomeMeasurement:
+        return OutcomeMeasurement(
+            problem_id=problem.problem_id,
+            metric=metric,
+            observed_value=value,
+            measured_at=measured_at,
+        )
+
+    store.record_outcome(problem=problem, measurement=measurement(5.0, "2026-07-20T12:00:00Z"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        store.record_outcome(problem=problem, measurement=measurement(9.0, "2026-07-10T12:00:00Z"))
+    assert exc_info.value.status_code == 409
+    assert store.outcome_snapshot(problem).latest_value == 5.0
+
+    # Same measured_at = a correction; it supersedes by insertion order.
+    store.record_outcome(problem=problem, measurement=measurement(4.0, "2026-07-20T12:00:00Z"))
+    assert store.outcome_snapshot(problem).latest_value == 4.0
 
 
 def test_sqlite_store_classifies_decrease_outcomes(tmp_path: Path) -> None:

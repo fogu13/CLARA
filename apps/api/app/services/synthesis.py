@@ -488,10 +488,16 @@ def synthesize_insights(
         qual_count = sum(1 for s in sigs if s.get("signal_type") == "qualitative")
         quant_count = len(sigs) - qual_count
         affected = sum(s.get("contact_count", 1) for s in sigs)
-        max_urgency = max(
-            sigs,
-            key=lambda s: URGENCY_RANK.get(s.get("urgency", "medium"), 2),
-        ).get("urgency", "low")
+        # `or "medium"` in both key and read: a missing/None urgency must rank
+        # and report identically, else the argmax winner is read as a value the
+        # ranking never saw (reported low while ranked medium).
+        max_urgency = (
+            max(
+                sigs,
+                key=lambda s: URGENCY_RANK.get(s.get("urgency") or "medium", 2),
+            ).get("urgency")
+            or "medium"
+        )
 
         insight = {
             "title": generated.get("title", ""),

@@ -125,6 +125,25 @@ C-999,A-100,12000,0.5
     assert report["importable_rows"] == 0
 
 
+def test_customer_context_csv_validation_rejects_non_finite_numbers() -> None:
+    # 'nan'/'inf' parse as floats and pass `< 0` checks, but poison every
+    # downstream account-value sum — they must be rejected as non-numeric.
+    client = make_client()
+    csv_text = """customer_id,account_id,account_value,health_score
+C-901,A-901,nan,0.5
+C-902,A-902,inf,0.5
+C-903,A-903,12000,0.5
+"""
+
+    response = client.post("/customer-context/validate-csv", json={"csv_text": csv_text})
+
+    assert response.status_code == 200
+    report = response.json()
+    assert not report["valid"]
+    assert len(report["errors"]) == 2
+    assert report["importable_rows"] == 1
+
+
 def test_customer_context_completeness_warns_on_sparse_import() -> None:
     client = make_client()
     response = client.post(

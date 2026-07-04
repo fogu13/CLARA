@@ -314,6 +314,38 @@ class TestSynthesizeInsights:
         assert insight["cluster_method"] == "token_jaccard"
         assert insight["audit"]["severity_source"] == "simple_urgency_volume"
 
+    def test_max_urgency_consistent_when_argmax_signal_lacks_urgency(
+        self, _mock_ai_env: None, httpx_mock: Any
+    ) -> None:
+        from app.services.synthesis import synthesize_insights
+
+        tag = "checkout_failure"
+        signals = _make_enriched_signals(tag, 3, urgency="low")
+        # A missing urgency ranks as medium in the argmax key; the reported
+        # value must match the ranking, not fall back to "low".
+        signals[2]["urgency"] = None
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json={
+                "choices": [{
+                    "message": {
+                        "tool_calls": [{
+                            "function": {
+                                "name": "submit_insight",
+                                "arguments": json.dumps(_synth_response(tag)),
+                            }
+                        }]
+                    }
+                }],
+                "usage": {},
+            },
+        )
+
+        insights = synthesize_insights(signals, min_cluster_size=3)
+
+        assert insights[0]["max_urgency"] == "medium"
+
     def test_skips_clusters_below_min_size(self, _mock_ai_env: None) -> None:
         from app.services.synthesis import synthesize_insights
 
