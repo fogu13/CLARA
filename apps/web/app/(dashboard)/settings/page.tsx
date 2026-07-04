@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { getSystemConfig, getWorkspace, updateWorkspace } from "@/lib/client-api";
+import { apiBaseUrl, apiHeaders, getSystemConfig, getWorkspace, updateWorkspace } from "@/lib/client-api";
 import type { SystemConfig, WorkspaceSettings } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
 
@@ -26,6 +26,47 @@ export default function SettingsPage() {
   const [status, setStatus] = useState<Status>({ tone: "idle", message: "" });
 
   const [workspaceLoadFailed, setWorkspaceLoadFailed] = useState(false);
+  const [aiUrl, setAiUrl] = useState("");
+  const [aiModel, setAiModel] = useState("");
+  const [aiKey, setAiKey] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiStatus, setAiStatus] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+
+  async function saveAi() {
+    setAiBusy(true);
+    setAiStatus(null);
+    try {
+      const res = await fetch(`${apiBaseUrl()}/settings/ai`, {
+        method: "PUT",
+        headers: apiHeaders(),
+        body: JSON.stringify({ base_url: aiUrl, model: aiModel, api_key: aiKey }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail ?? `Save failed (${res.status})`);
+      setAiKey("");
+      setAiStatus({ tone: "ok", text: t.settings.aiSaved });
+      getSystemConfig().then(setConfig).catch(() => {});
+    } catch (e) {
+      setAiStatus({ tone: "error", text: e instanceof Error ? e.message : "Save failed" });
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  async function testAi() {
+    setAiBusy(true);
+    setAiStatus(null);
+    try {
+      const res = await fetch(`${apiBaseUrl()}/settings/ai/test`, { method: "POST", headers: apiHeaders() });
+      const data = await res.json().catch(() => null);
+      if (data?.ok) setAiStatus({ tone: "ok", text: `${t.settings.aiTestOk} (${data.model})` });
+      else setAiStatus({ tone: "error", text: `${t.settings.aiTestFail} ${data?.error ?? res.status}` });
+    } catch (e) {
+      setAiStatus({ tone: "error", text: e instanceof Error ? e.message : "Test failed" });
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   useEffect(() => {
     // If the load fails, saving would overwrite real workspace data with the
@@ -164,28 +205,52 @@ export default function SettingsPage() {
           <CardTitle>{t.settings.aiConfig}</CardTitle>
           <CardDescription>{t.settings.aiConfigSubtitle}</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {config ? (
-            <div className="grid gap-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">AI_BASE_URL</span>
-                <code className="bg-muted px-2 py-0.5 rounded">{config.ai_base_url}</code>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">AI_MODEL</span>
-                <code className="bg-muted px-2 py-0.5 rounded">{config.ai_model}</code>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">{t.settings.authLabel}</span>
-                <code className="bg-muted px-2 py-0.5 rounded">{config.auth_enabled ? t.compliance.enabled : "disabled"}</code>
-              </div>
+            <div className="flex flex-wrap gap-4 text-sm">
+              <span className="text-muted-foreground">
+                {t.settings.authLabel}: <code className="rounded bg-muted px-2 py-0.5">{config.auth_enabled ? t.compliance.enabled : "disabled"}</code>
+              </span>
+              <span className="text-muted-foreground">
+                Aktiv: <code className="rounded bg-muted px-2 py-0.5">{config.ai_model}</code> @ <code className="rounded bg-muted px-2 py-0.5">{config.ai_base_url}</code>
+              </span>
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">{t.compliance.configUnavailable}</p>
-          )}
-          <p className="text-xs text-muted-foreground mt-3">
-            {t.settings.aiConfigNote}
+          ) : null}
+
+          <div className="space-y-2">
+            <Label htmlFor="ai-url">{t.settings.aiBaseUrl}</Label>
+            <Input id="ai-url" value={aiUrl} onChange={(e) => setAiUrl(e.target.value)} placeholder="https://api.mistral.ai/v1 · http://localhost:11434/v1" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ai-model">{t.settings.aiModel}</Label>
+            <Input id="ai-model" value={aiModel} onChange={(e) => setAiModel(e.target.value)} placeholder="mistral-small-latest · qwen3:32b" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ai-key">{t.settings.aiApiKey}</Label>
+            <Input id="ai-key" type="password" value={aiKey} onChange={(e) => setAiKey(e.target.value)} placeholder="sk-…" />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t.settings.aiPresets}{" "}
+            <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => { setAiUrl("https://api.mistral.ai/v1"); setAiModel("mistral-small-latest"); }}>Mistral (EU)</button>
+            {" · "}
+            <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => { setAiUrl("http://localhost:11434/v1"); setAiModel("qwen3:32b"); }}>Ollama (local)</button>
+            {" · "}
+            <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => { setAiUrl("https://opencode.ai/zen/v1"); setAiModel("glm-5.2"); }}>OpenCode Zen</button>
           </p>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={saveAi} disabled={aiBusy}>
+              {aiBusy ? t.settings.saving : t.settings.saveChanges}
+            </Button>
+            <Button size="sm" variant="outline" onClick={testAi} disabled={aiBusy}>
+              {aiBusy ? t.settings.aiTesting : t.settings.aiTest}
+            </Button>
+          </div>
+          {aiStatus ? (
+            <p role="status" className={`text-sm ${aiStatus.tone === "ok" ? "text-emerald-600" : "text-destructive"}`}>
+              {aiStatus.text}
+            </p>
+          ) : null}
+          <p className="text-xs text-muted-foreground">{t.settings.aiConfigNote}</p>
         </CardContent>
       </Card>
     </div>

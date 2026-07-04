@@ -14,6 +14,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import AUTH_ENABLED, UserContext, get_current_user
+import app.services.ai as ai
 from app.domain.models import (
     ActionProposalUpdateRequest,
     AffectedContextExplorer,
@@ -334,6 +335,10 @@ def review_match_key(value: str) -> str:
 
 # Connector config keys whose values are secrets and must never be returned to clients.
 _SECRET_CONFIG_KEYS = {
+    "api_key",
+    "refresh_token",
+    "client_secret",
+    "service_account_json",
     "api_token",
     "bot_token",
     "token",
@@ -571,6 +576,17 @@ def create_app(
         PostgresApiKeyStore(_pg_url) if _pg_url else SQLiteApiKeyStore(default_db_path())
     )
     set_api_key_verifier(api_key_store.verify)
+
+    # AI runtime config: the Settings GUI persists overrides in the connector
+    # config store ("ai" entry, secrets redacted on read like every connector);
+    # re-apply on boot so a restart keeps the configured endpoint.
+    _ai_stored = connector_config_store.get_config("ai")
+    if _ai_stored and _ai_stored.is_active:
+        ai.set_runtime_config(
+            base_url=_ai_stored.config.get("base_url"),
+            model=_ai_stored.config.get("model"),
+            api_key=_ai_stored.config.get("api_key"),
+        )
     if not signal_store.list_signals():
         signal_store.import_signals(load_seed_signals())
     if not context_store.list_context():
@@ -1602,13 +1618,69 @@ def create_app(
     ) -> WorkspaceSettings:
         return workspace_store.put(user.workspace_id, settings)
 
+    @api.put("/settings/ai", dependencies=[Depends(require_role(Role.admin))])
+    def update_ai_settings(body: dict) -> dict:
+        """Point CLARA at any OpenAI-compatible endpoint (cloud or local) at
+        runtime. Empty api_key keeps the previously stored key; empty base_url/
+        model fall back to the server env. The key is stored like every other
+        connector secret and redacted on read."""
+        from app.connectors.config_store import ConnectorConfig
+
+        stored = connector_config_store.get_config("ai")
+        base_url = str(body.get("base_url") or "").strip()
+        model = str(body.get("model") or "").strip()
+        api_key = str(body.get("api_key") or "").strip()
+        if base_url and not base_url.startswith(("http://", "https://")):
+            raise HTTPException(status_code=422, detail="base_url must be http(s)")
+        if not api_key and stored:
+            api_key = stored.config.get("api_key", "")
+
+        config = {"base_url": base_url, "model": model, "api_key": api_key}
+        connector_config_store.upsert_config(
+            ConnectorConfig(connector_type="ai", config=config, display_name="AI endpoint")
+        )
+        ai.set_runtime_config(base_url=base_url, model=model, api_key=api_key)
+        telemetry_store.record("ai_config_changed", metadata={"base_url": base_url or "env", "model": model or "env"})
+        return {
+            "ai_base_url": ai.effective_base_url(),
+            "ai_model": ai.effective_model(),
+            "key_set": bool(ai.effective_api_key()),
+        }
+
+    @api.post("/settings/ai/test", dependencies=[Depends(require_role(Role.admin))])
+    def test_ai_settings() -> dict:
+        """One tiny completion against the EFFECTIVE endpoint - proves the
+        pasted config works before anyone trusts triage to it."""
+        try:
+            result = ai.call_tool(
+                system="Reply by calling the tool.",
+                user="ping",
+                tool_name="pong",
+                tool={
+                    "type": "function",
+                    "function": {
+                        "name": "pong",
+                        "description": "Acknowledge the ping.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"ok": {"type": "boolean"}},
+                            "required": ["ok"],
+                        },
+                    },
+                },
+                timeout=30.0,
+            )
+            return {"ok": True, "model": ai.effective_model(), "echo": result}
+        except ai.AIProviderError as exc:
+            return {"ok": False, "model": ai.effective_model(), "error": str(exc)[:300]}
+
     @api.get("/system-config", response_model=SystemConfig, dependencies=[read_dep])
     def get_system_config() -> SystemConfig:
         from app.auth import AUTH_ENABLED
 
         return SystemConfig(
-            ai_base_url=os.getenv("AI_BASE_URL") or "https://api.openai.com/v1",
-            ai_model=os.getenv("AI_MODEL") or "gpt-4o-mini",
+            ai_base_url=ai.effective_base_url(),
+            ai_model=ai.effective_model(),
             auth_enabled=AUTH_ENABLED,
         )
 

@@ -46,6 +46,35 @@ AI_EMBED_MODEL = os.getenv("AI_EMBED_MODEL") or "gemini-embedding-001"
 # so the reduced (un-normalised) vectors are fine for nearest-neighbour matching.
 AI_EMBED_DIM = int(os.getenv("AI_EMBED_DIM") or "768")
 
+# --- Runtime override (set from the Settings GUI via main.py) ---
+# None field = fall back to the env value above. ponytail: a dict, not a
+# config framework; the store persists it, this is just the hot copy.
+_RUNTIME_OVERRIDE: dict[str, str] = {}
+
+
+def set_runtime_config(
+    *, base_url: str | None = None, model: str | None = None, api_key: str | None = None
+) -> None:
+    for key, value in (("base_url", base_url), ("model", model), ("api_key", api_key)):
+        if value:
+            _RUNTIME_OVERRIDE[key] = value.rstrip("/") if key == "base_url" else value
+        else:
+            _RUNTIME_OVERRIDE.pop(key, None)
+
+
+def effective_base_url() -> str:
+    # Override -> live env -> import-time default. Live env keeps test
+    # monkeypatching and container env changes working without a reimport.
+    return (_RUNTIME_OVERRIDE.get("base_url") or os.getenv("AI_BASE_URL") or AI_BASE_URL).rstrip("/")
+
+
+def effective_model() -> str:
+    return _RUNTIME_OVERRIDE.get("model") or os.getenv("AI_MODEL") or AI_MODEL
+
+
+def effective_api_key() -> str:
+    return _RUNTIME_OVERRIDE.get("api_key") or os.getenv("AI_API_KEY") or AI_API_KEY
+
 # --- Langfuse (optional tracing + evals) ---
 _LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY") or ""
 _LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY") or ""
@@ -101,8 +130,8 @@ class NoStructuredResponseError(AIProviderError):
 def _headers() -> dict[str, str]:
     h = {"Content-Type": "application/json"}
     # Local servers (Ollama/vLLM) usually need no key; only send one if configured.
-    if AI_API_KEY:
-        h["Authorization"] = f"Bearer {AI_API_KEY}"
+    if effective_api_key():
+        h["Authorization"] = f"Bearer {effective_api_key()}"
     return h
 
 
@@ -133,7 +162,7 @@ def call_tool(
     deterministic orchestration.
     """
     body = {
-        "model": AI_MODEL,
+        "model": effective_model(),
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -156,13 +185,13 @@ def call_tool(
         obs = lf.start_observation(
             name=trace_name or f"call_tool:{tool_name}",
             as_type="generation",
-            model=AI_MODEL,
+            model=effective_model(),
             input={"system": system, "user": user, "tool": tool},
         )
 
     try:
         with httpx.Client(timeout=timeout) as client:
-            resp = client.post(f"{AI_BASE_URL}/chat/completions", headers=_headers(), json=body)
+            resp = client.post(f"{effective_base_url()}/chat/completions", headers=_headers(), json=body)
     except httpx.RequestError as exc:
         err = AIProviderError(f"AI provider unreachable: {exc}")
         if obs is not None:
@@ -241,7 +270,7 @@ def embed(
 
     try:
         with httpx.Client(timeout=timeout) as client:
-            resp = client.post(f"{AI_BASE_URL}/embeddings", headers=_headers(), json=body)
+            resp = client.post(f"{effective_base_url()}/embeddings", headers=_headers(), json=body)
     except httpx.RequestError as exc:
         err = AIProviderError(f"AI provider unreachable: {exc}")
         if obs is not None:
