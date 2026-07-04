@@ -154,6 +154,7 @@ export default function CompliancePage() {
             <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.residency2}</span></div>
             <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.residency3}</span></div>
             <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.residency4}</span></div>
+            <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.residency5}</span></div>
           </CardContent>
         </Card>
       </div>

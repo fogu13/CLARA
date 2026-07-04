@@ -12,12 +12,14 @@ from app.connectors.base import ConnectorError, DestinationConnector, SourceConn
 from app.connectors.jira import JiraDestinationConnector
 from app.connectors.slack import SlackDestinationConnector
 from app.connectors.app_store import AppStoreSourceConnector
+from app.connectors.trustpilot import TrustpilotSourceConnector
 from app.connectors.zendesk import ZendeskSourceConnector
 
 # Registry: connector_type -> instance
 SOURCES: dict[str, SourceConnector] = {
     "zendesk": ZendeskSourceConnector(),
     "app_store": AppStoreSourceConnector(),
+    "trustpilot": TrustpilotSourceConnector(),
 }
 
 DESTINATIONS: dict[str, DestinationConnector] = {
@@ -65,6 +67,7 @@ __all__ = [
     "SourceConnector",
     "ZendeskSourceConnector",
     "AppStoreSourceConnector",
+    "TrustpilotSourceConnector",
     "JiraDestinationConnector",
     "SlackDestinationConnector",
     "SOURCES",
