@@ -152,7 +152,8 @@ CREATE TABLE IF NOT EXISTS clara_connector_configs (
 
 
 def database_url() -> str | None:
-    return os.getenv("DATABASE_URL")
+    url = os.getenv("DATABASE_URL")
+    return url or None
 
 
 def normalize_database_url(url: str) -> str:
@@ -682,17 +683,6 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         )
         return closure
 
-
-def _next_id(records: list[Any], field_name: str, prefix: str) -> int:
-    pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)$")
-    maximum = 0
-    for record in records:
-        match = pattern.match(getattr(record, field_name))
-        if match:
-            maximum = max(maximum, int(match.group(1)))
-    return maximum
-
-
     def update_execution(self, execution_id, *, status, external_ref=None, detail=None):
         # Base class mutates the in-memory record; persist the flip too, or a
         # restart resurrects executions as eternal drafts.
@@ -708,6 +698,16 @@ def _next_id(records: list[Any], field_name: str, prefix: str) -> int:
             for draft in self._jira_issue_drafts:
                 self._save_workflow_record("jira_draft", draft.draft_id, draft.problem_id, draft)
         return scrubbed
+
+
+def _next_id(records: list[Any], field_name: str, prefix: str) -> int:
+    pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)$")
+    maximum = 0
+    for record in records:
+        match = pattern.match(getattr(record, field_name))
+        if match:
+            maximum = max(maximum, int(match.group(1)))
+    return maximum
 
 
 class PostgresTaxonomyStore(PostgresConnectionMixin, TaxonomyStore):
