@@ -15,3 +15,57 @@ def utc_now() -> str:
 def action_snapshot(action: ActionProposal) -> ActionProposalSnapshot:
     """Immutable by-alias snapshot of an action proposal (for audit records)."""
     return ActionProposalSnapshot.model_validate(action.model_dump(by_alias=True))
+
+
+class _FetchedCursor:
+    """Cursor stand-in with results already materialized under the lock."""
+
+    def __init__(self, rows: list, lastrowid: int | None, rowcount: int) -> None:
+        self._rows = rows
+        self.lastrowid = lastrowid
+        self.rowcount = rowcount
+
+    def fetchall(self) -> list:
+        return self._rows
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
+class SerializedConnection:
+    """sqlite3 connection that is actually safe under FastAPI's threadpool.
+
+    Every SQLite store used check_same_thread=False with a SHARED connection,
+    but sqlite3 connections are not safe for concurrent use: parallel requests
+    (the dashboard fires ~8 at once) interleave cursor state and blow up with
+    IndexError/ProgrammingError mid-fetch (reproduced live on /outcome-board).
+
+    One RLock serializes execute+fetch as a unit; results are materialized
+    before the lock is released, so no cursor ever crosses a thread boundary.
+    ponytail: a lock, not a pool. Postgres stores are the scale path.
+    """
+
+    def __init__(self, path) -> None:
+        import sqlite3
+        import threading
+
+        self._conn = sqlite3.connect(path, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        self._lock = threading.RLock()
+
+    def execute(self, sql: str, params=()) -> _FetchedCursor:
+        with self._lock:
+            cursor = self._conn.execute(sql, params)
+            rows = cursor.fetchall() if cursor.description is not None else []
+            return _FetchedCursor(rows, cursor.lastrowid, cursor.rowcount)
+
+    def executescript(self, script: str) -> None:
+        with self._lock:
+            self._conn.executescript(script)
+
+    def commit(self) -> None:
+        with self._lock:
+            self._conn.commit()

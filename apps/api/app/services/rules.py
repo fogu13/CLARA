@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-import sqlite3
+
+from app.services.common import SerializedConnection
 from pathlib import Path
 from uuid import uuid4
 
@@ -14,8 +15,7 @@ class SQLiteRuleStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(self.path, check_same_thread=False)
-        self._connection.row_factory = sqlite3.Row
+        self._connection = SerializedConnection(self.path)
         self._connection.execute(
             """
             CREATE TABLE IF NOT EXISTS feedback_rules (

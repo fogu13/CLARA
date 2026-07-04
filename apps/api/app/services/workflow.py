@@ -31,7 +31,7 @@ from app.domain.models import (
     WorkflowState,
     retention_expires_at,
 )
-from app.services.common import action_snapshot, utc_now  # re-exported for importers
+from app.services.common import SerializedConnection, action_snapshot, utc_now  # re-exported for importers, SerializedConnection
 
 
 UNRESOLVED_GOVERNANCE_STATUSES = {"fail", "review_required"}
@@ -654,8 +654,7 @@ class SQLiteWorkflowStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(self.path, check_same_thread=False)
-        self._connection.row_factory = sqlite3.Row
+        self._connection = SerializedConnection(self.path)
         self._initialize()
 
     def _initialize(self) -> None:
