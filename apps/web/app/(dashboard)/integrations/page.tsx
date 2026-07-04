@@ -20,6 +20,8 @@ interface ConnectorConfig {
   is_active: boolean;
 }
 
+const PULL_SOURCES = ["zendesk", "app_store", "trustpilot"];
+
 const CONNECTOR_CATALOG = [
   {
     type: "zendesk",
@@ -40,6 +42,16 @@ const CONNECTOR_CATALOG = [
     fields: [
       { key: "app_id", label: "App Store ID", placeholder: "1279625243" },
       { key: "countries", label: "Countries (comma-separated)", placeholder: "de,at,ch" },
+    ],
+  },
+  {
+    type: "trustpilot",
+    name: "Trustpilot",
+    category: "Source (Pull)",
+    descKey: "descTrustpilot" as const,
+    fields: [
+      { key: "api_key", label: "API Key", placeholder: "your Trustpilot Business API key" },
+      { key: "business_unit_id", label: "Business Unit ID", placeholder: "46d5a5..." },
     ],
   },
   {
@@ -290,7 +302,7 @@ export default function IntegrationsPage() {
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            {configured && (connector.type === "zendesk" || connector.type === "app_store") && (
+                            {configured && PULL_SOURCES.includes(connector.type) && (
                               <Button size="sm" variant="outline" onClick={() => pullSource(connector.type)}>
                                 {t.integrations.pullNow}
                               </Button>
