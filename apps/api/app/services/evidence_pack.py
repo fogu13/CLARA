@@ -1,4 +1,4 @@
-"""Evidence-pack export — the audit-ready story of one problem, end to end.
+"""Evidence-pack export: the audit-ready story of one problem, end to end.
 
 Signals -> classification -> proposed actions + policy trail -> human approvals
 -> real executions (external refs) -> outcome contract + measurements -> learning.
@@ -8,7 +8,7 @@ Two renderings from one structured dict:
   - JSON (data-room / programmatic)
   - self-contained, print-optimized HTML (DACH buyers file PDFs: open -> Cmd+P)
 
-ponytail: stdlib-only HTML rendering (html.escape + f-strings) — no template
+ponytail: stdlib-only HTML rendering (html.escape + f-strings); no template
 engine, no PDF library. Browser print-to-PDF covers the PDF need.
 """
 
@@ -204,7 +204,7 @@ def render_evidence_pack_html(pack: dict[str, Any]) -> str:
     outcome_line = (
         f"{_esc(outcome['metric'])}: baseline {_esc(outcome['baseline'])} → "
         f"latest {_esc(outcome['latest_value'] if outcome['latest_value'] is not None else 'not measured')} "
-        f"(target {_esc(outcome['success_threshold'])}, {_esc(outcome['improvement_direction'])}) — "
+        f"(target {_esc(outcome['success_threshold'])}, {_esc(outcome['improvement_direction'])}). "
         f"status: {_esc(outcome['status'])}"
     )
 
@@ -212,7 +212,7 @@ def render_evidence_pack_html(pack: dict[str, Any]) -> str:
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Evidence Pack — {_esc(problem['problem_id'])}</title>
+<title>Evidence Pack: {_esc(problem['problem_id'])}</title>
 <style>
   body {{ font: 13px/1.5 -apple-system, 'Segoe UI', sans-serif; color: #111; margin: 40px auto; max-width: 900px; padding: 0 24px; }}
   h1 {{ font-size: 20px; margin-bottom: 2px; }}
@@ -229,7 +229,7 @@ def render_evidence_pack_html(pack: dict[str, Any]) -> str:
 </style>
 </head>
 <body>
-<h1>Evidence Pack — {_esc(problem['title'])}</h1>
+<h1>Evidence Pack: {_esc(problem['title'])}</h1>
 <p class="meta">
   {_esc(problem['problem_id'])} · generated {_esc(pack['generated_at'])} ·
   <span class="badge">status: {_esc(problem['status'])}</span>

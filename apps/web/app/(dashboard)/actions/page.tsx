@@ -89,7 +89,7 @@ export default function ActionsPage() {
 
       {usingFallback ? (
         <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
-          API unreachable — showing sample action proposals.
+          API unreachable. Showing sample action proposals.
         </div>
       ) : null}
 

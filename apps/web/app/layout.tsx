@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CLARA — Feedback-to-Action Platform",
+  title: "CLARA | Feedback-to-Action Platform",
   description: "Governed AI triage with real connectors: Zendesk in, Jira + Slack out"
 };
 

@@ -19,15 +19,14 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from app.services.common import utc_now
+from app.services.common import utc_now, SerializedConnection
 
 
 class SQLiteTelemetryStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(self.path, check_same_thread=False)
-        self._connection.row_factory = sqlite3.Row
+        self._connection = SerializedConnection(self.path)
         self._connection.execute(
             """
             CREATE TABLE IF NOT EXISTS telemetry_events (

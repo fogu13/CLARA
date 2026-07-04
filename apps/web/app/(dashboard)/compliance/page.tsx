@@ -24,7 +24,7 @@ export default function CompliancePage() {
     setExportError(null);
     try {
       const res = await fetch(`${apiBaseUrl()}/audit-export`, { headers: apiHeaders() });
-      if (!res.ok) throw new Error(`Export failed (${res.status}) — admin role required`);
+      if (!res.ok) throw new Error(`Export failed (${res.status}). Admin role required.`);
       const blob = new Blob([JSON.stringify(await res.json(), null, 2)], {
         type: "application/json"
       });
@@ -115,7 +115,7 @@ export default function CompliancePage() {
             <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
               <li>• Purpose: classify + summarize customer feedback; propose (never execute) actions.</li>
               <li>• Provider-agnostic (OpenAI-compatible): routable to EU-hosted or fully local models (Ollama/vLLM).</li>
-              <li>• No fine-tuning on customer data — adaptation via retrieval, taxonomy and outcome learnings.</li>
+              <li>• No fine-tuning on customer data. Adaptation happens via retrieval, taxonomy and outcome learnings.</li>
               <li>• Every AI output carries confidence, evidence links and stated limitations.</li>
               <li>• Known limitations: non-deterministic outputs; quality tracked by a published eval harness.</li>
             </ul>
@@ -230,7 +230,7 @@ export default function CompliancePage() {
                 <p className="text-sm font-medium">Risk Classification (AI Act)</p>
                 <p className="text-xs text-muted-foreground">
                   Documented assessment: text-based feedback triage with human approval is
-                  minimal/limited risk — not an Annex III use case. See docs/eu-ai-act-mapping.md.
+                  minimal/limited risk, not an Annex III use case. See docs/eu-ai-act-mapping.md.
                 </p>
               </div>
               <Badge variant="success">Documented</Badge>
@@ -295,7 +295,7 @@ export default function CompliancePage() {
             </div>
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              <span>Audit trail for all AI outputs — exportable above</span>
+              <span>Audit trail for all AI outputs, exportable above</span>
             </div>
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-emerald-500" />
@@ -303,7 +303,7 @@ export default function CompliancePage() {
             </div>
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              <span>Scheduled outcome re-measurement — real data only</span>
+              <span>Scheduled outcome re-measurement, real data only</span>
             </div>
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-emerald-500" />

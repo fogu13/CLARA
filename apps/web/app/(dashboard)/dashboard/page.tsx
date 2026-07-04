@@ -69,13 +69,15 @@ type OwnerLoad = {
   topProblem: ProblemSummary;
 };
 
-const actionClassLabels: Record<ActionClass, string> = {
-  structural: "Product fix",
-  customer_recovery: "Customer recovery",
-  journey_intervention: "Intervention",
-  research: "Research",
-  governance: "Governance"
-};
+function actionClassLabels(td: ReturnType<typeof useI18n>["t"]["dashboard"]): Record<ActionClass, string> {
+  return {
+    structural: td.classStructural,
+    customer_recovery: td.classRecovery,
+    journey_intervention: td.classIntervention,
+    research: td.classResearch,
+    governance: td.classGovernance
+  };
+}
 
 function label(value: string): string {
   return value.replaceAll("_", " ");
@@ -226,7 +228,7 @@ function approvedActionIds(approvals: ApprovalRecord[]): Set<string> {
   return new Set(approvals.filter((approval) => approval.decision === "approved").map((approval) => approval.action_id));
 }
 
-// Signals per day over the trailing window — the dashboard's time axis.
+// Signals per day over the trailing window; the dashboard's time axis.
 function signalTrendSeries(signals: SignalRecord[], days = 30): { day: string; count: number }[] {
   const now = Date.now();
   const dayMs = 86_400_000;
@@ -387,7 +389,7 @@ export default function DashboardPage() {
 
       {data?.usingFallback ? (
         <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
-          Showing sample data — couldn&apos;t reach the API.
+          Showing sample data. The API is unreachable.
         </div>
       ) : null}
 
@@ -453,7 +455,7 @@ export default function DashboardPage() {
                     {label(item.journey)} / {label(item.journey_stage)} · {t.dashboard.score} {Math.round(item.emerging_score * 100)}%
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {item.signal_count} {t.common.signals} · {item.customer_count} {t.common.customers} · {item.source_count} {t.common.sources}
+                    {t.common.signals}: {item.signal_count} · {t.common.customers}: {item.customer_count} · {t.common.sources}: {item.source_count}
                   </p>
                 </div>
               ))
@@ -485,9 +487,9 @@ export default function DashboardPage() {
                         <p className="mt-1 text-sm">{reason}</p>
                       </div>
                       <div className="flex flex-wrap gap-2 md:justify-end">
-                        <Badge variant={severity === "blocked" ? "destructive" : severity === "review" ? "warning" : "secondary"}>{severity}</Badge>
-                        <Badge variant="outline">impact {percent(impact(problem))}</Badge>
-                        <Badge variant="outline">{compact(problem.affected_customers)} customers</Badge>
+                        <Badge variant={severity === "blocked" ? "destructive" : severity === "review" ? "warning" : "secondary"}>{severity === "blocked" ? t.dashboard.severityBlocked : severity === "review" ? t.dashboard.severityReview : t.dashboard.severityWatch}</Badge>
+                        <Badge variant="outline">{t.insights.impact} {percent(impact(problem))}</Badge>
+                        <Badge variant="outline">{compact(problem.affected_customers)} {t.common.customers}</Badge>
                       </div>
                     </div>
                   </Link>
@@ -511,7 +513,7 @@ export default function DashboardPage() {
             <div className="space-y-3">
               {mix.map((item) => (
                 <div key={item.actionClass}>
-                  <div className="mb-1 flex items-center justify-between text-sm"><span>{actionClassLabels[item.actionClass]}</span><span className="text-muted-foreground">{item.count}</span></div>
+                  <div className="mb-1 flex items-center justify-between text-sm"><span>{actionClassLabels(t.dashboard)[item.actionClass]}</span><span className="text-muted-foreground">{item.count}</span></div>
                   <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${(item.count / maxMix) * 100}%` }} /></div>
                 </div>
               ))}

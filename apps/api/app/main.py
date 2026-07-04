@@ -742,7 +742,7 @@ def create_app(
         if webhook_config is None or not webhook_config.is_active or not secret:
             raise HTTPException(
                 status_code=400,
-                detail="No active webhook configured — set a secret via PUT /connectors/webhook",
+                detail="No active webhook configured. set a secret via PUT /connectors/webhook",
             )
 
         raw_body = await request.body()
@@ -881,7 +881,7 @@ def create_app(
         if report.get("error") == "embedding_failed":
             raise HTTPException(
                 status_code=502,
-                detail="Embedding provider unavailable — taxonomy bootstrap aborted (no partial writes)",
+                detail="Embedding provider unavailable. taxonomy bootstrap aborted (no partial writes)",
             )
         telemetry_store.record(
             "taxonomy_bootstrapped",
@@ -1382,7 +1382,7 @@ def create_app(
 
     @api.post("/ask", dependencies=[read_dep, Depends(rate_limiter)])
     def ask_clara_endpoint(body: dict) -> dict:
-        """Grounded Q&A over the workspace's signals — citations, confidence,
+        """Grounded Q&A over the workspace's signals; citations, confidence,
         and an explicit refusal when the evidence is thin. No chat memory."""
         from app.services import ai as ai_module
         from app.services.ask import ask_clara
@@ -1600,7 +1600,7 @@ def create_app(
             if stored is None or not stored.is_active:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"No active {connector_type} config — configure via PUT /connectors/{connector_type}",
+                    detail=f"No active {connector_type} config. configure via PUT /connectors/{connector_type}",
                 )
             pull_config = stored.config
 

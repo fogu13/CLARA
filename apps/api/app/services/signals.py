@@ -27,7 +27,7 @@ from app.domain.models import (
     SignalValidationReport,
 )
 from app.domain.scoring import approval_pressure, impact_band, normalized_impact_score
-from app.services.common import utc_now  # re-exported for existing importers
+from app.services.common import SerializedConnection, utc_now  # re-exported for existing importers, SerializedConnection
 from app.services.language import detect_language
 
 
@@ -649,8 +649,7 @@ class SQLiteSignalStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(self.path, check_same_thread=False)
-        self._connection.row_factory = sqlite3.Row
+        self._connection = SerializedConnection(self.path)
         self._initialize()
 
     def _initialize(self) -> None:

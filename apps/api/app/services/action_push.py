@@ -1,4 +1,4 @@
-"""Real action push — fires the destination connector when an action is approved.
+"""Real action push; fires the destination connector when an action is approved.
 
 Until now the normal approval flow only created local drafts; the real Jira/Slack
 push code was reachable only via the connector test endpoint and the LangGraph
@@ -87,7 +87,7 @@ def push_approved_action(
         return workflow_store.update_execution(
             execution.execution_id,
             status=execution.status,
-            detail=f"No active {destination} connector configured — draft only.",
+            detail=f"No active {destination} connector configured. draft only.",
         )
 
     # Idempotency: an earlier approval for this action already created the

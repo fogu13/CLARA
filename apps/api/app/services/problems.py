@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
 from app.domain.models import (
@@ -12,7 +11,7 @@ from app.domain.models import (
     ProblemUpdateRequest,
 )
 from app.domain.scoring import approval_pressure
-from app.services.common import action_snapshot  # re-exported for existing importers
+from app.services.common import SerializedConnection, action_snapshot  # re-exported for existing importers, SerializedConnection
 
 
 def with_approval_pressure(problem: ProblemRecord) -> ProblemRecord:
@@ -161,8 +160,7 @@ class SQLiteProblemStore:
         self.path = path
         self.seed_problems = {problem.problem_id: problem for problem in seed_problems}
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(self.path, check_same_thread=False)
-        self._connection.row_factory = sqlite3.Row
+        self._connection = SerializedConnection(self.path)
         self._initialize()
 
     def _initialize(self) -> None:

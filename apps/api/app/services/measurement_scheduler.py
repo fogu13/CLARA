@@ -1,4 +1,4 @@
-"""Scheduled outcome re-measurement — closes the loop without a human remembering.
+"""Scheduled outcome re-measurement; closes the loop without a human remembering.
 
 When an action is approved, measurement checkpoints are scheduled at T+7 days
 and T+measurement_window_days. When a checkpoint comes due:
@@ -24,13 +24,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
 from app.domain.models import OutcomeMeasurement, ProblemRecord
-from app.services.common import utc_now
+from app.services.common import utc_now, SerializedConnection
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +45,7 @@ class SQLiteMeasurementPlanStore:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._connection = sqlite3.connect(self.path, check_same_thread=False)
-        self._connection.row_factory = sqlite3.Row
+        self._connection = SerializedConnection(self.path)
         self._connection.execute(
             """
             CREATE TABLE IF NOT EXISTS measurement_plans (
@@ -264,7 +262,10 @@ def attach_measurement_loop(api: Any, runner: Callable[[], dict[str, int]]) -> N
     async def _loop() -> None:
         while True:
             try:
-                result = runner()
+                # The runner does blocking work (SQLite, HTTP pulls to Zendesk or
+                # Apple). Run it in a worker thread so a slow source sync never
+                # freezes the event loop and with it every API request.
+                result = await asyncio.to_thread(runner)
                 if any(result.values()):
                     logger.info("Measurement loop: %s", result)
             except Exception:  # noqa: BLE001

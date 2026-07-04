@@ -1,4 +1,4 @@
-"""Apple App Store reviews connector (pull) — governed public listening, L1.
+"""Apple App Store reviews connector (pull); governed public listening, L1.
 
 Fetches customer reviews from Apple's public per-country review feed and maps
 them to canonical signal dicts. No auth, no scraping: this is an Apple-provided
@@ -41,7 +41,7 @@ def _label(node: Any) -> str:
 
 
 def _pseudonym(author: str) -> str:
-    """Stable pseudonym for a reviewer — the name itself is never stored."""
+    """Stable pseudonym for a reviewer; the name itself is never stored."""
     digest = hashlib.sha256(author.encode("utf-8")).hexdigest()[:10]
     return f"rev-{digest}"
 
@@ -151,7 +151,7 @@ class AppStoreSourceConnector:
         rating = _label(entry.get("im:rating"))
         return {
             "signal_id": f"as-{country}-{review_id}",
-            # Pseudonymized at ingestion — the reviewer's name is never stored.
+            # Pseudonymized at ingestion; the reviewer's name is never stored.
             "customer_id": _pseudonym(author or review_id),
             "account_id": "public",
             "source": f"app_store:{country}",

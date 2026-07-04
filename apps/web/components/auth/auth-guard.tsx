@@ -9,7 +9,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // When auth isn't configured (no NEXT_PUBLIC_SUPABASE_* env), don't block — local dev
+    // When auth isn't configured (no NEXT_PUBLIC_SUPABASE_* env), don't block; local dev
     // runs against an auth-disabled API. With auth configured, require a valid session.
     if (!authConfigured || isAuthenticated()) {
       setReady(true);
