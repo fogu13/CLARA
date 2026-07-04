@@ -516,7 +516,21 @@ def create_app(
             now=now,
         )
 
-    attach_measurement_loop(api, _run_due_measurements)
+    # One background loop, two duties: measurements every tick (15 min), source
+    # sync every 4th tick (~hourly). _run_source_sync is defined later in
+    # create_app (route section) — Python closures bind late, so by the time the
+    # loop first fires the name is resolved.
+    _tick_counter = {"n": 0}
+
+    def _background_tick(now: str | None = None) -> dict[str, int]:
+        result = _run_due_measurements(now)
+        _tick_counter["n"] += 1
+        if _tick_counter["n"] % 4 == 1:  # first tick + hourly thereafter
+            sync = _run_source_sync()
+            result = {**result, **{f"sync_{k}": v for k, v in sync.items()}}
+        return result
+
+    attach_measurement_loop(api, _background_tick)
     url = database_url()
     taxonomy_store = taxonomies or (PostgresTaxonomyStore(url) if url else TaxonomyStore())
     terminology_store = terminology or (
@@ -1565,26 +1579,28 @@ def create_app(
             raise HTTPException(status_code=404, detail="Connector not found")
         return {"connector_type": connector_type, "status": "deleted"}
 
-    @api.post("/connectors/zendesk/pull", dependencies=[Depends(require_role(Role.admin))])
-    def pull_zendesk(config: dict | None = None) -> dict:
-        """Pull tickets from Zendesk and return mapped signals.
+    def _pull_source_and_import(connector_type: str, config: dict | None = None) -> dict:
+        """Shared pull->import->cursor logic for every registered SOURCE connector.
 
-        Uses stored config if no config is provided in the body.
+        Used by the manual pull route and the background source-sync loop.
+        Cursor is only advanced when pulling with the STORED config.
         """
         from app.connectors import get_source
         from app.connectors.base import ConnectorError
 
-        src = get_source("zendesk")
+        src = get_source(connector_type)
         if src is None:
-            raise HTTPException(status_code=400, detail="Zendesk connector not available")
+            raise HTTPException(
+                status_code=404, detail=f"No source connector '{connector_type}'"
+            )
 
-        stored = connector_config_store.get_config("zendesk")
+        stored = connector_config_store.get_config(connector_type)
         pull_config = config or {}
         if not pull_config:
-            if stored is None:
+            if stored is None or not stored.is_active:
                 raise HTTPException(
                     status_code=400,
-                    detail="No Zendesk config — configure via PUT /connectors/zendesk",
+                    detail=f"No active {connector_type} config — configure via PUT /connectors/{connector_type}",
                 )
             pull_config = stored.config
 
@@ -1593,8 +1609,6 @@ def create_app(
         except ConnectorError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-        # Import into the signal store (dedup by zd-<id>) — previously the pull
-        # only RETURNED the tickets and they never landed in /signals.
         last_synced_at = None
         records = []
         for item in raw_signals:
@@ -1608,9 +1622,6 @@ def create_app(
             records.append(SignalRecord.model_validate({**item, "metadata": metadata}))
         result = signal_store.import_signals(records)
 
-        # Persist the incremental cursor so the next pull fetches only new/updated
-        # tickets (the connector uses config["last_synced_at"] for the cursor API).
-        # Only when pulling with the STORED config — ad-hoc test pulls don't move it.
         if not config and stored is not None and last_synced_at:
             stored.config["last_synced_at"] = last_synced_at
             connector_config_store.upsert_config(stored)
@@ -1618,7 +1629,7 @@ def create_app(
         telemetry_store.record(
             "signals_imported",
             metadata={
-                "source": "zendesk",
+                "source": connector_type,
                 "imported": result.imported,
                 "skipped": result.skipped_duplicates,
             },
@@ -1630,6 +1641,35 @@ def create_app(
             "last_synced_at": last_synced_at,
             "signals": raw_signals[:10],
         }
+
+    def _run_source_sync() -> dict[str, int]:
+        """Background tick: pull every active SOURCE connector. Per-source errors
+        are logged and never break the loop or the other sources."""
+        from app.connectors import SOURCES
+
+        synced = 0
+        failed = 0
+        for stored in connector_config_store.list_configs():
+            if stored.connector_type not in SOURCES or not stored.is_active:
+                continue
+            try:
+                _pull_source_and_import(stored.connector_type)
+                synced += 1
+            except HTTPException as exc:
+                logger.warning(
+                    "Source sync failed for %s: %s", stored.connector_type, exc.detail
+                )
+                failed += 1
+            except Exception:  # noqa: BLE001 — one broken source must not stop the rest
+                logger.exception("Source sync crashed for %s", stored.connector_type)
+                failed += 1
+        return {"synced": synced, "failed": failed}
+
+    @api.post("/connectors/{connector_type}/pull", dependencies=[Depends(require_role(Role.admin))])
+    def pull_source(connector_type: str, config: dict | None = None) -> dict:
+        """Pull + import signals from any registered source connector
+        (zendesk, app_store, ...). Uses the stored config when no body is given."""
+        return _pull_source_and_import(connector_type, config)
 
     @api.post("/connectors/test/{connector_type}", dependencies=[Depends(require_role(Role.admin))])
     def test_connector(connector_type: str, config: dict) -> dict:

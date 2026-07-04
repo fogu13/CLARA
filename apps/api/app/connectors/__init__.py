@@ -11,11 +11,13 @@ from __future__ import annotations
 from app.connectors.base import ConnectorError, DestinationConnector, SourceConnector
 from app.connectors.jira import JiraDestinationConnector
 from app.connectors.slack import SlackDestinationConnector
+from app.connectors.app_store import AppStoreSourceConnector
 from app.connectors.zendesk import ZendeskSourceConnector
 
 # Registry: connector_type -> instance
 SOURCES: dict[str, SourceConnector] = {
     "zendesk": ZendeskSourceConnector(),
+    "app_store": AppStoreSourceConnector(),
 }
 
 DESTINATIONS: dict[str, DestinationConnector] = {
@@ -62,6 +64,7 @@ __all__ = [
     "DestinationConnector",
     "SourceConnector",
     "ZendeskSourceConnector",
+    "AppStoreSourceConnector",
     "JiraDestinationConnector",
     "SlackDestinationConnector",
     "SOURCES",

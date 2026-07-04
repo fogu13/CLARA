@@ -32,6 +32,16 @@ const CONNECTOR_CATALOG = [
     ],
   },
   {
+    type: "app_store",
+    name: "App Store Reviews",
+    category: "Source (Pull)",
+    description: "Listen to your app's public App Store reviews (Apple's official feed — no scraping)",
+    fields: [
+      { key: "app_id", label: "App Store ID", placeholder: "1279625243" },
+      { key: "countries", label: "Countries (comma-separated)", placeholder: "de,at,ch" },
+    ],
+  },
+  {
     type: "webhook",
     name: "Webhook",
     category: "Source (Pull)",
@@ -165,9 +175,9 @@ export default function IntegrationsPage() {
     }
   }
 
-  async function pullZendesk() {
+  async function pullSource(connectorType: string) {
     try {
-      const res = await fetch(`${API_URL}/connectors/zendesk/pull`, {
+      const res = await fetch(`${API_URL}/connectors/${connectorType}/pull`, {
         method: "POST",
         headers: apiHeaders(),
         body: JSON.stringify({}),
@@ -176,7 +186,7 @@ export default function IntegrationsPage() {
       if (!res.ok) {
         throw new Error(data?.detail ?? `Pull failed (${res.status})`);
       }
-      alert(`Pulled ${data.pulled} signals from Zendesk`);
+      alert(`Pulled ${data.pulled} signals (${data.imported} new, ${data.skipped_duplicates} duplicates)`);
     } catch (e) {
       alert(`Pull failed: ${e instanceof Error ? e.message : "unknown"}`);
     }
@@ -261,9 +271,9 @@ export default function IntegrationsPage() {
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            {configured && connector.type === "zendesk" && (
-                              <Button size="sm" variant="outline" onClick={pullZendesk}>
-                                Pull Tickets
+                            {configured && (connector.type === "zendesk" || connector.type === "app_store") && (
+                              <Button size="sm" variant="outline" onClick={() => pullSource(connector.type)}>
+                                Pull now
                               </Button>
                             )}
                             <Button
