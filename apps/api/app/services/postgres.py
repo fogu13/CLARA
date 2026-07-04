@@ -36,6 +36,7 @@ from app.services.problems import (
     apply_action_proposal_update,
     apply_problem_status,
     apply_problem_update,
+    scrub_customer_evidence,
 )
 from app.services.signals import build_candidates
 from app.services.taxonomies import (
@@ -114,6 +115,35 @@ CREATE TABLE IF NOT EXISTS clara_terminology_dictionary (
 
 CREATE TABLE IF NOT EXISTS clara_workspace_settings (
     workspace_id INTEGER PRIMARY KEY,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS clara_telemetry (
+    id BIGSERIAL PRIMARY KEY,
+    workspace_id BIGINT NOT NULL DEFAULT 1,
+    event_type TEXT NOT NULL,
+    entity_id TEXT,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS clara_measurement_plans (
+    id BIGSERIAL PRIMARY KEY,
+    workspace_id BIGINT NOT NULL DEFAULT 1,
+    problem_id TEXT NOT NULL,
+    execution_id TEXT NOT NULL,
+    executed_at TEXT NOT NULL,
+    due_at TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    note TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS clara_connector_configs (
+    connector_type TEXT PRIMARY KEY,
+    workspace_id BIGINT NOT NULL DEFAULT 1,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -282,6 +312,16 @@ class PostgresProblemStore(PostgresConnectionMixin):
         updated = apply_problem_status(existing, status)
         return self.upsert_problem(updated)
 
+    def scrub_customer(self, customer_id: str) -> int:
+        """GDPR Art. 17: erase a customer's evidence content inside stored problems."""
+        scrubbed = 0
+        for problem in self.list_problems():
+            updated = scrub_customer_evidence(problem, customer_id)
+            if updated is not None:
+                self.upsert_problem(updated)
+                scrubbed += 1
+        return scrubbed
+
 
 class PostgresSignalStore(PostgresConnectionMixin):
     def list_signals(self) -> list[SignalRecord]:
@@ -360,6 +400,14 @@ class PostgresSignalStore(PostgresConnectionMixin):
             rows = conn.execute("SELECT signal_id FROM clara_signals").fetchall()
         return {row["signal_id"] for row in rows}
 
+    def delete_by_customer(self, customer_id: str) -> int:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "DELETE FROM clara_signals WHERE payload->>'customer_id' = %s RETURNING signal_id",
+                (customer_id,),
+            ).fetchall()
+        return len(rows)
+
 
 class PostgresJourneyEventStore(PostgresConnectionMixin):
     def list_events(self) -> list[JourneyEventRecord]:
@@ -395,6 +443,14 @@ class PostgresJourneyEventStore(PostgresConnectionMixin):
         with self._connect() as conn:
             rows = conn.execute("SELECT event_id FROM clara_journey_events").fetchall()
         return {row["event_id"] for row in rows}
+
+    def delete_by_customer(self, customer_id: str) -> int:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "DELETE FROM clara_journey_events WHERE payload->>'customer_id' = %s RETURNING event_id",
+                (customer_id,),
+            ).fetchall()
+        return len(rows)
 
 
 class PostgresCustomerContextStore(PostgresConnectionMixin, CustomerContextStore):
@@ -443,6 +499,14 @@ class PostgresCustomerContextStore(PostgresConnectionMixin, CustomerContextStore
         with self._connect() as conn:
             rows = conn.execute("SELECT customer_id FROM clara_customer_context").fetchall()
         return {row["customer_id"] for row in rows}
+
+    def delete_by_customer(self, customer_id: str) -> int:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "DELETE FROM clara_customer_context WHERE customer_id = %s RETURNING customer_id",
+                (customer_id,),
+            ).fetchall()
+        return len(rows)
 
 
 class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
@@ -629,6 +693,23 @@ def _next_id(records: list[Any], field_name: str, prefix: str) -> int:
     return maximum
 
 
+    def update_execution(self, execution_id, *, status, external_ref=None, detail=None):
+        # Base class mutates the in-memory record; persist the flip too, or a
+        # restart resurrects executions as eternal drafts.
+        updated = super().update_execution(
+            execution_id, status=status, external_ref=external_ref, detail=detail
+        )
+        self._save_workflow_record("execution", updated.execution_id, updated.problem_id, updated)
+        return updated
+
+    def scrub_customer_references(self, customer_id: str) -> int:
+        scrubbed = super().scrub_customer_references(customer_id)
+        if scrubbed:
+            for draft in self._jira_issue_drafts:
+                self._save_workflow_record("jira_draft", draft.draft_id, draft.problem_id, draft)
+        return scrubbed
+
+
 class PostgresTaxonomyStore(PostgresConnectionMixin, TaxonomyStore):
     def __init__(self, url: str) -> None:
         PostgresConnectionMixin.__init__(self, url)
@@ -769,5 +850,162 @@ class PostgresRuleStore(PostgresConnectionMixin):
             row = conn.execute(
                 "DELETE FROM clara_feedback_rules WHERE rule_id = %s RETURNING rule_id",
                 (rule_id,),
+            ).fetchone()
+        return row is not None
+
+
+class PostgresTelemetryStore(PostgresConnectionMixin):
+    """Postgres-backed telemetry (parity with SQLiteTelemetryStore)."""
+
+    def record(
+        self,
+        event_type: str,
+        *,
+        entity_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        workspace_id: int = 1,
+    ) -> None:
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    "INSERT INTO clara_telemetry (workspace_id, event_type, entity_id, metadata)"
+                    " VALUES (%s, %s, %s, %s)",
+                    (workspace_id, event_type, entity_id, self._jsonb(metadata or {})),
+                )
+        except Exception:  # ponytail: swallow — metrics never break the product
+            pass
+
+    def list_events(self, *, limit: int = 500) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, workspace_id, event_type, entity_id, metadata, created_at"
+                " FROM clara_telemetry ORDER BY id DESC LIMIT %s",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "workspace_id": row["workspace_id"],
+                "event_type": row["event_type"],
+                "entity_id": row["entity_id"],
+                "metadata": _payload(row["metadata"]),
+                "created_at": str(row["created_at"]),
+            }
+            for row in rows
+        ]
+
+    def counts_by_type(self) -> dict[str, int]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT event_type, COUNT(*) AS n FROM clara_telemetry GROUP BY event_type"
+            ).fetchall()
+        return {row["event_type"]: row["n"] for row in rows}
+
+
+class PostgresMeasurementPlanStore(PostgresConnectionMixin):
+    """Postgres-backed measurement checkpoints (parity with the SQLite store)."""
+
+    def schedule(
+        self,
+        *,
+        problem_id: str,
+        execution_id: str,
+        executed_at: str,
+        due_at: str,
+        kind: str,
+    ) -> None:
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT id FROM clara_measurement_plans"
+                " WHERE problem_id = %s AND kind = %s AND status IN ('pending', 'manual_required')",
+                (problem_id, kind),
+            ).fetchone()
+            if existing:
+                return
+            conn.execute(
+                "INSERT INTO clara_measurement_plans"
+                " (problem_id, execution_id, executed_at, due_at, kind)"
+                " VALUES (%s, %s, %s, %s, %s)",
+                (problem_id, execution_id, executed_at, due_at, kind),
+            )
+
+    def _row_to_plan(self, row: Any) -> dict[str, Any]:
+        return {
+            "id": row["id"],
+            "problem_id": row["problem_id"],
+            "execution_id": row["execution_id"],
+            "executed_at": row["executed_at"],
+            "due_at": row["due_at"],
+            "kind": row["kind"],
+            "status": row["status"],
+            "note": row["note"],
+            "created_at": str(row["created_at"]),
+        }
+
+    def list_plans(self) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM clara_measurement_plans ORDER BY due_at"
+            ).fetchall()
+        return [self._row_to_plan(row) for row in rows]
+
+    def due(self, now: str) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM clara_measurement_plans"
+                " WHERE status = 'pending' AND due_at <= %s ORDER BY due_at",
+                (now,),
+            ).fetchall()
+        return [self._row_to_plan(row) for row in rows]
+
+    def mark(self, plan_id: int, *, status: str, note: str | None = None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE clara_measurement_plans SET status = %s, note = %s WHERE id = %s",
+                (status, note, plan_id),
+            )
+
+
+class PostgresConnectorConfigStore(PostgresConnectionMixin):
+    """Postgres-backed connector configs — survive redeploys, unlike SQLite on
+    a PaaS ephemeral disk (losing them silently killed continuous sync)."""
+
+    def _to_config(self, row: Any):
+        from app.connectors.config_store import ConnectorConfig
+
+        return ConnectorConfig.model_validate(_payload(row["payload"]))
+
+    def list_configs(self) -> list[Any]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT payload FROM clara_connector_configs ORDER BY connector_type"
+            ).fetchall()
+        return [self._to_config(row) for row in rows]
+
+    def get_config(self, connector_type: str):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT payload FROM clara_connector_configs WHERE connector_type = %s",
+                (connector_type,),
+            ).fetchone()
+        return self._to_config(row) if row else None
+
+    def upsert_config(self, config: Any):
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO clara_connector_configs (connector_type, payload)"
+                " VALUES (%s, %s)"
+                " ON CONFLICT (connector_type) DO UPDATE"
+                " SET payload = excluded.payload, updated_at = now()",
+                (config.connector_type, self._jsonb(config.model_dump())),
+            )
+        return config
+
+    def delete_config(self, connector_type: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "DELETE FROM clara_connector_configs WHERE connector_type = %s"
+                " RETURNING connector_type",
+                (connector_type,),
             ).fetchone()
         return row is not None
