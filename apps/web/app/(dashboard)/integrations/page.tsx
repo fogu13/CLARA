@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { apiBaseUrl, apiHeaders } from "@/lib/client-api";
 import { Plug, Trash2, CheckCircle, Loader2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { PageSkeleton } from "@/components/ui/page-skeleton";
 
 const API_URL = apiBaseUrl();
 
@@ -223,7 +224,7 @@ export default function IntegrationsPage() {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">Loading connectors...</div>;
+  if (loading) return <PageSkeleton cards={4} />;
 
   const categories = ["Source (Pull)", "Destination (Push)"];
 

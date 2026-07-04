@@ -9,6 +9,7 @@ import { ActionDecisionPanel } from "@/app/components/action-decision-panel";
 import { getExecutions, getProblem, getProblems } from "@/lib/client-api";
 import { fallbackProblems } from "@/lib/sample-data";
 import type { ActionProposal, ExecutionRecord, ProblemRecord } from "@/lib/types";
+import { PageSkeleton } from "@/components/ui/page-skeleton";
 import { CheckCircle, XCircle, Clock, ArrowRight } from "lucide-react";
 
 type ActionQueueItem = {
@@ -61,7 +62,7 @@ export default function ActionsPage() {
     void load();
   }, []);
 
-  if (loading) return <div className="text-muted-foreground">Loading actions...</div>;
+  if (loading) return <PageSkeleton cards={4} />;
 
   const blockedActions = items.filter((item) =>
     item.problem.governance_checks.some((check) => check.blocking && check.status !== "pass")
@@ -90,7 +91,7 @@ export default function ActionsPage() {
 
       {usingFallback ? (
         <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
-          API unreachable. Showing sample action proposals.
+          {t.taxonomy.apiUnreachableSample}
         </div>
       ) : null}
 

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollText, Plus, Trash2, X } from "lucide-react";
 import { createRule, deleteRule, getRules } from "@/lib/client-api";
 import type { FeedbackRule, RuleAction, RuleCondition } from "@/lib/types";
+import { PageSkeleton } from "@/components/ui/page-skeleton";
 
 type Draft = Omit<FeedbackRule, "rule_id">;
 
@@ -94,7 +95,7 @@ export default function RulesPage() {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">Loading rules...</div>;
+  if (loading) return <PageSkeleton cards={3} />;
 
   const busy = status.tone === "busy";
 

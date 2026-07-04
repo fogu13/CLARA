@@ -30,6 +30,7 @@ import {
 import { percent } from "@/lib/format";
 import { useI18n, type Locale } from "@/lib/i18n";
 import { fallbackProblems } from "@/lib/sample-data";
+import { PageSkeleton } from "@/components/ui/page-skeleton";
 import type {
   ActionClass,
   ApprovalRecord,
@@ -346,7 +347,7 @@ export default function DashboardPage() {
     void load();
   }, [reloadKey]);
 
-  if (loading) return <div role="status" aria-live="polite" className="text-muted-foreground">Loading leadership dashboard...</div>;
+  if (loading) return <PageSkeleton cards={5} />;
 
   const problems = data?.problems ?? [];
   const outcomeBoard = data?.outcomeBoard ?? fallbackOutcomeBoard();

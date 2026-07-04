@@ -16,6 +16,7 @@ import {
 } from "@/lib/csv";
 import type { ColumnMapping } from "@/lib/csv";
 import { useI18n } from "@/lib/i18n";
+import { PageSkeleton } from "@/components/ui/page-skeleton";
 
 type Status = { tone: "idle" | "busy" | "ok" | "error"; message: string };
 type FileCsv = { fileName: string; headers: string[]; rows: Record<string, string>[]; mapping: ColumnMapping };
@@ -128,7 +129,7 @@ export default function SignalsPage() {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">Loading signals...</div>;
+  if (loading) return <PageSkeleton cards={2} />;
 
   const busy = status.tone === "busy";
 
