@@ -114,14 +114,38 @@ def verify_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail=f"Invalid token: {exc}") from exc
 
 
+# create_app registers the active key store here so the dependency can verify
+# X-Api-Key headers without import cycles. None until an app is constructed.
+_API_KEY_VERIFIER = None
+
+
+def set_api_key_verifier(verify) -> None:
+    global _API_KEY_VERIFIER
+    _API_KEY_VERIFIER = verify
+
+
 def get_current_user(
     authorization: str | None = Header(None),
+    x_api_key: str | None = Header(None),
 ) -> UserContext:
-    """FastAPI dependency: extract and verify the Bearer token -> UserContext.
+    """FastAPI dependency: verify X-Api-Key or the Bearer token -> UserContext.
 
     When AUTH_ENABLED is False (no JWT secret configured), returns a default
     dev context so the API works without auth headers during local dev / tests.
+    An explicitly provided API key is ALWAYS verified strictly, in both modes:
+    a bad key must fail loudly, never fall through to a permissive default.
     """
+    if isinstance(x_api_key, str) and x_api_key:  # direct calls pass no header; FastAPI injects str|None
+        record = _API_KEY_VERIFIER(x_api_key) if _API_KEY_VERIFIER else None
+        if record is None:
+            raise HTTPException(status_code=401, detail="Invalid or revoked API key")
+        return UserContext(
+            user_id=f"api-key:{record['id']}",
+            workspace_id=1,
+            email=f"api-key:{record['name']}",
+            role=record["role"],
+        )
+
     if not AUTH_ENABLED:
         return _default_context()
 

@@ -108,10 +108,57 @@ export default function IntegrationsPage() {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [apiKeysList, setApiKeysList] = useState<Array<{ id: number; name: string; role: string; key_prefix: string; revoked_at: string | null }>>([]);
+  const [keyName, setKeyName] = useState("");
+  const [keyRole, setKeyRole] = useState("viewer");
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [newKey, setNewKey] = useState<string | null>(null);
 
   useEffect(() => {
     loadConnectors();
+    loadApiKeys();
   }, []);
+
+  async function loadApiKeys() {
+    try {
+      const res = await fetch(`${API_URL}/api-keys`, { headers: apiHeaders() });
+      if (res.ok) setApiKeysList(await res.json());
+    } catch {
+      // keys panel degrades silently; connector load errors already surface
+    }
+  }
+
+  async function createKey() {
+    setKeyBusy(true);
+    try {
+      const res = await fetch(`${API_URL}/api-keys`, {
+        method: "POST",
+        headers: apiHeaders(),
+        body: JSON.stringify({ name: keyName, role: keyRole }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail ?? `Create failed (${res.status})`);
+      setNewKey(data.key);
+      setKeyName("");
+      await loadApiKeys();
+    } catch (e) {
+      setNotice({ tone: "error", text: e instanceof Error ? e.message : "Create failed" });
+    } finally {
+      setKeyBusy(false);
+    }
+  }
+
+  async function revokeKey(id: number, name: string) {
+    if (!window.confirm(`Revoke API key "${name}"? Requests using it will stop working immediately.`)) return;
+    try {
+      const res = await fetch(`${API_URL}/api-keys/${id}`, { method: "DELETE", headers: apiHeaders() });
+      if (!res.ok) throw new Error(`Revoke failed (${res.status})`);
+      setNewKey(null);
+      await loadApiKeys();
+    } catch (e) {
+      setNotice({ tone: "error", text: e instanceof Error ? e.message : "Revoke failed" });
+    }
+  }
 
   async function loadConnectors() {
     try {
@@ -351,10 +398,60 @@ export default function IntegrationsPage() {
               <CardTitle>{t.integrations.apiKeys}</CardTitle>
               <CardDescription>{t.integrations.apiKeysHint}</CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                API key management will be available in Phase 6 (SaaS readiness).
-              </p>
+            <CardContent className="space-y-4">
+              {newKey ? (
+                <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm">
+                  <p className="font-medium text-emerald-800">{t.integrations.keyCreatedOnce}</p>
+                  <code className="mt-1 block select-all break-all rounded bg-white px-2 py-1 text-xs">{newKey}</code>
+                  <p className="mt-2 text-xs text-emerald-700">{t.integrations.keyUsage}</p>
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap items-end gap-2">
+                <div>
+                  <Label htmlFor="key-name">{t.integrations.keyName}</Label>
+                  <Input id="key-name" value={keyName} onChange={(e) => setKeyName(e.target.value)} placeholder="bi-export" className="w-48" />
+                </div>
+                <div>
+                  <Label htmlFor="key-role">{t.integrations.keyRole}</Label>
+                  <select
+                    id="key-role"
+                    value={keyRole}
+                    onChange={(e) => setKeyRole(e.target.value)}
+                    className="block h-10 rounded-md border bg-background px-3 text-sm"
+                  >
+                    <option value="viewer">viewer</option>
+                    <option value="editor">editor</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </div>
+                <Button size="sm" onClick={createKey} disabled={keyBusy}>
+                  {t.integrations.createKey}
+                </Button>
+              </div>
+
+              {apiKeysList.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t.integrations.noKeys}</p>
+              ) : (
+                <div className="space-y-2">
+                  {apiKeysList.map((key) => (
+                    <div key={key.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                      <div className="min-w-0">
+                        <span className="font-medium">{key.name}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">{key.key_prefix}… · {key.role}</span>
+                        {key.revoked_at ? (
+                          <Badge variant="outline" className="ml-2">{t.integrations.revokedLabel}</Badge>
+                        ) : null}
+                      </div>
+                      {!key.revoked_at ? (
+                        <Button size="sm" variant="ghost" onClick={() => revokeKey(key.id, key.name)}>
+                          {t.integrations.revokeKey}
+                        </Button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
