@@ -40,11 +40,12 @@ export default function RulesPage() {
   const { t } = useI18n();
   const [rules, setRules] = useState<FeedbackRule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [status, setStatus] = useState<{ tone: "idle" | "busy" | "error"; message: string }>({ tone: "idle", message: "" });
 
   useEffect(() => {
-    getRules().then(setRules).catch(() => {}).finally(() => setLoading(false));
+    getRules().then(setRules).catch(() => setLoadFailed(true)).finally(() => setLoading(false));
   }, []);
 
   async function refresh() {
@@ -83,6 +84,8 @@ export default function RulesPage() {
   }
 
   async function remove(ruleId: string) {
+    const rule = rules.find((r) => r.rule_id === ruleId);
+    if (!window.confirm(`Delete rule "${rule?.name ?? ruleId}"? This cannot be undone.`)) return;
     try {
       await deleteRule(ruleId);
       await refresh();
@@ -261,7 +264,9 @@ export default function RulesPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {rules.length === 0 ? (
+          {loadFailed ? (
+            <p className="text-sm text-destructive">{t.common.error}</p>
+          ) : rules.length === 0 ? (
             <p className="text-sm text-muted-foreground">No rules yet. Create one with “New Rule”.</p>
           ) : (
             <div className="space-y-3">
@@ -274,7 +279,7 @@ export default function RulesPage() {
                   <div className="flex items-center gap-2">
                     <Badge variant="outline">priority {rule.priority}</Badge>
                     <Badge variant={rule.is_active ? "success" : "secondary"}>{rule.is_active ? "Active" : "Inactive"}</Badge>
-                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => remove(rule.rule_id)}>
+                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => remove(rule.rule_id)} aria-label={`Delete rule ${rule.name}`}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

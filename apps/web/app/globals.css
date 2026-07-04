@@ -95,7 +95,7 @@ body {
 .taxonomy-stats dt,
 .taxonomy-grid span,
 .classification-row span {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 0.78rem;
   text-transform: uppercase;
 }
@@ -155,7 +155,7 @@ body {
 }
 
 .classification-meta {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 0.82rem;
 }
 
@@ -196,7 +196,7 @@ body {
 
 .emerging-stats dt,
 .emerging-metrics dt {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 0.78rem;
   text-transform: uppercase;
 }
@@ -241,7 +241,7 @@ body {
 .emerging-next-step,
 .emerging-empty {
   margin: 0;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -277,7 +277,7 @@ body {
 
 .emerging-score span {
   display: block;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   white-space: nowrap;
 }
@@ -354,13 +354,13 @@ select {
 .page-heading p {
   max-width: 680px;
   margin: 0;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
 }
 
 .eyebrow,
 .meta-line,
 .stat-label {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -457,7 +457,7 @@ select {
 
 .signal-intake-grid p {
   margin: 6px 0 0;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -489,7 +489,7 @@ select {
 
 .context-completeness-header p {
   margin: 0;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -532,7 +532,7 @@ select {
 
 .context-completeness-grid span {
   display: block;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
 }
 
@@ -565,7 +565,7 @@ select {
 }
 
 .demo-dataset-picker label {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -574,7 +574,7 @@ select {
 
 .demo-dataset-picker p {
   margin: 4px 0 0;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -603,7 +603,7 @@ select {
 }
 
 .demo-dataset-summary span {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
 }
 
@@ -630,7 +630,7 @@ select {
 .candidate-review-header span,
 .candidate-empty {
   margin: 3px 0 0;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -671,7 +671,7 @@ select {
 
 .candidate-list-header small {
   margin-top: 3px;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
 }
 
@@ -721,7 +721,7 @@ select {
 .candidate-duplicate,
 .candidate-review-note {
   margin: 0;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -739,7 +739,7 @@ select {
 }
 
 .candidate-meta dt {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -782,7 +782,7 @@ select {
 
 .csv-import label,
 .csv-file-import label {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -815,7 +815,7 @@ select {
 
 .csv-file-header p {
   margin: 4px 0 0;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -838,7 +838,7 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -905,7 +905,7 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -918,7 +918,7 @@ select {
   gap: 4px;
   margin: 0;
   padding-left: 18px;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -941,7 +941,7 @@ select {
 }
 
 .state-notice p {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -1024,7 +1024,7 @@ select {
 
 .outcome-board-message {
   margin: 0;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -1083,7 +1083,7 @@ select {
 
 .outcome-board-item-main small {
   margin-top: 2px;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   text-transform: capitalize;
 }
@@ -1100,7 +1100,7 @@ select {
 }
 
 .outcome-board-metrics dt {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -1115,7 +1115,7 @@ select {
 
 .outcome-board-empty {
   margin: 0;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -1143,7 +1143,7 @@ select {
 .policy-panel-header p {
   max-width: 420px;
   margin: 0;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -1193,7 +1193,7 @@ select {
 .policy-list small,
 .policy-empty {
   margin: 0;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -1224,7 +1224,7 @@ select {
 .problem-header p,
 .problem-grid p {
   margin: 0;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
 }
 
 .meta-line {
@@ -1253,7 +1253,7 @@ select {
 }
 
 .score-block span:last-child {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -1330,7 +1330,7 @@ select {
 .draft-editor label {
   display: grid;
   gap: 4px;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -1382,7 +1382,7 @@ select {
 
 .draft-editor-message {
   margin: 0 !important;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
 }
 
@@ -1418,7 +1418,7 @@ select {
 .lifecycle-message,
 .timeline-empty {
   margin: 0 !important;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
 }
 
@@ -1432,7 +1432,7 @@ select {
 .lifecycle-controls label {
   display: grid;
   gap: 4px;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -1512,7 +1512,7 @@ select {
 .timeline-list small,
 .timeline-list p {
   margin: 0 !important;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
 }
 
@@ -1538,7 +1538,7 @@ select {
 }
 
 .compact-list dt {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -1565,7 +1565,7 @@ select {
 }
 
 .affected-context-header span {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   font-weight: 800;
 }
@@ -1601,7 +1601,7 @@ select {
 }
 
 .affected-account-list span {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
 }
 
@@ -1617,7 +1617,7 @@ select {
 }
 
 .affected-account-list dt {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.05em;
@@ -1680,7 +1680,7 @@ select {
 }
 
 .routing-recommendations small {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
 }
 
 .routing-priority {
@@ -1703,7 +1703,7 @@ select {
 
 .routing-low {
   background: var(--surface-muted);
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
 }
 
 .affected-customer-list {
@@ -1728,7 +1728,7 @@ select {
 }
 
 .affected-customer-list span {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
 }
 
 .evidence-panel {
@@ -1749,7 +1749,7 @@ select {
 }
 
 .evidence-panel-header span {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   font-weight: 800;
 }
@@ -1770,7 +1770,7 @@ select {
 
 .evidence-summary dt,
 .evidence-meta dt {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -1817,7 +1817,7 @@ select {
 
 .evidence-empty {
   margin: 0 !important;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -1846,7 +1846,7 @@ select {
 .action-list small {
   display: block;
   margin-top: 4px;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
 }
 
 .action-editor {
@@ -1867,7 +1867,7 @@ select {
 .action-editor label {
   display: grid;
   gap: 4px;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -1919,7 +1919,7 @@ select {
 
 .action-editor-message {
   margin: 0 !important;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
 }
 
@@ -2004,7 +2004,7 @@ select {
 }
 
 .check span {
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
 }
 
 .check small {
@@ -2052,7 +2052,7 @@ select {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
 }
 
@@ -2067,7 +2067,7 @@ select {
 
 .outcome-not_measured {
   background: var(--surface-muted);
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
 }
 
 .outcome-target_met {
@@ -2095,7 +2095,7 @@ select {
 .outcome-input-row label {
   display: grid;
   gap: 4px;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -2132,7 +2132,7 @@ select {
 
 .outcome-message {
   margin: 0 !important;
-  color: var(--muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
 }
 

@@ -28,6 +28,7 @@ import type {
 } from "../../lib/types";
 import { StateNotice } from "./state-notice";
 import { useI18n } from "@/lib/i18n";
+import { currentUserEmail } from "../../lib/auth-client";
 import { percent } from "@/lib/format";
 
 type IntakeState = {
@@ -382,15 +383,18 @@ export function SignalIntakePanel() {
 
     try {
       const problem = await acceptProblemCandidate(candidate.candidate_id, {
-        reviewer: "demo_reviewer",
+        reviewer: currentUserEmail() ?? "local-user",
         note: "Accepted from Signal Intake."
       });
+      const { signals, candidates, demoDatasets } = await loadIntakeState();
       setState((current) => ({
         ...current,
         status: "ready",
-        message: `Created draft problem ${problem.problem_id}. Refreshing queue...`
+        message: `Created draft problem ${problem.problem_id}.`,
+        signals,
+        candidates,
+        demoDatasets
       }));
-      window.location.reload();
     } catch (error) {
       setState((current) => ({
         ...current,
@@ -407,7 +411,7 @@ export function SignalIntakePanel() {
 
     try {
       await rejectProblemCandidate(candidate.candidate_id, {
-        reviewer: "demo_reviewer",
+        reviewer: currentUserEmail() ?? "local-user",
         note:
           candidate.review_status === "duplicate"
             ? `Duplicate of ${candidate.duplicate_problem_id}.`

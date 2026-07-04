@@ -328,6 +328,7 @@ export default function InsightDetailPage() {
   const [policyRules, setPolicyRules] = useState<PolicyRule[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const [packBusy, setPackBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -397,7 +398,9 @@ export default function InsightDetailPage() {
           <Badge variant="outline">{t.detail.evidence} {percent(problem.evidence_confidence)}</Badge>
           <button
             type="button"
+            disabled={packBusy}
             onClick={async () => {
+              setPackBusy(true);
               // Anchor in a new tab would 401 when auth is on: fetch with the
               // session headers and open the blob instead.
               try {
@@ -411,11 +414,13 @@ export default function InsightDetailPage() {
                 setTimeout(() => URL.revokeObjectURL(url), 60_000);
               } catch {
                 window.alert(t.detail.loadFailed);
+              } finally {
+                setPackBusy(false);
               }
             }}
             className="inline-flex items-center rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted"
           >
-            <FileDown className="mr-1 h-3 w-3" /> {t.detail.evidencePack}
+            <FileDown className="mr-1 h-3 w-3" /> {packBusy ? t.common.working : t.detail.evidencePack}
           </button>
         </div>
       </div>

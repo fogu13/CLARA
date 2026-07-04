@@ -67,6 +67,7 @@ export default function ActionsPage() {
     item.problem.governance_checks.some((check) => check.blocking && check.status !== "pass")
   ).length;
   const destinations = new Set(items.map((item) => item.action.destination).filter(Boolean));
+  const problemTitleById = new Map(items.map(({ problem }) => [problem.problem_id, problem.title]));
   const interventionItems = items.filter((item) => item.action.intervention_brief?.audience_readiness);
   const readyInterventions = interventionItems.filter(
     (item) => item.action.intervention_brief?.audience_readiness?.readiness_status === "ready_for_review"
@@ -227,7 +228,10 @@ export default function ActionsPage() {
                       <Clock className="h-4 w-4 text-muted-foreground" />
                     )}
                     <div>
-                      <p className="text-sm font-medium">{execution.problem_id}</p>
+                      <a href={`/insights/${execution.problem_id}`} className="text-sm font-medium hover:underline">
+                        {problemTitleById.get(execution.problem_id) ?? execution.problem_id}
+                      </a>
+                      <p className="text-[11px] text-muted-foreground">{execution.problem_id}</p>
                       <p className="text-xs text-muted-foreground">Destination: {execution.destination}</p>
                     </div>
                   </div>
@@ -236,6 +240,9 @@ export default function ActionsPage() {
                   </Badge>
                 </div>
               ))}
+              {executions.length > 20 ? (
+                <p className="pt-2 text-xs text-muted-foreground">{t.common.showingOf.replace("{n}", "20").replace("{total}", String(executions.length))}</p>
+              ) : null}
             </div>
           )}
         </CardContent>
