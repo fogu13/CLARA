@@ -247,6 +247,20 @@ class PostgresConnectionMixin:
                     ON clara_workflow_records (tenant_id, problem_id, record_type)
                     """
                 )
+                # api-keys RLS is applied here (not only migration 010) so a boot
+                # against a DB that predates the migration self-heals the policy -
+                # the 007-era lesson: never leave a clara_ table without RLS.
+                cursor.execute("ALTER TABLE clara_api_keys ENABLE ROW LEVEL SECURITY")
+                cursor.execute(
+                    "DROP POLICY IF EXISTS clara_api_keys_workspace_isolation ON clara_api_keys"
+                )
+                cursor.execute(
+                    """
+                    CREATE POLICY clara_api_keys_workspace_isolation ON clara_api_keys
+                    USING (workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint)
+                    WITH CHECK (workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint)
+                    """
+                )
                 cursor.execute("ALTER TABLE clara_workflow_records ENABLE ROW LEVEL SECURITY")
                 cursor.execute(
                     """
