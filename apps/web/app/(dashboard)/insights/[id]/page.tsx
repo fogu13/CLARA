@@ -425,6 +425,27 @@ export default function InsightDetailPage() {
         </div>
       </div>
 
+      <nav
+        aria-label="Sections"
+        className="sticky top-0 z-10 -mx-2 flex gap-1 overflow-x-auto border-b bg-background/95 px-2 py-2 backdrop-blur"
+      >
+        {[
+          ["statement", t.detail.navStatement],
+          ["evidence", t.detail.navEvidence],
+          ["portfolio", t.detail.navPortfolio],
+          ["governance", t.detail.navGovernance],
+          ["outcome", t.detail.navOutcome],
+        ].map(([id, label]) => (
+          <a
+            key={id}
+            href={`#${id}`}
+            className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            {label}
+          </a>
+        ))}
+      </nav>
+
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
@@ -459,7 +480,7 @@ export default function InsightDetailPage() {
         </Card>
       </div>
 
-      <Card>
+      <Card id="statement" className="scroll-mt-14">
         <CardHeader>
           <CardTitle>{t.detail.problemStatement}</CardTitle>
         </CardHeader>
@@ -484,6 +505,7 @@ export default function InsightDetailPage() {
 
       <DraftProblemEditor problem={problem} />
 
+      <div id="evidence" className="scroll-mt-14" />
       <EvidencePanel
         evidence={problem.evidence}
         confidence={problem.evidence_confidence}
@@ -494,9 +516,10 @@ export default function InsightDetailPage() {
       <AffectedContextPanel problemId={problem.problem_id} />
       <JourneyImpactCard problem={problem} />
 
+      <div id="portfolio" className="scroll-mt-14" />
       <ActionPortfolioCard problem={problem} policyRules={policyRules} />
 
-      <Card>
+      <Card id="governance" className="scroll-mt-14">
         <CardHeader>
           <CardTitle>{t.detail.governanceChecks}</CardTitle>
         </CardHeader>
@@ -517,6 +540,7 @@ export default function InsightDetailPage() {
         </CardContent>
       </Card>
 
+      <div id="outcome" className="scroll-mt-14" />
       <ProblemLifecyclePanel problem={problem} />
       <CustomerClosurePanel problem={problem} />
       <OutcomeMeasurementPanel problemId={problem.problem_id} contract={problem.outcome_contract} />
