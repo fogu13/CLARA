@@ -153,4 +153,5 @@ class TestErasure:
             "journey_events": 0,
             "context_records": 0,
             "problems_scrubbed": 0,
+            "jira_drafts_scrubbed": 0,
         }

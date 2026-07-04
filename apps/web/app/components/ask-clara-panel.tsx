@@ -75,7 +75,7 @@ export function AskClaraPanel() {
               <div className="flex items-start justify-between gap-3">
                 <p>{result.answer}</p>
                 <Badge variant="outline" className="shrink-0">
-                  {Math.round(result.confidence * 100)}% conf
+                  {Math.round(result.confidence * 100)}% {t.common.confidence}
                 </Badge>
               </div>
             </div>

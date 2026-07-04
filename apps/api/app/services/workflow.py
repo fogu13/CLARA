@@ -328,6 +328,24 @@ class WorkflowStore:
     def list_jira_issue_drafts(self) -> list[JiraIssueDraft]:
         return self._jira_issue_drafts
 
+    def scrub_customer_references(self, customer_id: str) -> int:
+        """GDPR erasure: redact a customer's id inside Jira draft text.
+
+        Drafts embed evidence excerpts (and with them customer ids) in their
+        summary/description; erasure must reach them too.
+        """
+        scrubbed = 0
+        for index, draft in enumerate(self._jira_issue_drafts):
+            if customer_id in draft.description or customer_id in draft.summary:
+                self._jira_issue_drafts[index] = draft.model_copy(
+                    update={
+                        "description": draft.description.replace(customer_id, "[erased]"),
+                        "summary": draft.summary.replace(customer_id, "[erased]"),
+                    }
+                )
+                scrubbed += 1
+        return scrubbed
+
     def list_closure_records(self) -> list[ClosureRecord]:
         return self._closure_records
 
@@ -792,6 +810,19 @@ class SQLiteWorkflowStore:
     def list_jira_issue_drafts(self) -> list[JiraIssueDraft]:
         rows = self._connection.execute("SELECT * FROM jira_issue_drafts ORDER BY id").fetchall()
         return [self._jira_issue_draft_from_row(row) for row in rows]
+
+    def scrub_customer_references(self, customer_id: str) -> int:
+        """GDPR erasure: redact a customer's id inside stored Jira draft text."""
+        like = f"%{customer_id}%"
+        cursor = self._connection.execute(
+            "UPDATE jira_issue_drafts SET"
+            " description = REPLACE(description, ?, '[erased]'),"
+            " summary = REPLACE(summary, ?, '[erased]')"
+            " WHERE description LIKE ? OR summary LIKE ?",
+            (customer_id, customer_id, like, like),
+        )
+        self._connection.commit()
+        return cursor.rowcount
 
     def list_closure_records(self) -> list[ClosureRecord]:
         rows = self._connection.execute("SELECT * FROM closure_records ORDER BY id").fetchall()

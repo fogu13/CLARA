@@ -28,6 +28,9 @@ const en = {
     signOut: "Sign out",
   },
   common: {
+    unknown: "unknown",
+    ready: "ready",
+    error: "Couldn't load data. Retry or check the API.",
     loading: "Loading…",
     working: "Working…",
     save: "Save",
@@ -422,6 +425,9 @@ const de: Dict = {
     signOut: "Abmelden",
   },
   common: {
+    unknown: "unbekannt",
+    ready: "bereit",
+    error: "Daten konnten nicht geladen werden. Erneut versuchen oder API prüfen.",
     loading: "Wird geladen…",
     working: "In Arbeit…",
     save: "Speichern",
@@ -847,6 +853,7 @@ export function LanguageToggle() {
         <button
           key={option}
           type="button"
+          aria-pressed={locale === option}
           onClick={() => setLocale(option)}
           className={
             "px-2 py-1 uppercase transition-colors " +

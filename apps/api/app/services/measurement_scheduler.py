@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -38,7 +38,19 @@ LOOP_INTERVAL_SECONDS = 15 * 60
 
 
 def _parse_ts(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        # One naive timestamp must never crash a measurement run: mixing naive
+        # and aware datetimes raises TypeError on comparison. Treat naive as UTC.
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _norm_stage(value: str) -> str:
+    """Journey names round-trip through the metric string as lowercase with
+    underscores; normalize both sides so 'customer_onboarding' still matches
+    after the metric parser turns it into 'customer onboarding'."""
+    return value.lower().replace("_", " ").strip()
 
 
 class SQLiteMeasurementPlanStore:
@@ -153,9 +165,9 @@ def signal_rate_per_day(
 
     count = 0
     for signal in signals:
-        if signal.journey.lower() != journey.lower():
+        if _norm_stage(signal.journey) != _norm_stage(journey):
             continue
-        if signal.journey_stage.lower() != journey_stage.lower():
+        if _norm_stage(signal.journey_stage) != _norm_stage(journey_stage):
             continue
         try:
             ts = _parse_ts(signal.timestamp)

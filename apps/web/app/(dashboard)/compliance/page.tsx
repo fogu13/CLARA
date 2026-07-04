@@ -19,12 +19,34 @@ export default function CompliancePage() {
     getSystemConfig().then(setConfig).catch(() => {});
   }, []);
 
+  async function downloadCsv(entity: string) {
+    try {
+      const res = await fetch(`${apiBaseUrl()}/export/${entity}.csv`, { headers: apiHeaders() });
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const url = URL.createObjectURL(await res.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${entity}.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Export failed");
+    }
+  }
+
   async function downloadAuditLog() {
     setExporting(true);
     setExportError(null);
     try {
       const res = await fetch(`${apiBaseUrl()}/audit-export`, { headers: apiHeaders() });
-      if (!res.ok) throw new Error(`Export failed (${res.status}). Admin role required.`);
+      if (!res.ok) {
+        // Only blame the role when it IS the role; a down API is not a 403.
+        throw new Error(
+          res.status === 403
+            ? `Export failed (403). Admin role required.`
+            : `Export failed (${res.status})`
+        );
+      }
       const blob = new Blob([JSON.stringify(await res.json(), null, 2)], {
         type: "application/json"
       });
@@ -270,13 +292,14 @@ export default function CompliancePage() {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2 text-sm">
           {["signals", "problems", "outcomes", "telemetry"].map((entity) => (
-            <a
+            <button
               key={entity}
-              href={`${apiBaseUrl()}/export/${entity}.csv`}
+              type="button"
+              onClick={() => downloadCsv(entity)}
               className="inline-flex items-center rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted"
             >
               <Download className="mr-1 h-3 w-3" /> {entity}.csv
-            </a>
+            </button>
           ))}
         </CardContent>
       </Card>

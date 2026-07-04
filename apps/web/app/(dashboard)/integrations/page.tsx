@@ -84,6 +84,8 @@ export default function IntegrationsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadConnectors();
@@ -93,11 +95,14 @@ export default function IntegrationsPage() {
     try {
       const res = await fetch(`${API_URL}/connectors`, { headers: apiHeaders() });
       if (res.ok) {
-        const data = await res.json();
-        setConnectors(data);
+        setConnectors(await res.json());
+        setLoadError(null);
+      } else {
+        // A 403/500 must not masquerade as "nothing configured".
+        setLoadError(`Couldn't load connectors (${res.status}).`);
       }
     } catch {
-      // API not running; show empty state
+      setLoadError("API unreachable. Connector status unknown.");
     } finally {
       setLoading(false);
     }
@@ -135,13 +140,14 @@ export default function IntegrationsPage() {
       setEditingConnector(null);
     } catch (e) {
       // Previously swallowed: a failed save (e.g. 403 for non-admins) looked successful.
-      alert(`Save failed: ${e instanceof Error ? e.message : "unknown"}`);
+      setNotice({ tone: "error", text: `Save failed: ${e instanceof Error ? e.message : "unknown"}` });
     } finally {
       setSaving(false);
     }
   }
 
   async function deleteConnector(type: string) {
+    if (!window.confirm(`Delete the ${type} connector configuration?`)) return;
     try {
       const res = await fetch(`${API_URL}/connectors/${type}`, { method: "DELETE", headers: apiHeaders() });
       if (!res.ok) {
@@ -149,8 +155,9 @@ export default function IntegrationsPage() {
         throw new Error(detail?.detail ?? `Delete failed (${res.status})`);
       }
       await loadConnectors();
+      setNotice({ tone: "ok", text: `${type} connector deleted.` });
     } catch (e) {
-      alert(`Delete failed: ${e instanceof Error ? e.message : "unknown"}`);
+      setNotice({ tone: "error", text: `Delete failed: ${e instanceof Error ? e.message : "unknown"}` });
     }
   }
 
@@ -165,10 +172,10 @@ export default function IntegrationsPage() {
         body: JSON.stringify(formData),
       });
       const data = await res.json();
-      if (data.status === "ok") {
+      if (data?.status === "ok") {
         setTestResult("success");
       } else {
-        setTestResult(`error: ${data.message}`);
+        setTestResult(`error: ${data?.message ?? data?.detail ?? `test failed (${res.status})`}`);
       }
     } catch (e) {
       setTestResult(`error: ${e instanceof Error ? e.message : "unknown"}`);
@@ -188,9 +195,9 @@ export default function IntegrationsPage() {
       if (!res.ok) {
         throw new Error(data?.detail ?? `Pull failed (${res.status})`);
       }
-      alert(`Pulled ${data.pulled} signals (${data.imported} new, ${data.skipped_duplicates} duplicates)`);
+      setNotice({ tone: "ok", text: `Pulled ${data.pulled} signals (${data.imported} new, ${data.skipped_duplicates} duplicates)` });
     } catch (e) {
-      alert(`Pull failed: ${e instanceof Error ? e.message : "unknown"}`);
+      setNotice({ tone: "error", text: `Pull failed: ${e instanceof Error ? e.message : "unknown"}` });
     }
   }
 
@@ -206,6 +213,15 @@ export default function IntegrationsPage() {
           {t.integrations.subtitle}
         </p>
       </div>
+
+      {notice ? (
+        <div className={`rounded-md border px-3 py-2 text-sm ${notice.tone === "ok" ? "border-emerald-300 text-emerald-700" : "border-destructive text-destructive"}`}>
+          {notice.text}
+        </div>
+      ) : null}
+      {loadError ? (
+        <div className="rounded-md border border-amber-300 px-3 py-2 text-sm text-amber-700">{loadError}</div>
+      ) : null}
 
       <Tabs value="connectors">
         <TabsList>
@@ -263,9 +279,10 @@ export default function IntegrationsPage() {
                               <Button size="sm" onClick={saveConnector} disabled={saving}>
                                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : t.common.save}
                               </Button>
+                              {editingConnector !== "webhook" && (
                               <Button size="sm" variant="outline" onClick={testConnector} disabled={testing}>
                                 {testing ? <Loader2 className="h-3 w-3 animate-spin" /> : t.integrations.test}
-                              </Button>
+                              </Button>)}
                               <Button size="sm" variant="ghost" onClick={() => setEditingConnector(null)}>
                                 Cancel
                               </Button>

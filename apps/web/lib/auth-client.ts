@@ -1,4 +1,4 @@
-// Lightweight Supabase auth via the GoTrue REST endpoint — no SDK dependency.
+// Lightweight Supabase auth via the GoTrue REST endpoint; no SDK dependency.
 // Stores the access token under "clara_access_token", which lib/client-api.ts already
 // sends as the Bearer token to the FastAPI backend.
 

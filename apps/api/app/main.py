@@ -13,7 +13,7 @@ import json
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.auth import UserContext, get_current_user
+from app.auth import AUTH_ENABLED, UserContext, get_current_user
 from app.domain.models import (
     ActionProposalUpdateRequest,
     AffectedContextExplorer,
@@ -130,6 +130,8 @@ from app.services.workflow import SQLiteWorkflowStore
 from app.services.workspace import SQLiteWorkspaceStore
 
 logger = logging.getLogger(__name__)
+
+WEBHOOK_MAX_BODY_BYTES = 2 * 1024 * 1024  # 2 MB: far above real payloads, far below OOM
 
 
 def default_db_path() -> Path:
@@ -462,6 +464,10 @@ def create_app(
         title="CLARA API",
         version="0.1.0",
         summary="Feedback-to-Outcome API prototype",
+        # With auth on, public Swagger/OpenAPI would enumerate the admin surface.
+        docs_url=None if AUTH_ENABLED else "/docs",
+        redoc_url=None if AUTH_ENABLED else "/redoc",
+        openapi_url=None if AUTH_ENABLED else "/openapi.json",
     )
 
     cors_env = os.getenv("APP_CORS_ORIGINS") or os.getenv("API_CORS_ORIGINS") or "http://localhost:3000,http://127.0.0.1:3000"
@@ -745,10 +751,21 @@ def create_app(
                 detail="No active webhook configured. set a secret via PUT /connectors/webhook",
             )
 
+        # Cap the body BEFORE buffering it: this is the one unauthenticated data
+        # route, so an oversized POST must be rejected cheaply, not hashed.
+        content_length = request.headers.get("content-length")
+        if content_length and content_length.isdigit() and int(content_length) > WEBHOOK_MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="Payload too large")
         raw_body = await request.body()
+        if len(raw_body) > WEBHOOK_MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="Payload too large")
         expected = "sha256=" + hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
         provided = request.headers.get("x-clara-signature", "")
-        if not hmac.compare_digest(expected, provided):
+        try:
+            valid = hmac.compare_digest(expected, provided)
+        except TypeError:
+            valid = False  # non-ASCII header must 401, not 500
+        if not valid:
             raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
         try:
@@ -783,7 +800,7 @@ def create_app(
         )
         return result
 
-    @api.post("/signals/validate-csv", response_model=SignalValidationReport)
+    @api.post("/signals/validate-csv", response_model=SignalValidationReport, dependencies=[read_dep])
     def validate_signal_csv_import(request: SignalCsvImportRequest) -> SignalValidationReport:
         return validate_signal_csv(
             request.csv_text,
@@ -833,7 +850,7 @@ def create_app(
 
         return context_store.import_context(parse_context_csv(request.csv_text))
 
-    @api.post("/customer-context/validate-csv", response_model=CustomerContextValidationReport)
+    @api.post("/customer-context/validate-csv", response_model=CustomerContextValidationReport, dependencies=[read_dep])
     def validate_customer_context_csv(
         request: CustomerContextCsvImportRequest,
     ) -> CustomerContextValidationReport:
@@ -869,8 +886,11 @@ def create_app(
         from app.services.taxonomy_bootstrap import bootstrap_taxonomy
 
         body = body or {}
-        taxonomy_type = TaxonomyType(body.get("taxonomy_type", "contact_reason"))
-        limit = min(int(body.get("limit", 200)), 1000)
+        try:
+            taxonomy_type = TaxonomyType(body.get("taxonomy_type", "contact_reason"))
+            limit = min(int(body.get("limit", 200)), 1000)
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(status_code=422, detail=f"Invalid bootstrap request: {exc}") from exc
 
         report = bootstrap_taxonomy(
             signal_store.list_signals(),
@@ -1306,7 +1326,20 @@ def create_app(
 
         Optional body {"now": "<iso>"} lets demos/tests advance the clock.
         """
-        return _run_due_measurements(now=(body or {}).get("now"))
+        requested_now = (body or {}).get("now")
+        if requested_now is not None:
+            from datetime import datetime
+
+            try:
+                datetime.fromisoformat(str(requested_now).replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail="'now' must be ISO 8601") from exc
+            # Explicit clock overrides stay allowed (tests/demos time-travel),
+            # but the honesty-critical outcome loop records them for audit.
+            telemetry_store.record(
+                "measurement_clock_override", metadata={"now": str(requested_now)}
+            )
+        return _run_due_measurements(now=requested_now)
 
     @api.get("/customers/{customer_id}/data-export", dependencies=[Depends(require_role(Role.admin))])
     def export_customer_data(customer_id: str) -> dict:
@@ -1363,6 +1396,7 @@ def create_app(
             "journey_events": getattr(journey_event_store, "delete_by_customer", None),
             "context_records": getattr(context_store, "delete_by_customer", None),
             "problems_scrubbed": getattr(active_problem_store, "scrub_customer", None),
+            "jira_drafts_scrubbed": getattr(workflow_store, "scrub_customer_references", None),
         }
         missing = [name for name, fn in erasers.items() if fn is None]
         if missing:
@@ -1623,8 +1657,12 @@ def create_app(
         result = signal_store.import_signals(records)
 
         if not config and stored is not None and last_synced_at:
-            stored.config["last_synced_at"] = last_synced_at
-            connector_config_store.upsert_config(stored)
+            # Re-read before writing: the pull can take seconds and an admin may
+            # have edited the config meanwhile. ponytail: re-read shrinks the
+            # lost-update window; row versioning if concurrent editing matters.
+            fresh = connector_config_store.get_config(connector_type) or stored
+            fresh.config["last_synced_at"] = last_synced_at
+            connector_config_store.upsert_config(fresh)
 
         telemetry_store.record(
             "signals_imported",
