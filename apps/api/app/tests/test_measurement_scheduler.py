@@ -26,7 +26,10 @@ from app.services.signals import (
 from app.services.telemetry import SQLiteTelemetryStore
 from app.services.workflow import WorkflowStore
 
-NOW = datetime(2026, 7, 3, 12, 0, tzinfo=UTC)
+# Anchored to today: approval flows stamp executed_at with REAL wall-clock
+# time, so a hardcoded date drifts out of the assertion windows as the
+# calendar moves (this test started failing the day after its fixed date).
+NOW = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
 
 
 def _iso(dt: datetime) -> str:

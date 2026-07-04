@@ -292,5 +292,21 @@ def attach_measurement_loop(api: Any, runner: Callable[[], dict[str, int]]) -> N
         if task:
             task.cancel()
 
-    api.add_event_handler("startup", _start)
-    api.add_event_handler("shutdown", _stop)
+    # Starlette removed the deprecated startup/shutdown event API (Render's
+    # fresh dependency resolve hit the removal; local envs still had it).
+    # Compose the router's lifespan instead — supported on every version
+    # since 0.26, so this runs identically on old and new stacks.
+    from contextlib import asynccontextmanager
+
+    existing_lifespan = api.router.lifespan_context
+
+    @asynccontextmanager
+    async def _lifespan_with_loop(app):
+        await _start()
+        try:
+            async with existing_lifespan(app) as maybe_state:
+                yield maybe_state
+        finally:
+            await _stop()
+
+    api.router.lifespan_context = _lifespan_with_loop
