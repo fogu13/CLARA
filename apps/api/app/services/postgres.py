@@ -185,6 +185,9 @@ def _model_payload(model: Any) -> dict[str, Any]:
     return model.model_dump(mode="json", by_alias=True)
 
 
+_SCHEMA_ENSURED: set[str] = set()
+
+
 class PostgresConnectionMixin:
     def __init__(self, url: str) -> None:
         self.url = normalize_database_url(url)
@@ -195,6 +198,23 @@ class PostgresConnectionMixin:
         return psycopg.connect(self.url, row_factory=dict_row)
 
     def _ensure_schema(self) -> None:
+        # Once per process: create_app builds ~10 stores and each used to
+        # re-run the full DDL block. On a live Supabase project that means ten
+        # AccessExclusiveLock bursts racing autovacuum/background workers,
+        # which deadlocked real boots. One burst, retried once on deadlock.
+        if self.url in _SCHEMA_ENSURED:
+            return
+        psycopg, _, _ = _load_psycopg()
+        try:
+            self._run_schema_ddl()
+        except psycopg.errors.DeadlockDetected:
+            import time
+
+            time.sleep(1.0)
+            self._run_schema_ddl()
+        _SCHEMA_ENSURED.add(self.url)
+
+    def _run_schema_ddl(self) -> None:
         with self._connect() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(SCHEMA_SQL)
