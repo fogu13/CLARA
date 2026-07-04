@@ -42,6 +42,7 @@ def outcome_status(
     baseline: float,
     target: float,
     measured: float | None,
+    direction: str | None = None,
 ) -> str:
     """Direction-aware outcome status.
 
@@ -50,12 +51,20 @@ def outcome_status(
     (success_threshold < baseline) metrics correctly, so complaint-rate metrics
     are not misread as completion-rate metrics.
 
+    An explicit contract `direction` wins over derivation: with the standard
+    decrease contract (target=0) and a zero baseline, `target >= baseline`
+    would flip the derived direction to "increase" and report any recurrence
+    as target_met.
+
     Returns: not_measured | not_improved | improving | target_met
     """
     if measured is None:
         return "not_measured"
 
-    if outcome_direction(baseline=baseline, target=target) == "increase":
+    if direction is None:
+        direction = outcome_direction(baseline=baseline, target=target)
+
+    if direction == "increase":
         if measured >= target:
             return "target_met"
         if measured > baseline:
@@ -207,6 +216,7 @@ def measure_outcome(
         baseline=baseline,
         target=target,
         measured=measured_value,
+        direction=direction,
     )
     level = closure_level(
         action_results=action_results or [],

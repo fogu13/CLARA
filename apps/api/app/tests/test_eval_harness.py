@@ -149,6 +149,16 @@ class TestHallucinationCheck:
         text = "Some feedback"
         assert check_hallucination(enrichment, text) is False
 
+    def test_short_token_tag_present_in_text_is_grounded(self) -> None:
+        # "bug"/"ux" have no token longer than 3 chars; they must be grounded
+        # via word-boundary match, not auto-flagged as hallucination.
+        assert check_hallucination({"tags": ["bug"]}, "there is a bug in checkout") is False
+        assert check_hallucination({"tags": ["app_bug"]}, "the bug ruins the app") is False
+
+    def test_short_token_tag_absent_from_text_is_hallucination(self) -> None:
+        # "bug" appears only inside "bugle", not as a word -> not grounded.
+        assert check_hallucination({"tags": ["bug"]}, "the bugle sounds great") is True
+
 
 class TestEvalHarness:
     def test_run_enrichment_eval_with_golden_set(self) -> None:

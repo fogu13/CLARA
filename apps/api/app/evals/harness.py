@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 from dataclasses import dataclass, field
 from math import comb
 from pathlib import Path
@@ -208,11 +209,17 @@ def check_hallucination(
     text_lower = original_text.lower()
 
     # Check that at least one tag has some connection to the text
-    # (either as a substring or a reasonable semantic match)
+    # (either as a substring or a reasonable semantic match). Short tokens
+    # (2-3 chars, e.g. "bug", "ux") are grounded via word-boundary match so
+    # tags made only of short words aren't auto-flagged; 1-char tokens are
+    # skipped to avoid grounding everything on stopwords.
     for tag in tags:
-        tag_parts = tag.split("_")
-        if any(part in text_lower for part in tag_parts if len(part) > 3):
-            return False  # at least one tag is grounded
+        for part in tag.split("_"):
+            if len(part) > 3:
+                if part in text_lower:
+                    return False  # at least one tag is grounded
+            elif len(part) >= 2 and re.search(rf"\b{re.escape(part)}\b", text_lower):
+                return False
 
     # If no tags are grounded but tags exist, it might be a hallucination
     if tags and len(tags) > 0:

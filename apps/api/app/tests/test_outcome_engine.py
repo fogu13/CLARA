@@ -62,6 +62,12 @@ class TestOutcomeStatus:
         # Complaint rate: baseline 50, target 5, measured 60 -> not improved
         assert outcome_status(baseline=50, target=5, measured=60) == "not_improved"
 
+    def test_explicit_direction_wins_over_derivation_for_zero_baseline(self) -> None:
+        # target(0) >= baseline(0) derives "increase", which would report ANY
+        # recurrence as target_met; the explicit contract direction must win.
+        assert outcome_status(baseline=0, target=0, measured=2, direction="decrease") == "not_improved"
+        assert outcome_status(baseline=0, target=0, measured=0, direction="decrease") == "target_met"
+
 
 class TestResolutionScore:
     def test_decrease_full_resolution(self) -> None:
@@ -229,6 +235,15 @@ class TestMeasureOutcome:
         assert result["resolution_score"] == 0.0
         assert result["status"] == "not_improved"
         assert result["closure_level"] == "operational"
+
+    def test_zero_baseline_decrease_recurrence_is_not_target_met(self) -> None:
+        # A tag cluster of purely quantitative signals yields baseline=0 on the
+        # standard decrease contract; recurrence must not read as success.
+        contract = {"metric": "tag:x", "baseline": 0, "target": 0, "direction": "decrease"}
+        result = measure_outcome(contract=contract, measured_value=2)
+
+        assert result["status"] == "not_improved"
+        assert result["resolution_score"] == 0.5
 
     def test_summary_includes_tag_for_tag_metrics(self) -> None:
         contract = {"metric": "tag:onboarding", "baseline": 8, "target": 0, "direction": "decrease"}

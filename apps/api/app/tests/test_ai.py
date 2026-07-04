@@ -113,20 +113,61 @@ class TestCallTool:
         with pytest.raises(ai.NoStructuredResponseError):
             _call(ai)
 
-    def test_rate_limit_error_on_429(self, _clean_ai_env: None, httpx_mock: Any) -> None:
+    def test_rate_limit_error_on_429(
+        self, _clean_ai_env: None, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from app.services import ai
 
+        monkeypatch.setattr("time.sleep", lambda _: None)
         httpx_mock.add_response(
             url="http://test-ai.local/v1/chat/completions",
             method="POST",
             status_code=429,
             text="rate limited",
+            is_reusable=True,
         )
 
         with pytest.raises(ai.RateLimitError) as exc_info:
             _call(ai)
 
         assert exc_info.value.status == 429
+        # a persistent 429 is retried to exhaustion before it surfaces
+        assert len(httpx_mock.get_requests()) == 3
+
+    def test_transient_429_is_retried_then_succeeds(
+        self, _clean_ai_env: None, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services import ai
+
+        monkeypatch.setattr("time.sleep", lambda _: None)
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            status_code=429,
+            text="rate limited",
+        )
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json=_ai_response({"sentiment": "negative"}),
+        )
+
+        assert _call(ai) == {"sentiment": "negative"}
+        assert len(httpx_mock.get_requests()) == 2
+
+    def test_empty_choices_raises_no_structured_response(
+        self, _clean_ai_env: None, httpx_mock: Any
+    ) -> None:
+        from app.services import ai
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json={"choices": []},
+        )
+
+        with pytest.raises(ai.NoStructuredResponseError):
+            _call(ai)
 
     def test_quota_error_on_402(self, _clean_ai_env: None, httpx_mock: Any) -> None:
         from app.services import ai
@@ -143,14 +184,18 @@ class TestCallTool:
 
         assert exc_info.value.status == 402
 
-    def test_generic_error_on_500(self, _clean_ai_env: None, httpx_mock: Any) -> None:
+    def test_generic_error_on_500(
+        self, _clean_ai_env: None, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from app.services import ai
 
+        monkeypatch.setattr("time.sleep", lambda _: None)
         httpx_mock.add_response(
             url="http://test-ai.local/v1/chat/completions",
             method="POST",
             status_code=500,
             text="internal server error",
+            is_reusable=True,
         )
 
         with pytest.raises(ai.AIProviderError) as exc_info:

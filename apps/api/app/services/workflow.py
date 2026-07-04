@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime
 from itertools import count
 from pathlib import Path
 from uuid import uuid4
@@ -179,6 +180,61 @@ def assert_governance_allows_decision(
         action=action,
         approved_action_ids=approved_action_ids or set(),
     )
+
+
+def resolve_approval_state(
+    ordered_decisions: list[tuple[str, str]],
+    *,
+    decision: ApprovalDecision,
+) -> set[str]:
+    """Latest-decision-per-action approval set + repeat-approval guard.
+
+    Approvals are append-only, so the dependency gate must honor the LATEST
+    decision per action (a later rejection revokes an earlier approval), and
+    re-approving an already-approved action must not mint a duplicate
+    execution/Jira draft.
+    """
+    latest: dict[str, str] = {}
+    for action_id, decision_value in ordered_decisions:
+        latest[action_id] = decision_value
+    if (
+        decision.decision == ApprovalDecisionStatus.approved
+        and latest.get(decision.action_id) == ApprovalDecisionStatus.approved.value
+    ):
+        raise HTTPException(status_code=409, detail="Action is already approved")
+    return {
+        action_id
+        for action_id, decision_value in latest.items()
+        if decision_value == ApprovalDecisionStatus.approved.value
+    }
+
+
+def _parse_measured_at(value: str) -> datetime | None:
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
+def assert_measurement_not_stale(
+    existing_measured_at: str | None,
+    incoming_measured_at: str,
+) -> None:
+    """Reject a measurement older than the recorded one: a late backfill must
+    not regress latest_value and flip outcome status / the learning gate.
+    Equal timestamps stay allowed (corrections supersede by insertion order);
+    unparseable timestamps don't block the write."""
+    if existing_measured_at is None:
+        return
+    existing = _parse_measured_at(existing_measured_at)
+    incoming = _parse_measured_at(incoming_measured_at)
+    if existing is None or incoming is None:
+        return
+    if incoming < existing:
+        raise HTTPException(
+            status_code=409,
+            detail="A newer measurement already exists for this problem",
+        )
 
 
 def label_token(value: str) -> str:
@@ -379,12 +435,14 @@ class WorkflowStore:
         decision: ApprovalDecision,
     ) -> ApprovalRecord:
         action = find_action(problem, decision.action_id)
-        approved_action_ids = {
-            approval.action_id
-            for approval in self._approvals
-            if approval.problem_id == problem.problem_id
-            and approval.decision == ApprovalDecisionStatus.approved
-        }
+        approved_action_ids = resolve_approval_state(
+            [
+                (approval.action_id, approval.decision.value)
+                for approval in self._approvals
+                if approval.problem_id == problem.problem_id
+            ],
+            decision=decision,
+        )
         assert_governance_allows_decision(
             problem=problem,
             decision=decision,
@@ -440,6 +498,11 @@ class WorkflowStore:
         if measurement.metric != problem.outcome_contract.primary_metric:
             raise HTTPException(status_code=422, detail="Metric does not match the outcome contract")
 
+        existing = self._outcomes.get(problem.problem_id)
+        assert_measurement_not_stale(
+            existing.measured_at if existing is not None else None,
+            measurement.measured_at,
+        )
         self._outcomes[problem.problem_id] = measurement
         return measurement
 
@@ -869,11 +932,14 @@ class SQLiteWorkflowStore:
         decision: ApprovalDecision,
     ) -> ApprovalRecord:
         action = find_action(problem, decision.action_id)
-        approved_rows = self._connection.execute(
-            "SELECT action_id FROM approvals WHERE problem_id = ? AND decision = ?",
-            (problem.problem_id, ApprovalDecisionStatus.approved.value),
+        decision_rows = self._connection.execute(
+            "SELECT action_id, decision FROM approvals WHERE problem_id = ? ORDER BY id",
+            (problem.problem_id,),
         ).fetchall()
-        approved_action_ids = {row["action_id"] for row in approved_rows}
+        approved_action_ids = resolve_approval_state(
+            [(row["action_id"], row["decision"]) for row in decision_rows],
+            decision=decision,
+        )
         assert_governance_allows_decision(
             problem=problem,
             decision=decision,
@@ -981,6 +1047,14 @@ class SQLiteWorkflowStore:
         if measurement.metric != problem.outcome_contract.primary_metric:
             raise HTTPException(status_code=422, detail="Metric does not match the outcome contract")
 
+        existing_row = self._connection.execute(
+            "SELECT measured_at FROM outcomes WHERE problem_id = ?",
+            (measurement.problem_id,),
+        ).fetchone()
+        assert_measurement_not_stale(
+            existing_row["measured_at"] if existing_row is not None else None,
+            measurement.measured_at,
+        )
         self._connection.execute(
             """
             INSERT INTO outcomes (problem_id, metric, observed_value, measured_at, notes)

@@ -113,14 +113,18 @@ class TestEnrichSignals:
 
         assert enrich_signals([]) == []
 
-    def test_skips_failed_batch_gracefully(self, _mock_ai_env: None, httpx_mock: Any) -> None:
+    def test_skips_failed_batch_gracefully(
+        self, _mock_ai_env: None, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from app.services.enrichment import enrich_signals
 
+        monkeypatch.setattr("time.sleep", lambda _: None)
         httpx_mock.add_response(
             url="http://test-ai.local/v1/chat/completions",
             method="POST",
             status_code=500,
             text="server error",
+            is_reusable=True,  # a 5xx is retried before the batch is skipped
         )
 
         result = enrich_signals([{"id": "sig-1", "text": "test"}])

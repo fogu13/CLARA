@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -143,6 +144,48 @@ def _map_http_error(status: int, detail: str) -> AIProviderError:
     return AIProviderError(f"AI provider error {status}: {detail[:200]}", status)
 
 
+_MAX_ATTEMPTS = 3
+
+
+def _retry_delay(resp: httpx.Response | None, attempt: int) -> float:
+    if resp is not None:
+        retry_after = resp.headers.get("retry-after")
+        if retry_after:
+            try:
+                return min(float(retry_after), 10.0)
+            except ValueError:
+                pass
+    return 0.5 * (2**attempt)
+
+
+def _post_with_retry(path: str, body: dict[str, Any], timeout: float) -> httpx.Response:
+    """POST with a bounded retry (3 attempts, exponential backoff, honors
+    Retry-After) on 429/5xx/network errors. Other 4xx stay fail-fast.
+
+    The pipeline fires sequential burst batches, so a single throttle event is
+    the most likely failure — without retry it silently drops a whole
+    enrichment batch or cluster.
+    """
+    last_exc: httpx.RequestError | None = None
+    resp: httpx.Response | None = None
+    for attempt in range(_MAX_ATTEMPTS):
+        if attempt:
+            time.sleep(_retry_delay(resp, attempt - 1))
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                resp = client.post(f"{effective_base_url()}{path}", headers=_headers(), json=body)
+        except httpx.RequestError as exc:
+            last_exc = exc
+            resp = None
+            continue
+        if resp.status_code == 429 or resp.status_code >= 500:
+            continue
+        return resp
+    if resp is not None:
+        return resp  # retries exhausted — caller maps the HTTP error
+    raise AIProviderError(f"AI provider unreachable: {last_exc}") from last_exc
+
+
 def call_tool(
     *,
     system: str,
@@ -190,13 +233,11 @@ def call_tool(
         )
 
     try:
-        with httpx.Client(timeout=timeout) as client:
-            resp = client.post(f"{effective_base_url()}/chat/completions", headers=_headers(), json=body)
-    except httpx.RequestError as exc:
-        err = AIProviderError(f"AI provider unreachable: {exc}")
+        resp = _post_with_retry("/chat/completions", body, timeout)
+    except AIProviderError as err:
         if obs is not None:
             obs.end(level="ERROR", status_message=str(err), usage_details={})
-        raise err from exc
+        raise
 
     if resp.status_code != 200:
         detail = resp.text
@@ -208,7 +249,8 @@ def call_tool(
         raise err
 
     data = resp.json()
-    tool_calls = data.get("choices", [{}])[0].get("message", {}).get("tool_calls", [])
+    # `or [{}]`: an empty choices list must raise NoStructuredResponseError, not IndexError.
+    tool_calls = (data.get("choices") or [{}])[0].get("message", {}).get("tool_calls", [])
     if not tool_calls:
         err = NoStructuredResponseError("No structured response returned from AI")
         if obs is not None:
@@ -269,13 +311,11 @@ def embed(
         )
 
     try:
-        with httpx.Client(timeout=timeout) as client:
-            resp = client.post(f"{effective_base_url()}/embeddings", headers=_headers(), json=body)
-    except httpx.RequestError as exc:
-        err = AIProviderError(f"AI provider unreachable: {exc}")
+        resp = _post_with_retry("/embeddings", body, timeout)
+    except AIProviderError as err:
         if obs is not None:
             obs.end(level="ERROR", status_message=str(err), usage_details={})
-        raise err from exc
+        raise
 
     if resp.status_code != 200:
         detail = resp.text
