@@ -28,6 +28,7 @@ export default function SettingsPage() {
   const [workspaceLoadFailed, setWorkspaceLoadFailed] = useState(false);
   const [aiUrl, setAiUrl] = useState("");
   const [aiModel, setAiModel] = useState("");
+  const [aiEmbedModel, setAiEmbedModel] = useState("");
   const [aiKey, setAiKey] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [aiStatus, setAiStatus] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
@@ -39,12 +40,16 @@ export default function SettingsPage() {
       const res = await fetch(`${apiBaseUrl()}/settings/ai`, {
         method: "PUT",
         headers: apiHeaders(),
-        body: JSON.stringify({ base_url: aiUrl, model: aiModel, api_key: aiKey }),
+        body: JSON.stringify({ base_url: aiUrl, model: aiModel, embed_model: aiEmbedModel, api_key: aiKey }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.detail ?? `Save failed (${res.status})`);
       setAiKey("");
-      setAiStatus({ tone: "ok", text: t.settings.aiSaved });
+      setAiStatus(
+        data?.warning
+          ? { tone: "error", text: data.warning }
+          : { tone: "ok", text: t.settings.aiSaved }
+      );
       getSystemConfig().then(setConfig).catch(() => {});
     } catch (e) {
       setAiStatus({ tone: "error", text: e instanceof Error ? e.message : "Save failed" });
@@ -59,7 +64,9 @@ export default function SettingsPage() {
     try {
       const res = await fetch(`${apiBaseUrl()}/settings/ai/test`, { method: "POST", headers: apiHeaders() });
       const data = await res.json().catch(() => null);
-      if (data?.ok) setAiStatus({ tone: "ok", text: `${t.settings.aiTestOk} (${data.model})` });
+      if (data?.ok && data?.embed_ok === false)
+        setAiStatus({ tone: "error", text: `${t.settings.aiTestEmbedFail} ${data.embed_error ?? data.embed_model}` });
+      else if (data?.ok) setAiStatus({ tone: "ok", text: `${t.settings.aiTestOk} (${data.model})` });
       else setAiStatus({ tone: "error", text: `${t.settings.aiTestFail} ${data?.error ?? res.status}` });
     } catch (e) {
       setAiStatus({ tone: "error", text: e instanceof Error ? e.message : "Test failed" });
@@ -226,16 +233,20 @@ export default function SettingsPage() {
             <Input id="ai-model" value={aiModel} onChange={(e) => setAiModel(e.target.value)} placeholder="mistral-small-latest · qwen3:32b" />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="ai-embed-model">{t.settings.aiEmbedModel}</Label>
+            <Input id="ai-embed-model" value={aiEmbedModel} onChange={(e) => setAiEmbedModel(e.target.value)} placeholder="mistral-embed · nomic-embed-text" />
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="ai-key">{t.settings.aiApiKey}</Label>
             <Input id="ai-key" type="password" value={aiKey} onChange={(e) => setAiKey(e.target.value)} placeholder="sk-…" />
           </div>
           <p className="text-xs text-muted-foreground">
             {t.settings.aiPresets}{" "}
-            <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => { setAiUrl("https://api.mistral.ai/v1"); setAiModel("mistral-small-latest"); }}>Mistral (EU)</button>
+            <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => { setAiUrl("https://api.mistral.ai/v1"); setAiModel("mistral-small-latest"); setAiEmbedModel("mistral-embed"); }}>Mistral (EU)</button>
             {" · "}
-            <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => { setAiUrl("http://localhost:11434/v1"); setAiModel("qwen3:32b"); }}>Ollama (local)</button>
+            <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => { setAiUrl("http://localhost:11434/v1"); setAiModel("qwen3:32b"); setAiEmbedModel("nomic-embed-text"); }}>Ollama (local)</button>
             {" · "}
-            <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => { setAiUrl("https://opencode.ai/zen/v1"); setAiModel("glm-5.2"); }}>OpenCode Zen</button>
+            <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => { setAiUrl("https://opencode.ai/zen/v1"); setAiModel("glm-5.2"); setAiEmbedModel("gemini-embedding-001"); }}>OpenCode Zen</button>
           </p>
           <div className="flex gap-2">
             <Button size="sm" onClick={saveAi} disabled={aiBusy}>

@@ -350,6 +350,7 @@ def create_app(
             base_url=_ai_stored.config.get("base_url"),
             model=_ai_stored.config.get("model"),
             api_key=_ai_stored.config.get("api_key"),
+            embed_model=_ai_stored.config.get("embed_model"),
         )
     if not signal_store.list_signals():
         signal_store.import_signals(load_seed_signals())

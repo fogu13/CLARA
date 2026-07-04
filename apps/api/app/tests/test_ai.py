@@ -250,6 +250,30 @@ class TestEmbed:
         assert body["dimensions"] == 768
         assert body["model"] == "test-embed"
 
+    def test_runtime_embed_model_override_skips_dimensions(
+        self, _clean_ai_env: None, httpx_mock: Any
+    ) -> None:
+        # A GUI-selected embed model gets the provider's default dims — the
+        # env AI_EMBED_DIM belongs to the env-configured model only (Mistral
+        # 422s on an unexpected `dimensions` param).
+        from app.services import ai
+
+        ai.set_runtime_config(embed_model="mistral-embed")
+        try:
+            httpx_mock.add_response(
+                url="http://test-ai.local/v1/embeddings",
+                method="POST",
+                json=_embeddings_response([[0.1]]),
+            )
+
+            ai.embed("test")
+
+            body = json.loads(httpx_mock.get_requests()[-1].read())
+            assert body["model"] == "mistral-embed"
+            assert "dimensions" not in body
+        finally:
+            ai.set_runtime_config()
+
 
 class TestLocalFirstKeyless:
     """Local-first is a hard requirement: Ollama/vLLM must work without an API key."""
