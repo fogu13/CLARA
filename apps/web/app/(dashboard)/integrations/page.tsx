@@ -20,7 +20,7 @@ interface ConnectorConfig {
   is_active: boolean;
 }
 
-const PULL_SOURCES = ["zendesk", "app_store", "trustpilot", "google_play"];
+const PULL_SOURCES = ["zendesk", "app_store", "trustpilot", "google_play", "google_business"];
 
 const CONNECTOR_CATALOG = [
   {
@@ -62,6 +62,19 @@ const CONNECTOR_CATALOG = [
     fields: [
       { key: "package_name", label: "Package Name", placeholder: "com.example.app" },
       { key: "service_account_json", label: "Service Account JSON", placeholder: "paste the full key JSON" },
+    ],
+  },
+  {
+    type: "google_business",
+    name: "Google Reviews",
+    category: "Source (Pull)",
+    descKey: "descGoogleBusiness" as const,
+    fields: [
+      { key: "client_id", label: "OAuth Client ID", placeholder: "....apps.googleusercontent.com" },
+      { key: "client_secret", label: "OAuth Client Secret", placeholder: "GOCSPX-..." },
+      { key: "refresh_token", label: "Refresh Token", placeholder: "1//..." },
+      { key: "account_id", label: "Account ID", placeholder: "1234567890" },
+      { key: "location_id", label: "Location ID", placeholder: "9876543210" },
     ],
   },
   {
