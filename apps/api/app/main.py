@@ -104,6 +104,9 @@ from app.services.postgres import (
     PostgresTerminologyStore,
     PostgresWorkflowStore,
     PostgresWorkspaceStore,
+    PostgresTelemetryStore,
+    PostgresMeasurementPlanStore,
+    PostgresConnectorConfigStore,
     database_url,
 )
 from app.services.problems import ProblemStore, SQLiteProblemStore
@@ -502,7 +505,10 @@ def create_app(
     policy_store = policies or default_policy_store()
     workspace_store = workspace or default_workspace_store()
     rule_store = feedback_rules or default_rule_store()
-    telemetry_store = telemetry or SQLiteTelemetryStore(default_db_path())
+    _pg_url = database_url()
+    telemetry_store = telemetry or (
+        PostgresTelemetryStore(_pg_url) if _pg_url else SQLiteTelemetryStore(default_db_path())
+    )
     from app.services.measurement_scheduler import (
         SQLiteMeasurementPlanStore,
         attach_measurement_loop,
@@ -510,7 +516,9 @@ def create_app(
         schedule_measurements,
     )
 
-    measurement_plan_store = measurement_plans or SQLiteMeasurementPlanStore(default_db_path())
+    measurement_plan_store = measurement_plans or (
+        PostgresMeasurementPlanStore(_pg_url) if _pg_url else SQLiteMeasurementPlanStore(default_db_path())
+    )
 
     def _run_due_measurements(now: str | None = None) -> dict[str, int]:
         return run_due_measurements(
@@ -546,7 +554,9 @@ def create_app(
     from app.connectors.config_store import SQLiteConnectorConfigStore
 
     # Persistent by default: a pilot's Jira/Zendesk credentials must survive restarts.
-    connector_config_store = connector_configs or SQLiteConnectorConfigStore(default_db_path())
+    connector_config_store = connector_configs or (
+        PostgresConnectorConfigStore(_pg_url) if _pg_url else SQLiteConnectorConfigStore(default_db_path())
+    )
     if not signal_store.list_signals():
         signal_store.import_signals(load_seed_signals())
     if not context_store.list_context():
