@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useI18n } from "@/lib/i18n";
 import { Badge } from "@/components/ui/badge";
 import { ActionDecisionPanel } from "@/app/components/action-decision-panel";
 import { getExecutions, getProblem, getProblems } from "@/lib/client-api";
@@ -27,6 +28,7 @@ function readinessBadge(status: string): "success" | "warning" | "destructive" |
 }
 
 export default function ActionsPage() {
+  const { t } = useI18n();
   const [items, setItems] = useState<ActionQueueItem[]>([]);
   const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,9 +81,9 @@ export default function ActionsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Actions</h1>
+        <h1 className="text-2xl font-bold">{t.actionsPage.title}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Review proposed actions, record decisions and inspect execution history.
+          {t.actionsPage.subtitle}
         </p>
       </div>
 
@@ -108,7 +110,7 @@ export default function ActionsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Audience readiness</CardTitle>
+          <CardTitle>{t.actionsPage.audienceReadiness}</CardTitle>
         </CardHeader>
         <CardContent>
           {interventionItems.length === 0 ? (
@@ -172,7 +174,7 @@ export default function ActionsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Action Proposals</CardTitle>
+          <CardTitle>{t.actionsPage.actionProposals}</CardTitle>
         </CardHeader>
         <CardContent>
           {items.length === 0 ? (
@@ -208,7 +210,7 @@ export default function ActionsPage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Execution History</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t.actionsPage.executionHistory}</CardTitle></CardHeader>
         <CardContent>
           {executions.length === 0 ? (
             <p className="text-sm text-muted-foreground">No executions yet.</p>
@@ -240,16 +242,16 @@ export default function ActionsPage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Connector Pipeline</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t.actionsPage.connectorPipeline}</CardTitle></CardHeader>
         <CardContent>
           <div className="flex items-center gap-2 text-sm flex-wrap">
             <Badge variant="secondary">Zendesk in</Badge>
             <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <Badge variant="secondary">Triage</Badge>
+            <Badge variant="secondary">{t.actionsPage.triage}</Badge>
             <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <Badge variant="secondary">Governance</Badge>
+            <Badge variant="secondary">{t.actionsPage.governance}</Badge>
             <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <Badge variant="secondary">Human approval</Badge>
+            <Badge variant="secondary">{t.actionsPage.humanApproval}</Badge>
             <ArrowRight className="h-3 w-3 text-muted-foreground" />
             <Badge variant="success">Jira / Slack drafts</Badge>
           </div>
