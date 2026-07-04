@@ -28,7 +28,7 @@ Still-open findings cluster into three buckets:
 
 - **Gated on the live-DB / multi-tenant workstream** (don't fix until that session):
   #18 #23 #25 #29 #34 (Postgres store parity/scoping) · #30 #31 (tenant identity from client headers).
-- **Ungated backend correctness** (small, self-contained fixes):
+- **Ungated backend correctness** — all seven fixed in PR #84 (plus the #3 residual):
   #14 (LLM retry) · #35 (approval idempotency) · #36 (outcome direction) · #37 (max_urgency default)
   · #38 (eval hallucination check) · #45 (measured_at ordering) · #46 (nan/inf CSV validation).
 - **Frontend / duplication debt** (low severity):
