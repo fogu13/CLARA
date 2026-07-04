@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getWorkflowState, submitApproval } from "../../lib/client-api";
+import { currentUserEmail } from "../../lib/auth-client";
 import type { ActionProposal, ActionProposalChange, ApprovalDecisionStatus, WorkflowState } from "../../lib/types";
 
 type DecisionState = {
@@ -97,6 +98,13 @@ export function ActionDecisionPanel({
   }, [problemId, action.action_id]);
 
   async function decide(decision: ApprovalDecisionStatus) {
+    // Governance decisions are permanent: one native dialog doubles as the
+    // confirmation step and the rationale field. Cancel aborts.
+    const note = window.prompt(
+      `Record "${decision.replaceAll("_", " ")}" for this action? This is permanent and audited.\nOptional note:`,
+      ""
+    );
+    if (note === null) return;
     setDecisionState((current) => ({ ...current, state: "saving", message: "Recording decision..." }));
 
     try {
@@ -114,11 +122,8 @@ export function ActionDecisionPanel({
       const record = await submitApproval(problemId, {
         action_id: action.action_id,
         decision,
-        reviewer: "demo_reviewer",
-        note:
-          decision === "approved"
-            ? "Approved from the Action Queue."
-            : "Decision recorded from the Action Queue."
+        reviewer: currentUserEmail() ?? "local-user",
+        note: note.trim() || `Decision recorded in the app (${decision.replaceAll("_", " ")}).`
       });
       const workflow = await getWorkflowState(problemId);
 

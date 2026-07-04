@@ -25,8 +25,17 @@ export default function SettingsPage() {
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [status, setStatus] = useState<Status>({ tone: "idle", message: "" });
 
+  const [workspaceLoadFailed, setWorkspaceLoadFailed] = useState(false);
+
   useEffect(() => {
-    getWorkspace().then(setSettings).catch(() => {});
+    // If the load fails, saving would overwrite real workspace data with the
+    // placeholder defaults; disable Save until a real read succeeds.
+    getWorkspace()
+      .then((data) => {
+        setSettings(data);
+        setWorkspaceLoadFailed(false);
+      })
+      .catch(() => setWorkspaceLoadFailed(true));
     getSystemConfig().then(setConfig).catch(() => {});
   }, []);
 
@@ -51,6 +60,11 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-2xl font-bold">{t.settings.title}</h1>
         <p className="text-sm text-muted-foreground mt-1">{t.settings.subtitle}</p>
+        {workspaceLoadFailed ? (
+          <p role="alert" className="mt-2 rounded-md border border-destructive/50 px-3 py-2 text-sm text-destructive">
+            {t.common.error}
+          </p>
+        ) : null}
       </div>
 
       {status.message ? (
@@ -102,7 +116,7 @@ export default function SettingsPage() {
               onChange={(event) => update("notification_email", event.target.value)}
             />
           </div>
-          <Button onClick={save} disabled={busy}>
+          <Button onClick={save} disabled={busy || workspaceLoadFailed}>
             {busy ? t.settings.saving : t.settings.saveChanges}
           </Button>
         </CardContent>
@@ -139,7 +153,7 @@ export default function SettingsPage() {
               }}
             />
           </div>
-          <Button onClick={save} disabled={busy}>
+          <Button onClick={save} disabled={busy || workspaceLoadFailed}>
             {busy ? t.settings.saving : t.settings.saveChanges}
           </Button>
         </CardContent>

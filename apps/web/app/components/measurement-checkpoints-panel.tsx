@@ -22,12 +22,14 @@ export function MeasurementCheckpointsPanel() {
   const [busy, setBusy] = useState(false);
 
   const [loadFailed, setLoadFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(() => {
     getMeasurements()
       .then((data) => {
         setPlans(data);
         setLoadFailed(false);
+        setLoaded(true);
       })
       .catch(() => {
         // A fetch failure must not masquerade as "no checkpoints yet".
@@ -80,6 +82,8 @@ export function MeasurementCheckpointsPanel() {
         {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
         {loadFailed ? (
           <p className="text-sm text-destructive">{t.common.error}</p>
+        ) : !loaded ? (
+          <p role="status" className="text-sm text-muted-foreground">{t.common.loading}</p>
         ) : plans.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t.learnings.noCheckpoints}

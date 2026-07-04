@@ -72,6 +72,11 @@ export default function AuthPage() {
           <Button type="submit" className="w-full" disabled={loading || !authConfigured}>
             {loading ? "Signing in…" : "Sign in"}
           </Button>
+          <p className="text-center text-xs text-muted-foreground">
+            <a href="/reset-password" className="underline-offset-2 hover:text-foreground hover:underline">
+              Forgot password?
+            </a>
+          </p>
         </form>
       </div>
     </div>

@@ -79,6 +79,16 @@ function actionClassLabels(td: ReturnType<typeof useI18n>["t"]["dashboard"]): Re
   };
 }
 
+function outcomeStatusLabel(status: string, t: ReturnType<typeof useI18n>["t"]): string {
+  const map: Record<string, string> = {
+    not_measured: t.outcomeBoard.notMeasured,
+    target_met: t.outcomeBoard.targetMet,
+    improving: t.outcomeBoard.improving,
+    not_improved: t.outcomeBoard.notImproved,
+  };
+  return map[status] ?? status.replaceAll("_", " ");
+}
+
 function label(value: string): string {
   return value.replaceAll("_", " ");
 }
@@ -286,6 +296,7 @@ export default function DashboardPage() {
   const { t } = useI18n();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -333,9 +344,9 @@ export default function DashboardPage() {
     }
 
     void load();
-  }, []);
+  }, [reloadKey]);
 
-  if (loading) return <div className="text-muted-foreground">Loading leadership dashboard...</div>;
+  if (loading) return <div role="status" aria-live="polite" className="text-muted-foreground">Loading leadership dashboard...</div>;
 
   const problems = data?.problems ?? [];
   const outcomeBoard = data?.outcomeBoard ?? fallbackOutcomeBoard();
@@ -345,7 +356,7 @@ export default function DashboardPage() {
   const signals = data?.signals ?? [];
   const emerging = data?.emerging ?? null;
   const trendSeries = signalTrendSeries(signals);
-  const actionClassCount = problems.reduce((total, problem) => total + problem.top_action_classes.length, 0);
+  const actionClassCount = new Set(problems.flatMap((problem) => problem.top_action_classes)).size;
   const approvedActions = approvedActionIds(approvals);
   const blockedProblems = problems.filter((problem) => blockingChecks(problem) > 0);
   const highImpactProblems = problems.filter((problem) => impact(problem) >= 0.7 || problem.impact_band === "high");
@@ -388,14 +399,20 @@ export default function DashboardPage() {
       </div>
 
       {data?.usingFallback ? (
-        <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
-          Showing sample data. The API is unreachable.
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
+          <span>{t.dashboard.sampleBanner}</span>
+          <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="shrink-0 rounded-md border px-2 py-1 text-xs font-medium hover:bg-yellow-500/10">
+            {t.common.retry}
+          </button>
         </div>
       ) : null}
 
       {!data?.usingFallback && data?.partialSources.length ? (
-        <div className="rounded-md border border-dashed border-amber-500/50 bg-amber-500/5 p-3 text-sm text-amber-700 dark:text-amber-400">
-          Some data is unavailable ({data.partialSources.join(", ")}); a few counts may be low.
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-md border border-dashed border-amber-500/50 bg-amber-500/5 p-3 text-sm text-amber-700 dark:text-amber-400">
+          <span>{t.dashboard.partialBanner} ({data.partialSources.join(", ")})</span>
+          <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="shrink-0 rounded-md border px-2 py-1 text-xs font-medium hover:bg-amber-500/10">
+            {t.common.retry}
+          </button>
         </div>
       ) : null}
 
@@ -448,7 +465,7 @@ export default function DashboardPage() {
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-sm font-medium leading-tight">{item.title}</p>
                     <Badge variant={item.trend_label === "action" ? "destructive" : "warning"}>
-                      {item.trend_label}
+                      {item.trend_label === "action" ? t.dashboard.trendAction : t.dashboard.severityWatch}
                     </Badge>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -507,7 +524,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-lg border p-3"><p className="text-muted-foreground">{t.dashboard.actionTypes}</p><p className="mt-1 text-2xl font-bold">{actionClassCount}</p></div>
               <div className="rounded-lg border p-3"><p className="text-muted-foreground">{t.dashboard.approved}</p><p className="mt-1 text-2xl font-bold">{approvedActions.size}</p></div>
-              <div className="rounded-lg border p-3"><p className="text-muted-foreground">{t.dashboard.draftExecutions}</p><p className="mt-1 text-2xl font-bold">{executions.length}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-muted-foreground">{t.dashboard.draftExecutions}</p><p className="mt-1 text-2xl font-bold">{executions.filter((e) => e.status === "draft_created").length}</p></div>
               <div className="rounded-lg border p-3"><p className="text-muted-foreground">{t.dashboard.interventionsReady}</p><p className="mt-1 text-2xl font-bold">{interventionReady.length}</p></div>
             </div>
             <div className="space-y-3">
@@ -536,7 +553,7 @@ export default function DashboardPage() {
               {outcomeBoard.items.slice(0, 3).map((item) => (
                 <Link key={item.problem_id} className="flex items-center justify-between rounded-lg border p-3 text-sm hover:bg-muted/50" href={`/insights/${item.problem_id}`}>
                   <span className="truncate pr-3">{item.title}</span>
-                  <Badge variant={item.outcome_status === "target_met" || item.outcome_status === "improving" ? "success" : "outline"}>{label(item.outcome_status)}</Badge>
+                  <Badge variant={item.outcome_status === "target_met" || item.outcome_status === "improving" ? "success" : "outline"}>{outcomeStatusLabel(item.outcome_status, t)}</Badge>
                 </Link>
               ))}
             </div>

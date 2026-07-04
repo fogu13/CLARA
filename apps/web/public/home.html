@@ -5,17 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>CLARA | Turn customer signals into governed action</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%20100'%3E%3Crect%20width='100'%20height='100'%20rx='22'%20fill='%2308171a'/%3E%3Cpath%20d='M69.28%2027.02%20A30%2030%200%201%200%2069.28%2072.98'%20fill='none'%20stroke='%231bb89e'%20stroke-width='11'%20stroke-linecap='round'/%3E%3Ccircle%20cx='78'%20cy='50'%20r='7.5'%20fill='%23e0a24a'/%3E%3C/svg%3E" />
+<link rel="canonical" href="https://clara.eu/" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="CLARA | Turn customer signals into governed action" />
+<meta property="og:description" content="The European feedback-to-outcome platform: evidence-backed insights, policy-gated action, measured results." />
+<meta property="og:url" content="https://clara.eu/" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="CLARA | Turn customer signals into governed action" />
+<meta name="twitter:description" content="Evidence-backed insights, policy-gated action, measured results. EU-resident by design." />
 <meta name="description" content="CLARA is the European feedback-to-outcome platform. It connects what customers say with what they do, finds the problems that matter, recommends coordinated action, enforces your policies before anything ships, and proves whether it worked." />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<!-- Fonts are self-hosted: no Google CDN request, consistent with the EU data-residency claims on this very page. -->
+<style>
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:500;font-display:swap;src:url(/fonts/space-grotesk-500.woff2) format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:600;font-display:swap;src:url(/fonts/space-grotesk-600.woff2) format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/space-grotesk-700.woff2) format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/inter-400.woff2) format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:500;font-display:swap;src:url(/fonts/inter-500.woff2) format('woff2')}
+@font-face{font-family:'Inter';font-style:normal;font-weight:600;font-display:swap;src:url(/fonts/inter-600.woff2) format('woff2')}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/ibm-plex-mono-400.woff2) format('woff2')}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;src:url(/fonts/ibm-plex-mono-500.woff2) format('woff2')}
+</style>
 <style>
   :root{
     --ink:#08171a; --ink-2:#0d2227; --ink-3:#143036; --ink-card:#0f262b;
     --petrol:#016f60; --teal:#1bb89e; --teal-2:#4dd0b8; --teal-soft:#86ddca;
     --signal:#e0a24a; --signal-soft:#f1cd93;
     --paper:#f6f8f8; --paper-2:#eef3f2; --mist:#dfe8e7;
-    --text:#0c1f23; --muted:#566b70; --muted-2:#7d9094;
+    --text:#0c1f23; --muted:#566b70; --muted-2:#64777c;
     --line:#e2eae9; --line-dark:rgba(140,200,190,.14); --line-dark-2:rgba(140,200,190,.22);
     --white:#fff;
     --maxw:1180px;
@@ -405,7 +421,7 @@
       <span class="pill"><i>&#9679;</i> <b>Evidence-backed</b> intelligence</span>
       <span class="pill"><i>&#9679;</i> <b>Policy-as-code</b> approvals</span>
       <span class="pill"><i>&#9679;</i> Executes in <b>Zendesk &middot; Jira &middot; Slack</b></span>
-      <span class="pill"><i>&#9679;</i> <b>RLS</b> multi-tenancy &amp; audit export</span>
+      <span class="pill"><i>&#9679;</i> <b>Tenant isolation</b> multi-tenancy &amp; audit export</span>
       <span class="pill"><i>&#9679;</i> Self-hostable in the <b>EU</b></span>
     </div>
   </div>
@@ -525,9 +541,9 @@
           <h2>Evidence you can defend. Governance you can prove.</h2>
           <p class="sub">CLARA is built for regulated, European enterprises. Every recommendation carries its reasoning, and every action passes policy before it runs, with a full audit trail.</p>
           <ul>
-            <li><i>&#9670;</i><div><b>Honest AI by default.</b><p>Confidence, matched terminology, contradictory evidence and limitations on every classification and hypothesis.</p></div></li>
-            <li><i>&#9670;</i><div><b>Policy-as-code approvals.</b><p>Risk, privacy, evidence and AI-model checks run before execution. Blocking rules stop unsafe action automatically.</p></div></li>
-            <li><i>&#9670;</i><div><b>Audit &amp; isolation.</b><p>Role-based access, row-level multi-tenancy and admin audit export, ready for DACH and EU scrutiny.</p></div></li>
+            <li><i aria-hidden="true">&#9670;</i><div><b>Honest AI by default.</b><p>Confidence, matched terminology, contradictory evidence and limitations on every classification and hypothesis.</p></div></li>
+            <li><i aria-hidden="true">&#9670;</i><div><b>Policy-as-code approvals.</b><p>Risk, privacy, evidence and AI-model checks run before execution. Blocking rules stop unsafe action automatically.</p></div></li>
+            <li><i aria-hidden="true">&#9670;</i><div><b>Audit &amp; isolation.</b><p>Role-based access, row-level multi-tenancy and admin audit export, ready for DACH and EU scrutiny.</p></div></li>
           </ul>
         </div>
 
@@ -682,6 +698,7 @@
       <p>A 30-minute walkthrough of the loop, from a real feedback signal to a governed, measurable action.</p>
       <div class="cta-row">
         <a class="btn btn-primary" href="mailto:hello@clara.eu?subject=CLARA%20demo">Book a demo <span class="arrow" aria-hidden="true">&rarr;</span></a>
+        <p style="margin-top:14px;font-size:14px;opacity:.75">or write to <span style="user-select:all;font-weight:600">hello@clara.eu</span></p>
         <a class="btn btn-ghost on-dark" href="#loop">Revisit the loop</a>
       </div>
     </div>
@@ -728,10 +745,10 @@
       </div>
       <div class="foot-col">
         <h5>Compliance</h5>
-        <a href="#">GDPR</a>
-        <a href="#">EU AI Act</a>
-        <a href="#">Data residency</a>
-        <a href="#">DPA</a>
+        <a href="#governance">GDPR</a>
+        <a href="#governance">EU AI Act</a>
+        <a href="#governance">Data residency</a>
+        <a href="mailto:hello@clara.eu?subject=DPA%20request">DPA</a>
       </div>
     </div>
     <div class="foot-bot">
@@ -759,9 +776,12 @@
 
   const mb=document.getElementById('menuBtn'),mm=document.getElementById('mmenu');
   const toggle=(open)=>{mm.classList.toggle('open',open);mb.setAttribute('aria-expanded',open);
+    mm.toggleAttribute('inert',!open);
     mb.setAttribute('aria-label',open?'Close menu':'Open menu');mb.innerHTML=open?'&#10005;':'&#9776;';};
+  mm.toggleAttribute('inert',true);
   mb.addEventListener('click',()=>toggle(!mm.classList.contains('open')));
   mm.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>toggle(false)));
+  addEventListener('keydown',(e)=>{if(e.key==='Escape'&&mm.classList.contains('open')){toggle(false);mb.focus();}});
 </script>
 </body>
 </html>

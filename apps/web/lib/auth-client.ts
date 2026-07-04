@@ -57,3 +57,15 @@ export function isAuthenticated(): boolean {
   // Add refresh_token rotation here if longer sessions are needed.
   return exp !== null && exp * 1000 > Date.now();
 }
+
+export function currentUserEmail(): string | null {
+  if (typeof window === "undefined") return null;
+  const token = window.localStorage.getItem(TOKEN_KEY);
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return typeof payload.email === "string" ? payload.email : null;
+  } catch {
+    return null;
+  }
+}

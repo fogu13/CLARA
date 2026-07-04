@@ -15,6 +15,7 @@ import {
   toCanonicalSignalCsvWithDefaults
 } from "@/lib/csv";
 import type { ColumnMapping } from "@/lib/csv";
+import { useI18n } from "@/lib/i18n";
 
 type Status = { tone: "idle" | "busy" | "ok" | "error"; message: string };
 type FileCsv = { fileName: string; headers: string[]; rows: Record<string, string>[]; mapping: ColumnMapping };
@@ -34,16 +35,22 @@ const fieldLabels: Record<string, string> = {
 };
 
 export default function SignalsPage() {
+  const { t } = useI18n();
   const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<Status>({ tone: "idle", message: "" });
   const [fileCsv, setFileCsv] = useState<FileCsv | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [loadFailed, setLoadFailed] = useState(false);
+
   useEffect(() => {
     getSignals()
-      .then(setSignals)
-      .catch(() => {})
+      .then((data) => {
+        setSignals(data);
+        setLoadFailed(false);
+      })
+      .catch(() => setLoadFailed(true))
       .finally(() => setLoading(false));
   }, []);
 
@@ -240,7 +247,9 @@ export default function SignalsPage() {
       <Card>
         <CardHeader><CardTitle>Signal Feed</CardTitle></CardHeader>
         <CardContent>
-          {signals.length === 0 ? (
+          {loadFailed ? (
+              <p className="text-sm text-destructive">{t.common.error}</p>
+            ) : signals.length === 0 ? (
             <div className="text-center py-12">
               <MessageSquare className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
               <p className="text-sm text-muted-foreground">No signals yet. Import CSV or connect a source.</p>
@@ -268,6 +277,9 @@ export default function SignalsPage() {
                   </div>
                 </div>
               ))}
+              {signals.length > 20 ? (
+                <p className="pt-2 text-xs text-muted-foreground">{t.common.showingOf.replace("{n}", "20").replace("{total}", String(signals.length))}</p>
+              ) : null}
             </div>
           )}
         </CardContent>

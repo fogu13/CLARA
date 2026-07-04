@@ -100,6 +100,7 @@ export default function TaxonomyPage() {
   }
 
   async function lockCategory(type: TaxonomyType, categoryId: string) {
+    if (!window.confirm("Lock this category? Locked categories are protected from hygiene flags and edits.")) return;
     setBusy(true);
     try {
       applyCatalog(await lockTaxonomyCategory(type, categoryId));
@@ -154,6 +155,7 @@ export default function TaxonomyPage() {
   }
 
   async function reviewCategory(type: TaxonomyType, categoryId: string, decision: "accept" | "reject") {
+    if (decision === "reject" && !window.confirm("Reject this proposed category? It will be removed from review.")) return;
     setBusy(true);
     try {
       applyCatalog(await reviewTaxonomyCategory(type, { category_id: categoryId, decision }));
@@ -185,6 +187,7 @@ export default function TaxonomyPage() {
   }
 
   async function submitMerge(type: TaxonomyType) {
+    if (!window.confirm("Merge the selected categories? Signals keep their history but the merged categories become one.")) return;
     const targetId = slugId(mergeLabel);
     if (mergeSelection.length < 2 || !targetId) return;
     setBusy(true);
@@ -218,6 +221,7 @@ export default function TaxonomyPage() {
   }
 
   async function submitSplit() {
+    if (!window.confirm("Split this category? The original category is replaced by the new ones.")) return;
     if (!splitting) return;
     const parts = splitParts.filter((part) => part.label.trim() && part.description.trim());
     if (parts.length < 2) return;
