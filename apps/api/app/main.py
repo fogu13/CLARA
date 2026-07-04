@@ -542,6 +542,11 @@ def create_app(
         if _tick_counter["n"] % 4 == 1:  # first tick + hourly thereafter
             sync = _run_source_sync()
             result = {**result, **{f"sync_{k}": v for k, v in sync.items()}}
+            try:
+                alerts = _run_alert_sweep()
+                result = {**result, **{f"alert_{k}": v for k, v in alerts.items()}}
+            except Exception:  # noqa: BLE001 — alerting must never break the loop
+                logger.exception("Alert sweep failed")
         return result
 
     attach_measurement_loop(api, _background_tick)
@@ -1485,6 +1490,12 @@ def create_app(
         telemetry_store.record("digest_sent", metadata={"channel": "slack"})
         return {"pushed": True, "external_id": result.get("external_id"), "preview": digest_text}
 
+    @api.post("/alerts/run", dependencies=[Depends(require_role(Role.admin))])
+    def run_alerts_now() -> dict:
+        """Run the proactive alert sweep immediately (demo/testing; the
+        background loop runs the same sweep hourly)."""
+        return _run_alert_sweep()
+
     @api.get("/telemetry", dependencies=[Depends(require_role(Role.admin))])
     def get_telemetry(limit: int = 200) -> dict:
         """Product-metric events (admin): counts by type + recent events.
@@ -1689,6 +1700,30 @@ def create_app(
             "last_synced_at": last_synced_at,
             "signals": raw_signals[:10],
         }
+
+    def _run_alert_sweep() -> dict[str, int]:
+        """Hourly: Slack alerts for new action-grade emerging problems + the
+        weekly digest. No-op without an active Slack connector."""
+        from app.connectors import get_destination
+        from app.services.alerts import run_alert_sweep
+        from app.services.digest import build_digest
+
+        def push_slack(title: str, description: str, config: dict) -> None:
+            get_destination("slack").push({"title": title, "description": description}, config)
+
+        return run_alert_sweep(
+            emerging_report=build_emerging_problem_report(current_candidates()),
+            connector_config_store=connector_config_store,
+            telemetry=telemetry_store,
+            push_slack=push_slack,
+            build_digest_text=lambda: build_digest(
+                emerging=build_emerging_problem_report(current_candidates()),
+                outcome_board=build_outcome_board(
+                    active_problem_store.list_problems(), workflow_store
+                ),
+                measurement_plans=measurement_plan_store.list_plans(),
+            ),
+        )
 
     def _run_source_sync() -> dict[str, int]:
         """Background tick: pull every active SOURCE connector. Per-source errors
