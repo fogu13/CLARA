@@ -7,8 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Lightbulb, AlertCircle } from "lucide-react";
 import { getProblems } from "@/lib/client-api";
 import { AskClaraPanel } from "../../components/ask-clara-panel";
+import { useI18n } from "@/lib/i18n";
 
 export default function InsightsPage() {
+  const { t } = useI18n();
   const [problems, setProblems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,31 +30,31 @@ export default function InsightsPage() {
     load();
   }, []);
 
-  if (loading) return <div className="text-muted-foreground">Loading insights...</div>;
+  if (loading) return <div className="text-muted-foreground">{t.common.loading}</div>;
 
   if (error) {
     return (
       <Card>
         <CardContent className="text-center py-12">
           <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">Failed to load insights: {error}</p>
+          <p className="text-sm text-muted-foreground">{t.insights.loadFailed}: {error}</p>
         </CardContent>
       </Card>
     );
   }
 
   const columns = [
-    { key: "validation_required", label: "Validation", statuses: ["validation_required"] },
-    { key: "approval_needed", label: "Needs Approval", statuses: ["approval_needed"] },
-    { key: "in_progress", label: "In Progress", statuses: ["in_progress", "blocked_by_policy"] },
-    { key: "resolved", label: "Resolved", statuses: ["resolved"] },
+    { key: "validation_required", label: t.insights.validation, statuses: ["validation_required"] },
+    { key: "approval_needed", label: t.insights.needsApproval, statuses: ["approval_needed"] },
+    { key: "in_progress", label: t.insights.inProgress, statuses: ["in_progress", "blocked_by_policy"] },
+    { key: "resolved", label: t.insights.resolved, statuses: ["resolved"] },
   ];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Insights</h1>
-        <p className="text-sm text-muted-foreground mt-1">AI-synthesized problem insights from customer signals</p>
+        <h1 className="text-2xl font-bold">{t.insights.title}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t.insights.subtitle}</p>
       </div>
 
       <AskClaraPanel />
@@ -62,7 +64,7 @@ export default function InsightsPage() {
           <CardContent className="text-center py-12">
             <Lightbulb className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">
-              No insights yet. Run the triage pipeline on signals to generate insights.
+              {t.insights.empty}
             </p>
           </CardContent>
         </Card>
@@ -86,13 +88,13 @@ export default function InsightsPage() {
                           {p.status === "blocked_by_policy" && (
                             <Badge variant="destructive" className="text-xs">
                               <AlertCircle className="h-3 w-3 mr-1" />
-                              Blocked
+                              {t.insights.blocked}
                             </Badge>
                           )}
                         </div>
                         {p.impact_score !== undefined && (
                           <div className="mt-2 text-xs text-muted-foreground">
-                            Impact: {Math.round(p.impact_score * 100)}%
+                            {t.insights.impact}: {Math.round(p.impact_score * 100)}%
                           </div>
                         )}
                       </CardContent>

@@ -4,9 +4,11 @@ import { LogOut, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { authConfigured, signOut } from "@/lib/auth-client";
+import { LanguageToggle, useI18n } from "@/lib/i18n";
 
 export function AppHeader() {
   const router = useRouter();
+  const { t } = useI18n();
 
   function handleSignOut() {
     signOut();
@@ -15,13 +17,14 @@ export function AppHeader() {
 
   return (
     <header className="flex h-14 items-center justify-end gap-3 border-b bg-card px-6">
+      <LanguageToggle />
       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
         <User className="h-4 w-4 text-primary" />
       </div>
       {authConfigured && (
         <Button variant="ghost" size="sm" className="gap-2" onClick={handleSignOut}>
           <LogOut className="h-4 w-4" />
-          Sign out
+          {t.nav.signOut}
         </Button>
       )}
     </header>
