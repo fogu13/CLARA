@@ -27,6 +27,7 @@ import type {
   SignalValidationReport
 } from "../../lib/types";
 import { StateNotice } from "./state-notice";
+import { useI18n } from "@/lib/i18n";
 import { percent } from "@/lib/format";
 
 type IntakeState = {
@@ -50,12 +51,14 @@ type ValidationState = {
 };
 
 
-const candidateStatusLabels: Record<ProblemCandidate["review_status"], string> = {
-  pending: "Pending",
-  duplicate: "Duplicate",
-  accepted: "Accepted",
-  rejected: "Rejected"
-};
+function candidateStatusLabels(t: ReturnType<typeof useI18n>["t"]): Record<ProblemCandidate["review_status"], string> {
+  return {
+    pending: t.intake.statusPending,
+    duplicate: t.intake.statusDuplicate,
+    accepted: t.intake.statusAccepted,
+    rejected: t.intake.statusRejected
+  };
+}
 
 function CandidateIntelligence({ candidate }: { candidate: ProblemCandidate }) {
   const classifications = candidate.classifications ?? [];
@@ -129,6 +132,7 @@ async function loadIntakeState(): Promise<
 }
 
 export function SignalIntakePanel() {
+  const { t } = useI18n();
   const [csvText, setCsvText] = useState(
     "signal_id,customer_id,account_id,source,journey,journey_stage,campaign_exposure,product_events,feedback_text,language,timestamp\n"
   );
@@ -441,64 +445,64 @@ export function SignalIntakePanel() {
     <section className="signal-intake" aria-label="Signal intake">
       <div className="signal-intake-header">
         <div>
-          <p className="eyebrow">Signal Intake</p>
-          <h2>Import feedback and generate problem candidates</h2>
+          <p className="eyebrow">{t.intake.eyebrow}</p>
+          <h2>{t.intake.title}</h2>
         </div>
       </div>
 
       <div className="signal-intake-grid">
         <div>
-          <span className="stat-label">Persisted signals</span>
+          <span className="stat-label">{t.intake.persistedSignals}</span>
           <strong>{state.signals.length}</strong>
           <p>{state.message}</p>
         </div>
         <div>
-          <span className="stat-label">Problem candidates</span>
+          <span className="stat-label">{t.intake.problemCandidates}</span>
           <strong>{state.candidates.length}</strong>
           <p>
-            {pendingCandidates} pending review, {duplicateCandidates} duplicate matches.
+            {pendingCandidates} {t.intake.pendingReview} {duplicateCandidates} {t.intake.duplicateMatches}
           </p>
         </div>
         <div className="candidate-preview">
-          <span className="stat-label">Top candidate</span>
+          <span className="stat-label">{t.intake.topCandidate}</span>
           {topCandidate ? (
             <>
               <strong>{topCandidate.title}</strong>
               <p>
                 {topCandidate.signal_count} signals, {percent(topCandidate.confidence)} confidence,
-                {candidateStatusLabels[topCandidate.review_status].toLowerCase()}
+                {candidateStatusLabels(t)[topCandidate.review_status].toLowerCase()}
               </p>
             </>
           ) : (
             <>
-              <strong>No candidate yet</strong>
-              <p>Import signals while the API is running to generate candidates.</p>
+              <strong>{t.intake.noCandidate}</strong>
+              <p>{t.intake.noCandidateHint}</p>
             </>
           )}
         </div>
       </div>
 
       {state.status === "loading" ? (
-        <StateNotice tone="loading" title="Loading signal intake">
+        <StateNotice tone="loading" title={t.intake.loadingIntake}>
           Connecting to the API, demo datasets, imported signals and generated candidates.
         </StateNotice>
       ) : null}
 
       {state.status === "saving" ? (
-        <StateNotice tone="info" title="Signal intake action in progress">
+        <StateNotice tone="info" title={t.intake.actionInProgress}>
           {state.message}
         </StateNotice>
       ) : null}
 
       {state.status === "error" ? (
-        <StateNotice tone="error" title="Signal intake API unavailable">
+        <StateNotice tone="error" title={t.intake.apiUnavailable}>
           {state.message}
         </StateNotice>
       ) : null}
 
       <div className="demo-dataset-picker">
         <div>
-          <label htmlFor="demo-dataset">Demo dataset</label>
+          <label htmlFor="demo-dataset">{t.intake.demoDataset}</label>
           <p>
             Import packaged demo signals and customer context for a repeatable design-partner walkthrough.
           </p>
@@ -532,21 +536,21 @@ export function SignalIntakePanel() {
           disabled={state.status === "saving" || !selectedDemoDataset}
           onClick={importSelectedDemoDataset}
         >
-          Import demo dataset
+          {t.intake.importDemo}
         </button>
       </div>
 
       <div className="candidate-review">
         <div className="candidate-review-header">
           <div>
-            <h3>Candidate Review</h3>
-            <p>Accept new problems into the Action Queue or reject duplicates and weak candidates.</p>
+            <h3>{t.intake.candidateReview}</h3>
+            <p>{t.intake.candidateReviewHint}</p>
           </div>
-          <span>{pendingCandidates} pending</span>
+          <span>{pendingCandidates} {t.intake.pending}</span>
         </div>
 
         {state.status === "loading" ? (
-          <StateNotice tone="loading" title="Loading candidates">
+          <StateNotice tone="loading" title={t.intake.loadingCandidates}>
             Candidate groups will appear after the API returns imported signals.
           </StateNotice>
         ) : state.candidates.length > 0 ? (
@@ -556,7 +560,7 @@ export function SignalIntakePanel() {
                 <div className="candidate-list-header">
                   <div>
                     <span className={`candidate-status candidate-status-${candidate.review_status}`}>
-                      {candidateStatusLabels[candidate.review_status]}
+                      {candidateStatusLabels(t)[candidate.review_status]}
                     </span>
                     <strong>{candidate.title}</strong>
                     <small>
@@ -607,7 +611,7 @@ export function SignalIntakePanel() {
                     disabled={state.status === "saving" || candidate.review_status !== "pending"}
                     onClick={() => acceptCandidate(candidate)}
                   >
-                    Accept into queue
+                    {t.intake.acceptIntoQueue}
                   </button>
                   <button
                     type="button"
@@ -618,21 +622,21 @@ export function SignalIntakePanel() {
                     }
                     onClick={() => rejectCandidate(candidate)}
                   >
-                    Reject
+                    {t.common.reject}
                   </button>
                 </div>
               </li>
             ))}
           </ul>
         ) : (
-          <StateNotice tone="empty" title="No candidates yet">
+          <StateNotice tone="empty" title={t.intake.noCandidates}>
             Import a demo dataset, pasted CSV, or mapped CSV to generate review items.
           </StateNotice>
         )}
       </div>
 
       <div className="csv-import">
-        <label htmlFor="signal-csv">Paste CSV signals</label>
+        <label htmlFor="signal-csv">{t.intake.pasteCsv}</label>
         <textarea
           id="signal-csv"
           value={csvText}
@@ -640,18 +644,18 @@ export function SignalIntakePanel() {
           onChange={(event) => setCsvText(event.target.value)}
         />
         <button type="button" disabled={state.status === "saving"} onClick={importCsvText}>
-          Import pasted CSV
+          {t.intake.importPasted}
         </button>
         <button type="button" disabled={state.status === "saving"} onClick={validatePastedCsv}>
-          Validate pasted CSV
+          {t.intake.validatePasted}
         </button>
       </div>
 
       <div className="csv-file-import">
         <div className="csv-file-header">
           <div>
-            <label htmlFor="signal-csv-file">Upload CSV and map columns</label>
-            <p>Use this when source files have different column names than the canonical signal model.</p>
+            <label htmlFor="signal-csv-file">{t.intake.uploadCsv}</label>
+            <p>{t.intake.uploadHint}</p>
           </div>
           <input
             id="signal-csv-file"
@@ -689,10 +693,10 @@ export function SignalIntakePanel() {
             </div>
             <div className="mapping-actions">
               <button type="button" disabled={state.status === "saving"} onClick={validateMappedCsv}>
-                Validate mapped CSV
+                {t.intake.validateMapped}
               </button>
               <button type="button" disabled={state.status === "saving"} onClick={importMappedCsv}>
-                Import mapped CSV
+                {t.intake.importMapped}
               </button>
             </div>
           </div>
