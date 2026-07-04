@@ -20,7 +20,7 @@ export function AppHeader({ onMenuClick }: { onMenuClick?: () => void }) {
       <button
         type="button"
         className="md:hidden rounded-md p-2 text-muted-foreground hover:bg-accent"
-        aria-label="Open navigation"
+        aria-label={t.common.openNav}
         onClick={onMenuClick}
       >
         <Menu className="h-5 w-5" />

@@ -30,6 +30,7 @@ const en = {
   common: {
     unknown: "unknown",
     ready: "ready",
+    openNav: "Open navigation",
     error: "Couldn't load data. Retry or check the API.",
     loading: "Loading…",
     working: "Working…",
@@ -426,6 +427,7 @@ const de: Dict = {
   },
   common: {
     unknown: "unbekannt",
+    openNav: "Navigation öffnen",
     ready: "bereit",
     error: "Daten konnten nicht geladen werden. Erneut versuchen oder API prüfen.",
     loading: "Wird geladen…",
