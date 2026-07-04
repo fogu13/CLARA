@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useI18n } from "@/lib/i18n";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,7 @@ function summarize(rule: FeedbackRule): string {
 }
 
 export default function RulesPage() {
+  const { t } = useI18n();
   const [rules, setRules] = useState<FeedbackRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -97,8 +99,8 @@ export default function RulesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Rules</h1>
-          <p className="text-sm text-muted-foreground mt-1">Automation rules for triage and action routing</p>
+          <h1 className="text-2xl font-bold">{t.rulesPage.title}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t.rulesPage.subtitle}</p>
         </div>
         <Button size="sm" disabled={!!draft} onClick={() => setDraft(emptyDraft())}>
           <Plus className="h-4 w-4 mr-2" />
@@ -124,7 +126,7 @@ export default function RulesPage() {
           <CardContent className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
               <div>
-                <Label htmlFor="rule-name">Name</Label>
+                <Label htmlFor="rule-name">{t.rulesPage.name}</Label>
                 <Input
                   id="rule-name"
                   className="mt-1"
@@ -133,7 +135,7 @@ export default function RulesPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="rule-priority">Priority</Label>
+                <Label htmlFor="rule-priority">{t.rulesPage.priority}</Label>
                 <Input
                   id="rule-priority"
                   type="number"
@@ -287,9 +289,9 @@ export default function RulesPage() {
         <CardHeader><CardTitle className="text-base">Conflict Resolution</CardTitle></CardHeader>
         <CardContent>
           <div className="text-xs space-y-1 text-muted-foreground">
-            <p>1. <strong>Priority</strong> — higher priority rules win</p>
-            <p>2. <strong>Specificity</strong> — more conditions = more specific</p>
-            <p>3. <strong>Action-type dedupe</strong> — one action per type per insight</p>
+            <p>1. {t.rulesPage.ruleOrder1}</p>
+            <p>2. {t.rulesPage.ruleOrder2}</p>
+            <p>3. {t.rulesPage.ruleOrder3}</p>
           </div>
         </CardContent>
       </Card>

@@ -128,10 +128,10 @@ export default function CompliancePage() {
             <CardDescription>{t.compliance.residencySubtitle}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>Feedback, context and outcomes stay in the deployment&apos;s own database (local-first SQLite or your EU Postgres).</span></div>
-            <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>No external analytics vendor: product metrics are stored in the same database, nowhere else.</span></div>
-            <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>Inference endpoint is configurable per deployment — EU-hosted or on-premise; visible in the model card.</span></div>
-            <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>Outbound connectors (Jira/Slack/Zendesk) receive only the drafted action content a human approved.</span></div>
+            <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.residency1}</span></div>
+            <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.residency2}</span></div>
+            <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.residency3}</span></div>
+            <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.residency4}</span></div>
           </CardContent>
         </Card>
       </div>
@@ -143,16 +143,15 @@ export default function CompliancePage() {
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div className="rounded-md border p-3">
-            <p className="font-medium">Export (portability, Art. 20)</p>
+            <p className="font-medium">{t.complianceProse.exportTitle}</p>
             <code className="mt-1 block text-xs bg-muted rounded px-2 py-1">GET /customers/&#123;customer_id&#125;/data-export</code>
-            <p className="mt-1 text-xs text-muted-foreground">Returns every signal, journey event, context record and evidence appearance for one customer as JSON.</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t.complianceProse.exportDesc}</p>
           </div>
           <div className="rounded-md border p-3">
-            <p className="font-medium">Erasure (right to be forgotten, Art. 17)</p>
+            <p className="font-medium">{t.complianceProse.erasureTitle}</p>
             <code className="mt-1 block text-xs bg-muted rounded px-2 py-1">DELETE /customers/&#123;customer_id&#125;/data</code>
             <p className="mt-1 text-xs text-muted-foreground">
-              Deletes signals, journey events and context; scrubs evidence excerpts inside draft problems.
-              All-or-nothing: partial erasure is rejected. The erased identifier is not retained in telemetry.
+              {t.complianceProse.erasureDesc}
             </p>
           </div>
         </CardContent>
