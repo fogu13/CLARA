@@ -82,6 +82,16 @@ def default_db_path() -> Path:
     return Path(__file__).resolve().parents[1] / ".data" / "clara.db"
 
 
+def demo_seed_enabled() -> bool:
+    """CLARA_SEED_DEMO_DATA=0 starts pilots with an EMPTY workspace.
+
+    Default on: demos and tests rely on seed signals/problems/context. Pilots
+    must disable it — seed problems otherwise mark real candidates as
+    duplicates and seed signals mix into real-data triage.
+    """
+    return (os.getenv("CLARA_SEED_DEMO_DATA") or "1").strip().lower() not in {"0", "false", "no"}
+
+
 def default_workflow_store() -> SQLiteWorkflowStore:
     url = database_url()
     if url:
@@ -111,10 +121,11 @@ def default_journey_event_store() -> SQLiteJourneyEventStore:
 
 
 def default_problem_store() -> SQLiteProblemStore:
+    seeds = load_seed_problems() if demo_seed_enabled() else []
     url = database_url()
     if url:
-        return PostgresProblemStore(url, load_seed_problems())
-    return SQLiteProblemStore(default_db_path(), load_seed_problems())
+        return PostgresProblemStore(url, seeds)
+    return SQLiteProblemStore(default_db_path(), seeds)
 
 
 def default_policy_store() -> PolicyRuleStore:
@@ -352,10 +363,11 @@ def create_app(
             api_key=_ai_stored.config.get("api_key"),
             embed_model=_ai_stored.config.get("embed_model"),
         )
-    if not signal_store.list_signals():
-        signal_store.import_signals(load_seed_signals())
-    if not context_store.list_context():
-        context_store.import_context(load_seed_customer_context())
+    if demo_seed_enabled():
+        if not signal_store.list_signals():
+            signal_store.import_signals(load_seed_signals())
+        if not context_store.list_context():
+            context_store.import_context(load_seed_customer_context())
 
     def require_problem(problem_id: str) -> ProblemRecord:
         problem = active_problem_store.get_problem(problem_id)

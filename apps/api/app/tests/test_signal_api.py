@@ -451,3 +451,35 @@ def test_unique_candidate_can_be_accepted_into_action_queue() -> None:
     )
     assert accepted_candidate["review_status"] == "accepted"
     assert accepted_candidate["reviewer"] == "test_reviewer"
+
+
+def test_journeyless_signals_get_per_source_candidates() -> None:
+    """Connector/CSV data with no journey metadata must not collapse into one
+    "Unknown Stage" mega-candidate — it falls back to per-source grouping."""
+    from app.services.signals import build_candidates, signal_from_row
+
+    rows = [
+        {"feedback_text": f"Refund never arrived {i}", "source": "trustpilot", "timestamp": f"2026-01-0{i + 1}T00:00:00Z"}
+        for i in range(2)
+    ] + [
+        {"feedback_text": "App crashes on login", "source": "apple_app_store", "timestamp": "2026-01-05T00:00:00Z"}
+    ]
+    candidates = build_candidates([signal_from_row(r) for r in rows])
+
+    by_stage = {c.journey_stage: c for c in candidates}
+    assert "Trustpilot Feedback" in by_stage
+    assert "Apple App Store Feedback" in by_stage
+    assert by_stage["Trustpilot Feedback"].signal_count == 2
+    assert by_stage["Trustpilot Feedback"].title == "Repeated friction in Trustpilot Feedback"
+    assert "UNKNOWN-STAGE" not in " ".join(c.candidate_id for c in candidates)
+
+
+def test_seed_demo_data_flag_starts_empty(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("CLARA_SEED_DEMO_DATA", "0")
+    monkeypatch.setenv("CLARA_DB_PATH", str(tmp_path / "empty.db"))
+
+    client = TestClient(create_app())
+
+    assert client.get("/signals").json() == []
+    assert client.get("/problems").json() == []
+    assert client.get("/customer-context").json() == []
