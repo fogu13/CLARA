@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 import json
 import os
 import re
@@ -186,6 +188,36 @@ def _load_psycopg():
     return psycopg, dict_row, Jsonb
 
 
+# One pool per DATABASE_URL, shared across all stores in the process. The
+# previous connect-per-call pattern opened a fresh session-pooler connection
+# for EVERY store method; under burst load Supavisor queues new connects
+# indefinitely, which surfaced as multi-minute request hangs, and each stuck
+# request parked an "idle in transaction" session that ate another pooler
+# slot. A bounded pool with timeouts fails fast instead of hanging.
+_POOLS: dict[str, Any] = {}
+_POOLS_LOCK = threading.Lock()
+
+
+def _get_pool(url: str):
+    from psycopg_pool import ConnectionPool
+
+    _, dict_row, _ = _load_psycopg()
+    with _POOLS_LOCK:
+        pool = _POOLS.get(url)
+        if pool is None:
+            pool = ConnectionPool(
+                url,
+                kwargs={"row_factory": dict_row, "connect_timeout": 10},
+                min_size=0,
+                max_size=5,
+                timeout=15,  # bounded wait for a pooled connection, not forever
+                open=True,
+                name=f"clara-{len(_POOLS)}",
+            )
+            _POOLS[url] = pool
+    return pool
+
+
 def _payload(value: Any) -> dict[str, Any]:
     if isinstance(value, str):
         return json.loads(value)
@@ -205,8 +237,9 @@ class PostgresConnectionMixin:
         self._ensure_schema()
 
     def _connect(self):
-        psycopg, dict_row, _ = _load_psycopg()
-        return psycopg.connect(self.url, row_factory=dict_row)
+        # Context manager from the shared pool: `with self._connect() as conn`
+        # commits on clean exit, rolls back on error, returns the connection.
+        return _get_pool(self.url).connection()
 
     def _ensure_schema(self) -> None:
         # Once per process: create_app builds ~10 stores and each used to
