@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MessageSquare, Upload, Sparkles } from "lucide-react";
+import { MessageSquare, Upload, Sparkles, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { apiBaseUrl, apiHeaders, getSignals, importSignalCsv, validateSignalCsv } from "@/lib/client-api";
+import { apiBaseUrl, apiHeaders, deleteSignals, getSignals, importSignalCsv, validateSignalCsv } from "@/lib/client-api";
 import {
   essentialSignalCsvField,
   inferColumnMapping,
@@ -59,6 +59,28 @@ export default function SignalsPage() {
       setSignals(await getSignals());
     } catch {
       /* keep current list */
+    }
+  }
+
+  // CSV imports carry their batch in the signal id (csv-<batch>-<row>), so a
+  // mis-mapped import can be undone as a unit.
+  const importBatches = Object.entries(
+    signals.reduce<Record<string, string[]>>((acc, s) => {
+      const match = /^csv-([a-z0-9]+)-/.exec(s.signal_id ?? "");
+      if (match) (acc[match[1]] ??= []).push(s.signal_id);
+      return acc;
+    }, {})
+  ).map(([batch, ids]) => ({ batch, ids }));
+
+  async function removeBatch(batch: string, ids: string[]) {
+    if (!window.confirm(`Remove all ${ids.length} signal(s) from import batch ${batch}? This cannot be undone.`)) return;
+    setStatus({ tone: "busy", message: "Removing import batch..." });
+    try {
+      const result = await deleteSignals(ids);
+      await refresh();
+      setStatus({ tone: "ok", message: `Removed ${result.deleted} signal(s). Re-run triage to refresh insights.` });
+    } catch (error) {
+      setStatus({ tone: "error", message: error instanceof Error ? error.message : t.common.error });
     }
   }
 
@@ -243,6 +265,32 @@ export default function SignalsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {importBatches.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Import batches</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Each CSV import is one batch. Remove a batch to undo a mis-mapped import, then re-import and re-run triage.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {importBatches.map(({ batch, ids }) => (
+              <div key={batch} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                <span>
+                  <code className="rounded bg-muted px-1.5 py-0.5">{batch}</code>
+                  {" · "}
+                  {ids.length} signal(s)
+                </span>
+                <Button variant="ghost" size="sm" disabled={busy} onClick={() => removeBatch(batch, ids)}>
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader><CardTitle>Signal Feed</CardTitle></CardHeader>

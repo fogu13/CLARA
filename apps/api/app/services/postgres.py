@@ -454,6 +454,17 @@ class PostgresSignalStore(PostgresConnectionMixin):
             ).fetchall()
         return len(rows)
 
+    def delete_signals(self, signal_ids: list[str]) -> int:
+        """Bulk-remove signals by id — the undo for a mis-mapped import batch."""
+        if not signal_ids:
+            return 0
+        with self._connect() as conn:
+            rows = conn.execute(
+                "DELETE FROM clara_signals WHERE signal_id = ANY(%s) RETURNING signal_id",
+                (list(signal_ids),),
+            ).fetchall()
+        return len(rows)
+
 
 class PostgresJourneyEventStore(PostgresConnectionMixin):
     def list_events(self) -> list[JourneyEventRecord]:
