@@ -144,35 +144,56 @@ def build_router(
     def update_ai_settings(body: dict) -> dict:
         """Point CLARA at any OpenAI-compatible endpoint (cloud or local) at
         runtime. Empty api_key keeps the previously stored key; empty base_url/
-        model fall back to the server env. The key is stored like every other
-        connector secret and redacted on read."""
+        model/embed_model fall back to the server env. The key is stored like
+        every other connector secret and redacted on read."""
         from app.connectors.config_store import ConnectorConfig
 
         stored = connector_config_store.get_config("ai")
         base_url = str(body.get("base_url") or "").strip()
         model = str(body.get("model") or "").strip()
+        embed_model = str(body.get("embed_model") or "").strip()
         api_key = str(body.get("api_key") or "").strip()
         if base_url and not base_url.startswith(("http://", "https://")):
             raise HTTPException(status_code=422, detail="base_url must be http(s)")
+        # Edit forms may echo the masked value from the redacted read path back.
+        if api_key == "***redacted***":
+            api_key = ""
         if not api_key and stored:
             api_key = stored.config.get("api_key", "")
 
-        config = {"base_url": base_url, "model": model, "api_key": api_key}
+        config = {
+            "base_url": base_url,
+            "model": model,
+            "embed_model": embed_model,
+            "api_key": api_key,
+        }
         connector_config_store.upsert_config(
             ConnectorConfig(connector_type="ai", config=config, display_name="AI endpoint")
         )
-        ai.set_runtime_config(base_url=base_url, model=model, api_key=api_key)
+        ai.set_runtime_config(
+            base_url=base_url, model=model, api_key=api_key, embed_model=embed_model
+        )
         telemetry_store.record("ai_config_changed", metadata={"base_url": base_url or "env", "model": model or "env"})
-        return {
+        result = {
             "ai_base_url": ai.effective_base_url(),
             "ai_model": ai.effective_model(),
+            "ai_embed_model": ai.effective_embed_model(),
             "key_set": bool(ai.effective_api_key()),
         }
+        if base_url and not api_key and ai.effective_api_key():
+            # The env fallback key almost certainly belongs to a DIFFERENT
+            # provider than the freshly configured endpoint — a silent 401 trap.
+            result["warning"] = (
+                "No API key saved for this endpoint; the server's environment "
+                "key will be sent instead."
+            )
+        return result
 
     @router.post("/settings/ai/test", dependencies=[Depends(require_role(Role.admin))])
     def test_ai_settings() -> dict:
-        """One tiny completion against the EFFECTIVE endpoint - proves the
-        pasted config works before anyone trusts triage to it."""
+        """One tiny completion + one tiny embedding against the EFFECTIVE
+        endpoint - proves the pasted config works before anyone trusts triage
+        to it. Ask/taxonomy need embeddings, so a chat-only green would lie."""
         try:
             result = ai.call_tool(
                 system="Reply by calling the tool.",
@@ -192,9 +213,18 @@ def build_router(
                 },
                 timeout=30.0,
             )
-            return {"ok": True, "model": ai.effective_model(), "echo": result}
         except ai.AIProviderError as exc:
             return {"ok": False, "model": ai.effective_model(), "error": str(exc)[:300]}
+
+        response = {"ok": True, "model": ai.effective_model(), "echo": result}
+        try:
+            ai.embed("ping", timeout=30.0)
+            response["embed_ok"] = True
+        except ai.AIProviderError as exc:
+            response["embed_ok"] = False
+            response["embed_model"] = ai.effective_embed_model()
+            response["embed_error"] = str(exc)[:300]
+        return response
 
     @router.get("/system-config", response_model=SystemConfig, dependencies=[read_dep])
     def get_system_config() -> SystemConfig:
@@ -203,6 +233,7 @@ def build_router(
         return SystemConfig(
             ai_base_url=ai.effective_base_url(),
             ai_model=ai.effective_model(),
+            ai_embed_model=ai.effective_embed_model(),
             auth_enabled=AUTH_ENABLED,
         )
 

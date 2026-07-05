@@ -54,9 +54,18 @@ _RUNTIME_OVERRIDE: dict[str, str] = {}
 
 
 def set_runtime_config(
-    *, base_url: str | None = None, model: str | None = None, api_key: str | None = None
+    *,
+    base_url: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+    embed_model: str | None = None,
 ) -> None:
-    for key, value in (("base_url", base_url), ("model", model), ("api_key", api_key)):
+    for key, value in (
+        ("base_url", base_url),
+        ("model", model),
+        ("api_key", api_key),
+        ("embed_model", embed_model),
+    ):
         if value:
             _RUNTIME_OVERRIDE[key] = value.rstrip("/") if key == "base_url" else value
         else:
@@ -75,6 +84,10 @@ def effective_model() -> str:
 
 def effective_api_key() -> str:
     return _RUNTIME_OVERRIDE.get("api_key") or os.getenv("AI_API_KEY") or AI_API_KEY
+
+
+def effective_embed_model() -> str:
+    return _RUNTIME_OVERRIDE.get("embed_model") or os.getenv("AI_EMBED_MODEL") or AI_EMBED_MODEL
 
 # --- Langfuse (optional tracing + evals) ---
 _LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY") or ""
@@ -295,9 +308,11 @@ def embed(
     else:
         input_list = list(input)
 
-    body: dict[str, Any] = {"model": AI_EMBED_MODEL, "input": input_list}
-    # Some providers don't support the `dimensions` param; send it when configured.
-    if AI_EMBED_DIM:
+    body: dict[str, Any] = {"model": effective_embed_model(), "input": input_list}
+    # Some providers don't support the `dimensions` param (Mistral 422s on it);
+    # send it only for the env-configured model, where the operator controls
+    # both knobs. A GUI-selected embed model gets the provider's default dims.
+    if AI_EMBED_DIM and "embed_model" not in _RUNTIME_OVERRIDE:
         body["dimensions"] = AI_EMBED_DIM
 
     lf = _get_langfuse()

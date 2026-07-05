@@ -577,6 +577,7 @@ export type WorkspaceSettings = {
 export type SystemConfig = {
   ai_base_url: string;
   ai_model: string;
+  ai_embed_model?: string;
   auth_enabled: boolean;
 };
 

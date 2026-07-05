@@ -63,7 +63,10 @@ def test_ai_settings_runtime_override_and_redaction(monkeypatch, tmp_path) -> No
         "/settings/ai",
         json={"base_url": "http://localhost:11434/v1", "model": "qwen3:32b", "api_key": "sk-local"},
     ).json()
-    assert saved == {"ai_base_url": "http://localhost:11434/v1", "ai_model": "qwen3:32b", "key_set": True}
+    assert saved["ai_base_url"] == "http://localhost:11434/v1"
+    assert saved["ai_model"] == "qwen3:32b"
+    assert saved["key_set"] is True
+    assert "warning" not in saved
 
     config = client.get("/system-config").json()
     assert config["ai_model"] == "qwen3:32b"
@@ -80,4 +83,53 @@ def test_ai_settings_runtime_override_and_redaction(monkeypatch, tmp_path) -> No
 
     # rejected: non-http url
     assert client.put("/settings/ai", json={"base_url": "ftp://x"}).status_code == 422
+    ai.set_runtime_config()  # reset for other tests
+
+
+def test_ai_settings_embed_model_and_key_guards(monkeypatch, tmp_path) -> None:
+    import app.services.ai as ai
+
+    monkeypatch.setenv("AI_API_KEY", "sk-env-other-provider")
+    monkeypatch.setenv("AI_EMBED_MODEL", "env-embed")
+    client = make_client(tmp_path)
+
+    # embed_model is runtime-swappable alongside base_url/model.
+    saved = client.put(
+        "/settings/ai",
+        json={
+            "base_url": "https://api.mistral.ai/v1",
+            "model": "mistral-small-latest",
+            "embed_model": "mistral-embed",
+            "api_key": "sk-mistral",
+        },
+    ).json()
+    assert saved["ai_embed_model"] == "mistral-embed"
+    assert ai.effective_embed_model() == "mistral-embed"
+    assert client.get("/system-config").json()["ai_embed_model"] == "mistral-embed"
+
+    # The masked placeholder echoed back from the redacted read keeps the stored key.
+    client.put(
+        "/settings/ai",
+        json={
+            "base_url": "https://api.mistral.ai/v1",
+            "model": "mistral-small-latest",
+            "api_key": "***redacted***",
+        },
+    )
+    assert ai.effective_api_key() == "sk-mistral"
+
+    ai.set_runtime_config()  # reset
+
+    # Custom endpoint with NO key anywhere -> the env key would be sent
+    # cross-provider; the save must say so instead of silently 401-ing later.
+    # (The connector store is shared across the run via CLARA_DB_PATH, so
+    # drop the stored ai config first.)
+    client.delete("/connectors/ai")
+    saved = client.put(
+        "/settings/ai",
+        json={"base_url": "https://api.mistral.ai/v1", "model": "m", "api_key": ""},
+    ).json()
+    assert "environment" in saved.get("warning", "")
+
+    client.delete("/connectors/ai")  # leave no cross-test state behind
     ai.set_runtime_config()  # reset for other tests

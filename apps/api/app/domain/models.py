@@ -156,6 +156,7 @@ class WorkspaceSettings(BaseModel):
 class SystemConfig(BaseModel):
     ai_base_url: str
     ai_model: str
+    ai_embed_model: str = ""
     auth_enabled: bool
 
 
