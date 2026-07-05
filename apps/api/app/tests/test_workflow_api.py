@@ -14,7 +14,9 @@ client = TestClient(
     )
 )
 
-TRUSTED_HEADERS = {"x-tenant-id": "test_tenant", "x-actor-id": "test_product_owner"}
+# Tenant/actor identity is JWT-bound (auth-disabled tests resolve to the dev
+# context: tenant "1", actor "dev-user"). Spoofed-header regression tests live
+# in test_tenant_identity.py.
 
 
 def test_action_dependency_must_be_approved_first() -> None:
@@ -154,7 +156,6 @@ def test_closure_record_separates_operational_and_customer_closure() -> None:
     )
     response = client.post(
         "/problems/PRB-108/closure",
-        headers=TRUSTED_HEADERS,
         json={
             "operational_status": "released",
             "customer_status": "draft_ready",
@@ -171,7 +172,7 @@ def test_closure_record_separates_operational_and_customer_closure() -> None:
     assert closure["customer_closure_eligible"] is True
     assert "Draft for human review only" in closure["response_draft"]
 
-    workflow = client.get("/problems/PRB-108/workflow", headers=TRUSTED_HEADERS).json()
+    workflow = client.get("/problems/PRB-108/workflow").json()
     assert workflow["closure_records"][-1]["operational_status"] == "released"
     assert "closure_recorded" in {event["event_type"] for event in workflow["timeline"]}
 
@@ -185,7 +186,6 @@ def test_closure_redacts_common_pii() -> None:
     )
     response = client.post(
         "/problems/PRB-108/closure",
-        headers=TRUSTED_HEADERS,
         json={
             "operational_status": "released",
             "customer_status": "draft_ready",
@@ -202,41 +202,35 @@ def test_closure_redacts_common_pii() -> None:
     assert closure["owner"] == "[EMAIL REDACTED]"
     assert "[ID REDACTED]" in closure["verified_resolution_facts"][0]
     assert "[PHONE REDACTED]" in closure["verified_resolution_facts"][0]
-    assert closure["tenant_id"] == "test_tenant"
-    assert closure["actor"] == "test_product_owner"
+    assert closure["tenant_id"] == "1"
+    assert closure["actor"] == "dev-user"
 
 
 def test_closure_records_are_tenant_filtered_in_workflow_state() -> None:
-    client = TestClient(
-        create_app(
-            problem_store=ProblemStore(load_seed_problems()),
-            workflows=WorkflowStore(),
-        )
-    )
-    client.post(
-        "/problems/PRB-108/closure",
-        headers=TRUSTED_HEADERS,
-        json={
-            "operational_status": "released",
-            "customer_status": "draft_ready",
-            "owner": "cx_operations",
-            "verified_resolution_facts": ["Resolution released."],
-            "unresolved_customers": 1,
-            "follow_up_channel": "zendesk",
-            "limitations": [],
-        },
-    )
+    # Store-level contract: the tenant filter hides other tenants' closures.
+    # (API-level isolation with real JWTs is covered in test_tenant_identity.py.)
+    from app.domain.models import ClosureRecordRequest
 
-    same_tenant = client.get("/problems/PRB-108/workflow", headers=TRUSTED_HEADERS).json()
-    other_tenant = client.get(
-        "/problems/PRB-108/workflow",
-        headers={"x-tenant-id": "other_tenant", "x-actor-id": "test_product_owner"},
-    ).json()
+    problem = load_seed_problems()[0]
+    store = WorkflowStore()
+    closure = ClosureRecordRequest(
+        operational_status="released",
+        customer_status="draft_ready",
+        owner="cx_operations",
+        verified_resolution_facts=["Resolution released."],
+        unresolved_customers=1,
+        follow_up_channel="zendesk",
+        limitations=[],
+    )
+    store.record_closure(problem=problem, closure=closure, tenant_id="1", actor="dev-user")
 
-    assert len(same_tenant["closure_records"]) == 1
-    assert other_tenant["closure_records"] == []
-    assert "closure_recorded" in {event["event_type"] for event in same_tenant["timeline"]}
-    assert "closure_recorded" not in {event["event_type"] for event in other_tenant["timeline"]}
+    own = store.state_for_problem(problem, tenant_id="1")
+    other = store.state_for_problem(problem, tenant_id="2")
+
+    assert len(own.closure_records) == 1
+    assert other.closure_records == []
+    assert "closure_recorded" in {event.event_type for event in own.timeline}
+    assert "closure_recorded" not in {event.event_type for event in other.timeline}
 
 
 def test_closure_unresolved_customers_cannot_exceed_affected_cohort() -> None:
@@ -248,7 +242,6 @@ def test_closure_unresolved_customers_cannot_exceed_affected_cohort() -> None:
     )
     response = client.post(
         "/problems/PRB-108/closure",
-        headers=TRUSTED_HEADERS,
         json={
             "operational_status": "released",
             "customer_status": "draft_ready",
@@ -293,7 +286,6 @@ def test_learning_conclusion_requires_measured_outcome() -> None:
 
     response = client.post(
         "/problems/PRB-108/learning-conclusions",
-        headers=TRUSTED_HEADERS,
         json={
             "learning_status": "inconclusive",
             "summary": "No readout yet.",
@@ -323,7 +315,6 @@ def test_learning_conclusion_records_review_and_redacts_common_pii() -> None:
 
     response = client.post(
         "/problems/PRB-108/learning-conclusions",
-        headers=TRUSTED_HEADERS,
         json={
             "learning_status": "worked",
             "summary": "Worked for jane@example.com from 192.168.1.1.",
@@ -335,22 +326,21 @@ def test_learning_conclusion_records_review_and_redacts_common_pii() -> None:
     assert response.status_code == 200
     conclusion = response.json()
     assert conclusion["learning_status"] == "worked"
-    assert conclusion["tenant_id"] == "test_tenant"
-    assert conclusion["reviewer"] == "test_product_owner"
+    assert conclusion["tenant_id"] == "1"
+    assert conclusion["reviewer"] == "dev-user"
     assert conclusion["retention_expires_at"] is not None
     assert conclusion["summary"] == "Worked for [EMAIL REDACTED] from [IP REDACTED]."
     assert "[PHONE REDACTED]" in conclusion["limitations"]
     assert "[ID REDACTED]" in conclusion["limitations"]
 
-    workflow = client.get(
-        "/problems/PRB-108/workflow",
-        headers={"x-tenant-id": "test_tenant"},
-    ).json()
+    workflow = client.get("/problems/PRB-108/workflow").json()
     assert workflow["learning_conclusions"][-1]["conclusion_id"] == conclusion["conclusion_id"]
     assert "learning_reviewed" in {event["event_type"] for event in workflow["timeline"]}
 
 
-def test_learning_conclusion_requires_trusted_headers() -> None:
+def test_learning_conclusion_uses_verified_identity_without_headers() -> None:
+    """Identity is server-derived: no headers required (auth-disabled -> dev
+    context), and the recorded tenant/reviewer are the verified principal's."""
     client = TestClient(
         create_app(
             problem_store=ProblemStore(load_seed_problems()),
@@ -376,34 +366,6 @@ def test_learning_conclusion_requires_trusted_headers() -> None:
         },
     )
 
-    assert response.status_code == 401
-
-
-def test_learning_actor_rejects_personal_data() -> None:
-    client = TestClient(
-        create_app(
-            problem_store=ProblemStore(load_seed_problems()),
-            workflows=WorkflowStore(),
-        )
-    )
-    client.post(
-        "/problems/PRB-108/outcomes",
-        json={
-            "problem_id": "PRB-108",
-            "metric": "verification_completion_7d",
-            "observed_value": 0.72,
-            "measured_at": "2026-07-20T12:00:00Z",
-        },
-    )
-
-    response = client.post(
-        "/problems/PRB-108/learning-conclusions",
-        headers={"x-tenant-id": "test_tenant", "x-actor-id": "owner@example.com"},
-        json={
-            "learning_status": "worked",
-            "summary": "Worked.",
-            "limitations": "None noted.",
-        },
-    )
-
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert response.json()["tenant_id"] == "1"
+    assert response.json()["reviewer"] == "dev-user"

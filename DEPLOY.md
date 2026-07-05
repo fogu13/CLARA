@@ -44,6 +44,17 @@ git push -u origin main
    - `apps/api/migrations/003_pgvector_taxonomy.sql`
    - `apps/api/migrations/005_outcome_events_learnings.sql`
    - `apps/api/migrations/006_clara_workspace_id_default.sql`
+   - `apps/api/migrations/007_rls_backfill_all_public.sql`
+   - `apps/api/migrations/008_ops_stores.sql`
+   - `apps/api/migrations/009_rls_gaps.sql`
+   - `apps/api/migrations/010_api_keys.sql`
+   - `apps/api/migrations/011_tenant_rls_enforcement.sql` — ⚠️ **deploy the matching API
+     code first** (it sets the RLS GUCs per connection); applying 011 under an older API
+     fail-closes every read. Afterwards verify with
+     `DATABASE_URL=... python scripts/pg_parity_smoke.py` and check the SQL-editor output
+     for pg_cron WARNINGs. Ad-hoc SQL-editor DML now needs
+     `SELECT set_config('app.tenant_id','1',false), set_config('app.workspace_id','1',false);`
+     first (RLS is FORCEd for the owner role too).
    _(For the existing **CLARA** project these are already applied via MCP — listed here for
    reproducibility.)_
 

@@ -6,10 +6,12 @@ import threading
 import json
 import os
 import re
+from contextlib import contextmanager
 from itertools import count
 from typing import Any
 from uuid import uuid4
 
+from app.auth import current_tenant
 from app.domain.models import (
     ApprovalRecord,
     CandidateDecisionRecord,
@@ -96,7 +98,10 @@ CREATE TABLE IF NOT EXISTS clara_workflow_records (
     retention_expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (record_type, record_id)
+    -- tenant-first PK: record ids (DEC-0001, ...) are minted per tenant view,
+    -- so uniqueness must be per tenant or tenant 2's first ids would collide
+    -- with tenant 1's rows (invisible under RLS -> 42501 on upsert).
+    PRIMARY KEY (tenant_id, record_type, record_id)
 );
 
 CREATE INDEX IF NOT EXISTS clara_workflow_problem_idx
@@ -122,9 +127,12 @@ CREATE TABLE IF NOT EXISTS clara_workspace_settings (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- workspace_id defaults read the session GUC set by _connect(), so inserts
+-- inherit the active tenant without any store naming the column (falls back
+-- to the default workspace for GUC-less sessions, e.g. SQL-editor DML).
 CREATE TABLE IF NOT EXISTS clara_telemetry (
     id BIGSERIAL PRIMARY KEY,
-    workspace_id BIGINT NOT NULL DEFAULT 1,
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
     event_type TEXT NOT NULL,
     entity_id TEXT,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -133,7 +141,7 @@ CREATE TABLE IF NOT EXISTS clara_telemetry (
 
 CREATE TABLE IF NOT EXISTS clara_measurement_plans (
     id BIGSERIAL PRIMARY KEY,
-    workspace_id BIGINT NOT NULL DEFAULT 1,
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
     problem_id TEXT NOT NULL,
     execution_id TEXT NOT NULL,
     executed_at TEXT NOT NULL,
@@ -146,7 +154,7 @@ CREATE TABLE IF NOT EXISTS clara_measurement_plans (
 
 CREATE TABLE IF NOT EXISTS clara_connector_configs (
     connector_type TEXT PRIMARY KEY,
-    workspace_id BIGINT NOT NULL DEFAULT 1,
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -154,7 +162,7 @@ CREATE TABLE IF NOT EXISTS clara_connector_configs (
 
 CREATE TABLE IF NOT EXISTS clara_api_keys (
     id BIGSERIAL PRIMARY KEY,
-    workspace_id BIGINT NOT NULL DEFAULT 1,
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
     name TEXT NOT NULL,
     role TEXT NOT NULL,
     key_hash TEXT NOT NULL UNIQUE,
@@ -246,10 +254,23 @@ class PostgresConnectionMixin:
         self.url = normalize_database_url(url)
         self._ensure_schema()
 
+    @contextmanager
     def _connect(self):
         # Context manager from the shared pool: `with self._connect() as conn`
         # commits on clean exit, rolls back on error, returns the connection.
-        return _get_pool(self.url).connection()
+        # Every checkout pins the transaction to the active tenant (auth.py
+        # ContextVar): the FORCEd RLS policies key on these two GUCs, so this
+        # single choke point is what tenant-scopes every store. set_config with
+        # is_local=true is transaction-scoped — it dies at the checkout's
+        # commit/rollback and can never leak across pooled connection reuses.
+        with _get_pool(self.url).connection() as conn:
+            tenant = current_tenant()
+            conn.execute(
+                "SELECT set_config('app.tenant_id', %s, true),"
+                " set_config('app.workspace_id', %s, true)",
+                (tenant, tenant),
+            )
+            yield conn
 
     def _ensure_schema(self) -> None:
         # Once per process: create_app builds ~10 stores and each used to
@@ -290,6 +311,47 @@ class PostgresConnectionMixin:
                     ON clara_workflow_records (tenant_id, problem_id, record_type)
                     """
                 )
+                # Self-heal the tenant-first PK on DBs that predate migration 011.
+                # _save_workflow_record's ON CONFLICT names this arbiter, so the
+                # swap must happen at boot, before the first write. ~10 rows live;
+                # the ACCESS EXCLUSIVE lock is momentary.
+                cursor.execute(
+                    """
+                    DO $$
+                    DECLARE
+                        pk_cols text;
+                    BEGIN
+                        SELECT string_agg(a.attname, ',' ORDER BY k.ord) INTO pk_cols
+                        FROM pg_constraint c
+                        JOIN unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord) ON true
+                        JOIN pg_attribute a
+                          ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+                        WHERE c.conrelid = 'clara_workflow_records'::regclass
+                          AND c.contype = 'p';
+                        IF pk_cols IS DISTINCT FROM 'tenant_id,record_type,record_id' THEN
+                            ALTER TABLE clara_workflow_records
+                                DROP CONSTRAINT clara_workflow_records_pkey;
+                            ALTER TABLE clara_workflow_records
+                                ADD PRIMARY KEY (tenant_id, record_type, record_id);
+                        END IF;
+                    END $$
+                    """
+                )
+                # Same self-heal for the GUC-based workspace defaults on the ops
+                # tables this DDL owns (SCHEMA_SQL creates them correctly on
+                # fresh DBs; older DBs carry a literal DEFAULT 1).
+                for ops_table in (
+                    "clara_telemetry",
+                    "clara_measurement_plans",
+                    "clara_connector_configs",
+                    "clara_api_keys",
+                ):
+                    cursor.execute(
+                        f"""
+                        ALTER TABLE {ops_table} ALTER COLUMN workspace_id SET DEFAULT
+                        COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint
+                        """
+                    )
                 # api-keys RLS is applied here (not only migration 010) so a boot
                 # against a DB that predates the migration self-heals the policy -
                 # the 007-era lesson: never leave a clara_ table without RLS.
@@ -305,6 +367,13 @@ class PostgresConnectionMixin:
                     """
                 )
                 cursor.execute("ALTER TABLE clara_workflow_records ENABLE ROW LEVEL SECURITY")
+                # FORCE = the policies bind the table owner too (the app connects
+                # as `postgres`). Without it every policy here is decorative —
+                # the core of review finding #25. Migration 011 forces the other
+                # clara_ tables; these two are self-healed because this DDL owns
+                # their policies.
+                cursor.execute("ALTER TABLE clara_api_keys FORCE ROW LEVEL SECURITY")
+                cursor.execute("ALTER TABLE clara_workflow_records FORCE ROW LEVEL SECURITY")
                 cursor.execute(
                     """
                     DROP POLICY IF EXISTS clara_workflow_records_tenant_isolation
@@ -731,9 +800,13 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         record_id: str,
         problem_id: str,
         record: Any,
-        tenant_id: str = "legacy",
+        tenant_id: str | None = None,
         retention_expires_at: str | None = None,
     ) -> None:
+        # Default to the request's tenant (auth ContextVar) so every record type
+        # — transitions, approvals, outcomes, executions, drafts — satisfies the
+        # FORCEd RLS WITH CHECK; the old 'legacy' default would be rejected.
+        tenant_id = tenant_id or current_tenant()
         with self._connect() as conn:
             conn.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
             conn.execute(
@@ -747,9 +820,8 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
                     retention_expires_at
                 )
                 VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (record_type, record_id) DO UPDATE
+                ON CONFLICT (tenant_id, record_type, record_id) DO UPDATE
                 SET problem_id = excluded.problem_id,
-                    tenant_id = excluded.tenant_id,
                     payload = excluded.payload,
                     retention_expires_at = excluded.retention_expires_at,
                     updated_at = now()
@@ -822,7 +894,6 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
     def record_learning_conclusion(self, *args: Any, **kwargs: Any):
         self._load_records()
         conclusion = WorkflowStore.record_learning_conclusion(self, *args, **kwargs)
-        # ponytail: workflow_records has no tenant_id yet; future RLS milestone adds DB tenant boundaries.
         self._save_workflow_record(
             "learning_conclusion",
             conclusion.conclusion_id,
@@ -1026,14 +1097,17 @@ class PostgresTelemetryStore(PostgresConnectionMixin):
         *,
         entity_id: str | None = None,
         metadata: dict[str, Any] | None = None,
-        workspace_id: int = 1,
     ) -> None:
         try:
             with self._connect() as conn:
+                # workspace_id intentionally not in the column list: the GUC-based
+                # DEFAULT stamps the active tenant, and an explicit value from a
+                # different tenant would fail the FORCEd WITH CHECK (silently,
+                # thanks to the swallow below).
                 conn.execute(
-                    "INSERT INTO clara_telemetry (workspace_id, event_type, entity_id, metadata)"
-                    " VALUES (%s, %s, %s, %s)",
-                    (workspace_id, event_type, entity_id, self._jsonb(metadata or {})),
+                    "INSERT INTO clara_telemetry (event_type, entity_id, metadata)"
+                    " VALUES (%s, %s, %s)",
+                    (event_type, entity_id, self._jsonb(metadata or {})),
                 )
         except Exception:  # ponytail: swallow — metrics never break the product
             pass
@@ -1144,6 +1218,25 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
                 "UPDATE clara_measurement_plans SET status = %s, note = %s WHERE id = %s",
                 (status, note, plan_id),
             )
+
+    def run_due(self, now: str | None = None) -> dict[str, int]:
+        """Process due checkpoints via the DB-side function (migration 011).
+
+        clara_run_due_measurements is the single Postgres implementation of the
+        measurement tick — pg_cron runs it on schedule, and the in-process loop
+        + manual endpoint call it here (FOR UPDATE SKIP LOCKED inside makes
+        concurrent callers skip in-flight plans, so nothing double-fires).
+        Scoped to the caller's workspace; raises UndefinedFunction on databases
+        that predate migration 011 (main.py falls back to the Python path).
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT public.clara_run_due_measurements("
+                "%s::int, COALESCE(%s::timestamptz, now())) AS result",
+                (int(current_tenant()), now),
+            ).fetchone()
+        result = row["result"]
+        return result if isinstance(result, dict) else json.loads(result)
 
 
 class PostgresConnectorConfigStore(PostgresConnectionMixin):

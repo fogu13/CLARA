@@ -303,6 +303,24 @@ def create_app(
     )
 
     def _run_due_measurements(now: str | None = None) -> dict[str, int]:
+        # On Postgres the DB-side function (migration 011) is the single tick
+        # implementation — pg_cron fires it on schedule, and this path lets the
+        # in-process loop + manual endpoint share it (FOR UPDATE SKIP LOCKED
+        # inside makes concurrent callers skip in-flight plans: no double-fire
+        # between Render, local dev, and cron on the shared database).
+        if _pg_url and hasattr(measurement_plan_store, "run_due"):
+            try:
+                return measurement_plan_store.run_due(now)
+            except Exception as exc:
+                from psycopg import errors as psycopg_errors
+
+                if not isinstance(exc, psycopg_errors.UndefinedFunction):
+                    raise
+                # Database predates migration 011 — Python path still works.
+                logger.warning(
+                    "clara_run_due_measurements missing (run migration 011); "
+                    "falling back to the in-process measurement pass"
+                )
         return run_due_measurements(
             plan_store=measurement_plan_store,
             problem_lookup=active_problem_store.get_problem,

@@ -51,7 +51,6 @@ class SQLiteTelemetryStore:
         *,
         entity_id: str | None = None,
         metadata: dict[str, Any] | None = None,
-        workspace_id: int = 1,
     ) -> None:
         """Append one event. Never raises — telemetry must not break a request."""
         try:
@@ -60,7 +59,7 @@ class SQLiteTelemetryStore:
                 " (workspace_id, event_type, entity_id, metadata, created_at)"
                 " VALUES (?, ?, ?, ?, ?)",
                 (
-                    workspace_id,
+                    1,  # SQLite is the single-workspace local path
                     event_type,
                     entity_id,
                     json.dumps(metadata or {}),
