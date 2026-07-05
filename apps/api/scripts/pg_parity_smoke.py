@@ -24,7 +24,9 @@ from app.domain.models import SignalRecord  # noqa: E402
 from app.services.postgres import (  # noqa: E402
     PostgresConnectorConfigStore,
     PostgresCustomerContextStore,
+    PostgresJourneyEventStore,
     PostgresMeasurementPlanStore,
+    PostgresProblemStore,
     PostgresSignalStore,
     PostgresTelemetryStore,
     PostgresWorkflowStore,
@@ -142,13 +144,71 @@ def main() -> None:
         len(reloaded) == 1 and reloaded[0].status == "completed" and reloaded[0].external_ref == "SMOKE-77",
     )
 
+    # --- #18: problem-store contract parity (insert-only upsert + seed guard) ---
+    from app.domain.models import ApprovalDecision, JourneyEventRecord, ProblemUpdateRequest
+    from app.services.seed import load_seed_problems
+
+    problems_store = PostgresProblemStore(URL, [])
+    smoke_problem = load_seed_problems()[0].model_copy(
+        update={"problem_id": "SMOKE-PRB-18", "title": "smoke original"}
+    )
+    problems_store.upsert_problem(smoke_problem)
+    returned = problems_store.upsert_problem(
+        smoke_problem.model_copy(update={"title": "OVERWRITTEN"})
+    )
+    stored_title = problems_store.get_problem("SMOKE-PRB-18").title
+    check("problem upsert is insert-only", returned.title == "smoke original" and stored_title == "smoke original")
+    updated = problems_store.update_problem("SMOKE-PRB-18", ProblemUpdateRequest(title="edited"))
+    check("problem update works on non-seed", updated is not None and updated.title == "edited")
+    seeded_store = PostgresProblemStore(URL, [smoke_problem])
+    check(
+        "seed problems are read-only",
+        seeded_store.update_problem("SMOKE-PRB-18", ProblemUpdateRequest(title="nope")) is None
+        and seeded_store.transition_problem_status("SMOKE-PRB-18", smoke_problem.status) is None,
+    )
+
+    # --- #23: cross-instance workflow freshness (local dev + Render share one DB) ---
+    wf_reader = PostgresWorkflowStore(URL)  # constructed BEFORE the write
+    wf_writer = PostgresWorkflowStore(URL)
+    before = {a.decision_id for a in wf_reader.list_approvals()}
+    wf_writer.record_approval(
+        problem=smoke_problem,
+        decision=ApprovalDecision(
+            action_id=smoke_problem.action_proposals[0].action_id,
+            decision="rejected",  # rejection skips governance gating + mints no execution
+            reviewer="smoke",
+        ),
+    )
+    after = {a.decision_id for a in wf_reader.list_approvals()}
+    check("workflow reads are cross-instance fresh", len(after - before) == 1)
+
+    # --- #29/#34: in-batch duplicate counting ---
+    dup = SignalRecord(
+        signal_id="SMOKE-DUP-1", customer_id="SMOKE-CUST-9", account_id="SMOKE-ACC",
+        source="smoke", journey="smoke", journey_stage="smoke",
+        campaign_exposure=[], product_events=[],
+        feedback_text="dupe batch", language="en", timestamp="2026-07-04T10:00:00Z",
+    )
+    result = signals.import_signals([dup, dup])
+    check("in-batch signal dupes counted as skipped", result.imported == 1 and result.skipped_duplicates == 1)
+    events_store = PostgresJourneyEventStore(URL)
+    evt = JourneyEventRecord(
+        event_id="SMOKE-EVT-1", customer_id="SMOKE-CUST-9", account_id="SMOKE-ACC",
+        journey="smoke", journey_stage="smoke", event_name="smoke", timestamp="2026-07-04T10:00:00Z",
+    )
+    eresult = events_store.import_events([evt, evt])
+    check("in-batch event dupes counted as skipped", eresult.imported == 1 and eresult.skipped_duplicates == 1)
+
     # --- cleanup ---
     with telemetry._connect() as conn:
         conn.execute("DELETE FROM clara_telemetry WHERE event_type = 'SMOKE_event'")
         conn.execute("DELETE FROM clara_measurement_plans WHERE problem_id = 'SMOKE-PRB'")
         conn.execute(
-            "DELETE FROM clara_workflow_records WHERE record_id LIKE 'SMOKE-%' OR problem_id = 'SMOKE-PRB'"
+            "DELETE FROM clara_workflow_records WHERE record_id LIKE 'SMOKE-%' OR problem_id LIKE 'SMOKE-%'"
         )
+        conn.execute("DELETE FROM clara_problems WHERE problem_id LIKE 'SMOKE-%'")
+        conn.execute("DELETE FROM clara_signals WHERE signal_id LIKE 'SMOKE-%'")
+        conn.execute("DELETE FROM clara_journey_events WHERE event_id LIKE 'SMOKE-%'")
     print(f"\nAll {len(PASS)} parity checks passed against the live DB; smoke rows cleaned up.")
 
 
