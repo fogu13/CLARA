@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from langgraph.types import Command
 
 from app.auth import UserContext, get_current_user
@@ -38,7 +38,6 @@ from app.domain.models import (
     ProblemTransitionRequest,
     ProblemUpdateRequest,
     WorkflowState,
-    pseudonymized_identifier,
 )
 from app.rate_limit import rate_limiter
 from app.rbac import Role, require_role
@@ -146,18 +145,30 @@ class TrustedWorkflowIdentity:
         self.actor_id = actor_id
 
 
+def _actor_identifier(user: UserContext) -> str:
+    """Stable pseudonym for audit records, derived from the verified principal.
+
+    JWT subs are UUIDs, and a raw UUID can trip the phone-number pattern in
+    pseudonymized_identifier (any digit/hyphen run >= 9 chars matches), so JWT
+    actors are recorded as user-<first 8 hex> — too short for that pattern,
+    still correlatable to the Supabase user. Short ids (dev-user, api-key:N)
+    pass through unchanged.
+    """
+    if len(user.user_id) >= 20:
+        return f"user-{user.user_id[:8]}"
+    return user.user_id
+
+
 def require_trusted_workflow_identity(
-    x_tenant_id: str | None = Header(default=None, alias="x-tenant-id"),
-    x_actor_id: str | None = Header(default=None, alias="x-actor-id"),
+    user: UserContext = Depends(get_current_user),
 ) -> TrustedWorkflowIdentity:
-    if x_tenant_id is None or x_actor_id is None:
-        raise HTTPException(status_code=401, detail="Trusted tenant and actor headers are required")
-    try:
-        tenant_id = pseudonymized_identifier(x_tenant_id, "Tenant ID")
-        actor_id = pseudonymized_identifier(x_actor_id, "Actor ID")
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return TrustedWorkflowIdentity(tenant_id=tenant_id, actor_id=actor_id)
+    """Tenant + actor for workflow audit records, bound to the verified JWT /
+    API key (review #30/#31): the old x-tenant-id/x-actor-id client headers
+    were spoofable and are now ignored entirely."""
+    return TrustedWorkflowIdentity(
+        tenant_id=user.tenant_setting,
+        actor_id=_actor_identifier(user),
+    )
 
 
 def build_router(
@@ -424,16 +435,10 @@ def build_router(
     @router.get("/problems/{problem_id}/workflow", response_model=WorkflowState, dependencies=[read_dep])
     def get_workflow_state(
         problem_id: str,
-        x_tenant_id: str | None = Header(default=None, alias="x-tenant-id"),
+        user: UserContext = Depends(get_current_user),  # noqa: B008
     ) -> WorkflowState:
         problem = require_problem(problem_id)
-        tenant_id = ""
-        if x_tenant_id is not None:
-            try:
-                tenant_id = pseudonymized_identifier(x_tenant_id, "Tenant ID")
-            except ValueError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return workflow_store.state_for_problem(problem, tenant_id=tenant_id)
+        return workflow_store.state_for_problem(problem, tenant_id=user.tenant_setting)
 
     @router.post("/problems/{problem_id}/outcomes", response_model=OutcomeMeasurement, dependencies=[Depends(require_role(Role.editor))])
     def record_outcome(problem_id: str, measurement: OutcomeMeasurement) -> OutcomeMeasurement:
@@ -504,15 +509,11 @@ def build_router(
 
     @router.get("/outcome-board", response_model=OutcomeBoard, dependencies=[read_dep])
     def get_outcome_board(
-        x_tenant_id: str | None = Header(default=None, alias="x-tenant-id"),
+        user: UserContext = Depends(get_current_user),  # noqa: B008
     ) -> OutcomeBoard:
-        tenant_id = ""
-        if x_tenant_id is not None:
-            try:
-                tenant_id = pseudonymized_identifier(x_tenant_id, "Tenant ID")
-            except ValueError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return build_outcome_board(list_enriched_problems(), workflow_store, tenant_id=tenant_id)
+        return build_outcome_board(
+            list_enriched_problems(), workflow_store, tenant_id=user.tenant_setting
+        )
 
     @router.get("/approvals", response_model=list[ApprovalRecord], dependencies=[read_dep])
     def list_approvals() -> list[ApprovalRecord]:

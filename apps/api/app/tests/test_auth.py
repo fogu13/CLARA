@@ -48,18 +48,18 @@ def _make_token(secret: str, sub: str = "user-123", workspace_id: int = 42, **ex
 
 class TestAuthDisabled:
     def test_returns_default_context_when_no_secret(self, _no_auth_env: None) -> None:
-        from app.auth import AUTH_ENABLED, get_current_user
+        from app.auth import AUTH_ENABLED, _resolve_user
 
         assert AUTH_ENABLED is False
-        user = get_current_user(authorization=None)
+        user = _resolve_user(authorization=None)
         assert user.user_id == "dev-user"
         assert user.workspace_id == 1
         assert user.role == "owner"
 
     def test_returns_default_context_even_with_header(self, _no_auth_env: None) -> None:
-        from app.auth import get_current_user
+        from app.auth import _resolve_user
 
-        user = get_current_user(authorization="Bearer some-garbage")
+        user = _resolve_user(authorization="Bearer some-garbage")
         assert user.user_id == "dev-user"
 
 
@@ -67,37 +67,37 @@ class TestAuthEnabled:
     def test_rejects_missing_header(self, _auth_env: None) -> None:
         from fastapi import HTTPException
 
-        from app.auth import get_current_user
+        from app.auth import _resolve_user
 
         with pytest.raises(HTTPException) as exc_info:
-            get_current_user(authorization=None)
+            _resolve_user(authorization=None)
 
         assert exc_info.value.status_code == 401
 
     def test_rejects_non_bearer_header(self, _auth_env: None) -> None:
         from fastapi import HTTPException
 
-        from app.auth import get_current_user
+        from app.auth import _resolve_user
 
         with pytest.raises(HTTPException) as exc_info:
-            get_current_user(authorization="Basic abc123")
+            _resolve_user(authorization="Basic abc123")
 
         assert exc_info.value.status_code == 401
 
     def test_rejects_invalid_token(self, _auth_env: None) -> None:
         from fastapi import HTTPException
 
-        from app.auth import get_current_user
+        from app.auth import _resolve_user
 
         with pytest.raises(HTTPException) as exc_info:
-            get_current_user(authorization="Bearer not-a-real-jwt")
+            _resolve_user(authorization="Bearer not-a-real-jwt")
 
         assert exc_info.value.status_code == 401
 
     def test_rejects_expired_token(self, _auth_env: None) -> None:
         from fastapi import HTTPException
 
-        from app.auth import get_current_user
+        from app.auth import _resolve_user
 
         expired = jwt.encode(
             {"sub": "user-1", "exp": int(time.time()) - 100},
@@ -106,36 +106,36 @@ class TestAuthEnabled:
         )
 
         with pytest.raises(HTTPException) as exc_info:
-            get_current_user(authorization=f"Bearer {expired}")
+            _resolve_user(authorization=f"Bearer {expired}")
 
         assert exc_info.value.status_code == 401
 
     def test_returns_user_context_from_valid_token(self, _auth_env: None) -> None:
-        from app.auth import get_current_user
+        from app.auth import _resolve_user
 
         token = _make_token("test-jwt-secret-for-hybrid", sub="user-abc", workspace_id=7)
-        user = get_current_user(authorization=f"Bearer {token}")
+        user = _resolve_user(authorization=f"Bearer {token}")
 
         assert user.user_id == "user-abc"
         assert user.workspace_id == 7
         assert user.email == "test@example.com"
 
     def test_defaults_workspace_id_to_1_when_absent(self, _auth_env: None) -> None:
-        from app.auth import get_current_user
+        from app.auth import _resolve_user
 
         token = jwt.encode(
             {"sub": "user-x", "exp": int(time.time()) + 3600},
             "test-jwt-secret-for-hybrid",
             algorithm="HS256",
         )
-        user = get_current_user(authorization=f"Bearer {token}")
+        user = _resolve_user(authorization=f"Bearer {token}")
 
         assert user.workspace_id == 1
 
     def test_rejects_token_without_sub(self, _auth_env: None) -> None:
         from fastapi import HTTPException
 
-        from app.auth import get_current_user
+        from app.auth import _resolve_user
 
         token = jwt.encode(
             {"exp": int(time.time()) + 3600},
@@ -144,7 +144,7 @@ class TestAuthEnabled:
         )
 
         with pytest.raises(HTTPException) as exc_info:
-            get_current_user(authorization=f"Bearer {token}")
+            _resolve_user(authorization=f"Bearer {token}")
 
         assert exc_info.value.status_code == 401
 
@@ -183,20 +183,20 @@ class TestVerifyToken:
 
 class TestAppMetadataClaims:
     def test_resolves_role_and_workspace_from_app_metadata(self, _auth_env: None) -> None:
-        from app.auth import get_current_user
+        from app.auth import _resolve_user
 
         token = _make_token(
             "test-jwt-secret-for-hybrid",
             sub="admin-1",
             app_metadata={"user_role": "owner", "workspace_id": 2},
         )
-        user = get_current_user(authorization=f"Bearer {token}")
+        user = _resolve_user(authorization=f"Bearer {token}")
 
         assert user.role == "owner"
         assert user.workspace_id == 2
 
     def test_app_metadata_overrides_top_level_claims(self, _auth_env: None) -> None:
-        from app.auth import get_current_user
+        from app.auth import _resolve_user
 
         token = _make_token(
             "test-jwt-secret-for-hybrid",
@@ -204,7 +204,7 @@ class TestAppMetadataClaims:
             user_role="viewer",  # top-level
             app_metadata={"user_role": "admin"},  # app_metadata wins
         )
-        user = get_current_user(authorization=f"Bearer {token}")
+        user = _resolve_user(authorization=f"Bearer {token}")
 
         assert user.role == "admin"
 
@@ -238,7 +238,7 @@ class TestAsymmetricVerification:
 
         monkeypatch.setattr(auth_mod, "_jwks_client", lambda: _FakeJWKSClient())
 
-        user = auth_mod.get_current_user(authorization=f"Bearer {token}")
+        user = auth_mod._resolve_user(authorization=f"Bearer {token}")
         assert user.user_id == "user-es"
         assert user.role == "owner"
         assert user.workspace_id == 3

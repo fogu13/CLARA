@@ -199,16 +199,183 @@ def main() -> None:
     eresult = events_store.import_events([evt, evt])
     check("in-batch event dupes counted as skipped", eresult.imported == 1 and eresult.skipped_duplicates == 1)
 
-    # --- cleanup ---
+    # --- migration 011: FORCE RLS + pg_cron actually in effect ---
+    from app.auth import set_current_tenant
+
+    clara_tables = {
+        "clara_problems", "clara_signals", "clara_candidate_decisions",
+        "clara_customer_context", "clara_workflow_records",
+        "clara_taxonomy_catalogs", "clara_terminology_dictionary",
+        "clara_telemetry", "clara_measurement_plans", "clara_connector_configs",
+        "clara_journey_events", "clara_feedback_rules",
+        "clara_workspace_settings", "clara_api_keys",
+    }
+    with telemetry._connect() as conn:
+        forced = {
+            row["relname"]
+            for row in conn.execute(
+                "SELECT relname FROM pg_class WHERE relforcerowsecurity"
+            ).fetchall()
+        }
+    check(
+        "FORCE RLS on every clara_ table",
+        clara_tables <= forced,
+        f"missing: {sorted(clara_tables - forced)}" if not clara_tables <= forced else "",
+    )
+
+    # Hard check — migration 003's silent exception swallow hid a pg_cron
+    # enable failure for months; never trust a WARNING alone.
+    try:
+        with telemetry._connect() as conn:
+            jobs = {
+                row["jobname"]
+                for row in conn.execute("SELECT jobname FROM cron.job").fetchall()
+            }
+    except Exception as exc:  # noqa: BLE001 — undefined cron schema = not installed
+        jobs = set()
+        print(f"      (cron.job unreadable: {exc})")
+    check("pg_cron measurement job scheduled", "clara-measurements-due" in jobs, f"jobs={sorted(jobs)}")
+    check("pg_cron taxonomy job re-healed", "taxonomy-governance-daily" in jobs)
+
+    # --- tenant isolation: a second workspace can neither see nor be seen ---
+    with telemetry._connect() as conn:
+        smoke_ws = conn.execute(
+            "INSERT INTO public.workspaces (name, slug) VALUES ('SMOKE workspace', 'smoke-tenant')"
+            " ON CONFLICT (slug) DO UPDATE SET name = excluded.name RETURNING id"
+        ).fetchone()["id"]
+
+    iso_signal = record.model_copy(
+        update={"signal_id": "SMOKE-ISO-1", "customer_id": "SMOKE-CUST-ISO"}
+    )
+    set_current_tenant(str(smoke_ws))
+    signals.import_signals([iso_signal])
+    with signals._connect() as conn:
+        stamped = conn.execute(
+            "SELECT workspace_id FROM clara_signals WHERE signal_id = 'SMOKE-ISO-1'"
+        ).fetchone()
+    check(
+        "insert inherits the session workspace via GUC default",
+        stamped is not None and stamped["workspace_id"] == smoke_ws,
+        f"workspace_id={stamped['workspace_id'] if stamped else None} expected {smoke_ws}",
+    )
+    check("own-tenant read sees the row", "SMOKE-ISO-1" in signals.existing_signal_ids())
+    iso_execution = execution.model_copy(
+        update={"execution_id": "SMOKE-ISO-EXE", "problem_id": "SMOKE-ISO-PRB"}
+    )
+    workflow._save_workflow_record(
+        "execution", "SMOKE-ISO-EXE", "SMOKE-ISO-PRB", iso_execution, str(smoke_ws)
+    )
+
+    set_current_tenant("1")
+    check("cross-tenant store read hides the row", "SMOKE-ISO-1" not in signals.existing_signal_ids())
+    with signals._connect() as conn:
+        visible = conn.execute(
+            "SELECT count(*) AS n FROM clara_signals WHERE signal_id = 'SMOKE-ISO-1'"
+        ).fetchone()["n"]
+    check("raw select as owner is RLS-filtered too (FORCE)", visible == 0)
+    iso_workflow = PostgresWorkflowStore(URL)
+    check(
+        "cross-tenant workflow records invisible",
+        not any(e.execution_id == "SMOKE-ISO-EXE" for e in iso_workflow._executions),
+    )
+    # Pin the documented ceiling: entity ids are global PKs, so a cross-tenant
+    # same-id import silently no-ops (isolation holds; usability of a second
+    # workspace is gated on composite keys — see migration 011 header).
+    ceiling = signals.import_signals([iso_signal])
+    check("global-PK ceiling: cross-tenant same-id import no-ops", ceiling.imported == 0)
+
+    # --- clara_run_due_measurements: the DB-side measurement tick, end to end ---
+    from datetime import UTC, datetime, timedelta
+
+    def iso_z(dt: datetime) -> str:
+        return dt.isoformat().replace("+00:00", "Z")
+
+    now = datetime.now(UTC)
+    cron_contract = smoke_problem.outcome_contract.model_copy(
+        update={"primary_metric": "signal_rate_per_day:smoke journey/smoke stage"}
+    )
+    cron_problem = smoke_problem.model_copy(
+        update={"problem_id": "SMOKE-CRON-PRB", "outcome_contract": cron_contract}
+    )
+    problems_store.upsert_problem(cron_problem)
+    signals.import_signals(
+        [
+            record.model_copy(
+                update={
+                    "signal_id": f"SMOKE-CRON-SIG-{i}",
+                    "customer_id": "SMOKE-CUST-CRON",
+                    "timestamp": iso_z(now - timedelta(days=1)),
+                }
+            )
+            for i in (1, 2)
+        ]
+    )
+    plans.schedule(
+        problem_id="SMOKE-CRON-PRB",
+        execution_id="SMOKE-CRON-EXE",
+        executed_at=iso_z(now - timedelta(days=2)),
+        due_at=iso_z(now - timedelta(hours=1)),
+        kind="t7",
+    )
+    with plans._connect() as conn:
+        conn.execute("SELECT public.clara_run_due_measurements(1)")
+    cron_plan = next(p for p in plans.list_plans() if p["problem_id"] == "SMOKE-CRON-PRB")
+    check(
+        "cron function measures the due plan from real signals",
+        cron_plan["status"] == "done" and "2 signals" in (cron_plan["note"] or ""),
+        f"status={cron_plan['status']} note={cron_plan['note']}",
+    )
+    from app.domain.models import OutcomeMeasurement
+
+    with plans._connect() as conn:
+        outcome_rows = conn.execute(
+            "SELECT payload FROM clara_workflow_records"
+            " WHERE record_type = 'outcome' AND problem_id = 'SMOKE-CRON-PRB'"
+        ).fetchall()
+    check("cron outcome row written", len(outcome_rows) == 1)
+    outcome = OutcomeMeasurement.model_validate(outcome_rows[0]["payload"])
+    check(
+        "cron outcome payload parses with a real rate",
+        outcome.metric == cron_contract.primary_metric and 0 < outcome.observed_value <= 2,
+        f"observed={outcome.observed_value}",
+    )
+    check(
+        "cron run recorded honest telemetry",
+        telemetry.has_event("outcome_recorded", "SMOKE-CRON-PRB"),
+    )
+    # Idempotency + the API-side wrapper share one implementation.
+    rerun = plans.run_due()
+    with plans._connect() as conn:
+        recount = conn.execute(
+            "SELECT count(*) AS n FROM clara_workflow_records"
+            " WHERE record_type = 'outcome' AND problem_id = 'SMOKE-CRON-PRB'"
+        ).fetchone()["n"]
+    check(
+        "second pass is a no-op (plan already done)",
+        isinstance(rerun, dict) and recount == 1,
+        f"rerun={rerun} outcomes={recount}",
+    )
+
+    # --- cleanup (per tenant: RLS scopes DELETEs to the active GUC) ---
     with telemetry._connect() as conn:
         conn.execute("DELETE FROM clara_telemetry WHERE event_type = 'SMOKE_event'")
-        conn.execute("DELETE FROM clara_measurement_plans WHERE problem_id = 'SMOKE-PRB'")
+        conn.execute("DELETE FROM clara_telemetry WHERE entity_id LIKE 'SMOKE-%'")
+        conn.execute("DELETE FROM clara_measurement_plans WHERE problem_id LIKE 'SMOKE-%'")
         conn.execute(
             "DELETE FROM clara_workflow_records WHERE record_id LIKE 'SMOKE-%' OR problem_id LIKE 'SMOKE-%'"
         )
         conn.execute("DELETE FROM clara_problems WHERE problem_id LIKE 'SMOKE-%'")
         conn.execute("DELETE FROM clara_signals WHERE signal_id LIKE 'SMOKE-%'")
         conn.execute("DELETE FROM clara_journey_events WHERE event_id LIKE 'SMOKE-%'")
+    set_current_tenant(str(smoke_ws))
+    with telemetry._connect() as conn:
+        conn.execute("DELETE FROM clara_signals WHERE signal_id LIKE 'SMOKE-%'")
+        conn.execute(
+            "DELETE FROM clara_workflow_records WHERE record_id LIKE 'SMOKE-%' OR problem_id LIKE 'SMOKE-%'"
+        )
+    set_current_tenant("1")
+    with telemetry._connect() as conn:
+        conn.execute("DELETE FROM public.workspaces WHERE slug = 'smoke-tenant'")
     print(f"\nAll {len(PASS)} parity checks passed against the live DB; smoke rows cleaned up.")
 
 

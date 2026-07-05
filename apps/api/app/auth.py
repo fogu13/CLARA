@@ -1,8 +1,10 @@
 """Supabase JWT authentication for FastAPI.
 
 Verifies Supabase-issued JWTs (HS256 with the project JWT secret, or RS256 via
-JWKS) and extracts user identity + workspace context. Sets session-level
-Postgres settings (app.tenant_id, app.user_id) for RLS enforcement.
+JWKS) and extracts user identity + workspace context. `get_current_user` also
+records the tenant in a request-scoped ContextVar; the Postgres store layer
+(PostgresConnectionMixin._connect) reads it to SET app.tenant_id /
+app.workspace_id on every pooled checkout, which is what drives RLS.
 
 Auth is optional during the Phase 0 transition: if SUPABASE_JWT_SECRET is unset,
 `get_current_user` returns a default context (workspace_id=1, the default
@@ -14,9 +16,11 @@ from __future__ import annotations
 
 import logging
 import os
+from contextvars import ContextVar, Token
 
 import jwt
 from fastapi import Header, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from jwt import PyJWKClient
 from pydantic import BaseModel
 
@@ -80,6 +84,23 @@ def _default_context() -> UserContext:
     return UserContext(user_id="dev-user", workspace_id=1, email="dev@local", role="owner")
 
 
+# Request-scoped tenant. get_current_user (async, runs in the request task) sets it;
+# the value propagates into threadpool-run sync endpoints and store calls, where
+# PostgresConnectionMixin._connect applies it as the RLS GUCs. The default "1" keeps
+# boot-time seeding, background loops, and unauthenticated paths pinned to the
+# default workspace — fail-closed, never cross-tenant.
+_current_tenant: ContextVar[str] = ContextVar("clara_current_tenant", default="1")
+
+
+def current_tenant() -> str:
+    return _current_tenant.get()
+
+
+def set_current_tenant(value: str) -> Token[str]:
+    """Set the active tenant; returns the Token so callers (tests, smoke) can reset."""
+    return _current_tenant.set(value)
+
+
 def verify_token(token: str) -> dict:
     """Verify a Supabase JWT and return its claims.
 
@@ -124,11 +145,11 @@ def set_api_key_verifier(verify) -> None:
     _API_KEY_VERIFIER = verify
 
 
-def get_current_user(
-    authorization: str | None = Header(None),
-    x_api_key: str | None = Header(None),
+def _resolve_user(
+    authorization: str | None = None,
+    x_api_key: str | None = None,
 ) -> UserContext:
-    """FastAPI dependency: verify X-Api-Key or the Bearer token -> UserContext.
+    """Verify X-Api-Key or the Bearer token -> UserContext (sync core).
 
     When AUTH_ENABLED is False (no JWT secret configured), returns a default
     dev context so the API works without auth headers during local dev / tests.
@@ -169,12 +190,18 @@ def get_current_user(
     return UserContext(user_id=user_id, workspace_id=workspace_id, email=email, role=role)
 
 
-def apply_tenant_to_connection(conn, user: UserContext) -> None:
-    """Set session-level Postgres settings for RLS enforcement.
+async def get_current_user(
+    authorization: str | None = Header(None),
+    x_api_key: str | None = Header(None),
+) -> UserContext:
+    """FastAPI dependency: `_resolve_user` + tenant ContextVar.
 
-    Call this on a psycopg connection before any query so that RLS policies
-    (migration 004) can use current_setting('app.tenant_id', true).
+    Async on purpose: it runs in the request task, so the ContextVar set here
+    propagates into threadpool-run sync endpoints and their store calls (a sync
+    dependency's ContextVar writes happen in a throwaway context copy and would
+    be lost). Verification itself stays off the event loop — token checks can
+    hit the JWKS endpoint and the API-key store.
     """
-    with conn.cursor() as cur:
-        cur.execute("SET LOCAL app.tenant_id = %s", (user.tenant_setting,))
-        cur.execute("SET LOCAL app.user_id = %s", (user.user_id,))
+    user = await run_in_threadpool(_resolve_user, authorization, x_api_key)
+    set_current_tenant(user.tenant_setting)
+    return user

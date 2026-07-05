@@ -826,6 +826,19 @@ class SQLiteWorkflowStore:
         self._ensure_column("learning_conclusions", "retention_expires_at", "TEXT NOT NULL DEFAULT ''")
         self._ensure_column("executions", "external_ref", "TEXT")
         self._ensure_column("executions", "detail", "TEXT")
+        # Idempotent backfill for the JWT-tenant migration: header-era rows were
+        # tagged with client strings ('demo_tenant'/...); the tenant key is now
+        # str(workspace_id) and local dev is the default workspace ('1'). Closure
+        # rows keep tenant inside the payload JSON, hence the json_set.
+        self._connection.execute(
+            "UPDATE learning_conclusions SET tenant_id = '1'"
+            " WHERE tenant_id IN ('legacy', 'demo_tenant', 'tenant_feature_test')"
+        )
+        self._connection.execute(
+            "UPDATE closure_records SET payload = json_set(payload, '$.tenant_id', '1')"
+            " WHERE json_extract(payload, '$.tenant_id')"
+            " IN ('legacy', 'demo_tenant', 'tenant_feature_test')"
+        )
         self._connection.commit()
 
     def _ensure_column(self, table: str, column: str, definition: str) -> None:

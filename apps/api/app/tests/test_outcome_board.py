@@ -15,9 +15,6 @@ def make_client() -> TestClient:
     )
 
 
-TRUSTED_HEADERS = {"x-tenant-id": "test_tenant", "x-actor-id": "test_product_owner"}
-
-
 def test_outcome_board_lists_problem_outcome_contracts() -> None:
     client = make_client()
 
@@ -106,7 +103,6 @@ def test_outcome_board_shows_latest_learning_conclusion() -> None:
 
     response = client.post(
         "/problems/PRB-108/learning-conclusions",
-        headers=TRUSTED_HEADERS,
         json={
             "learning_status": "partially_worked",
             "summary": "Helped a subset of accounts.",
@@ -115,7 +111,7 @@ def test_outcome_board_shows_latest_learning_conclusion() -> None:
     )
 
     assert response.status_code == 200
-    board = client.get("/outcome-board", headers={"x-tenant-id": "test_tenant"}).json()
+    board = client.get("/outcome-board").json()
     item = next(item for item in board["items"] if item["problem_id"] == "PRB-108")
     assert board["learning_partially_worked"] == 1
     assert item["latest_learning_status"] == "partially_worked"

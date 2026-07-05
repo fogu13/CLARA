@@ -47,13 +47,6 @@ export function apiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 }
 
-function trustedHeaders(): Record<string, string> {
-  return {
-    "x-tenant-id": process.env.NEXT_PUBLIC_CLARA_TENANT_ID ?? "demo_tenant",
-    "x-actor-id": process.env.NEXT_PUBLIC_CLARA_ACTOR_ID ?? "demo_reviewer"
-  };
-}
-
 function browserAccessToken(): string | null {
   if (typeof window === "undefined") return null;
 
@@ -64,10 +57,11 @@ function browserAccessToken(): string | null {
   }
 }
 
+// Tenant and actor identity now come from the verified JWT server-side; the
+// old x-tenant-id/x-actor-id headers are ignored by the API and no longer sent.
 export function apiHeaders(headers?: HeadersInit): Headers {
   const merged = new Headers({
-    "Content-Type": "application/json",
-    ...trustedHeaders()
+    "Content-Type": "application/json"
   });
 
   new Headers(headers).forEach((value, key) => merged.set(key, value));
