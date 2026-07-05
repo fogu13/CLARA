@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import threading
 
 import json
@@ -207,7 +208,15 @@ def _get_pool(url: str):
         if pool is None:
             pool = ConnectionPool(
                 url,
-                kwargs={"row_factory": dict_row, "connect_timeout": 10},
+                kwargs={
+                    "row_factory": dict_row,
+                    "connect_timeout": 10,
+                    # Server-side guard: whatever leaks a transaction (stuck
+                    # thread, killed process), Postgres reaps it — stale
+                    # "idle in transaction" sessions blocked schema DDL for
+                    # hours during the 5 Jul incident.
+                    "options": "-c idle_in_transaction_session_timeout=120000",
+                },
                 min_size=0,
                 max_size=5,
                 timeout=15,  # bounded wait for a pooled connection, not forever
@@ -215,6 +224,7 @@ def _get_pool(url: str):
                 name=f"clara-{len(_POOLS)}",
             )
             _POOLS[url] = pool
+            atexit.register(pool.close)  # quiet, prompt worker shutdown
     return pool
 
 
@@ -330,6 +340,8 @@ class PostgresConnectionMixin:
 class PostgresProblemStore(PostgresConnectionMixin):
     def __init__(self, url: str, seed_problems: list[ProblemRecord]) -> None:
         super().__init__(url)
+        # SQLite-contract parity: seed problems are read-only reference content.
+        self.seed_problem_ids = {problem.problem_id for problem in seed_problems}
         if not self.list_problems():
             for problem in seed_problems:
                 self.upsert_problem(problem)
@@ -352,6 +364,24 @@ class PostgresProblemStore(PostgresConnectionMixin):
         return ProblemRecord.model_validate(_payload(row["payload"]))
 
     def upsert_problem(self, problem: ProblemRecord) -> ProblemRecord:
+        # SQLite-contract parity: upsert is INSERT-ONLY — promoting a candidate
+        # twice must return the existing problem, never overwrite edits/approvals.
+        existing = self.get_problem(problem.problem_id)
+        if existing is not None:
+            return existing
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO clara_problems (problem_id, payload)
+                VALUES (%s, %s)
+                ON CONFLICT (problem_id) DO NOTHING
+                """,
+                (problem.problem_id, self._jsonb(_model_payload(problem))),
+            )
+        return problem
+
+    def _write_problem(self, problem: ProblemRecord) -> ProblemRecord:
+        """Internal overwrite for update paths (the old upsert semantics)."""
         with self._connect() as conn:
             conn.execute(
                 """
@@ -366,19 +396,19 @@ class PostgresProblemStore(PostgresConnectionMixin):
 
     def update_problem(self, problem_id: str, update) -> ProblemRecord | None:
         existing = self.get_problem(problem_id)
-        if existing is None:
+        if existing is None or problem_id in self.seed_problem_ids:
             return None
         updated = apply_problem_update(existing, update)
-        return self.upsert_problem(updated)
+        return self._write_problem(updated)
 
     def update_action_proposal(self, problem_id: str, action_id: str, update):
         existing = self.get_problem(problem_id)
-        if existing is None:
+        if existing is None or problem_id in self.seed_problem_ids:
             return None
         updated = apply_action_proposal_update(existing, action_id, update)
         if updated is None:
             return None
-        return self.upsert_problem(updated)
+        return self._write_problem(updated)
 
     def transition_problem_status(
         self,
@@ -386,10 +416,10 @@ class PostgresProblemStore(PostgresConnectionMixin):
         status: ProblemStatus,
     ) -> ProblemRecord | None:
         existing = self.get_problem(problem_id)
-        if existing is None:
+        if existing is None or problem_id in self.seed_problem_ids:
             return None
         updated = apply_problem_status(existing, status)
-        return self.upsert_problem(updated)
+        return self._write_problem(updated)
 
     def scrub_customer(self, customer_id: str) -> int:
         """GDPR Art. 17: erase a customer's evidence content inside stored problems."""
@@ -397,7 +427,7 @@ class PostgresProblemStore(PostgresConnectionMixin):
         for problem in self.list_problems():
             updated = scrub_customer_evidence(problem, customer_id)
             if updated is not None:
-                self.upsert_problem(updated)
+                self._write_problem(updated)
                 scrubbed += 1
         return scrubbed
 
@@ -411,13 +441,12 @@ class PostgresSignalStore(PostgresConnectionMixin):
         return [SignalRecord.model_validate(_payload(row["payload"])) for row in rows]
 
     def import_signals(self, signals: list[SignalRecord]) -> SignalImportResult:
-        existing_ids = self.existing_signal_ids()
         imported = 0
         with self._connect() as conn:
             for signal in signals:
-                if signal.signal_id in existing_ids:
-                    continue
-                conn.execute(
+                # rowcount is 0 when ON CONFLICT skips — counts real inserts, so
+                # duplicates WITHIN one batch are reported as skipped (SQLite parity).
+                result = conn.execute(
                     """
                     INSERT INTO clara_signals (signal_id, payload)
                     VALUES (%s, %s)
@@ -425,7 +454,7 @@ class PostgresSignalStore(PostgresConnectionMixin):
                     """,
                     (signal.signal_id, self._jsonb(_model_payload(signal))),
                 )
-                imported += 1
+                imported += result.rowcount
         return SignalImportResult(
             imported=imported,
             skipped_duplicates=len(signals) - imported,
@@ -508,13 +537,10 @@ class PostgresJourneyEventStore(PostgresConnectionMixin):
         return [JourneyEventRecord.model_validate(_payload(row["payload"])) for row in rows]
 
     def import_events(self, events: list[JourneyEventRecord]) -> JourneyEventImportResult:
-        existing_ids = self.existing_event_ids()
         imported = 0
         with self._connect() as conn:
             for event in events:
-                if event.event_id in existing_ids:
-                    continue
-                conn.execute(
+                result = conn.execute(
                     """
                     INSERT INTO clara_journey_events (event_id, payload)
                     VALUES (%s, %s)
@@ -522,7 +548,7 @@ class PostgresJourneyEventStore(PostgresConnectionMixin):
                     """,
                     (event.event_id, self._jsonb(_model_payload(event))),
                 )
-                imported += 1
+                imported += result.rowcount
         return JourneyEventImportResult(
             imported=imported,
             skipped_duplicates=len(events) - imported,
@@ -600,10 +626,52 @@ class PostgresCustomerContextStore(PostgresConnectionMixin, CustomerContextStore
 
 
 class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
+    """DB-backed workflow store.
+
+    #23 parity: multiple instances (local dev + Render) share one database, so
+    every public operation re-reads the records instead of trusting the
+    boot-time snapshot — a boot snapshot served stale approvals/outcomes and
+    reused ID counters across instances.
+    """
+
     def __init__(self, url: str) -> None:
         PostgresConnectionMixin.__init__(self, url)
         WorkflowStore.__init__(self)
         self._load_records()
+
+    # -- reads: refresh, then delegate to the in-memory logic --
+
+    def list_approvals(self):
+        self._load_records()
+        return WorkflowStore.list_approvals(self)
+
+    def list_executions(self):
+        self._load_records()
+        return WorkflowStore.list_executions(self)
+
+    def list_jira_issue_drafts(self):
+        self._load_records()
+        return WorkflowStore.list_jira_issue_drafts(self)
+
+    def list_closure_records(self):
+        self._load_records()
+        return WorkflowStore.list_closure_records(self)
+
+    def latest_learning_conclusion(self, problem, tenant_id=None):
+        self._load_records()
+        return WorkflowStore.latest_learning_conclusion(self, problem, tenant_id=tenant_id)
+
+    def outcome_snapshot(self, problem):
+        self._load_records()
+        return WorkflowStore.outcome_snapshot(self, problem)
+
+    def state_for_problem(self, problem, tenant_id=None):
+        self._load_records()
+        return WorkflowStore.state_for_problem(self, problem, tenant_id=tenant_id)
+
+    def timeline_for_problem(self, problem, tenant_id=None):
+        self._load_records()
+        return WorkflowStore.timeline_for_problem(self, problem, tenant_id=tenant_id)
 
     def _load_records(self) -> None:
         with self._connect() as conn:
@@ -697,6 +765,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
             )
 
     def record_transition(self, *args: Any, **kwargs: Any):
+        self._load_records()
         transition = WorkflowStore.record_transition(self, *args, **kwargs)
         self._save_workflow_record(
             "transition",
@@ -707,6 +776,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         return transition
 
     def record_approval(self, *args: Any, **kwargs: Any):
+        self._load_records()
         before_executions = {execution.execution_id for execution in self._executions}
         before_drafts = {draft.draft_id for draft in self._jira_issue_drafts}
         approval = WorkflowStore.record_approval(self, *args, **kwargs)
@@ -735,6 +805,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         return approval
 
     def record_outcome(self, *args: Any, **kwargs: Any):
+        self._load_records()
         measurement = WorkflowStore.record_outcome(self, *args, **kwargs)
         record_id = (
             f"{measurement.problem_id}:{measurement.metric}:"
@@ -749,6 +820,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         return measurement
 
     def record_learning_conclusion(self, *args: Any, **kwargs: Any):
+        self._load_records()
         conclusion = WorkflowStore.record_learning_conclusion(self, *args, **kwargs)
         # ponytail: workflow_records has no tenant_id yet; future RLS milestone adds DB tenant boundaries.
         self._save_workflow_record(
@@ -762,6 +834,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         return conclusion
 
     def record_closure(self, *args: Any, **kwargs: Any):
+        self._load_records()
         closure = WorkflowStore.record_closure(self, *args, **kwargs)
         self._save_workflow_record(
             "closure",
@@ -773,6 +846,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         return closure
 
     def update_execution(self, execution_id, *, status, external_ref=None, detail=None):
+        self._load_records()
         # Base class mutates the in-memory record; persist the flip too, or a
         # restart resurrects executions as eternal drafts.
         updated = super().update_execution(

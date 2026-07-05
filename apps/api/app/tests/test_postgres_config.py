@@ -132,6 +132,7 @@ def test_postgres_workflow_loads_approval_with_action_diff() -> None:
     saved_records = []
     store = PostgresWorkflowStore.__new__(PostgresWorkflowStore)
     WorkflowStore.__init__(store)
+    store._connect = lambda: FakePostgresConnection([])
     store._save_workflow_record = lambda *record: saved_records.append(record)
 
     store.record_approval(
@@ -170,7 +171,12 @@ def test_postgres_workflow_records_outcome_without_list_state() -> None:
     saved_records = []
     store = PostgresWorkflowStore.__new__(PostgresWorkflowStore)
     WorkflowStore.__init__(store)
+    # Refresh-on-read (#23) reloads from the DB on every op, so the fake must
+    # serve back what was saved — an empty fake would erase in-memory state.
     store._save_workflow_record = lambda *record: saved_records.append(record)
+    store._connect = lambda: FakePostgresConnection(
+        [{"record_type": r[0], "payload": _model_payload(r[3])} for r in saved_records]
+    )
 
     store.record_outcome(problem=problem, measurement=measurement)
     snapshot = store.outcome_snapshot(problem)
@@ -216,6 +222,7 @@ def test_postgres_workflow_records_learning_conclusion() -> None:
     saved_records = []
     store = PostgresWorkflowStore.__new__(PostgresWorkflowStore)
     WorkflowStore.__init__(store)
+    store._connect = lambda: FakePostgresConnection([])
     store._save_workflow_record = lambda *record: saved_records.append(record)
 
     conclusion = store.record_learning_conclusion(
