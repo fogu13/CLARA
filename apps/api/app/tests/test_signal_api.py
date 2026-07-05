@@ -483,3 +483,38 @@ def test_seed_demo_data_flag_starts_empty(monkeypatch, tmp_path) -> None:
     assert client.get("/signals").json() == []
     assert client.get("/problems").json() == []
     assert client.get("/customer-context").json() == []
+
+
+def test_delete_signals_removes_an_import_batch() -> None:
+    """POST /signals/delete is the undo for a mis-mapped import batch."""
+    client = TestClient(
+        create_app(
+            problem_store=ProblemStore(load_seed_problems()),
+            workflows=WorkflowStore(),
+            signals=SignalStore(),
+        )
+    )
+    csv_text = (
+        "signal_id,source,feedback_text\n"
+        "csv-badbatch-0,trustpilot,apple_app_store\n"
+        "csv-badbatch-1,reddit,google_play\n"
+        "csv-goodbatch-0,zendesk,Refund flow is broken\n"
+    )
+    assert client.post("/signals/import-csv", json={"csv_text": csv_text}).status_code == 200
+    before = {s["signal_id"] for s in client.get("/signals").json()}
+    assert {"csv-badbatch-0", "csv-badbatch-1", "csv-goodbatch-0"} <= before
+
+    result = client.post(
+        "/signals/delete",
+        json={"signal_ids": ["csv-badbatch-0", "csv-badbatch-1", "csv-never-existed"]},
+    )
+    assert result.status_code == 200
+    assert result.json()["deleted"] == 2
+
+    after = {s["signal_id"] for s in client.get("/signals").json()}
+    assert "csv-badbatch-0" not in after and "csv-badbatch-1" not in after
+    assert "csv-goodbatch-0" in after
+
+    # guards: empty / non-list payloads are rejected
+    assert client.post("/signals/delete", json={"signal_ids": []}).status_code == 422
+    assert client.post("/signals/delete", json={"signal_ids": "csv-x"}).status_code == 422

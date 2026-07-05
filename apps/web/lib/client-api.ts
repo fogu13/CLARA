@@ -470,6 +470,13 @@ export async function importSignalCsv(csvText: string): Promise<SignalImportResu
   });
 }
 
+export async function deleteSignals(signalIds: string[]): Promise<{ deleted: number }> {
+  return requestJson<{ deleted: number }>(`${apiBaseUrl()}/signals/delete`, {
+    method: "POST",
+    body: JSON.stringify({ signal_ids: signalIds })
+  });
+}
+
 export async function validateSignalCsv(csvText: string): Promise<SignalValidationReport> {
   return requestJson<SignalValidationReport>(`${apiBaseUrl()}/signals/validate-csv`, {
     method: "POST",

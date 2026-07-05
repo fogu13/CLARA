@@ -161,6 +161,24 @@ def build_router(
         )
         return result
 
+    @router.post("/signals/delete", dependencies=[Depends(require_role(Role.editor))])
+    def delete_signals(body: dict) -> dict:
+        """Bulk-remove signals by id — the undo for a mis-mapped import batch.
+
+        Editor-gated like import (whoever can create signals can retract their
+        own mistake). Derived insights are recomputed on the next triage run.
+        """
+        ids = body.get("signal_ids")
+        if not isinstance(ids, list) or not ids:
+            raise HTTPException(status_code=422, detail="signal_ids must be a non-empty list")
+        if len(ids) > 5000:
+            raise HTTPException(status_code=422, detail="Max 5000 signal_ids per call")
+        deleted = signal_store.delete_signals([str(i) for i in ids])
+        telemetry_store.record(
+            "signals_deleted", metadata={"requested": len(ids), "deleted": deleted}
+        )
+        return {"deleted": deleted}
+
     @router.post("/signals/validate-csv", response_model=SignalValidationReport, dependencies=[read_dep])
     def validate_signal_csv_import(request: SignalCsvImportRequest) -> SignalValidationReport:
         return validate_signal_csv(

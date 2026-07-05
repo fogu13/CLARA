@@ -608,6 +608,13 @@ class SignalStore:
             del self._signals[signal_id]
         return len(doomed)
 
+    def delete_signals(self, signal_ids: list[str]) -> int:
+        """Bulk-remove signals by id — the undo for a mis-mapped import batch."""
+        doomed = [sid for sid in signal_ids if sid in self._signals]
+        for signal_id in doomed:
+            del self._signals[signal_id]
+        return len(doomed)
+
     def import_signals(self, signals: list[SignalRecord]) -> SignalImportResult:
         imported = 0
         skipped = 0
@@ -705,6 +712,18 @@ class SQLiteSignalStore:
         """GDPR Art. 17: remove every signal belonging to a customer."""
         cursor = self._connection.execute(
             "DELETE FROM signals WHERE customer_id = ?", (customer_id,)
+        )
+        self._connection.commit()
+        return cursor.rowcount
+
+    def delete_signals(self, signal_ids: list[str]) -> int:
+        """Bulk-remove signals by id — the undo for a mis-mapped import batch."""
+        if not signal_ids:
+            return 0
+        placeholders = ",".join("?" for _ in signal_ids)
+        cursor = self._connection.execute(
+            f"DELETE FROM signals WHERE signal_id IN ({placeholders})",  # noqa: S608 — placeholders only
+            signal_ids,
         )
         self._connection.commit()
         return cursor.rowcount
