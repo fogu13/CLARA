@@ -25,6 +25,13 @@ services:
         sync: false
       - key: AI_MODEL
         value: mistral-small-latest
+      # Embeddings must match the provider: Mistral serves mistral-embed only
+      # (fixed 1024 dims); AI_EMBED_DIM=0 stops sending the dimensions param,
+      # which Mistral rejects. See docs/feature-test-2026-07-05.md.
+      - key: AI_EMBED_MODEL
+        value: mistral-embed
+      - key: AI_EMBED_DIM
+        value: "0"
       - key: APP_CORS_ORIGINS
         sync: false
       - key: LANGFUSE_PUBLIC_KEY
