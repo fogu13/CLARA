@@ -112,6 +112,25 @@ def _tokenize(s: str) -> list[str]:
     return [t for t in re.split(r"[^a-z0-9]+", s.lower()) if len(t) > 2]
 
 
+def track_record(learning: dict[str, Any]) -> float:
+    """Proven-outcome weight in [0, 1] — port of Elvis's recScore track-record term.
+
+    Elvis (RelevantLearnings.tsx:13-17) ranks by
+    ``similarity × decayed_confidence × (1 + avg_resolution)`` so a play that actually
+    closed loops outranks a merely-similar untested one. This returns that
+    ``avg_resolution``: an explicit re-application average once the apply -> outcome edge
+    is tracked, else the originating outcome's resolution_score, else 0 (neutral: the
+    ``1 + track_record`` factor stays 1.0, so unproven learnings are never penalised).
+    """
+    res = learning.get("avg_resolution")
+    if res is None:
+        res = learning.get("evidence", {}).get("resolution_score", 0)
+    try:
+        return max(0.0, min(1.0, float(res)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def rank_learnings(
     learnings: list[dict[str, Any]],
     query: str,
@@ -122,9 +141,10 @@ def rank_learnings(
     """Relevant-learnings retrieval — port of Elvis's rankLearnings (learnings.ts:33-47).
 
     Ranks learnings by token overlap with the query, weighted by decayed
-    confidence so fresher/stronger learnings surface first.
+    confidence *and* proven track record, so fresher/stronger plays that actually
+    closed loops surface first: overlap × (0.5 + 0.5·decayed) × (1 + track_record).
 
-    A pgvector semantic ranking can replace this scorer without changing callers.
+    A pgvector semantic ranking can replace the overlap term without changing callers.
     """
     q_tokens = list(set(_tokenize(query)))
     if not q_tokens:
@@ -145,7 +165,7 @@ def rank_learnings(
             continue
 
         decayed = decayed_confidence(learning, now=now)
-        score = overlap * (0.5 + 0.5 * decayed)
+        score = overlap * (0.5 + 0.5 * decayed) * (1.0 + track_record(learning))
         scored.append((score, learning))
 
     scored.sort(key=lambda x: x[0], reverse=True)

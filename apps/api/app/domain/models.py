@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from datetime import UTC, datetime, timedelta
 from enum import Enum
@@ -557,6 +558,10 @@ def redact_common_pii(value: str | None) -> str | None:
     patterns = [
         (r"\b\S+@\S+\b", "[EMAIL REDACTED]"),
         (r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "[IP REDACTED]"),
+        # IBAN + card before phone: both are digit runs the phone pattern would otherwise
+        # swallow. (Ported from Elvis's _shared/pii.ts.)
+        (r"\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b", "[IBAN REDACTED]"),
+        (r"\b\d(?:[ -]?\d){12,18}\b", "[CARD REDACTED]"),
         (r"(?<!\w)(?:\+?\d[\d .()/-]{7,}\d)(?!\w)", "[PHONE REDACTED]"),
         (r"\b(?:CUST|CUSTOMER|ACC|ACCOUNT)-[A-Za-z0-9_-]+\b", "[ID REDACTED]"),
         (
@@ -733,6 +738,20 @@ class SignalRecord(BaseModel):
     language: str = "unknown"
     timestamp: str = "1970-01-01T00:00:00Z"
     metadata: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("feedback_text")
+    @classmethod
+    def mask_pii_on_ingest(cls, value: str) -> str:
+        # GDPR data-minimisation: mask high-confidence PII in raw feedback before it is
+        # ever persisted. Every ingest path (JSON / CSV / webhook / seed) builds a
+        # SignalRecord, so this one validator covers them all. Idempotent — re-validation
+        # when a row is read back from the DB is a no-op.
+        # ponytail: env off-switch, not a per-workspace toggle — wire to workspace settings
+        # if an operator needs consent-based raw retention. Masks feedback_text only;
+        # metadata values need field-aware handling (NER) — that's the upgrade path.
+        if os.getenv("CLARA_MASK_PII_ON_INGEST", "true").lower() == "false":
+            return value
+        return redact_common_pii(value) or value
 
 
 class SignalImportRequest(BaseModel):
