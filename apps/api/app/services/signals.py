@@ -250,7 +250,14 @@ def parse_signal_csv(csv_text: str) -> list[SignalRecord]:
 def build_candidates(signals: list[SignalRecord]) -> list[ProblemCandidate]:
     grouped: dict[tuple[str, str], list[SignalRecord]] = defaultdict(list)
     for signal in signals:
-        grouped[(signal.journey, signal.journey_stage)].append(signal)
+        journey_stage = signal.journey_stage
+        if signal.journey == "unknown_journey" and journey_stage == "unknown_stage":
+            # Connector/CSV feedback (app stores, review sites) carries no journey
+            # metadata; one mega-candidate titled "Unknown Stage" is useless. Fall
+            # back to per-source grouping so each channel gets a readable candidate
+            # ("Repeated friction in Trustpilot Feedback").
+            journey_stage = f"{signal.source}_feedback"
+        grouped[(signal.journey, journey_stage)].append(signal)
 
     candidates: list[ProblemCandidate] = []
     for (journey, journey_stage), group in grouped.items():
