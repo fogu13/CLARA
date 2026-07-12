@@ -27,6 +27,7 @@ import {
   getProblems,
   getSignals
 } from "@/lib/client-api";
+import { WorksCouncilBanner } from "@/app/components/works-council-banner";
 import { percent } from "@/lib/format";
 import { useI18n, type Locale } from "@/lib/i18n";
 import { fallbackProblems } from "@/lib/sample-data";
@@ -563,6 +564,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Users className="h-5 w-5 text-primary" /> {t.dashboard.workload}</CardTitle></CardHeader>
           <CardContent className="space-y-3">
+            <WorksCouncilBanner />
             {loads.length === 0 ? (
               <p className="text-sm text-muted-foreground">No active owner load.</p>
             ) : (

@@ -278,6 +278,13 @@ const en = {
     authLabel: "Authentication",
     disclosureLabel: "AI disclosure line (EU AI Act Art. 50)",
     disclosureNote: "Appended as the final line of any outbound text that was not human-reviewed. Approved pushes carry the reviewer stamp instead and stay unlabelled (Art. 50(4)).",
+    worksCouncil: "Works-council mode",
+    worksCouncilSubtitle: "Betriebsrat-Modus — co-determination under §87 (1) No. 6 BetrVG",
+    worksCouncilLabel: "Enable works-council mode",
+    worksCouncilNote: "Routine views and exports show role labels (approver, editor, owner) instead of names, so no per-employee metric can be derived. The audit chain stays intact and admins keep the full-identity export.",
+  },
+  worksCouncil: {
+    banner: "Aggregated under works-council mode",
   },
   actionsPage: {
     title: "Actions",
@@ -774,6 +781,13 @@ const de: Dict = {
     authLabel: "Authentifizierung",
     disclosureLabel: "KI-Kennzeichnungszeile (EU AI Act Art. 50)",
     disclosureNote: "Wird als letzte Zeile an jeden ausgehenden Text angehängt, der nicht menschlich geprüft wurde. Freigegebene Pushes tragen stattdessen den Prüfer-Stempel und bleiben unmarkiert (Art. 50 Abs. 4).",
+    worksCouncil: "Betriebsrat-Modus",
+    worksCouncilSubtitle: "Mitbestimmung nach §87 Abs. 1 Nr. 6 BetrVG",
+    worksCouncilLabel: "Betriebsrat-Modus aktivieren",
+    worksCouncilNote: "Reguläre Ansichten und Exporte zeigen Rollenbezeichnungen (Prüfer, Bearbeiter, Verantwortliche) statt Namen — personenbezogene Leistungskennzahlen lassen sich nicht ableiten. Die Audit-Kette bleibt intakt, Admins behalten den vollständigen Export.",
+  },
+  worksCouncil: {
+    banner: "Aggregiert im Betriebsrat-Modus",
   },
   actionsPage: {
     title: "Maßnahmen",

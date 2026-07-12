@@ -101,6 +101,32 @@ def set_current_tenant(value: str) -> Token[str]:
     return _current_tenant.set(value)
 
 
+# Request-scoped caller identity for the works-council response middleware:
+# (role, workspace_id) of the verified principal, or None before auth ran on
+# this request (routes without the get_current_user dependency, e.g. /health).
+# Same propagation rules as _current_tenant above: get_current_user is async
+# and runs in the request task, so the value it sets is visible to the pure-ASGI
+# middleware wrapping that same task. The middleware resets it per request.
+_current_request_user: ContextVar[tuple[str, int] | None] = ContextVar(
+    "clara_current_request_user", default=None
+)
+
+
+def current_request_user() -> tuple[str, int] | None:
+    """(role, workspace_id) of the current request's verified principal, if any."""
+    return _current_request_user.get()
+
+
+def set_current_request_user(
+    value: tuple[str, int] | None,
+) -> Token[tuple[str, int] | None]:
+    return _current_request_user.set(value)
+
+
+def reset_current_request_user(token: Token[tuple[str, int] | None]) -> None:
+    _current_request_user.reset(token)
+
+
 def verify_token(token: str) -> dict:
     """Verify a Supabase JWT and return its claims.
 
@@ -204,4 +230,6 @@ async def get_current_user(
     """
     user = await run_in_threadpool(_resolve_user, authorization, x_api_key)
     set_current_tenant(user.tenant_setting)
+    # Works-council middleware reads this after the route ran (same task).
+    set_current_request_user((user.role, user.workspace_id))
     return user

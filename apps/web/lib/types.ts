@@ -609,6 +609,7 @@ export type WorkspaceSettings = {
   measurement_window_days: number;
   learning_half_life_days: number;
   ai_disclosure_template: string;
+  works_council_mode: boolean;
 };
 
 export type Article50Status = {

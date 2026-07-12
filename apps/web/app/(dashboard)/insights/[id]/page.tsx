@@ -15,6 +15,7 @@ import { EvidencePanel } from "@/app/components/evidence-panel";
 import { OutcomeContractCard } from "@/app/components/outcome-contract-card";
 import { OutcomeMeasurementPanel } from "@/app/components/outcome-measurement-panel";
 import { ProblemLifecyclePanel } from "@/app/components/problem-lifecycle-panel";
+import { WorksCouncilBanner } from "@/app/components/works-council-banner";
 import { apiBaseUrl, apiHeaders, getPolicyRules, getProblem } from "@/lib/client-api";
 import { percent } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
@@ -508,6 +509,7 @@ export default function InsightDetailPage() {
       <JourneyImpactCard problem={problem} />
 
       <div id="portfolio" className="scroll-mt-14" />
+      <WorksCouncilBanner />
       <ActionPortfolioCard problem={problem} policyRules={policyRules} />
 
       <Card id="governance" className="scroll-mt-14">

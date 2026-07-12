@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useI18n } from "@/lib/i18n";
 import { Badge } from "@/components/ui/badge";
 import { ActionDecisionPanel } from "@/app/components/action-decision-panel";
+import { WorksCouncilBanner } from "@/app/components/works-council-banner";
 import { getExecutions, getProblem, getProblems } from "@/lib/client-api";
 import { fallbackProblems } from "@/lib/sample-data";
 import type { ActionProposal, ExecutionRecord, ProblemRecord } from "@/lib/types";
@@ -177,7 +178,8 @@ export default function ActionsPage() {
         <CardHeader>
           <CardTitle>{t.actionsPage.actionProposals}</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <WorksCouncilBanner />
           {items.length === 0 ? (
             <div className="text-center py-8">
               <CheckCircle className="h-8 w-8 text-muted-foreground mx-auto mb-3" />

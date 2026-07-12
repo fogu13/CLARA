@@ -288,6 +288,14 @@ def create_app(
     policy_store = policies or default_policy_store()
     workspace_store = workspace or default_workspace_store()
     rule_store = feedback_rules or default_rule_store()
+
+    # W1 Betriebsrat-Modus (§87(1) Nr. 6 BetrVG): ONE response-level choke point
+    # redacts person-capable fields from below-admin JSON GET responses when the
+    # workspace flag is on. Policy lives in services/works_council.py; the
+    # evidence-pack HTML variant redacts at the source in the problems router.
+    from app.services.works_council import WorksCouncilRedactionMiddleware
+
+    api.add_middleware(WorksCouncilRedactionMiddleware, get_settings=workspace_store.get)
     _pg_url = database_url()
     telemetry_store = telemetry or (
         PostgresTelemetryStore(_pg_url) if _pg_url else SQLiteTelemetryStore(default_db_path())
