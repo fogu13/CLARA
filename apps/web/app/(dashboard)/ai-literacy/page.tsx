@@ -47,10 +47,9 @@ export default function AiLiteracyPage() {
   async function attest() {
     setAttestState("busy");
     try {
-      // Fresh read → spread → write, so a stale page can't clobber settings
-      // saved elsewhere since load (same pattern as the settings page).
-      const current = await getWorkspace();
-      const saved = await updateWorkspace({ ...current, ai_literacy_pack_delivered_at: todayIso() });
+      // Partial PUT: the API merges, so only the attestation field is sent
+      // and nothing else can be clobbered by a stale page.
+      const saved = await updateWorkspace({ ai_literacy_pack_delivered_at: todayIso() });
       setDeliveredAt(saved.ai_literacy_pack_delivered_at);
       setAttestState("idle");
     } catch {

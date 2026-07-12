@@ -49,7 +49,7 @@ export default function AiLiteracyPackPage() {
         </div>
       </div>
 
-      <header className="border-b pb-4">
+      <header className="pack-header border-b pb-4">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">CLARA</p>
         <h1 className="mt-2 text-2xl font-bold">{a.packTitle}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{a.packSubtitle}</p>

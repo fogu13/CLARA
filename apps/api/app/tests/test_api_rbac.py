@@ -173,6 +173,7 @@ def test_article50_status_readable_by_viewer(monkeypatch) -> None:
     assert set(response.json()) == {
         "human_reviewed",
         "auto_published",
+        "unpublished_count",
         "by_destination",
         "generated_at",
     }

@@ -29,7 +29,9 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<WorkspaceSettings>(DEFAULTS);
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [status, setStatus] = useState<Status>({ tone: "idle", message: "" });
+  const [dirty, setDirty] = useState<Set<keyof WorkspaceSettings>>(new Set());
 
+  const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const [workspaceLoadFailed, setWorkspaceLoadFailed] = useState(false);
   const [aiUrl, setAiUrl] = useState("");
   const [aiModel, setAiModel] = useState("");
@@ -86,6 +88,7 @@ export default function SettingsPage() {
     getWorkspace()
       .then((data) => {
         setSettings(data);
+        setWorkspaceLoaded(true);
         setWorkspaceLoadFailed(false);
       })
       .catch(() => setWorkspaceLoadFailed(true));
@@ -94,12 +97,21 @@ export default function SettingsPage() {
 
   function update<K extends keyof WorkspaceSettings>(key: K, value: WorkspaceSettings[K]) {
     setSettings((current) => ({ ...current, [key]: value }));
+    setDirty((current) => new Set(current).add(key));
   }
 
   async function save() {
     setStatus({ tone: "busy", message: t.settings.saving });
     try {
-      setSettings(await updateWorkspace(settings));
+      // Send only the fields edited in THIS tab: the API merges partial
+      // payloads, so a stale tab cannot wipe flags or attestations written
+      // elsewhere (e.g. the AI-literacy delivery attestation).
+      const payload: Partial<WorkspaceSettings> = {};
+      for (const key of dirty) {
+        (payload as Record<string, unknown>)[key] = settings[key];
+      }
+      setSettings(await updateWorkspace(payload));
+      setDirty(new Set());
       setStatus({ tone: "ok", message: t.settings.saved });
     } catch (error) {
       setStatus({ tone: "error", message: error instanceof Error ? error.message : t.settings.saveFailed });
@@ -179,7 +191,7 @@ export default function SettingsPage() {
             />
             <p className="mt-1 text-xs text-muted-foreground">{t.settings.disclosureNote}</p>
           </div>
-          <Button onClick={save} disabled={busy || workspaceLoadFailed}>
+          <Button onClick={save} disabled={busy || workspaceLoadFailed || !workspaceLoaded}>
             {busy ? t.settings.saving : t.settings.saveChanges}
           </Button>
         </CardContent>
@@ -216,7 +228,7 @@ export default function SettingsPage() {
               }}
             />
           </div>
-          <Button onClick={save} disabled={busy || workspaceLoadFailed}>
+          <Button onClick={save} disabled={busy || workspaceLoadFailed || !workspaceLoaded}>
             {busy ? t.settings.saving : t.settings.saveChanges}
           </Button>
         </CardContent>
@@ -240,7 +252,7 @@ export default function SettingsPage() {
               <span className="mt-1 block text-xs text-muted-foreground">{t.settings.worksCouncilNote}</span>
             </span>
           </label>
-          <Button onClick={save} disabled={busy || workspaceLoadFailed}>
+          <Button onClick={save} disabled={busy || workspaceLoadFailed || !workspaceLoaded}>
             {busy ? t.settings.saving : t.settings.saveChanges}
           </Button>
         </CardContent>

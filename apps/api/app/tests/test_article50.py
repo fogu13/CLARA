@@ -282,3 +282,41 @@ class TestArticle50Status:
         assert status["human_reviewed"] == {"count": 0, "latest_at": None}
         assert status["auto_published"] == {"count": 0, "disclosed_count": 0, "latest_at": None}
         assert status["by_destination"] == []
+
+
+class TestAddExecution:
+    """Graph-path pushes (POST /triage/resume) are recorded via
+    add_execution so Art. 50 accounting and the audit export see them."""
+
+    def test_add_execution_round_trips_on_both_stores(self, tmp_path) -> None:
+        from app.services.common import utc_now
+        from app.services.workflow import SQLiteWorkflowStore
+
+        for store in (WorkflowStore(), SQLiteWorkflowStore(tmp_path / "wf-add.db")):
+            now = utc_now()
+            record = store.add_execution(
+                ExecutionRecord(
+                    execution_id="EXE-PENDING",  # store assigns the real id
+                    problem_id="TRIAGE-thread1",
+                    action_id="create_ticket",
+                    destination="jira",
+                    status=ExecutionStatus.pushed,
+                    owner="user-deadbeef",
+                    summary="Triage push: test",
+                    created_at=now,
+                    external_ref="JIRA-1",
+                    detail=None,
+                    human_reviewed=True,
+                    reviewed_by="user-deadbeef",
+                    reviewed_at=now,
+                )
+            )
+            assert record.execution_id.startswith("EXE-")
+            assert record.execution_id != "EXE-PENDING"
+            stored = {e.execution_id: e for e in store.list_executions()}[
+                record.execution_id
+            ]
+            assert stored.human_reviewed is True
+            assert stored.reviewed_by == "user-deadbeef"
+            assert stored.status == ExecutionStatus.pushed
+            assert stored.external_ref == "JIRA-1"

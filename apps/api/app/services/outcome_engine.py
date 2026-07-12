@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
 from app.domain.models import OutcomeContract, ProblemRecord
@@ -337,7 +337,12 @@ def _insufficient_delta(*, delta: float, n_pre: int, n_post: int) -> dict[str, A
     }
 
 
-def its_effect(daily_counts: list[float], action_index: int) -> dict[str, Any]:
+def its_effect(
+    daily_counts: list[float],
+    action_index: int,
+    *,
+    times: list[float] | None = None,
+) -> dict[str, Any]:
     """Segmented regression (interrupted time series) on a daily-rate series.
 
     Model: y = b0 + b1*t + b2*post + b3*(t - action_index)*post — the classic
@@ -345,16 +350,22 @@ def its_effect(daily_counts: list[float], action_index: int) -> dict[str, Any]:
     the model-implied difference at the end of the series between the fitted
     post trend and the pre-trend counterfactual: b2 + b3*(t_end - action_index).
 
+    `times` gives each observation's day offset on the real time axis
+    (default 0..n-1); callers use it to drop buckets (e.g. the mixed
+    pre/post execution day) without compressing the timeline.
+
     Honesty rule: with fewer than MIN_PRE_DAYS pre or MIN_POST_DAYS post daily
     buckets the regression is not credible — return the labelled plain delta.
     """
     n = len(daily_counts)
-    n_pre = min(max(action_index, 0), n)
+    if times is None:
+        times = [float(i) for i in range(n)]
+    n_pre = sum(1 for t in times if t < action_index)
     n_post = n - n_pre
 
     def _delta_fallback() -> dict[str, Any]:
-        pre = daily_counts[:n_pre]
-        post = daily_counts[n_pre:]
+        pre = [y for t, y in zip(times, daily_counts) if t < action_index]
+        post = [y for t, y in zip(times, daily_counts) if t >= action_index]
         pre_mean = sum(pre) / len(pre) if pre else 0.0
         post_mean = sum(post) / len(post) if post else 0.0
         return _insufficient_delta(delta=post_mean - pre_mean, n_pre=n_pre, n_post=n_post)
@@ -365,7 +376,7 @@ def its_effect(daily_counts: list[float], action_index: int) -> dict[str, Any]:
     design_rows: list[tuple[float, float, float, float]] = []
     xtx = [[0.0] * 4 for _ in range(4)]
     xty = [0.0] * 4
-    for t, y in enumerate(daily_counts):
+    for t, y in zip(times, daily_counts):
         post = 1.0 if t >= action_index else 0.0
         x = (1.0, float(t), post, (t - action_index) * post)
         design_rows.append(x)
@@ -386,7 +397,7 @@ def its_effect(daily_counts: list[float], action_index: int) -> dict[str, Any]:
     degrees = n - 4
     sigma2 = residual_ss / degrees if degrees > 0 else 0.0
 
-    horizon = (n - 1) - action_index
+    horizon = times[-1] - action_index
     effect = beta[2] + horizon * beta[3]
     # Var(b2 + h*b3) from the (X'X)^-1 block, scaled by residual variance.
     # ponytail: plain-OLS standard errors; Newey-West (HAC) errors are the
@@ -406,6 +417,11 @@ def its_effect(daily_counts: list[float], action_index: int) -> dict[str, Any]:
         "n_pre": n_pre,
         "n_post": n_post,
     }
+
+
+def _utc_date(ts: datetime) -> date:
+    """Calendar day in UTC — a stamp's own offset must not shift its bucket."""
+    return ts.astimezone(timezone.utc).date()
 
 
 def _metric_journey_stage(metric: str) -> tuple[str, str] | None:
@@ -444,9 +460,10 @@ def propose_outcome_contract(
     upgrade the comparison to ITS segmented regression over a 30-day window.
 
     Returns None for metrics CLARA cannot observe (seed problems' business
-    metrics) — those keep their manually authored contracts. A zero-signal
-    trailing window still proposes (baseline 0.0): the metric is observable,
-    the observed rate is just zero.
+    metrics) — those keep their manually authored contracts — and for a
+    zero-signal trailing window: a baseline of 0.0 makes the halving
+    convention degenerate (threshold == baseline flips the inferred
+    direction, so any recurrence would read as target_met).
     """
     contract = problem.outcome_contract
     parsed = _metric_journey_stage(contract.primary_metric)
@@ -455,12 +472,21 @@ def propose_outcome_contract(
     journey, stage = parsed
     end = _parse_ts(now)
     start = end - timedelta(days=TRAILING_BASELINE_DAYS)
-    count = sum(
-        1
+    window_stamps = [
+        ts
         for ts in _matching_timestamps(signals, journey=journey, journey_stage=stage)
         if start <= ts < end
+    ]
+    if not window_stamps:
+        return None
+    # Rate over the OBSERVED span, not a fixed 28d: dividing a young
+    # workspace's count by fabricated zero-days dilutes the baseline up to
+    # 4x and turns real improvements into reported failures.
+    span_days = min(
+        float(TRAILING_BASELINE_DAYS),
+        max((end - window_stamps[0]).total_seconds() / 86400.0, 1.0),
     )
-    baseline = round(count / TRAILING_BASELINE_DAYS, 4)
+    baseline = round(len(window_stamps) / span_days, 4)
     return OutcomeContract(
         primary_metric=contract.primary_metric,
         baseline=baseline,
@@ -497,24 +523,50 @@ def its_outcome_for_problem(
     end = min(_parse_ts(now), executed + timedelta(days=window_days))
     start = executed - timedelta(days=TRAILING_BASELINE_DAYS)
 
-    stamps = _matching_timestamps(signals, journey=journey, journey_stage=stage)
+    stamps = [
+        ts
+        for ts in _matching_timestamps(signals, journey=journey, journey_stage=stage)
+        if start <= ts <= end
+    ]
     if not stamps:
         return _insufficient_delta(delta=0.0, n_pre=0, n_post=0)
-    # Honest pre-window: never fabricate observation days before data existed.
-    if stamps[0] > start:
-        start = stamps[0]
 
-    start_date = start.date()
-    end_date = end.date()
+    # Complete UTC days only. The bucket for `end`'s own day is partial on
+    # every mid-window read and would enter the regression at full-day scale
+    # with maximum leverage on the effect estimate; same for `start`'s day.
+    if stamps[0] > start:
+        # Honest pre-window: never fabricate observation days before data
+        # existed. The first signal's day is a complete observation (zero
+        # signals before it that day is real data, not a window artifact).
+        start_date = _utc_date(stamps[0])
+    else:
+        start_utc = start.astimezone(timezone.utc)
+        start_date = start_utc.date()
+        if start_utc.time() != time.min:
+            start_date += timedelta(days=1)
+    end_date = _utc_date(end) - timedelta(days=1)
+    exec_day = _utc_date(executed)
     if end_date < start_date:
         return _insufficient_delta(delta=0.0, n_pre=0, n_post=0)
 
     total_days = (end_date - start_date).days + 1
-    counts = [0.0] * total_days
+    raw = [0.0] * total_days
     for ts in stamps:
-        index = (ts.date() - start_date).days
+        index = (_utc_date(ts) - start_date).days
         if 0 <= index < total_days:
-            counts[index] += 1.0
+            raw[index] += 1.0
 
-    action_index = max((executed.date() - start_date).days, 0)
-    return its_effect(counts, action_index)
+    # The execution day mixes pre- and post-intervention signals — drop it
+    # from the fit (standard ITS practice) and keep the real time axis.
+    times: list[float] = []
+    counts: list[float] = []
+    for offset in range(total_days):
+        if start_date + timedelta(days=offset) == exec_day:
+            continue
+        times.append(float(offset))
+        counts.append(raw[offset])
+    if not counts:
+        return _insufficient_delta(delta=0.0, n_pre=0, n_post=0)
+
+    action_index = max((exec_day - start_date).days + 1, 0)
+    return its_effect(counts, action_index, times=times)

@@ -19,6 +19,42 @@ from typing import Any
 
 from app.domain.models import ProblemRecord, WorkflowState
 from app.services.common import utc_now
+from app.services.workflow import approved_action_keys, is_human_reviewed
+
+
+def _execution_entry(execution, approvals) -> dict[str, Any]:
+    """Executions with the effective Art. 50(4) review status: pre-stamp rows
+    are backfilled from their approval record (see workflow.is_human_reviewed),
+    so a legacy human-approved push never renders as 'auto'."""
+    reviewed = is_human_reviewed(execution, approved_action_keys(approvals))
+    reviewed_by = execution.reviewed_by
+    reviewed_at = execution.reviewed_at
+    if reviewed and not execution.human_reviewed:
+        approval = next(
+            (
+                record
+                for record in approvals
+                if record.action_id == execution.action_id
+                and str(getattr(record.decision, "value", record.decision)) == "approved"
+            ),
+            None,
+        )
+        if approval is not None:
+            reviewed_by = reviewed_by or approval.reviewer
+            reviewed_at = reviewed_at or approval.created_at
+    return {
+        "execution_id": execution.execution_id,
+        "action_id": execution.action_id,
+        "destination": execution.destination,
+        "status": execution.status.value,
+        "external_ref": execution.external_ref,
+        "detail": execution.detail,
+        "created_at": execution.created_at,
+        "human_reviewed": reviewed,
+        "reviewed_by": reviewed_by,
+        "reviewed_at": reviewed_at,
+        "disclosure_applied": execution.disclosure_applied,
+    }
 
 
 def build_evidence_pack(
@@ -101,19 +137,7 @@ def build_evidence_pack(
             for approval in state.approvals
         ],
         "executions": [
-            {
-                "execution_id": execution.execution_id,
-                "action_id": execution.action_id,
-                "destination": execution.destination,
-                "status": execution.status.value,
-                "external_ref": execution.external_ref,
-                "detail": execution.detail,
-                "created_at": execution.created_at,
-                "human_reviewed": execution.human_reviewed,
-                "reviewed_by": execution.reviewed_by,
-                "reviewed_at": execution.reviewed_at,
-                "disclosure_applied": execution.disclosure_applied,
-            }
+            _execution_entry(execution, state.approvals)
             for execution in state.executions
         ],
         "outcome": {

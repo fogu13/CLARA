@@ -22,6 +22,7 @@ from app.domain.models import (
     ClosureRecordRequest,
     EmergingProblemReport,
     ExecutionRecord,
+    ExecutionStatus,
     JiraIssueDraft,
     LearningConclusionRecord,
     LearningConclusionRequest,
@@ -53,6 +54,7 @@ from app.services.outcome_engine import (
     propose_outcome_contract,
 )
 from app.services.signals import promote_candidate
+from app.services.works_council import strip_redaction_sentinels
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +237,7 @@ def build_router(
     @router.patch("/problems/{problem_id}", response_model=ProblemRecord, dependencies=[Depends(require_role(Role.editor))])
     def update_problem(problem_id: str, update: ProblemUpdateRequest) -> ProblemRecord:
         require_problem(problem_id)
+        update = strip_redaction_sentinels(update)
         updated_problem = active_problem_store.update_problem(problem_id, update)
         if updated_problem is None:
             raise HTTPException(
@@ -261,7 +264,7 @@ def build_router(
         updated_problem = active_problem_store.update_action_proposal(
             problem_id,
             action_id,
-            update,
+            strip_redaction_sentinels(update),
         )
         if updated_problem is None:
             raise HTTPException(
@@ -301,7 +304,22 @@ def build_router(
         problem_id: str,
         update: OutcomeContractUpdateRequest,
     ) -> ProblemRecord:
-        require_problem(problem_id)
+        problem = require_problem(problem_id)
+        update = strip_redaction_sentinels(update)
+        if (
+            update.primary_metric
+            and update.primary_metric != problem.outcome_contract.primary_metric
+            and workflow_store.outcome_snapshot(problem).status != "not_measured"
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot change the contract metric after an outcome was recorded against it",
+            )
+        if update.model_fields_set and update.comparison_method is None:
+            # An explicit edit upgrades the method to ITS unless the caller
+            # says otherwise — and marks the contract as deliberately authored,
+            # so the next approval's auto-proposal will not silently overwrite it.
+            update = update.model_copy(update={"comparison_method": ITS_COMPARISON_METHOD})
         updated_problem = active_problem_store.update_outcome_contract(problem_id, update)
         if updated_problem is None:
             raise HTTPException(
@@ -769,11 +787,52 @@ def build_router(
             )
 
         result = triage_graph.invoke(Command(resume=decision), config=config)
+
+        # Durable Art. 50 accounting for graph pushes: action_node results
+        # otherwise live only in graph state — no execution record, invisible
+        # to /article50-status and the audit export. The resume decision is
+        # the human gate, so the resuming principal is recorded as reviewer.
+        execution_ids: list[str] = []
+        if decision == "approved":
+            reviewer = _actor_identifier(user)
+            recorded_at = utc_now()
+            status_map = {
+                "pushed": ExecutionStatus.pushed,
+                "failed": ExecutionStatus.push_failed,
+                "no_connector": ExecutionStatus.blocked,
+                "no_config": ExecutionStatus.blocked,
+            }
+            for item in result.get("action_results", []):
+                audit = item.get("audit") or {}
+                execution = ExecutionRecord(
+                    execution_id="EXE-PENDING",  # store assigns the real id
+                    problem_id=f"TRIAGE-{thread_id}",
+                    action_id=str(item.get("action_type", "unknown")),
+                    destination=str(
+                        audit.get("connector") or item.get("action_type", "unknown")
+                    ),
+                    status=status_map.get(
+                        str(item.get("status", "")), ExecutionStatus.blocked
+                    ),
+                    owner=reviewer,
+                    summary=(
+                        f"Triage push: {item.get('title') or item.get('insight_id') or 'action'}"
+                    )[:200],
+                    created_at=recorded_at,
+                    external_ref=item.get("external_id"),
+                    detail="; ".join(audit.get("limitations", [])) or None,
+                    human_reviewed=True,
+                    reviewed_by=reviewer,
+                    reviewed_at=recorded_at,
+                )
+                execution_ids.append(workflow_store.add_execution(execution).execution_id)
+
         return {
             "status": result.get("status", "unknown"),
             "approval_decision": result.get("approval_decision"),
             "approved_insights": result.get("approved_insights", []),
             "action_results": result.get("action_results", []),
+            "execution_ids": execution_ids,
             "outcome": result.get("outcome"),
             "learning": result.get("learning"),
             "errors": result.get("errors", []),

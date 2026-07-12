@@ -924,6 +924,12 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         )
         return closure
 
+    def add_execution(self, execution):
+        self._load_records()  # syncs the EXE- id counter before assignment
+        record = super().add_execution(execution)
+        self._save_workflow_record("execution", record.execution_id, record.problem_id, record)
+        return record
+
     def update_execution(
         self, execution_id, *, status, external_ref=None, detail=None, disclosure_applied=None
     ):

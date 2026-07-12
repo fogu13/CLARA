@@ -350,7 +350,9 @@ class TestItsEffect:
 
 
 class TestProposeOutcomeContract:
-    def test_proposes_trailing_28d_baseline_and_its_window(self) -> None:
+    def test_proposes_observed_span_baseline_and_its_window(self) -> None:
+        # 14 signals over 14 observed days -> 1.0/day; dividing by a fixed 28
+        # would fabricate zero-days and dilute the baseline to 0.5.
         signals = [_signal(f"s{i}", days_ago=1 + i) for i in range(14)]
         problem = _promoted_problem(signals)
 
@@ -358,12 +360,25 @@ class TestProposeOutcomeContract:
 
         assert proposal is not None
         assert proposal.primary_metric == problem.outcome_contract.primary_metric
-        assert proposal.baseline == round(14 / 28, 4)
+        assert proposal.baseline == round(14 / 14.0, 4)
         assert proposal.success_threshold == round(proposal.baseline * 0.5, 4)
         assert proposal.measurement_window_days == 30
         assert proposal.comparison_method == ITS_COMPARISON_METHOD
         assert proposal.guardrail_metrics == problem.outcome_contract.guardrail_metrics
         assert proposal.responsible_owner == problem.outcome_contract.responsible_owner
+
+    def test_span_caps_at_trailing_28d_for_mature_workspaces(self) -> None:
+        signals = [
+            _signal(f"s{day}-{i}", days_ago=day)
+            for day in range(1, 29)
+            for i in range(2)
+        ]
+        problem = _promoted_problem(signals)
+
+        proposal = propose_outcome_contract(problem, signals, now=_iso(NOW))
+
+        assert proposal is not None
+        assert proposal.baseline == round(56 / 28.0, 4)
 
     def test_signals_outside_trailing_window_are_excluded(self) -> None:
         recent = [_signal(f"r{i}", days_ago=1 + i) for i in range(7)]
@@ -373,7 +388,7 @@ class TestProposeOutcomeContract:
         proposal = propose_outcome_contract(problem, recent + stale, now=_iso(NOW))
 
         assert proposal is not None
-        assert proposal.baseline == round(7 / 28, 4)
+        assert proposal.baseline == round(7 / 7.0, 4)
 
     def test_business_metric_contract_is_left_alone(self) -> None:
         seed_problem = load_seed_problems()[0]
@@ -383,16 +398,14 @@ class TestProposeOutcomeContract:
 
         assert propose_outcome_contract(seed_problem, [], now=_iso(NOW)) is None
 
-    def test_zero_signal_baseline_still_proposes(self) -> None:
+    def test_zero_signal_trailing_window_proposes_nothing(self) -> None:
+        # baseline 0.0 would make threshold == baseline and flip the inferred
+        # direction to 'increase' — any recurrence would read as target_met.
         signals = [_signal(f"s{i}", days_ago=40 + i) for i in range(5)]
         problem = _promoted_problem(signals)
 
-        proposal = propose_outcome_contract(problem, [], now=_iso(NOW))
-
-        assert proposal is not None
-        assert proposal.baseline == 0.0
-        assert proposal.success_threshold == 0.0
-        assert proposal.comparison_method == ITS_COMPARISON_METHOD
+        assert propose_outcome_contract(problem, [], now=_iso(NOW)) is None
+        assert propose_outcome_contract(problem, signals, now=_iso(NOW)) is None
 
 
 class TestItsOutcomeForProblem:
@@ -420,6 +433,52 @@ class TestItsOutcomeForProblem:
         assert result["n_pre"] >= 27 and result["n_post"] >= 14
         assert result["effect"] < 0
         assert result["ci_high"] < 0  # the drop is significant, CI excludes 0
+
+    def test_steady_rate_mid_day_read_reports_no_effect(self) -> None:
+        # Regression: the partial bucket for the read day used to enter the
+        # fit at full-day scale, dragging every mid-window read toward a
+        # phantom improvement. With complete-days-only, a steady rate with
+        # no true effect must not produce a significant negative effect.
+        executed = NOW - timedelta(days=15)
+        signals = [
+            _signal(f"d{day}-{i}", days_ago=float(day))
+            for day in range(1, 44)
+            for i in range(10)
+        ]
+        problem = _promoted_problem(signals)
+
+        # Read mid-day: `now` is 03:00 into the current UTC day.
+        read_at = NOW - timedelta(hours=9)
+        result = its_outcome_for_problem(
+            problem, signals, executed_at=_iso(executed), now=_iso(read_at)
+        )
+
+        assert result is not None
+        assert result["method"] == "its"
+        assert abs(result["effect"]) < 1.0
+        assert result["ci_low"] <= 0.0 <= result["ci_high"]
+
+    def test_execution_day_excluded_from_fit(self) -> None:
+        # Regression: the execution day mixes pre and post signals; keeping
+        # it in the post segment understated the level change and invented a
+        # post slope. An instant, complete stop must fit as a clean level
+        # drop with no slope artifact.
+        executed = NOW - timedelta(days=15)
+        signals = [
+            _signal(f"pre{day}-{i}", days_ago=float(day))
+            for day in range(15, 44)
+            for i in range(10)
+        ]
+        problem = _promoted_problem(signals)
+
+        result = its_outcome_for_problem(
+            problem, signals, executed_at=_iso(executed), now=_iso(NOW)
+        )
+
+        assert result is not None
+        assert result["method"] == "its"
+        assert abs(result["level_change"] + 10.0) < 0.5
+        assert abs(result["slope_change"]) < 0.2
 
     def test_sparse_post_period_returns_labelled_delta(self) -> None:
         executed = NOW - timedelta(days=1)
