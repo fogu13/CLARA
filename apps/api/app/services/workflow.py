@@ -371,12 +371,14 @@ class WorkflowStore:
         status: ExecutionStatus,
         external_ref: str | None = None,
         detail: str | None = None,
+        disclosure_applied: bool | None = None,
     ) -> ExecutionRecord:
         for index, execution in enumerate(self._executions):
             if execution.execution_id == execution_id:
-                updated = execution.model_copy(
-                    update={"status": status, "external_ref": external_ref, "detail": detail}
-                )
+                update: dict = {"status": status, "external_ref": external_ref, "detail": detail}
+                if disclosure_applied is not None:
+                    update["disclosure_applied"] = disclosure_applied
+                updated = execution.model_copy(update=update)
                 self._executions[index] = updated
                 return updated
         raise HTTPException(status_code=404, detail="Execution not found")
@@ -473,6 +475,11 @@ class WorkflowStore:
                 owner=action.owner,
                 summary=f"Draft {action.destination} execution created for {action.class_.value}.",
                 created_at=record.created_at,
+                # Art. 50(4): this execution exists because a named human approved
+                # it — stamp the editorial review as a first-class field.
+                human_reviewed=True,
+                reviewed_by=decision.reviewer,
+                reviewed_at=record.created_at,
             )
             self._executions.append(execution)
             if action.destination == "jira":
@@ -761,7 +768,11 @@ class SQLiteWorkflowStore:
                 summary TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 external_ref TEXT,
-                detail TEXT
+                detail TEXT,
+                human_reviewed INTEGER NOT NULL DEFAULT 0,
+                reviewed_by TEXT,
+                reviewed_at TEXT,
+                disclosure_applied INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS jira_issue_drafts (
@@ -826,6 +837,10 @@ class SQLiteWorkflowStore:
         self._ensure_column("learning_conclusions", "retention_expires_at", "TEXT NOT NULL DEFAULT ''")
         self._ensure_column("executions", "external_ref", "TEXT")
         self._ensure_column("executions", "detail", "TEXT")
+        self._ensure_column("executions", "human_reviewed", "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column("executions", "reviewed_by", "TEXT")
+        self._ensure_column("executions", "reviewed_at", "TEXT")
+        self._ensure_column("executions", "disclosure_applied", "INTEGER NOT NULL DEFAULT 0")
         # Idempotent backfill for the JWT-tenant migration: header-era rows were
         # tagged with client strings ('demo_tenant'/...); the tenant key is now
         # str(workspace_id) and local dev is the default workspace ('1'). Closure
@@ -860,6 +875,7 @@ class SQLiteWorkflowStore:
         status: ExecutionStatus,
         external_ref: str | None = None,
         detail: str | None = None,
+        disclosure_applied: bool | None = None,
     ) -> ExecutionRecord:
         # execution_id is derived as EXE-{rowid:04d}; map back to the numeric row id.
         try:
@@ -867,9 +883,14 @@ class SQLiteWorkflowStore:
         except ValueError as exc:
             raise HTTPException(status_code=404, detail="Execution not found") from exc
 
+        assignments = "status = ?, external_ref = ?, detail = ?"
+        values: list = [status.value, external_ref, detail]
+        if disclosure_applied is not None:
+            assignments += ", disclosure_applied = ?"
+            values.append(int(disclosure_applied))
         cursor = self._connection.execute(
-            "UPDATE executions SET status = ?, external_ref = ?, detail = ? WHERE id = ?",
-            (status.value, external_ref, detail, row_id),
+            f"UPDATE executions SET {assignments} WHERE id = ?",
+            (*values, row_id),
         )
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Execution not found")
@@ -992,8 +1013,9 @@ class SQLiteWorkflowStore:
             execution_cursor = self._connection.execute(
                 """
                 INSERT INTO executions
-                    (problem_id, action_id, destination, status, owner, summary, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (problem_id, action_id, destination, status, owner, summary, created_at,
+                     human_reviewed, reviewed_by, reviewed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     problem.problem_id,
@@ -1002,6 +1024,9 @@ class SQLiteWorkflowStore:
                     ExecutionStatus.draft_created.value,
                     action.owner,
                     f"Draft {action.destination} execution created for {action.class_.value}.",
+                    created_at,
+                    1,
+                    decision.reviewer,
                     created_at,
                 ),
             )
@@ -1363,6 +1388,10 @@ class SQLiteWorkflowStore:
             created_at=row["created_at"],
             external_ref=row["external_ref"],
             detail=row["detail"],
+            human_reviewed=bool(row["human_reviewed"]),
+            reviewed_by=row["reviewed_by"],
+            reviewed_at=row["reviewed_at"],
+            disclosure_applied=bool(row["disclosure_applied"]),
         )
 
     @staticmethod

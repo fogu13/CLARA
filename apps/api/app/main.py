@@ -582,6 +582,7 @@ def create_app(
             connector_config_store=connector_config_store,
             telemetry_store=telemetry_store,
             measurement_plan_store=measurement_plan_store,
+            workspace_store=workspace_store,
             require_problem=require_problem,
             enrich_problem_for_response=enrich_problem_for_response,
             list_enriched_problems=list_enriched_problems,
@@ -594,6 +595,7 @@ def create_app(
     api.include_router(
         connectors_routes.build_router(
             connector_config_store=connector_config_store,
+            workspace_store=workspace_store,
             pull_source_and_import=_pull_source_and_import,
         )
     )

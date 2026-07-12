@@ -4,19 +4,23 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, FileText, AlertTriangle, CheckCircle, Download, Cpu, Globe, UserX } from "lucide-react";
-import { apiBaseUrl, apiHeaders, getSystemConfig } from "@/lib/client-api";
-import type { SystemConfig } from "@/lib/types";
+import { ShieldCheck, FileText, AlertTriangle, CheckCircle, Download, Cpu, Globe, UserX, Server, Scale } from "lucide-react";
+import { apiBaseUrl, apiHeaders, getArticle50Status, getSystemConfig, getWorkspace } from "@/lib/client-api";
+import type { Article50Status, SystemConfig, WorkspaceSettings } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
 
 export default function CompliancePage() {
   const { t } = useI18n();
   const [config, setConfig] = useState<SystemConfig | null>(null);
+  const [art50, setArt50] = useState<Article50Status | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceSettings | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     getSystemConfig().then(setConfig).catch(() => {});
+    getArticle50Status().then(setArt50).catch(() => {});
+    getWorkspace().then(setWorkspace).catch(() => {});
   }, []);
 
   async function downloadCsv(entity: string) {
@@ -63,6 +67,21 @@ export default function CompliancePage() {
     }
   }
 
+  function downloadArticle50Status() {
+    setExportError(null);
+    if (!art50) {
+      setExportError(t.compliance.art50Unavailable);
+      return;
+    }
+    const blob = new Blob([JSON.stringify(art50, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `clara-article50-status-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   const aiHost = (() => {
     try {
       return config ? new URL(config.ai_base_url).host : null;
@@ -70,6 +89,9 @@ export default function CompliancePage() {
       return config?.ai_base_url ?? null;
     }
   })();
+
+  const art50Compliant =
+    art50 !== null && art50.auto_published.disclosed_count >= art50.auto_published.count;
 
   return (
     <div className="space-y-6">
@@ -146,6 +168,59 @@ export default function CompliancePage() {
 
         <Card>
           <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Scale className="h-4 w-4" /> {t.compliance.art50Title}</CardTitle>
+            <CardDescription>{t.compliance.art50Subtitle}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {art50 ? (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t.compliance.art50HumanReviewed}</span>
+                  <span className="font-medium">{art50.human_reviewed.count}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t.compliance.art50AutoPublished}</span>
+                  <span className="font-medium">
+                    {art50.auto_published.count}
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      ({art50.auto_published.disclosed_count} {t.compliance.art50Disclosed})
+                    </span>
+                  </span>
+                </div>
+                {art50.by_destination.length > 0 ? (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-muted-foreground">
+                        <th className="py-1 font-medium">{t.compliance.art50Destination}</th>
+                        <th className="py-1 font-medium">{t.compliance.art50HumanReviewed}</th>
+                        <th className="py-1 font-medium">{t.compliance.art50Disclosed}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {art50.by_destination.map((row) => (
+                        <tr key={row.destination} className="border-t">
+                          <td className="py-1">{row.destination}</td>
+                          <td className="py-1">{row.human_reviewed}</td>
+                          <td className="py-1">{row.disclosed}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t.compliance.art50NoExecutions}</p>
+                )}
+                <Button size="sm" variant="outline" onClick={downloadArticle50Status}>
+                  <Download className="mr-1 h-3 w-3" /> {t.compliance.art50Export}
+                </Button>
+              </>
+            ) : (
+              <p className="text-muted-foreground">{t.compliance.art50Unavailable}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle className="flex items-center gap-2"><Globe className="h-4 w-4" /> {t.compliance.residency}</CardTitle>
             <CardDescription>{t.compliance.residencySubtitle}</CardDescription>
           </CardHeader>
@@ -182,6 +257,26 @@ export default function CompliancePage() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Server className="h-4 w-4" /> {t.compliance.subprocessors}</CardTitle>
+          <CardDescription>{t.compliance.subprocessorsSubtitle}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.subprocessors1}</span></div>
+          <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.subprocessors2}</span></div>
+          <div className="rounded-md border p-3">
+            <p className="font-medium">{t.compliance.securityContact}</p>
+            {workspace?.notification_email ? (
+              <code className="mt-1 block text-xs bg-muted rounded px-2 py-1">{workspace.notification_email}</code>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">{t.complianceProse.securityContactNone}</p>
+            )}
+            <p className="mt-1 text-xs text-muted-foreground">{t.complianceProse.incidentNotice}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>{t.compliance.assessment}</CardTitle>
           <CardDescription>{t.compliance.assessmentSubtitle}</CardDescription>
         </CardHeader>
@@ -200,15 +295,31 @@ export default function CompliancePage() {
             </div>
 
             <div className="flex items-start gap-3">
-              <CheckCircle className="h-5 w-5 text-emerald-500 mt-0.5" />
+              {art50Compliant || art50 === null ? (
+                <CheckCircle className="h-5 w-5 text-emerald-500 mt-0.5" />
+              ) : (
+                <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
+              )}
               <div>
-                <p className="text-sm font-medium">Transparency (Art 50)</p>
+                <p className="text-sm font-medium">{t.complianceProse.transparencyTitle}</p>
                 <p className="text-xs text-muted-foreground">
-                  AI-generated content is labelled with audit metadata (model, source,
-                  limitations). Users can see which insights are LLM-synthesized.
+                  {t.complianceProse.transparencyDesc}
+                  {art50 ? (
+                    <>
+                      {" "}
+                      {art50.human_reviewed.count} {t.compliance.art50HumanReviewed} ·{" "}
+                      {art50.auto_published.count} {t.compliance.art50AutoPublished}.
+                    </>
+                  ) : null}
                 </p>
               </div>
-              <Badge variant="success">Compliant</Badge>
+              {art50 ? (
+                <Badge variant={art50Compliant ? "success" : "warning"}>
+                  {art50Compliant ? t.compliance.art50BadgeOk : t.compliance.art50BadgeGap}
+                </Badge>
+              ) : (
+                <Badge variant="secondary">{t.compliance.art50BadgeOk}</Badge>
+              )}
             </div>
 
             <div className="flex items-start gap-3">

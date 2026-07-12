@@ -433,6 +433,10 @@ export type ExecutionRecord = {
   owner: string;
   summary: string;
   created_at: string;
+  human_reviewed?: boolean;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  disclosure_applied?: boolean;
 };
 
 export type ClosureRecordRequest = {
@@ -604,6 +608,14 @@ export type WorkspaceSettings = {
   notification_email: string;
   measurement_window_days: number;
   learning_half_life_days: number;
+  ai_disclosure_template: string;
+};
+
+export type Article50Status = {
+  human_reviewed: { count: number; latest_at: string | null };
+  auto_published: { count: number; disclosed_count: number; latest_at: string | null };
+  by_destination: { destination: string; human_reviewed: number; disclosed: number }[];
+  generated_at: string;
 };
 
 export type SystemConfig = {

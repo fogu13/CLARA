@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from app.auth import UserContext, get_current_user
 from app.rbac import Role, require_role
 
 # Connector config keys whose values are secrets and must never be returned to clients.
@@ -36,6 +37,7 @@ def redacted_connector_config(connector) -> dict:
 def build_router(
     *,
     connector_config_store,
+    workspace_store,
     pull_source_and_import,
 ) -> APIRouter:
     router = APIRouter()
@@ -82,10 +84,15 @@ def build_router(
         return pull_source_and_import(connector_type, config)
 
     @router.post("/connectors/test/{connector_type}", dependencies=[Depends(require_role(Role.admin))])
-    def test_connector(connector_type: str, config: dict) -> dict:
+    def test_connector(
+        connector_type: str,
+        config: dict,
+        user: UserContext = Depends(get_current_user),  # noqa: B008
+    ) -> dict:
         """Test a connector configuration without saving it."""
         from app.connectors import get_destination, get_source
         from app.connectors.base import ConnectorError
+        from app.services.action_push import apply_disclosure
 
         if connector_type in ("zendesk",):
             src = get_source(connector_type)
@@ -101,11 +108,16 @@ def build_router(
             dest = get_destination(connector_type)
             if dest is None:
                 raise HTTPException(status_code=400, detail="Unknown destination connector")
-            # For testing, send a minimal test action
+            # Minimal test action. Nobody reviewed this text (it is the one
+            # human-free push in the product), so it carries the workspace's
+            # Art. 50 AI-disclosure line — which also proves the mechanism e2e.
             test_action = {
                 "type": "create_ticket" if connector_type == "jira" else "notify",
                 "title": "CLARA connector test",
-                "description": "This is a test from the CLARA platform.",
+                "description": apply_disclosure(
+                    "This is a test from the CLARA platform.",
+                    workspace_store.get(user.workspace_id).ai_disclosure_template,
+                ),
                 "priority": 3,
                 "insight_title": "Test",
                 "insight_summary": "Connector configuration test",
