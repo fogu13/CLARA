@@ -30,7 +30,7 @@ import {
 import { AiLiteracyBanner } from "@/app/components/ai-literacy-banner";
 import { WorksCouncilBanner } from "@/app/components/works-council-banner";
 import { percent } from "@/lib/format";
-import { useI18n, type Locale } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import { fallbackProblems } from "@/lib/sample-data";
 import type {
   ActionClass,
