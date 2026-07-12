@@ -1,6 +1,7 @@
 import type {
   ApprovalDecision,
   ApprovalRecord,
+  Article50Status,
   ActionProposalUpdateRequest,
   ClosureRecord,
   ClosureRecordRequest,
@@ -414,6 +415,10 @@ export async function updateWorkspace(settings: WorkspaceSettings): Promise<Work
 
 export async function getSystemConfig(): Promise<SystemConfig> {
   return requestJson<SystemConfig>(`${apiBaseUrl()}/system-config`);
+}
+
+export async function getArticle50Status(): Promise<Article50Status> {
+  return requestJson<Article50Status>(`${apiBaseUrl()}/article50-status`);
 }
 
 export async function getRules(): Promise<FeedbackRule[]> {

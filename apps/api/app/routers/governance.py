@@ -108,6 +108,40 @@ def build_router(
             ),
         }
 
+    @router.get("/article50-status", dependencies=[read_dep])
+    def article50_status() -> dict:
+        """EU AI Act Art. 50 transparency aggregate: which outbound executions
+        were human-reviewed (Art. 50(4) exempt) vs auto-published (disclosed).
+        Aggregates only, so viewer role is enough."""
+        executions = workflow_store.list_executions()
+        reviewed = [e for e in executions if e.human_reviewed]
+        auto_published = [e for e in executions if not e.human_reviewed]
+        by_destination: dict[str, dict[str, int]] = {}
+        for execution in executions:
+            row = by_destination.setdefault(
+                execution.destination, {"human_reviewed": 0, "disclosed": 0}
+            )
+            if execution.human_reviewed:
+                row["human_reviewed"] += 1
+            if execution.disclosure_applied:
+                row["disclosed"] += 1
+        return {
+            "human_reviewed": {
+                "count": len(reviewed),
+                "latest_at": max((e.created_at for e in reviewed), default=None),
+            },
+            "auto_published": {
+                "count": len(auto_published),
+                "disclosed_count": sum(1 for e in auto_published if e.disclosure_applied),
+                "latest_at": max((e.created_at for e in auto_published), default=None),
+            },
+            "by_destination": [
+                {"destination": destination, **counts}
+                for destination, counts in sorted(by_destination.items())
+            ],
+            "generated_at": utc_now(),
+        }
+
     @router.get("/audit-export", dependencies=[Depends(require_role(Role.admin))])
     def export_audit_log() -> dict:
         return {

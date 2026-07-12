@@ -109,6 +109,10 @@ def build_evidence_pack(
                 "external_ref": execution.external_ref,
                 "detail": execution.detail,
                 "created_at": execution.created_at,
+                "human_reviewed": execution.human_reviewed,
+                "reviewed_by": execution.reviewed_by,
+                "reviewed_at": execution.reviewed_at,
+                "disclosure_applied": execution.disclosure_applied,
             }
             for execution in state.executions
         ],
@@ -190,7 +194,17 @@ def render_evidence_pack_html(pack: dict[str, Any]) -> str:
         for a in pack["approvals"]
     ]
     execution_rows = [
-        [x["execution_id"], x["destination"], x["status"], x["external_ref"], x["detail"], x["created_at"]]
+        [
+            x["execution_id"],
+            x["destination"],
+            x["status"],
+            # Art. 50(4) editorial-review stamp vs disclosed auto-publication.
+            f"human ({x['reviewed_by']})" if x["human_reviewed"]
+            else ("auto, AI-disclosed" if x["disclosure_applied"] else "auto"),
+            x["external_ref"],
+            x["detail"],
+            x["created_at"],
+        ]
         for x in pack["executions"]
     ]
     checkpoint_rows = [
@@ -259,7 +273,7 @@ def render_evidence_pack_html(pack: dict[str, Any]) -> str:
 {_table(['Decision', 'Action', 'Outcome', 'Reviewer', 'At', 'Note'], approval_rows, 'No approval decisions yet.')}
 
 <h2>Executions</h2>
-{_table(['Execution', 'Destination', 'Status', 'External ref', 'Detail', 'At'], execution_rows, 'No executions yet.')}
+{_table(['Execution', 'Destination', 'Status', 'Review (Art. 50)', 'External ref', 'Detail', 'At'], execution_rows, 'No executions yet.')}
 
 <h2>Outcome contract &amp; measurement</h2>
 <div class="outcome">{outcome_line}<br>

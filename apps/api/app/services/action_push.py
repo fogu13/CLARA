@@ -41,15 +41,32 @@ class _WorkflowStore(Protocol):
         status: ExecutionStatus,
         external_ref: str | None = None,
         detail: str | None = None,
+        disclosure_applied: bool | None = None,
     ) -> ExecutionRecord: ...
 
 
-def _build_push_payload(problem: ProblemRecord, action: ActionProposal) -> dict[str, Any]:
-    """Map a problem + approved action onto the dict shape connectors expect."""
+def apply_disclosure(description: str, template: str) -> str:
+    """Append the Art. 50 AI-disclosure line to outbound text (final line)."""
+    if not template:
+        return description
+    return f"{description}\n\n{template}" if description else template
+
+
+def _build_push_payload(
+    problem: ProblemRecord, action: ActionProposal, *, disclosure: str | None = None
+) -> dict[str, Any]:
+    """Map a problem + approved action onto the dict shape connectors expect.
+
+    This is the single choke point for outbound text: a disclosure passed here
+    reaches every destination (Jira description, Slack message) unchanged.
+    """
     risk_priority = {"critical": 1, "high": 1, "medium": 2, "low": 3}
+    description = action.proposal
+    if disclosure:
+        description = apply_disclosure(description, disclosure)
     return {
         "title": f"{problem.title} [{action.class_.value}]",
-        "description": action.proposal,
+        "description": description,
         "priority": risk_priority.get(action.risk_level.value, 3),
         "insight_title": problem.title,
         "insight_summary": problem.statement,
@@ -67,11 +84,16 @@ def push_approved_action(
     execution: ExecutionRecord,
     config_store: _ConfigStore,
     workflow_store: _WorkflowStore,
+    disclosure_template: str | None = None,
 ) -> ExecutionRecord:
     """Push an approved action to its destination system, if one is configured.
 
     Returns the (possibly updated) execution record. Never raises for connector
     failures — the outcome is recorded on the execution instead.
+
+    Art. 50: executions without a human-review stamp get `disclosure_template`
+    appended to the outbound text and `disclosure_applied=True` recorded;
+    human-reviewed executions are Art. 50(4)-exempt and pushed verbatim.
     """
     destination = execution.destination
     connector = DESTINATIONS.get(destination)
@@ -106,8 +128,11 @@ def push_approved_action(
                 detail=f"Reused existing {destination} record (idempotent skip).",
             )
 
+    disclosure = None if execution.human_reviewed else disclosure_template
     try:
-        result = connector.push(_build_push_payload(problem, action), config)
+        result = connector.push(
+            _build_push_payload(problem, action, disclosure=disclosure), config
+        )
     except ConnectorError as exc:
         logger.warning(
             "Action push failed: problem=%s action=%s destination=%s error=%s",
@@ -128,4 +153,5 @@ def push_approved_action(
         status=ExecutionStatus.pushed,
         external_ref=external_id,
         detail=f"{destination} record created: {external_id}",
+        disclosure_applied=True if disclosure else None,
     )

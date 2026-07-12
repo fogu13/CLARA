@@ -924,12 +924,18 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         )
         return closure
 
-    def update_execution(self, execution_id, *, status, external_ref=None, detail=None):
+    def update_execution(
+        self, execution_id, *, status, external_ref=None, detail=None, disclosure_applied=None
+    ):
         self._load_records()
         # Base class mutates the in-memory record; persist the flip too, or a
         # restart resurrects executions as eternal drafts.
         updated = super().update_execution(
-            execution_id, status=status, external_ref=external_ref, detail=detail
+            execution_id,
+            status=status,
+            external_ref=external_ref,
+            detail=detail,
+            disclosure_applied=disclosure_applied,
         )
         self._save_workflow_record("execution", updated.execution_id, updated.problem_id, updated)
         return updated

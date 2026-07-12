@@ -163,6 +163,21 @@ def test_audit_export_requires_admin(monkeypatch) -> None:
     assert set(admin_response.json()) == {"approvals", "executions", "closure_records", "jira_issue_drafts"}
 
 
+def test_article50_status_readable_by_viewer(monkeypatch) -> None:
+    client = make_auth_client(monkeypatch)
+
+    assert client.get("/article50-status").status_code == 401
+
+    response = client.get("/article50-status", headers=auth_header("viewer"))
+    assert response.status_code == 200
+    assert set(response.json()) == {
+        "human_reviewed",
+        "auto_published",
+        "by_destination",
+        "generated_at",
+    }
+
+
 def test_connector_listing_requires_admin_and_redacts_secrets(monkeypatch) -> None:
     from app.connectors.config_store import ConnectorConfig, ConnectorConfigStore
 

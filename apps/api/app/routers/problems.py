@@ -188,6 +188,7 @@ def build_router(
     connector_config_store,
     telemetry_store,
     measurement_plan_store,
+    workspace_store,
     require_problem,
     enrich_problem_for_response,
     list_enriched_problems,
@@ -396,7 +397,11 @@ def build_router(
         return require_candidate(candidate_id)
 
     @router.post("/problems/{problem_id}/approvals", response_model=ApprovalRecord, dependencies=[Depends(require_role(Role.editor))])
-    def record_approval(problem_id: str, decision: ApprovalDecision) -> ApprovalRecord:
+    def record_approval(
+        problem_id: str,
+        decision: ApprovalDecision,
+        user: UserContext = Depends(get_current_user),  # noqa: B008
+    ) -> ApprovalRecord:
         problem = require_problem(problem_id)
         record = workflow_store.record_approval(problem=problem, decision=decision)
         # approval-cycle-time denominator + decision mix.
@@ -466,6 +471,9 @@ def build_router(
                         execution=execution,
                         config_store=connector_config_store,
                         workflow_store=workflow_store,
+                        disclosure_template=workspace_store.get(
+                            user.workspace_id
+                        ).ai_disclosure_template,
                     )
                     if pushed.status.value in ("pushed", "push_failed"):
                         telemetry_store.record(
