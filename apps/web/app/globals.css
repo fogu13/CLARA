@@ -2333,3 +2333,32 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+/* W3 AI-literacy pack: print-route pattern (no PDF dependency). The pack page
+   renders inside the dashboard chrome; printing hides the chrome (the sidebar
+   <aside> and the app <header>, which sits OUTSIDE <main> — the pack's own
+   stamped <header> lives inside <main> and stays), lets the scroll container
+   flow onto pages, and keeps citation blocks unsplit. */
+@media print {
+  aside,
+  header {
+    display: none !important;
+  }
+
+  main header {
+    display: block !important;
+  }
+
+  main {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  .print-hidden {
+    display: none !important;
+  }
+
+  .print-avoid-break {
+    break-inside: avoid;
+  }
+}

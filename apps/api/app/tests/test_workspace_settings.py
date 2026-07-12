@@ -42,6 +42,27 @@ def test_workspace_settings_round_trip(tmp_path) -> None:
     assert after["notification_email"] == "alerts@acme.com"
 
 
+def test_ai_literacy_attestation_round_trip(tmp_path) -> None:
+    client = make_client(tmp_path)
+
+    # Default: the Art. 4 pack has not been attested as delivered yet.
+    before = client.get("/workspace").json()
+    assert before["ai_literacy_pack_delivered_at"] is None
+
+    updated = client.put(
+        "/workspace",
+        json={**before, "ai_literacy_pack_delivered_at": "2026-07-12"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["ai_literacy_pack_delivered_at"] == "2026-07-12"
+
+    after = client.get("/workspace").json()
+    assert after["ai_literacy_pack_delivered_at"] == "2026-07-12"
+    # The attestation write leaves the rest of the settings blob untouched.
+    assert after["name"] == before["name"]
+    assert after["works_council_mode"] == before["works_council_mode"]
+
+
 def test_system_config_reports_ai_settings(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("AI_BASE_URL", "https://api.mistral.ai/v1")
     monkeypatch.setenv("AI_MODEL", "mistral-small-latest")

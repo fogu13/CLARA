@@ -17,11 +17,13 @@ import {
   ShieldCheck,
   Settings,
   Rocket,
+  BookOpen,
 } from "lucide-react";
 
 type NavKey =
   | "dashboard" | "signals" | "insights" | "actions" | "learnings"
-  | "onboarding" | "sources" | "integrations" | "taxonomy" | "rules" | "compliance" | "settings";
+  | "onboarding" | "sources" | "integrations" | "taxonomy" | "rules"
+  | "compliance" | "aiLiteracy" | "settings";
 type GroupKey = "work" | "setup" | "govern";
 
 const NAV_GROUPS: {
@@ -55,6 +57,7 @@ const NAV_GROUPS: {
     label: "govern",
     items: [
       { href: "/compliance", key: "compliance", icon: ShieldCheck },
+      { href: "/ai-literacy", key: "aiLiteracy", icon: BookOpen },
       { href: "/settings", key: "settings", icon: Settings },
     ],
   },

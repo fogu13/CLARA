@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Circle } from "lucide-react";
+import { BookOpen, CheckCircle2, Circle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   apiBaseUrl,
@@ -132,6 +132,24 @@ export default function OnboardingPage() {
           </Card>
         ))}
       </div>
+
+      {/* W3: Art. 4 AI-literacy module — a standing pointer, not a tracked
+          step: completion is deliberately never recorded per user. */}
+      <Card className="border-primary/30">
+        <CardContent className="flex items-start gap-4 py-4">
+          <BookOpen className="mt-0.5 h-6 w-6 shrink-0 text-primary" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">{t.aiLiteracy.onboardingTitle}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{t.aiLiteracy.onboardingDesc}</p>
+          </div>
+          <Link
+            href="/ai-literacy"
+            className="mt-0.5 shrink-0 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+          >
+            {t.aiLiteracy.onboardingCta}
+          </Link>
+        </CardContent>
+      </Card>
     </div>
   );
 }
