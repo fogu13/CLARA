@@ -161,6 +161,11 @@ class WorkspaceSettings(BaseModel):
     # person-capable fields (reviewer/actor/owner/assignee) with fixed role
     # labels. The entire policy lives in services/works_council.py.
     works_council_mode: bool = False
+    # EU AI Act Art. 4: ISO date the AI-Literacy Pack was attested as delivered
+    # to staff. Deliberately workspace-level only — per-user completion tracking
+    # would be an employee-monitoring feature (works-council trap, conflicts
+    # with the Betriebsrat-Modus guarantee above), so it does not exist here.
+    ai_literacy_pack_delivered_at: str | None = None
 
 
 class SystemConfig(BaseModel):

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, FileText, AlertTriangle, CheckCircle, Download, Cpu, Globe, UserX, Server, Scale } from "lucide-react";
+import { ShieldCheck, FileText, AlertTriangle, BookOpen, CheckCircle, Download, Cpu, Globe, UserX, Server, Scale } from "lucide-react";
 import { apiBaseUrl, apiHeaders, getArticle50Status, getSystemConfig, getWorkspace } from "@/lib/client-api";
 import type { Article50Status, SystemConfig, WorkspaceSettings } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
@@ -216,6 +217,40 @@ export default function CompliancePage() {
             ) : (
               <p className="text-muted-foreground">{t.compliance.art50Unavailable}</p>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><BookOpen className="h-4 w-4" /> {t.aiLiteracy.compTitle}</CardTitle>
+            <CardDescription>{t.aiLiteracy.compSubtitle}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">{t.aiLiteracy.packAttestation}</span>
+              {workspace?.ai_literacy_pack_delivered_at ? (
+                <Badge variant="success">
+                  {t.aiLiteracy.attestedOn.replace("{date}", workspace.ai_literacy_pack_delivered_at)}
+                </Badge>
+              ) : (
+                <Badge variant="secondary">{t.aiLiteracy.notAttested}</Badge>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/ai-literacy"
+                className="inline-flex items-center rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted"
+              >
+                {t.aiLiteracy.compOpen}
+              </Link>
+              <Link
+                href="/ai-literacy/pack"
+                className="inline-flex items-center rounded-md border px-3 py-1 text-xs font-medium hover:bg-muted"
+              >
+                <Download className="mr-1 h-3 w-3" aria-hidden="true" /> {t.aiLiteracy.compPack}
+              </Link>
+            </div>
+            <p className="text-xs text-muted-foreground">{t.aiLiteracy.attestNote}</p>
           </CardContent>
         </Card>
 

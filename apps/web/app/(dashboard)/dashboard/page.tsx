@@ -27,6 +27,7 @@ import {
   getProblems,
   getSignals
 } from "@/lib/client-api";
+import { AiLiteracyBanner } from "@/app/components/ai-literacy-banner";
 import { WorksCouncilBanner } from "@/app/components/works-council-banner";
 import { percent } from "@/lib/format";
 import { useI18n, type Locale } from "@/lib/i18n";
@@ -375,6 +376,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <AiLiteracyBanner />
       <div className="rounded-2xl border bg-card p-8 shadow-sm">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
