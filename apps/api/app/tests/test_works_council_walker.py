@@ -161,12 +161,31 @@ def _seed_person_data(client: TestClient) -> None:
 
 
 def _set_flag(client: TestClient, enabled: bool) -> None:
-    editor = _bearer(EDITOR)
-    settings = client.get("/workspace", headers=editor).json()
-    settings["works_council_mode"] = enabled
-    response = client.put("/workspace", json=settings, headers=editor)
+    # Toggling the flag is admin-only: an editor flipping it off would defeat
+    # the very control the mode exists for (see test below).
+    response = client.put(
+        "/workspace", json={"works_council_mode": enabled}, headers=_bearer(ADMIN)
+    )
     assert response.status_code == 200, response.text
     assert response.json()["works_council_mode"] is enabled
+
+
+def test_editor_cannot_toggle_works_council_mode(wc) -> None:
+    _, client = wc
+    _set_flag(client, True)
+    response = client.put(
+        "/workspace", json={"works_council_mode": False}, headers=_bearer(EDITOR)
+    )
+    assert response.status_code == 403
+    editor_view = client.get("/workspace", headers=_bearer(EDITOR)).json()
+    assert editor_view["works_council_mode"] is True
+    # Benign fields stay editor-editable; merge keeps the flag intact.
+    renamed = client.put(
+        "/workspace", json={"name": "Walker WS"}, headers=_bearer(EDITOR)
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["works_council_mode"] is True
+    assert renamed.json()["name"] == "Walker WS"
 
 
 def _assert_no_person_fields(payload, where: str) -> None:

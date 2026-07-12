@@ -8,7 +8,7 @@ import app.services.ai as ai
 from app.auth import UserContext, get_current_user
 from app.domain.models import SystemConfig, WorkspaceSettings
 from app.rate_limit import rate_limiter
-from app.rbac import Role, require_role
+from app.rbac import Role, can_admin, require_role
 from app.routers.problems import build_outcome_board, to_summary
 
 
@@ -129,6 +129,11 @@ def build_router(
     def get_workspace(user: UserContext = Depends(get_current_user)) -> WorkspaceSettings:  # noqa: B008
         return workspace_store.get(user.workspace_id)
 
+    # Governance-bearing settings: an editor toggling works_council_mode off
+    # would defeat the §87 BetrVG control it exists for, and blanking the
+    # disclosure template silently disables the Art. 50 line.
+    ADMIN_ONLY_SETTINGS = ("works_council_mode", "ai_disclosure_template")
+
     @router.put(
         "/workspace",
         response_model=WorkspaceSettings,
@@ -138,7 +143,29 @@ def build_router(
         settings: WorkspaceSettings,
         user: UserContext = Depends(get_current_user),  # noqa: B008
     ) -> WorkspaceSettings:
-        return workspace_store.put(user.workspace_id, settings)
+        stored = workspace_store.get(user.workspace_id)
+        # Merge semantics: fields absent from the request keep their stored
+        # values, so a stale settings tab cannot wipe flags or attestations
+        # written elsewhere (full-object PUT lost-update).
+        merged = stored.model_copy(
+            update={
+                name: getattr(settings, name)
+                for name in settings.model_fields_set
+                if name in WorkspaceSettings.model_fields
+            }
+        )
+        if not can_admin(user):
+            changed = [
+                name
+                for name in ADMIN_ONLY_SETTINGS
+                if getattr(merged, name) != getattr(stored, name)
+            ]
+            if changed:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Changing {', '.join(changed)} requires the admin role",
+                )
+        return workspace_store.put(user.workspace_id, merged)
 
     @router.put("/settings/ai", dependencies=[Depends(require_role(Role.admin))])
     def update_ai_settings(body: dict) -> dict:

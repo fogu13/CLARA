@@ -10,8 +10,9 @@ metric can be derived. Admin+ keeps full identities (including /audit-export) �
 the works-council agreement typically requires naming who holds that access.
 
 ALL redaction policy lives in this module. Call sites only invoke `redact()`
-(the response middleware below and the evidence-pack HTML path); they never
-carry their own field lists or role rules.
+(the response middleware below and the evidence-pack HTML path) or
+`strip_redaction_sentinels()` (write routes whose payloads may round-trip a
+redacted read); they never carry their own field lists or role rules.
 """
 
 from __future__ import annotations
@@ -44,6 +45,13 @@ REDACTED_FIELDS: dict[str, str] = {
     "responsible_owner": "owner",
 }
 
+# Plural aggregations of the same person values (affected-context explorer);
+# collapsed to a single label so neither names nor distinct-person counts leak.
+REDACTED_LIST_FIELDS: dict[str, str] = {
+    "owners": "owner",
+    "product_owners": "owner",
+}
+
 ROLE_LABELS = frozenset(REDACTED_FIELDS.values())
 
 K_ANONYMITY_FLOOR = 5
@@ -71,17 +79,23 @@ def redact(payload: Any, *, enabled: bool, role: str | None) -> Any:
 
 def _walk(node: Any) -> Any:
     if isinstance(node, dict):
-        return {
-            key: (
-                REDACTED_FIELDS[key]
-                if key in REDACTED_FIELDS and isinstance(value, str) and value
-                else _walk(value)
-            )
-            for key, value in node.items()
-        }
+        return {key: _walk_value(key, value) for key, value in node.items()}
     if isinstance(node, list):
         return [_walk(item) for item in node]
     return node
+
+
+def _walk_value(key: str, value: Any) -> Any:
+    if key in REDACTED_FIELDS and isinstance(value, str) and value:
+        return REDACTED_FIELDS[key]
+    if (
+        key in REDACTED_LIST_FIELDS
+        and isinstance(value, list)
+        and value
+        and all(isinstance(item, str) for item in value)
+    ):
+        return [REDACTED_LIST_FIELDS[key]]
+    return _walk(value)
 
 
 def k_suppress(
@@ -104,13 +118,33 @@ def k_suppress(
     return list(groups)
 
 
+def strip_redaction_sentinels(model: Any) -> Any:
+    """Return a copy of a Pydantic update model with role-label values dropped
+    from person-capable fields (set to None so the merge keeps stored values).
+
+    A below-admin client that round-trips a redacted GET payload into a write
+    (contract accept/edit, action or draft edits) would otherwise persist the
+    literal label ("owner", "approver", ...) and destroy real attribution —
+    for every viewer, including admins and the audit trail. Role labels are
+    never legitimate person values, so this is safe with the mode off too.
+    """
+    overrides = {
+        name: None
+        for name in REDACTED_FIELDS
+        if isinstance(getattr(model, name, None), str)
+        and getattr(model, name) in ROLE_LABELS
+    }
+    return model.model_copy(update=overrides) if overrides else model
+
+
 class WorksCouncilRedactionMiddleware:
     """Pure-ASGI response middleware: the single application choke point.
 
-    Applies `redact()` to `application/json` bodies of 2xx GET responses when
-    the request's workspace has works_council_mode on AND the caller's role is
-    below admin. Everything else (non-GET, non-2xx, HTML/CSV/streaming
-    responses) passes through untouched.
+    Applies `redact()` to `application/json` bodies of 2xx responses on ALL
+    methods when the request's workspace has works_council_mode on AND the
+    caller's role is below admin — write echoes (POST /approvals, PATCH
+    responses) reproduce the same person fields the GET surfaces carry.
+    Non-2xx, HTML/CSV/streaming responses pass through untouched.
 
     Role/workspace come from the request-scoped ContextVar that
     `get_current_user` publishes (async dependency in the same task — pure-ASGI
@@ -130,7 +164,7 @@ class WorksCouncilRedactionMiddleware:
         self._get_settings = get_settings  # workspace_id -> WorkspaceSettings
 
     async def __call__(self, scope, receive, send) -> None:
-        if scope["type"] != "http" or scope.get("method") != "GET":
+        if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 

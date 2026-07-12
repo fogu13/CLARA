@@ -47,7 +47,8 @@ def _signal(signal_id: str, *, days_ago: float) -> SignalRecord:
     )
 
 
-# 14 matching signals inside the trailing 28 days -> proposed baseline 0.5/day.
+# 14 matching signals over ~14 observed days -> proposed baseline ~1.0/day
+# (rate over the observed span, capped at the trailing 28d).
 SIGNALS = [_signal(f"s{i}", days_ago=1 + i) for i in range(14)]
 
 
@@ -103,7 +104,10 @@ class TestApprovalAppliesProposal:
         contract = client.get(f"/problems/{problem['problem_id']}").json()["outcome_contract"]
         assert contract["comparison_method"] == "its_segmented_regression"
         assert contract["measurement_window_days"] == 30
-        assert contract["baseline"] == round(14 / 28, 4)  # trailing 28d, not observed-window
+        # 14 signals over ~14 observed days -> ~1.0/day. The route computes
+        # `now` live while NOW here is pinned to 12:00 UTC, so the observed
+        # span floats +-12h around 14 days: assert a band, not an instant.
+        assert 0.95 <= contract["baseline"] <= 1.05
         assert contract["success_threshold"] == round(contract["baseline"] * 0.5, 4)
         assert contract["primary_metric"] == problem["outcome_contract"]["primary_metric"]
 
@@ -121,7 +125,7 @@ class TestApprovalAppliesProposal:
         events = [e for e in telemetry.list_events() if e["event_type"] == "contract_proposed"]
         assert len(events) == 1
         metadata = events[0]["metadata"]
-        assert metadata["new_baseline"] == round(14 / 28, 4)
+        assert metadata["new_baseline"] == contract["baseline"]
         assert metadata["old_window_days"] == 28 and metadata["new_window_days"] == 30
         assert metadata["old_baseline"] == problem["outcome_contract"]["baseline"]
 
@@ -180,7 +184,7 @@ class TestProposalPreview:
         assert preview["current"]["comparison_method"] == "pre_post_signal_rate"
         assert preview["proposed"]["comparison_method"] == "its_segmented_regression"
         assert preview["proposed"]["measurement_window_days"] == 30
-        assert preview["proposed"]["baseline"] == round(14 / 28, 4)
+        assert 0.95 <= preview["proposed"]["baseline"] <= 1.05  # see band note above
 
     def test_preview_for_business_metric_has_no_proposal(self, tmp_path: Path) -> None:
         client, _, _ = _app(tmp_path)

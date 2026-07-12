@@ -7,6 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.domain.models import FeedbackRule, FeedbackRuleCreate, PolicyRule
 from app.rbac import Role, require_role
 from app.services.common import utc_now
+from app.services.workflow import (
+    PUBLISHED_STATUSES,
+    _status_value,
+    approved_action_keys,
+    is_human_reviewed,
+)
 
 
 def build_router(
@@ -110,18 +116,28 @@ def build_router(
 
     @router.get("/article50-status", dependencies=[read_dep])
     def article50_status() -> dict:
-        """EU AI Act Art. 50 transparency aggregate: which outbound executions
-        were human-reviewed (Art. 50(4) exempt) vs auto-published (disclosed).
-        Aggregates only, so viewer role is enough."""
+        """EU AI Act Art. 50 transparency aggregate: which PUBLISHED outbound
+        executions were human-reviewed (Art. 50(4) exempt) vs auto-published
+        (disclosed). Aggregates only, so viewer role is enough.
+
+        Review status is derived, not just read from the stamp: executions are
+        only ever created by record_approval on an approved decision, so pre-W2
+        rows without the human_reviewed column are backfilled at read time from
+        their approval record — otherwise every legacy human-approved push
+        would be reported as an undisclosed AI auto-publication. Drafts and
+        failed pushes never left the system and are excluded from both buckets.
+        """
         executions = workflow_store.list_executions()
-        reviewed = [e for e in executions if e.human_reviewed]
-        auto_published = [e for e in executions if not e.human_reviewed]
+        approved = approved_action_keys(workflow_store.list_approvals())
+        published = [e for e in executions if _status_value(e.status) in PUBLISHED_STATUSES]
+        reviewed = [e for e in published if is_human_reviewed(e, approved)]
+        auto_published = [e for e in published if not is_human_reviewed(e, approved)]
         by_destination: dict[str, dict[str, int]] = {}
-        for execution in executions:
+        for execution in published:
             row = by_destination.setdefault(
                 execution.destination, {"human_reviewed": 0, "disclosed": 0}
             )
-            if execution.human_reviewed:
+            if is_human_reviewed(execution, approved):
                 row["human_reviewed"] += 1
             if execution.disclosure_applied:
                 row["disclosed"] += 1
@@ -135,6 +151,7 @@ def build_router(
                 "disclosed_count": sum(1 for e in auto_published if e.disclosure_applied),
                 "latest_at": max((e.created_at for e in auto_published), default=None),
             },
+            "unpublished_count": len(executions) - len(published),
             "by_destination": [
                 {"destination": destination, **counts}
                 for destination, counts in sorted(by_destination.items())

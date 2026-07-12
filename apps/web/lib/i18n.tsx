@@ -221,6 +221,7 @@ const en = {
     art50Unavailable: "Article 50 status unavailable.",
     art50BadgeOk: "Compliant",
     art50BadgeGap: "Review needed",
+    art50BadgeUnknown: "Status unavailable",
     art50LatestReviewed: "Latest human-reviewed push",
     art50LatestAuto: "Latest auto-published push",
     subprocessors: "Subprocessors & incident contact",
@@ -575,6 +576,9 @@ const en = {
     itsInsufficient: "Insufficient data for ITS",
     itsDelta: "Δ vs pre-period",
     itsBuckets: "{pre} pre / {post} post days",
+    editContract: "Edit contract",
+    editWindowLabel: "Measurement window (days)",
+    editThresholdLabel: "Success threshold",
   },
 } as const;
 
@@ -796,6 +800,7 @@ const de: Dict = {
     art50Unavailable: "Artikel-50-Status nicht verfügbar.",
     art50BadgeOk: "Konform",
     art50BadgeGap: "Prüfung nötig",
+    art50BadgeUnknown: "Status nicht verfügbar",
     art50LatestReviewed: "Letzter menschlich geprüfter Push",
     art50LatestAuto: "Letzter automatischer Push",
     subprocessors: "Unterauftragsverarbeiter & Vorfallskontakt",
@@ -1150,6 +1155,9 @@ const de: Dict = {
     itsInsufficient: "Zu wenig Daten für ITS",
     itsDelta: "Δ ggü. Vorperiode",
     itsBuckets: "{pre} Tage vorher / {post} Tage nachher",
+    editContract: "Vertrag bearbeiten",
+    editWindowLabel: "Messfenster (Tage)",
+    editThresholdLabel: "Erfolgsschwelle",
   },
 };
 

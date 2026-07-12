@@ -202,7 +202,7 @@ export function ActionDecisionPanel({
             {t.contract.acceptProposed}
           </label>
           <Link
-            href={`/insights/${problemId}#outcome`}
+            href={`/insights/${problemId}#contract`}
             className="mt-1 inline-block text-primary hover:underline"
           >
             {t.contract.editOnInsight}

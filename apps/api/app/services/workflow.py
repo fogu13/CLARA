@@ -272,6 +272,37 @@ def learning_label(status: str) -> str:
     return status.replace("_", " ")
 
 
+# Executions that actually left the system — drafts, blocks and failed pushes
+# never published content, so Art. 50 accounting excludes them.
+PUBLISHED_STATUSES = frozenset(
+    {ExecutionStatus.pushed.value, ExecutionStatus.completed.value}
+)
+
+
+def _status_value(status) -> str:
+    return str(getattr(status, "value", status))
+
+
+def approved_action_keys(approvals) -> set[tuple[str, str]]:
+    """(problem_id, action_id) pairs with an approved decision on record."""
+    return {
+        (record.problem_id, record.action_id)
+        for record in approvals
+        if _status_value(record.decision) == "approved"
+    }
+
+
+def is_human_reviewed(execution, approved_keys: set[tuple[str, str]]) -> bool:
+    """Effective Art. 50(4) review status: the W2 stamp, or provable by the
+    approval record. Executions are only ever created by record_approval on an
+    approved decision, so pre-stamp rows are backfilled at read time — without
+    this, every legacy human-approved push reads as an undisclosed AI
+    auto-publication."""
+    if execution.human_reviewed:
+        return True
+    return (execution.problem_id, execution.action_id) in approved_keys
+
+
 def build_response_draft(problem: ProblemRecord, request: ClosureRecordRequest) -> str:
     facts = "; ".join(request.verified_resolution_facts)
     draft = (
@@ -363,6 +394,16 @@ class WorkflowStore:
 
     def list_executions(self) -> list[ExecutionRecord]:
         return self._executions
+
+    def add_execution(self, execution: ExecutionRecord) -> ExecutionRecord:
+        """Record an execution created outside the approval flow (the LangGraph
+        triage path) so audit export and Art. 50 accounting see it. The store
+        assigns the execution id; any caller-provided id is replaced."""
+        record = execution.model_copy(
+            update={"execution_id": f"EXE-{next(self._execution_ids):04d}"}
+        )
+        self._executions.append(record)
+        return record
 
     def update_execution(
         self,
@@ -867,6 +908,38 @@ class SQLiteWorkflowStore:
     def list_approvals(self) -> list[ApprovalRecord]:
         rows = self._connection.execute("SELECT * FROM approvals ORDER BY id").fetchall()
         return [self._approval_from_row(row) for row in rows]
+
+    def add_execution(self, execution: ExecutionRecord) -> ExecutionRecord:
+        """Record an execution created outside the approval flow (the LangGraph
+        triage path). The row id assigns the EXE-{rowid} execution id."""
+        cursor = self._connection.execute(
+            """
+            INSERT INTO executions
+                (problem_id, action_id, destination, status, owner, summary, created_at,
+                 external_ref, detail, human_reviewed, reviewed_by, reviewed_at,
+                 disclosure_applied)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                execution.problem_id,
+                execution.action_id,
+                execution.destination,
+                execution.status.value,
+                execution.owner,
+                execution.summary,
+                execution.created_at,
+                execution.external_ref,
+                execution.detail,
+                int(execution.human_reviewed),
+                execution.reviewed_by,
+                execution.reviewed_at,
+                int(execution.disclosure_applied),
+            ),
+        )
+        self._connection.commit()
+        return execution.model_copy(
+            update={"execution_id": f"EXE-{cursor.lastrowid:04d}"}
+        )
 
     def update_execution(
         self,

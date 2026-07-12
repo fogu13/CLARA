@@ -2345,7 +2345,9 @@ select {
     display: none !important;
   }
 
-  main header {
+  /* Only the pack's stamped header survives printing; a blanket `main header`
+     override would force `display: block` on flex headers of other pages. */
+  main header.pack-header {
     display: block !important;
   }
 

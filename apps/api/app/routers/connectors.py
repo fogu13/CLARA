@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import UserContext, get_current_user
+from app.domain.models import WorkspaceSettings
 from app.rbac import Role, require_role
 
 # Connector config keys whose values are secrets and must never be returned to clients.
@@ -108,15 +109,20 @@ def build_router(
             dest = get_destination(connector_type)
             if dest is None:
                 raise HTTPException(status_code=400, detail="Unknown destination connector")
-            # Minimal test action. Nobody reviewed this text (it is the one
-            # human-free push in the product), so it carries the workspace's
-            # Art. 50 AI-disclosure line — which also proves the mechanism e2e.
+            # Minimal test action. Nobody reviewed this text (a human-free
+            # push), so it carries the workspace's Art. 50 AI-disclosure line —
+            # which also proves the mechanism e2e. A settings-store hiccup must
+            # not 500 a connector test: fall back to the default template.
+            try:
+                template = workspace_store.get(user.workspace_id).ai_disclosure_template
+            except Exception:  # noqa: BLE001
+                template = WorkspaceSettings().ai_disclosure_template
             test_action = {
                 "type": "create_ticket" if connector_type == "jira" else "notify",
                 "title": "CLARA connector test",
                 "description": apply_disclosure(
                     "This is a test from the CLARA platform.",
-                    workspace_store.get(user.workspace_id).ai_disclosure_template,
+                    template,
                 ),
                 "priority": 3,
                 "insight_title": "Test",

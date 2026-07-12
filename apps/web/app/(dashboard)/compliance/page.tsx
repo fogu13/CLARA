@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, FileText, AlertTriangle, BookOpen, CheckCircle, Download, Cpu, Globe, UserX, Server, Scale } from "lucide-react";
+import { ShieldCheck, FileText, AlertTriangle, BookOpen, CheckCircle, Download, Cpu, Globe, HelpCircle, UserX, Server, Scale } from "lucide-react";
 import { apiBaseUrl, apiHeaders, getArticle50Status, getSystemConfig, getWorkspace } from "@/lib/client-api";
 import type { Article50Status, SystemConfig, WorkspaceSettings } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
@@ -330,7 +330,9 @@ export default function CompliancePage() {
             </div>
 
             <div className="flex items-start gap-3">
-              {art50Compliant || art50 === null ? (
+              {art50 === null ? (
+                <HelpCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
+              ) : art50Compliant ? (
                 <CheckCircle className="h-5 w-5 text-emerald-500 mt-0.5" />
               ) : (
                 <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
@@ -353,7 +355,7 @@ export default function CompliancePage() {
                   {art50Compliant ? t.compliance.art50BadgeOk : t.compliance.art50BadgeGap}
                 </Badge>
               ) : (
-                <Badge variant="secondary">{t.compliance.art50BadgeOk}</Badge>
+                <Badge variant="secondary">{t.compliance.art50BadgeUnknown}</Badge>
               )}
             </div>
 

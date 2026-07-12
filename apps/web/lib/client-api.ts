@@ -406,7 +406,11 @@ export async function getWorkspace(): Promise<WorkspaceSettings> {
   return requestJson<WorkspaceSettings>(`${apiBaseUrl()}/workspace`);
 }
 
-export async function updateWorkspace(settings: WorkspaceSettings): Promise<WorkspaceSettings> {
+export async function updateWorkspace(
+  settings: Partial<WorkspaceSettings>
+): Promise<WorkspaceSettings> {
+  // The API merges partial payloads: send only the fields you actually
+  // changed, or a stale full object will overwrite concurrent writes.
   return requestJson<WorkspaceSettings>(`${apiBaseUrl()}/workspace`, {
     method: "PUT",
     body: JSON.stringify(settings)
