@@ -508,16 +508,29 @@ def build_router(
         return record
 
     @router.get("/problems/{problem_id}/evidence-pack", dependencies=[read_dep])
-    def export_evidence_pack(problem_id: str, format: str = "html"):
+    def export_evidence_pack(
+        problem_id: str,
+        format: str = "html",
+        user: UserContext = Depends(get_current_user),  # noqa: B008
+    ):
         """Audit-ready export of one problem: evidence -> actions -> policy trail ->
         approvals -> executions -> outcome -> learning. HTML (print-to-PDF) or JSON."""
         from fastapi.responses import HTMLResponse
 
         from app.services.evidence_pack import build_evidence_pack, render_evidence_pack_html
+        from app.services.works_council import redact as works_council_redact
 
         problem = enrich_problem_for_response(require_problem(problem_id))
         state = workflow_store.state_for_problem(problem)
         pack = build_evidence_pack(problem, state, measurement_plan_store.list_plans())
+        # W1 Betriebsrat-Modus: the HTML rendering below bypasses the JSON
+        # response middleware, so redact the pack dict at the source for BOTH
+        # formats (idempotent under the middleware's second pass on JSON).
+        pack = works_council_redact(
+            pack,
+            enabled=workspace_store.get(user.workspace_id).works_council_mode,
+            role=user.role,
+        )
         telemetry_store.record(
             "evidence_pack_exported", entity_id=problem_id, metadata={"format": format}
         )
