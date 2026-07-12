@@ -12,6 +12,7 @@ import { AffectedContextPanel } from "@/app/components/affected-context-panel";
 import { CustomerClosurePanel } from "@/app/components/customer-closure-panel";
 import { DraftProblemEditor } from "@/app/components/draft-problem-editor";
 import { EvidencePanel } from "@/app/components/evidence-panel";
+import { OutcomeContractCard } from "@/app/components/outcome-contract-card";
 import { OutcomeMeasurementPanel } from "@/app/components/outcome-measurement-panel";
 import { ProblemLifecyclePanel } from "@/app/components/problem-lifecycle-panel";
 import { apiBaseUrl, apiHeaders, getPolicyRules, getProblem } from "@/lib/client-api";
@@ -467,17 +468,7 @@ export default function InsightDetailPage() {
             </p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">{t.detail.outcomeContract}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-sm font-semibold">{problem.outcome_contract.primary_metric}</div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {problem.outcome_contract.comparison_method} / {problem.outcome_contract.measurement_window_days} {t.detail.days}
-            </p>
-          </CardContent>
-        </Card>
+        <OutcomeContractCard problem={problem} />
       </div>
 
       <Card id="statement" className="scroll-mt-14">

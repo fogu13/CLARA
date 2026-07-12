@@ -456,6 +456,23 @@ const en = {
     consent: "Consent",
     governance: "Governance",
   },
+  contract: {
+    title: "Outcome contract",
+    baseline: "baseline",
+    trailing28d: "trailing 28d",
+    windowDays: "window {n}d",
+    itsMethod: "ITS segmented regression",
+    acceptProposed: "Accept proposed measurement contract",
+    editOnInsight: "Edit on the insight page",
+    applyProposal: "Accept proposed contract",
+    applying: "Applying…",
+    applyFailed: "Could not apply the proposed contract.",
+    itsEffect: "ITS effect",
+    itsCi: "95% CI",
+    itsInsufficient: "Insufficient data for ITS",
+    itsDelta: "Δ vs pre-period",
+    itsBuckets: "{pre} pre / {post} post days",
+  },
 } as const;
 
 // Widen literal string types so `de` can hold different strings while the
@@ -910,6 +927,23 @@ const de: Dict = {
     guardrails: "Leitplanken",
     consent: "Einwilligung",
     governance: "Governance",
+  },
+  contract: {
+    title: "Outcome-Vertrag",
+    baseline: "Baseline",
+    trailing28d: "letzte 28 Tage",
+    windowDays: "Fenster {n} Tage",
+    itsMethod: "ITS segmentierte Regression",
+    acceptProposed: "Vorgeschlagenen Messvertrag übernehmen",
+    editOnInsight: "Auf der Insight-Seite bearbeiten",
+    applyProposal: "Vorgeschlagenen Vertrag übernehmen",
+    applying: "Wird übernommen…",
+    applyFailed: "Vorgeschlagener Vertrag konnte nicht übernommen werden.",
+    itsEffect: "ITS-Effekt",
+    itsCi: "95%-KI",
+    itsInsufficient: "Zu wenig Daten für ITS",
+    itsDelta: "Δ ggü. Vorperiode",
+    itsBuckets: "{pre} Tage vorher / {post} Tage nachher",
   },
 };
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -461,6 +461,25 @@ class ActionProposalUpdateRequest(BaseModel):
     intervention_brief: InterventionBrief | None = None
 
 
+class OutcomeContractUpdateRequest(BaseModel):
+    primary_metric: str | None = Field(default=None, min_length=1)
+    baseline: float | None = None
+    success_threshold: float | None = None
+    measurement_window_days: int | None = Field(default=None, gt=0)
+    comparison_method: str | None = Field(default=None, min_length=1)
+    guardrail_metrics: list[str] | None = None
+    responsible_owner: str | None = Field(default=None, min_length=1)
+
+
+class OutcomeContractProposalPreview(BaseModel):
+    """What approving with accept_proposed_contract=True would apply."""
+
+    problem_id: str
+    current: OutcomeContract
+    proposed: OutcomeContract | None = None
+    is_promotion_default: bool
+
+
 class ProblemTransitionRequest(BaseModel):
     target_status: ProblemStatus
     actor: str = Field(min_length=1)
@@ -492,6 +511,10 @@ class ApprovalDecision(BaseModel):
     decision: ApprovalDecisionStatus
     reviewer: str
     note: str | None = None
+    # W4 zero-input closure: approving applies the auto-proposed outcome
+    # contract (trailing-28d baseline, 30d window, ITS scoring) unless the
+    # reviewer opts out.
+    accept_proposed_contract: bool = True
 
 
 class ApprovalRecord(ApprovalDecision):
@@ -671,6 +694,10 @@ class OutcomeSnapshot(BaseModel):
     improvement_direction: Literal["increase", "decrease"]
     measurement_window_days: int
     comparison_method: str
+    # W4 read-time ITS scoring (outcome_engine.its_outcome_for_problem):
+    # either {method: "its", effect, ci_low, ci_high, ...} or the honest
+    # sparse fallback {method: "delta_insufficient_data", label, delta, ...}.
+    its: dict[str, Any] | None = None
 
 
 class OutcomeBoardItem(BaseModel):

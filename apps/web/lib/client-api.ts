@@ -22,6 +22,8 @@ import type {
   LearningConclusionRecord,
   LearningConclusionRequest,
   OutcomeBoard,
+  OutcomeContractProposalPreview,
+  OutcomeContractUpdateRequest,
   OutcomeMeasurement,
   OutcomeSnapshot,
   PolicyRule,
@@ -165,6 +167,24 @@ export async function recordClosure(
 
 export async function getOutcomeSnapshot(problemId: string): Promise<OutcomeSnapshot> {
   return requestJson<OutcomeSnapshot>(`${apiBaseUrl()}/problems/${problemId}/outcome`);
+}
+
+export async function getContractProposal(
+  problemId: string
+): Promise<OutcomeContractProposalPreview> {
+  return requestJson<OutcomeContractProposalPreview>(
+    `${apiBaseUrl()}/problems/${problemId}/outcome-contract/proposal`
+  );
+}
+
+export async function updateOutcomeContract(
+  problemId: string,
+  update: OutcomeContractUpdateRequest
+): Promise<ProblemRecord> {
+  return requestJson<ProblemRecord>(`${apiBaseUrl()}/problems/${problemId}/outcome-contract`, {
+    method: "PATCH",
+    body: JSON.stringify(update)
+  });
 }
 
 export async function getOutcomeBoard(): Promise<OutcomeBoard> {

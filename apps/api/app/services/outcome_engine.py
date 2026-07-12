@@ -19,7 +19,19 @@ The hybrid engine:
 from __future__ import annotations
 
 import logging
+import math
+from datetime import timedelta
 from typing import Any
+
+from app.domain.models import OutcomeContract, ProblemRecord
+
+# Shared with the scheduler so proposal, ITS scoring and scheduled
+# re-measurement all match/bucket signals identically.
+from app.services.measurement_scheduler import (
+    SIGNAL_METRIC_PREFIX,
+    _norm_stage,
+    _parse_ts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -256,3 +268,253 @@ def _build_summary(
         f"Metric {metric}: baseline {baseline}, measured {measured}. "
         f"Resolution score: {score:.2f} ({status})."
     )
+
+
+# ---------------------------------------------------------------------------
+# W4 — auto-proposed outcome contracts + honest ITS (interrupted time series)
+# scoring. Pure stdlib, deterministic (precedent: evals/harness.py).
+# ---------------------------------------------------------------------------
+
+ITS_COMPARISON_METHOD = "its_segmented_regression"
+PROPOSED_WINDOW_DAYS = 30
+TRAILING_BASELINE_DAYS = 28
+MIN_PRE_DAYS = 10
+MIN_POST_DAYS = 5
+INSUFFICIENT_DATA_LABEL = "insufficient data for ITS"
+
+# Two-sided 95% critical values of Student's t for df 1..30; beyond 30 the
+# Cornish-Fisher expansion in _t_crit_95 is accurate to ~1e-3.
+_T_95 = [
+    12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228,
+    2.201, 2.179, 2.160, 2.145, 2.131, 2.120, 2.110, 2.101, 2.093, 2.086,
+    2.080, 2.074, 2.069, 2.064, 2.060, 2.056, 2.052, 2.048, 2.045, 2.042,
+]
+
+
+def _t_crit_95(df: int) -> float:
+    if df <= 0:
+        return 0.0
+    if df <= 30:
+        return _T_95[df - 1]
+    z = 1.959964
+    return z + (z**3 + z) / (4 * df) + (5 * z**5 + 16 * z**3 + 3 * z) / (96 * df**2)
+
+
+def _solve_gaussian(
+    matrix: list[list[float]],
+    rhs_list: list[list[float]],
+) -> list[list[float]] | None:
+    """Solve matrix @ x = rhs for several right-hand sides at once via
+    Gauss-Jordan elimination with partial pivoting. Returns None when the
+    matrix is singular (collinear design)."""
+    n = len(matrix)
+    augmented = [list(matrix[i]) + [rhs[i] for rhs in rhs_list] for i in range(n)]
+    for col in range(n):
+        pivot = max(range(col, n), key=lambda row: abs(augmented[row][col]))
+        if abs(augmented[pivot][col]) < 1e-12:
+            return None
+        augmented[col], augmented[pivot] = augmented[pivot], augmented[col]
+        divisor = augmented[col][col]
+        augmented[col] = [value / divisor for value in augmented[col]]
+        for row in range(n):
+            if row == col or augmented[row][col] == 0.0:
+                continue
+            factor = augmented[row][col]
+            augmented[row] = [
+                value - factor * lead for value, lead in zip(augmented[row], augmented[col])
+            ]
+    return [[augmented[i][n + k] for i in range(n)] for k in range(len(rhs_list))]
+
+
+def _insufficient_delta(*, delta: float, n_pre: int, n_post: int) -> dict[str, Any]:
+    """Honest sparse fallback: a labelled plain delta, never a fake CI."""
+    return {
+        "method": "delta_insufficient_data",
+        "label": INSUFFICIENT_DATA_LABEL,
+        "delta": round(delta, 4),
+        "n_pre": n_pre,
+        "n_post": n_post,
+    }
+
+
+def its_effect(daily_counts: list[float], action_index: int) -> dict[str, Any]:
+    """Segmented regression (interrupted time series) on a daily-rate series.
+
+    Model: y = b0 + b1*t + b2*post + b3*(t - action_index)*post — the classic
+    level-change (b2) + slope-change (b3) ITS parameterisation. `effect` is
+    the model-implied difference at the end of the series between the fitted
+    post trend and the pre-trend counterfactual: b2 + b3*(t_end - action_index).
+
+    Honesty rule: with fewer than MIN_PRE_DAYS pre or MIN_POST_DAYS post daily
+    buckets the regression is not credible — return the labelled plain delta.
+    """
+    n = len(daily_counts)
+    n_pre = min(max(action_index, 0), n)
+    n_post = n - n_pre
+
+    def _delta_fallback() -> dict[str, Any]:
+        pre = daily_counts[:n_pre]
+        post = daily_counts[n_pre:]
+        pre_mean = sum(pre) / len(pre) if pre else 0.0
+        post_mean = sum(post) / len(post) if post else 0.0
+        return _insufficient_delta(delta=post_mean - pre_mean, n_pre=n_pre, n_post=n_post)
+
+    if n_pre < MIN_PRE_DAYS or n_post < MIN_POST_DAYS:
+        return _delta_fallback()
+
+    design_rows: list[tuple[float, float, float, float]] = []
+    xtx = [[0.0] * 4 for _ in range(4)]
+    xty = [0.0] * 4
+    for t, y in enumerate(daily_counts):
+        post = 1.0 if t >= action_index else 0.0
+        x = (1.0, float(t), post, (t - action_index) * post)
+        design_rows.append(x)
+        for i in range(4):
+            xty[i] += x[i] * y
+            for j in range(4):
+                xtx[i][j] += x[i] * x[j]
+
+    solved = _solve_gaussian(xtx, [xty, [0, 0, 1, 0], [0, 0, 0, 1]])
+    if solved is None:  # collinear design — cannot fit credibly
+        return _delta_fallback()
+    beta, inv_col2, inv_col3 = solved
+
+    residual_ss = sum(
+        (y - sum(b * xi for b, xi in zip(beta, x))) ** 2
+        for x, y in zip(design_rows, daily_counts)
+    )
+    degrees = n - 4
+    sigma2 = residual_ss / degrees if degrees > 0 else 0.0
+
+    horizon = (n - 1) - action_index
+    effect = beta[2] + horizon * beta[3]
+    # Var(b2 + h*b3) from the (X'X)^-1 block, scaled by residual variance.
+    # ponytail: plain-OLS standard errors; Newey-West (HAC) errors are the
+    # upgrade path if residual autocorrelation in daily rates matters.
+    variance = sigma2 * (
+        inv_col2[2] + horizon * horizon * inv_col3[3] + 2 * horizon * inv_col2[3]
+    )
+    standard_error = math.sqrt(max(variance, 0.0))
+    t_crit = _t_crit_95(degrees)
+    return {
+        "method": "its",
+        "level_change": round(beta[2], 4),
+        "slope_change": round(beta[3], 4),
+        "effect": round(effect, 4),
+        "ci_low": round(effect - t_crit * standard_error, 4),
+        "ci_high": round(effect + t_crit * standard_error, 4),
+        "n_pre": n_pre,
+        "n_post": n_post,
+    }
+
+
+def _metric_journey_stage(metric: str) -> tuple[str, str] | None:
+    if not metric.startswith(SIGNAL_METRIC_PREFIX):
+        return None
+    journey, _, stage = metric.removeprefix(SIGNAL_METRIC_PREFIX).partition("/")
+    return journey.replace("_", " "), stage.replace("_", " ")
+
+
+def _matching_timestamps(
+    signals: list[Any],
+    *,
+    journey: str,
+    journey_stage: str,
+) -> list:
+    stamps = []
+    for signal in signals:
+        if _norm_stage(signal.journey) != _norm_stage(journey):
+            continue
+        if _norm_stage(signal.journey_stage) != _norm_stage(journey_stage):
+            continue
+        try:
+            stamps.append(_parse_ts(signal.timestamp))
+        except ValueError:
+            continue
+    return sorted(stamps)
+
+
+def propose_outcome_contract(
+    problem: ProblemRecord,
+    signals: list[Any],
+    now: str,
+) -> OutcomeContract | None:
+    """Auto-proposed contract at approval time (W4): keep the promotion metric,
+    re-anchor the baseline on the trailing 28 days of REAL signal inflow, and
+    upgrade the comparison to ITS segmented regression over a 30-day window.
+
+    Returns None for metrics CLARA cannot observe (seed problems' business
+    metrics) — those keep their manually authored contracts. A zero-signal
+    trailing window still proposes (baseline 0.0): the metric is observable,
+    the observed rate is just zero.
+    """
+    contract = problem.outcome_contract
+    parsed = _metric_journey_stage(contract.primary_metric)
+    if parsed is None:
+        return None
+    journey, stage = parsed
+    end = _parse_ts(now)
+    start = end - timedelta(days=TRAILING_BASELINE_DAYS)
+    count = sum(
+        1
+        for ts in _matching_timestamps(signals, journey=journey, journey_stage=stage)
+        if start <= ts < end
+    )
+    baseline = round(count / TRAILING_BASELINE_DAYS, 4)
+    return OutcomeContract(
+        primary_metric=contract.primary_metric,
+        baseline=baseline,
+        success_threshold=round(baseline * 0.5, 4),
+        measurement_window_days=PROPOSED_WINDOW_DAYS,
+        comparison_method=ITS_COMPARISON_METHOD,
+        guardrail_metrics=list(contract.guardrail_metrics),
+        responsible_owner=contract.responsible_owner,
+    )
+
+
+def its_outcome_for_problem(
+    problem: ProblemRecord,
+    signals: list[Any],
+    *,
+    executed_at: str,
+    now: str,
+) -> dict[str, Any] | None:
+    """Read-time ITS scoring for a problem's approved+executed action.
+
+    Builds the daily count series for the contract's journey/stage over
+    [executed_at - 28d, min(now, executed_at + window)], bucketed by UTC day
+    with zero-signal days included, and runs segmented regression. The series
+    comes from raw signals only — simulated data never writes signals, so it
+    is real-source by construction. Returns None for non-signal metrics.
+    """
+    parsed = _metric_journey_stage(problem.outcome_contract.primary_metric)
+    if parsed is None:
+        return None
+    journey, stage = parsed
+
+    executed = _parse_ts(executed_at)
+    window_days = problem.outcome_contract.measurement_window_days
+    end = min(_parse_ts(now), executed + timedelta(days=window_days))
+    start = executed - timedelta(days=TRAILING_BASELINE_DAYS)
+
+    stamps = _matching_timestamps(signals, journey=journey, journey_stage=stage)
+    if not stamps:
+        return _insufficient_delta(delta=0.0, n_pre=0, n_post=0)
+    # Honest pre-window: never fabricate observation days before data existed.
+    if stamps[0] > start:
+        start = stamps[0]
+
+    start_date = start.date()
+    end_date = end.date()
+    if end_date < start_date:
+        return _insufficient_delta(delta=0.0, n_pre=0, n_post=0)
+
+    total_days = (end_date - start_date).days + 1
+    counts = [0.0] * total_days
+    for ts in stamps:
+        index = (ts.date() - start_date).days
+        if 0 <= index < total_days:
+            counts[index] += 1.0
+
+    action_index = max((executed.date() - start_date).days, 0)
+    return its_effect(counts, action_index)

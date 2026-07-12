@@ -1,16 +1,53 @@
-"""Tests for the outcome engine — resolution_score + direction-aware status + closure."""
+"""Tests for the outcome engine — resolution_score + direction-aware status + closure,
+plus W4: auto-proposed outcome contracts + honest ITS (segmented regression) scoring."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
+from app.domain.models import SignalRecord
 from app.services.outcome_engine import (
+    INSUFFICIENT_DATA_LABEL,
+    ITS_COMPARISON_METHOD,
     build_outcome_contract,
     clamp01,
     closure_level,
+    its_effect,
+    its_outcome_for_problem,
     measure_outcome,
     outcome_direction,
     outcome_status,
+    propose_outcome_contract,
     resolution_score,
 )
+from app.services.seed import load_seed_problems
+from app.services.signals import build_candidates, promote_candidate
+
+NOW = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
+
+
+def _iso(dt: datetime) -> str:
+    return dt.isoformat().replace("+00:00", "Z")
+
+
+def _signal(signal_id: str, *, days_ago: float) -> SignalRecord:
+    return SignalRecord(
+        signal_id=signal_id,
+        customer_id=f"C-{signal_id}",
+        account_id="A-1",
+        source="webhook",
+        journey="checkout",
+        journey_stage="payment",
+        campaign_exposure=[],
+        product_events=[],
+        feedback_text=f"Payment problem report {signal_id}",
+        language="en",
+        timestamp=_iso(NOW - timedelta(days=days_ago)),
+    )
+
+
+def _promoted_problem(signals: list[SignalRecord]):
+    return promote_candidate(build_candidates(signals)[0])
 
 
 class TestClamp01:
@@ -252,3 +289,169 @@ class TestMeasureOutcome:
         assert "onboarding" in result["summary"]
         assert "3" in result["summary"]
         assert "8" in result["summary"]
+
+
+class TestItsEffect:
+    def test_exact_recovery_on_noiseless_data(self) -> None:
+        # y = 2 + 0.1t pre; level change -3 and slope change -0.05 at t=25.
+        series = [
+            2 + 0.1 * t + ((-3 - 0.05 * (t - 25)) if t >= 25 else 0.0)
+            for t in range(40)
+        ]
+        result = its_effect(series, 25)
+
+        assert result["method"] == "its"
+        assert result["level_change"] == -3.0
+        assert result["slope_change"] == -0.05
+        assert result["effect"] == round(-3 + (39 - 25) * -0.05, 4)  # -3.7
+        # Perfect fit: residual variance 0, so the CI collapses to the point.
+        assert result["ci_low"] == result["effect"] == result["ci_high"]
+        assert result["n_pre"] == 25 and result["n_post"] == 15
+
+    def test_level_drop_ci_excludes_zero(self) -> None:
+        # ~30-day series: pre rate alternates 5/7 (mean 6), post 1/3 (mean 2).
+        pre = [7.0 if t % 2 == 0 else 5.0 for t in range(28)]
+        post = [3.0 if t % 2 == 0 else 1.0 for t in range(15)]
+        result = its_effect(pre + post, 28)
+
+        assert result["method"] == "its"
+        assert result["effect"] < 0
+        assert result["ci_high"] < 0  # 95% CI excludes 0
+        assert result["ci_low"] < result["ci_high"]
+
+    def test_zero_variance_series_yields_zero_effect_and_ci(self) -> None:
+        result = its_effect([5.0] * 30, 20)
+
+        assert result["method"] == "its"
+        assert result["effect"] == 0.0
+        assert result["ci_low"] == 0.0 and result["ci_high"] == 0.0
+
+    def test_all_zero_series(self) -> None:
+        result = its_effect([0.0] * 20, 12)
+
+        assert result["method"] == "its"
+        assert result["effect"] == 0.0
+        assert result["ci_low"] == 0.0 and result["ci_high"] == 0.0
+
+    def test_sparse_pre_period_falls_back_to_labelled_delta(self) -> None:
+        result = its_effect([4.0] * 3 + [1.0] * 10, 3)
+
+        assert result["method"] == "delta_insufficient_data"
+        assert result["label"] == INSUFFICIENT_DATA_LABEL
+        assert result["delta"] == -3.0
+        assert result["n_pre"] == 3 and result["n_post"] == 10
+        assert "ci_low" not in result  # never a fake CI
+
+    def test_sparse_post_period_falls_back_to_labelled_delta(self) -> None:
+        result = its_effect([4.0] * 20 + [1.0] * 3, 20)
+
+        assert result["method"] == "delta_insufficient_data"
+        assert result["label"] == INSUFFICIENT_DATA_LABEL
+
+
+class TestProposeOutcomeContract:
+    def test_proposes_trailing_28d_baseline_and_its_window(self) -> None:
+        signals = [_signal(f"s{i}", days_ago=1 + i) for i in range(14)]
+        problem = _promoted_problem(signals)
+
+        proposal = propose_outcome_contract(problem, signals, now=_iso(NOW))
+
+        assert proposal is not None
+        assert proposal.primary_metric == problem.outcome_contract.primary_metric
+        assert proposal.baseline == round(14 / 28, 4)
+        assert proposal.success_threshold == round(proposal.baseline * 0.5, 4)
+        assert proposal.measurement_window_days == 30
+        assert proposal.comparison_method == ITS_COMPARISON_METHOD
+        assert proposal.guardrail_metrics == problem.outcome_contract.guardrail_metrics
+        assert proposal.responsible_owner == problem.outcome_contract.responsible_owner
+
+    def test_signals_outside_trailing_window_are_excluded(self) -> None:
+        recent = [_signal(f"r{i}", days_ago=1 + i) for i in range(7)]
+        stale = [_signal(f"o{i}", days_ago=40 + i) for i in range(5)]
+        problem = _promoted_problem(recent + stale)
+
+        proposal = propose_outcome_contract(problem, recent + stale, now=_iso(NOW))
+
+        assert proposal is not None
+        assert proposal.baseline == round(7 / 28, 4)
+
+    def test_business_metric_contract_is_left_alone(self) -> None:
+        seed_problem = load_seed_problems()[0]
+        assert not seed_problem.outcome_contract.primary_metric.startswith(
+            "signal_rate_per_day:"
+        )
+
+        assert propose_outcome_contract(seed_problem, [], now=_iso(NOW)) is None
+
+    def test_zero_signal_baseline_still_proposes(self) -> None:
+        signals = [_signal(f"s{i}", days_ago=40 + i) for i in range(5)]
+        problem = _promoted_problem(signals)
+
+        proposal = propose_outcome_contract(problem, [], now=_iso(NOW))
+
+        assert proposal is not None
+        assert proposal.baseline == 0.0
+        assert proposal.success_threshold == 0.0
+        assert proposal.comparison_method == ITS_COMPARISON_METHOD
+
+
+class TestItsOutcomeForProblem:
+    def test_level_drop_detected_with_ci(self) -> None:
+        executed = NOW - timedelta(days=15)
+        signals: list[SignalRecord] = []
+        # Pre: 28 days before execution, alternating 5/7 reports per day.
+        for day in range(1, 29):
+            count = 7 if day % 2 == 0 else 5
+            for i in range(count):
+                signals.append(_signal(f"pre-{day}-{i}", days_ago=15 + day))
+        # Post: execution day onward, alternating 1/3 reports per day.
+        for day in range(15):
+            count = 3 if day % 2 == 0 else 1
+            for i in range(count):
+                signals.append(_signal(f"post-{day}-{i}", days_ago=15 - day - 0.1))
+        problem = _promoted_problem(signals)
+
+        result = its_outcome_for_problem(
+            problem, signals, executed_at=_iso(executed), now=_iso(NOW)
+        )
+
+        assert result is not None
+        assert result["method"] == "its"
+        assert result["n_pre"] >= 27 and result["n_post"] >= 14
+        assert result["effect"] < 0
+        assert result["ci_high"] < 0  # the drop is significant, CI excludes 0
+
+    def test_sparse_post_period_returns_labelled_delta(self) -> None:
+        executed = NOW - timedelta(days=1)
+        signals = [_signal(f"s{i}", days_ago=2 + i) for i in range(20)]
+        problem = _promoted_problem(signals)
+
+        result = its_outcome_for_problem(
+            problem, signals, executed_at=_iso(executed), now=_iso(NOW)
+        )
+
+        assert result is not None
+        assert result["method"] == "delta_insufficient_data"
+        assert result["label"] == INSUFFICIENT_DATA_LABEL
+
+    def test_non_signal_metric_returns_none(self) -> None:
+        seed_problem = load_seed_problems()[0]
+
+        result = its_outcome_for_problem(
+            seed_problem, [], executed_at=_iso(NOW - timedelta(days=10)), now=_iso(NOW)
+        )
+
+        assert result is None
+
+    def test_no_matching_signals_returns_labelled_delta(self) -> None:
+        signals = [_signal(f"s{i}", days_ago=1 + i) for i in range(5)]
+        problem = _promoted_problem(signals)
+
+        result = its_outcome_for_problem(
+            problem, [], executed_at=_iso(NOW - timedelta(days=10)), now=_iso(NOW)
+        )
+
+        assert result is not None
+        assert result["method"] == "delta_insufficient_data"
+        assert result["delta"] == 0.0
+        assert result["n_pre"] == 0 and result["n_post"] == 0
