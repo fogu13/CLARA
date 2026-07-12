@@ -28,6 +28,8 @@ from app.domain.models import (
     LearningStatus,
     OutcomeBoard,
     OutcomeBoardItem,
+    OutcomeContractProposalPreview,
+    OutcomeContractUpdateRequest,
     OutcomeMeasurement,
     OutcomeSnapshot,
     ProblemCandidate,
@@ -41,9 +43,15 @@ from app.domain.models import (
 )
 from app.rate_limit import rate_limiter
 from app.rbac import Role, require_role
+from app.services.common import utc_now
 from app.services.context_impact import build_affected_context_explorer
 from app.services.emerging import build_emerging_problem_report
 from app.services.measurement_scheduler import schedule_measurements
+from app.services.outcome_engine import (
+    ITS_COMPARISON_METHOD,
+    its_outcome_for_problem,
+    propose_outcome_contract,
+)
 from app.services.signals import promote_candidate
 
 logger = logging.getLogger(__name__)
@@ -262,6 +270,46 @@ def build_router(
 
         return enrich_problem_for_response(updated_problem)
 
+    @router.get(
+        "/problems/{problem_id}/outcome-contract/proposal",
+        response_model=OutcomeContractProposalPreview,
+        dependencies=[read_dep],
+    )
+    def get_outcome_contract_proposal(problem_id: str) -> OutcomeContractProposalPreview:
+        """Preview what approving with accept_proposed_contract=True will apply."""
+        problem = require_problem(problem_id)
+        proposed = propose_outcome_contract(
+            problem, signal_store.list_signals(), now=utc_now()
+        )
+        return OutcomeContractProposalPreview(
+            problem_id=problem_id,
+            current=problem.outcome_contract,
+            proposed=proposed,
+            is_promotion_default=(
+                proposed is not None
+                and problem.outcome_contract.comparison_method != ITS_COMPARISON_METHOD
+            ),
+        )
+
+    @router.patch(
+        "/problems/{problem_id}/outcome-contract",
+        response_model=ProblemRecord,
+        dependencies=[Depends(require_role(Role.editor))],
+    )
+    def update_outcome_contract(
+        problem_id: str,
+        update: OutcomeContractUpdateRequest,
+    ) -> ProblemRecord:
+        require_problem(problem_id)
+        updated_problem = active_problem_store.update_outcome_contract(problem_id, update)
+        if updated_problem is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Only promoted draft problem contracts can be edited",
+            )
+
+        return enrich_problem_for_response(updated_problem)
+
     @router.post("/problems/{problem_id}/transitions", response_model=ProblemTransitionRecord, dependencies=[Depends(require_role(Role.editor))])
     def transition_problem(
         problem_id: str,
@@ -364,6 +412,43 @@ def build_router(
         if record.decision == ApprovalDecisionStatus.approved:
             from app.services.action_push import push_approved_action
             from app.services.workflow import find_action
+
+            # W4 zero-input closure: upgrade the promotion-default contract to
+            # the auto-proposed one (trailing-28d baseline, 30d window, ITS
+            # scoring) unless the reviewer opted out. Best-effort — the
+            # approval is already recorded and must never fail here.
+            if (
+                decision.accept_proposed_contract
+                and problem.outcome_contract.comparison_method != ITS_COMPARISON_METHOD
+            ):
+                try:
+                    proposed = propose_outcome_contract(
+                        problem, signal_store.list_signals(), now=utc_now()
+                    )
+                    upgraded = (
+                        active_problem_store.update_outcome_contract(
+                            problem_id,
+                            OutcomeContractUpdateRequest(**proposed.model_dump()),
+                        )
+                        if proposed is not None
+                        else None
+                    )
+                    if proposed is not None and upgraded is not None:
+                        telemetry_store.record(
+                            "contract_proposed",
+                            entity_id=problem_id,
+                            metadata={
+                                "old_baseline": problem.outcome_contract.baseline,
+                                "new_baseline": proposed.baseline,
+                                "old_window_days": problem.outcome_contract.measurement_window_days,
+                                "new_window_days": proposed.measurement_window_days,
+                                "comparison_method": proposed.comparison_method,
+                            },
+                        )
+                        # schedule_measurements below reads the upgraded window.
+                        problem = upgraded
+                except Exception:  # noqa: BLE001 — contract upgrade is best-effort
+                    logger.exception("Contract proposal failed for %s", problem_id)
 
             execution = next(
                 (
@@ -505,7 +590,33 @@ def build_router(
     @router.get("/problems/{problem_id}/outcome", response_model=OutcomeSnapshot, dependencies=[read_dep])
     def get_outcome_snapshot(problem_id: str) -> OutcomeSnapshot:
         problem = require_problem(problem_id)
-        return workflow_store.outcome_snapshot(problem)
+        snapshot = workflow_store.outcome_snapshot(problem)
+        # W4 honest quasi-experimental read: ITS segmented regression on the
+        # raw signal series, anchored at the first approved action's execution.
+        # Read-time only — the scheduler/plpgsql measurement path is unchanged.
+        approved_action_ids = {
+            approval.action_id
+            for approval in workflow_store.list_approvals()
+            if approval.problem_id == problem_id
+            and approval.decision == ApprovalDecisionStatus.approved
+        }
+        executed_at = min(
+            (
+                execution.created_at
+                for execution in workflow_store.list_executions()
+                if execution.problem_id == problem_id
+                and execution.action_id in approved_action_ids
+            ),
+            default=None,
+        )
+        if executed_at is not None:
+            snapshot.its = its_outcome_for_problem(
+                problem,
+                signal_store.list_signals(),
+                executed_at=executed_at,
+                now=utc_now(),
+            )
+        return snapshot
 
     @router.get("/outcome-board", response_model=OutcomeBoard, dependencies=[read_dep])
     def get_outcome_board(

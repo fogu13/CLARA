@@ -39,6 +39,7 @@ from app.domain.models import (
 from app.services.contexts import CustomerContextStore
 from app.services.problems import (
     apply_action_proposal_update,
+    apply_outcome_contract_update,
     apply_problem_status,
     apply_problem_update,
     scrub_customer_evidence,
@@ -488,6 +489,13 @@ class PostgresProblemStore(PostgresConnectionMixin):
         if existing is None or problem_id in self.seed_problem_ids:
             return None
         updated = apply_problem_status(existing, status)
+        return self._write_problem(updated)
+
+    def update_outcome_contract(self, problem_id: str, update) -> ProblemRecord | None:
+        existing = self.get_problem(problem_id)
+        if existing is None or problem_id in self.seed_problem_ids:
+            return None
+        updated = apply_outcome_contract_update(existing, update)
         return self._write_problem(updated)
 
     def scrub_customer(self, customer_id: str) -> int:

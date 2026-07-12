@@ -6,6 +6,8 @@ from pathlib import Path
 from app.domain.models import (
     ActionProposal,
     ActionProposalUpdateRequest,
+    OutcomeContract,
+    OutcomeContractUpdateRequest,
     ProblemRecord,
     ProblemStatus,
     ProblemUpdateRequest,
@@ -60,6 +62,17 @@ def apply_action_proposal_update(
 
 def apply_problem_status(problem: ProblemRecord, status: ProblemStatus) -> ProblemRecord:
     return with_approval_pressure(problem.model_copy(update={"status": status}))
+
+
+def apply_outcome_contract_update(
+    problem: ProblemRecord,
+    update: OutcomeContractUpdateRequest,
+) -> ProblemRecord:
+    merged = problem.outcome_contract.model_dump()
+    merged.update(update.model_dump(exclude_unset=True, exclude_none=True))
+    return problem.model_copy(
+        update={"outcome_contract": OutcomeContract.model_validate(merged)}
+    )
 
 
 GDPR_ERASED = "[erased under GDPR Art. 17]"
@@ -151,6 +164,19 @@ class ProblemStore:
             return None
 
         updated_problem = apply_problem_status(existing, status)
+        self._draft_problems[problem_id] = updated_problem
+        return updated_problem
+
+    def update_outcome_contract(
+        self,
+        problem_id: str,
+        update: OutcomeContractUpdateRequest,
+    ) -> ProblemRecord | None:
+        existing = self._draft_problems.get(problem_id)
+        if existing is None:
+            return None
+
+        updated_problem = apply_outcome_contract_update(existing, update)
         self._draft_problems[problem_id] = updated_problem
         return updated_problem
 
@@ -294,6 +320,28 @@ class SQLiteProblemStore:
             return None
 
         updated_problem = apply_problem_status(existing, status)
+        payload = json.dumps(updated_problem.model_dump(mode="json", by_alias=True))
+        self._connection.execute(
+            """
+            UPDATE draft_problems
+            SET payload = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE problem_id = ?
+            """,
+            (payload, problem_id),
+        )
+        self._connection.commit()
+        return updated_problem
+
+    def update_outcome_contract(
+        self,
+        problem_id: str,
+        update: OutcomeContractUpdateRequest,
+    ) -> ProblemRecord | None:
+        existing = self.get_problem(problem_id)
+        if existing is None or problem_id in self.seed_problems:
+            return None
+
+        updated_problem = apply_outcome_contract_update(existing, update)
         payload = json.dumps(updated_problem.model_dump(mode="json", by_alias=True))
         self._connection.execute(
             """

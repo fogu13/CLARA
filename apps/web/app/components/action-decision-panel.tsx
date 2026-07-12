@@ -1,9 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getWorkflowState, submitApproval } from "../../lib/client-api";
+import { getContractProposal, getWorkflowState, submitApproval } from "../../lib/client-api";
 import { currentUserEmail } from "../../lib/auth-client";
-import type { ActionProposal, ActionProposalChange, ApprovalDecisionStatus, WorkflowState } from "../../lib/types";
+import { useI18n } from "../../lib/i18n";
+import type {
+  ActionProposal,
+  ActionProposalChange,
+  ApprovalDecisionStatus,
+  OutcomeContractProposalPreview,
+  WorkflowState
+} from "../../lib/types";
 
 type DecisionState = {
   state: "loading" | "idle" | "saving" | "saved" | "error";
@@ -66,10 +74,13 @@ export function ActionDecisionPanel({
   problemId: string;
   action: ActionProposal;
 }) {
+  const { t } = useI18n();
   const [decisionState, setDecisionState] = useState<DecisionState>({
     state: "loading",
     message: "Loading previous decisions..."
   });
+  const [contractProposal, setContractProposal] = useState<OutcomeContractProposalPreview | null>(null);
+  const [acceptContract, setAcceptContract] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +101,16 @@ export function ActionDecisionPanel({
           state: "error",
           message: "Couldn't load previous decisions."
         });
+      });
+
+    // Preview of the outcome contract an approval would apply (W4). Optional:
+    // panel works unchanged when the endpoint is unavailable.
+    getContractProposal(problemId)
+      .then((preview) => {
+        if (!cancelled) setContractProposal(preview);
+      })
+      .catch(() => {
+        if (!cancelled) setContractProposal(null);
       });
 
     return () => {
@@ -123,7 +144,8 @@ export function ActionDecisionPanel({
         action_id: action.action_id,
         decision,
         reviewer: currentUserEmail() ?? "local-user",
-        note: note.trim() || `Decision recorded in the app (${decision.replaceAll("_", " ")}).`
+        note: note.trim() || `Decision recorded in the app (${decision.replaceAll("_", " ")}).`,
+        accept_proposed_contract: acceptContract
       });
       const workflow = await getWorkflowState(problemId);
 
@@ -150,8 +172,43 @@ export function ActionDecisionPanel({
   );
   const changes = matchingApproval?.action_diff ?? pendingChanges(action);
 
+  const proposedContract =
+    !matchingApproval && contractProposal?.is_promotion_default
+      ? contractProposal.proposed
+      : null;
+
   return (
     <div className="decision-panel" aria-live="polite">
+      {proposedContract ? (
+        <div className="rounded-md border p-2 text-xs text-muted-foreground">
+          <p className="font-semibold text-foreground">{t.contract.title}</p>
+          <p className="mt-1">
+            {proposedContract.primary_metric}: {t.contract.baseline}{" "}
+            {contractProposal?.current.baseline}
+            {" -> "}
+            {proposedContract.baseline} ({t.contract.trailing28d}) /{" "}
+            {t.contract.windowDays.replace(
+              "{n}",
+              String(proposedContract.measurement_window_days)
+            )}{" "}
+            / {t.contract.itsMethod}
+          </p>
+          <label className="mt-1 flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={acceptContract}
+              onChange={(event) => setAcceptContract(event.target.checked)}
+            />
+            {t.contract.acceptProposed}
+          </label>
+          <Link
+            href={`/insights/${problemId}#outcome`}
+            className="mt-1 inline-block text-primary hover:underline"
+          >
+            {t.contract.editOnInsight}
+          </Link>
+        </div>
+      ) : null}
       {!matchingApproval && decisionState.state !== "loading" ? (
         <div className="decision-buttons">
           {(Object.keys(decisionLabels) as ApprovalDecisionStatus[]).map((decision) => (

@@ -317,6 +317,23 @@ export type OutcomeContract = {
   responsible_owner: string;
 };
 
+export type OutcomeContractUpdateRequest = {
+  primary_metric?: string;
+  baseline?: number;
+  success_threshold?: number;
+  measurement_window_days?: number;
+  comparison_method?: string;
+  guardrail_metrics?: string[];
+  responsible_owner?: string;
+};
+
+export type OutcomeContractProposalPreview = {
+  problem_id: string;
+  current: OutcomeContract;
+  proposed?: OutcomeContract | null;
+  is_promotion_default: boolean;
+};
+
 export type ProblemRecord = {
   problem_id: string;
   title: string;
@@ -396,6 +413,7 @@ export type ApprovalDecision = {
   decision: ApprovalDecisionStatus;
   reviewer: string;
   note?: string;
+  accept_proposed_contract?: boolean;
 };
 
 export type ApprovalRecord = ApprovalDecision & {
@@ -453,6 +471,19 @@ export type JiraIssueDraft = {
   created_at: string;
 };
 
+export type ItsResult = {
+  method: "its" | "delta_insufficient_data";
+  label?: string;
+  level_change?: number;
+  slope_change?: number;
+  effect?: number;
+  ci_low?: number;
+  ci_high?: number;
+  delta?: number;
+  n_pre: number;
+  n_post: number;
+};
+
 export type OutcomeSnapshot = {
   problem_id: string;
   metric: string;
@@ -463,6 +494,7 @@ export type OutcomeSnapshot = {
   improvement_direction: "increase" | "decrease";
   measurement_window_days: number;
   comparison_method: string;
+  its?: ItsResult | null;
 };
 
 export type OutcomeBoardItem = {
