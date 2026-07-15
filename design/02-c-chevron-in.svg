@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="CLARA mark — C with an incoming piece">
+  <!-- The C (petrol) -->
+  <path d="M69.28 27.02 A30 30 0 1 0 69.28 72.98" fill="none" stroke="#016f60" stroke-width="10" stroke-linecap="round"/>
+  <!-- Closing piece pointing into the gap -->
+  <path d="M82 39 L73 50 L82 61" fill="none" stroke="#e0a24a" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CLARA — logo system (recommended direction)</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{--petrol:#016f60;--teal:#1bb89e;--amber:#e0a24a;--ink:#08171a;--paper:#f6f8f8;--line:#e2eae9;--muted:#566b70;--disp:"Space Grotesk",sans-serif;--mono:"IBM Plex Mono",monospace}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:#0c1f23;font-family:var(--mono);padding:0 0 90px}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 28px}
+  .wm{font-family:var(--disp);font-weight:700;letter-spacing:.005em}
+  h1{font-family:var(--disp);font-weight:600;font-size:22px;margin:0}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--petrol)}
+  .sec{font-family:var(--disp);font-weight:600;font-size:15px;margin:46px 0 16px;display:flex;align-items:center;gap:10px;color:#0c1f23}
+  .sec::after{content:"";flex:1;height:1px;background:var(--line)}
+  .desc{font-size:13px;color:var(--muted);line-height:1.65;max-width:64ch}
+  .mk{display:block}
+  /* hero */
+  .hero{background:var(--ink);border-radius:20px;padding:48px 44px;display:flex;align-items:center;gap:30px;margin-top:28px;flex-wrap:wrap}
+  .hero .lock{display:flex;align-items:center;gap:22px}
+  .hero .name{font-size:54px;color:#fff;line-height:1}
+  .hero .tag{font-family:var(--mono);font-size:12px;color:#7fb6ab;letter-spacing:.13em;margin-top:10px}
+  /* tiles */
+  .row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .tile{border:1px solid var(--line);border-radius:14px;min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px}
+  .tile .cap{font-family:var(--mono);font-size:11px;letter-spacing:.07em;color:var(--muted)}
+  .t-light{background:#fff;color:var(--petrol)}
+  .t-paper{background:var(--paper);color:var(--petrol)}
+  .t-ink{background:var(--ink);color:var(--teal)}
+  .t-ink .cap{color:#7fb6ab}
+  /* sizes */
+  .sizes{display:flex;align-items:flex-end;gap:30px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:26px 30px;color:var(--petrol);flex-wrap:wrap}
+  .sizes .item{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .sizes .px{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  /* lockups */
+  .locks{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .lk{border:1px solid var(--line);border-radius:14px;padding:30px;display:flex;align-items:center;justify-content:center;min-height:130px}
+  .lk.ink{background:var(--ink);border-color:transparent}
+  .lk .h{display:flex;align-items:center;gap:18px}
+  .lk .s{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .lk .name{font-size:36px;line-height:1}
+  .lk .name.dk{color:#fff}.lk .name.lt{color:#0c1f23}
+  /* color */
+  .cols{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .col{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+  .col .chip{height:64px}
+  .col .meta{padding:11px 13px;font-family:var(--mono);font-size:11px}
+  .col .meta b{display:block;font-family:var(--disp);font-weight:600;font-size:13px;color:#0c1f23;margin-bottom:2px}
+  .col .meta span{color:var(--muted)}
+  /* misuse */
+  .dd{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .dd .b{border:1px solid var(--line);border-radius:12px;padding:18px;font-size:12.5px;color:var(--muted);line-height:1.6}
+  .dd .b h4{margin:0 0 8px;font-family:var(--disp);font-size:13px}
+  .dd .ok h4{color:var(--petrol)}.dd .no h4{color:#b34a3a}
+  @media(max-width:760px){.row,.locks,.cols,.dd{grid-template-columns:1fr 1fr}.hero{padding:32px 24px}}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="m" viewBox="0 0 100 100">
+    <g fill="none" stroke="currentColor" stroke-width="10">
+      <path d="M70.07 27.71 A30 30 0 0 0 46.86 20.16"/>
+      <path d="M43.76 20.66 A30 30 0 0 0 24.02 35.00"/>
+      <path d="M22.59 37.80 A30 30 0 0 0 22.59 62.20"/>
+      <path d="M24.02 65.00 A30 30 0 0 0 43.76 79.34"/>
+      <path d="M46.86 79.84 A30 30 0 0 0 70.07 72.29"/>
+    </g>
+    <path d="M74.27 32.37 A30 30 0 0 1 74.27 67.63" fill="none" stroke="#e0a24a" stroke-width="10" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="mono" viewBox="0 0 100 100">
+    <g fill="none" stroke="currentColor" stroke-width="10">
+      <path d="M70.07 27.71 A30 30 0 0 0 46.86 20.16"/>
+      <path d="M43.76 20.66 A30 30 0 0 0 24.02 35.00"/>
+      <path d="M22.59 37.80 A30 30 0 0 0 22.59 62.20"/>
+      <path d="M24.02 65.00 A30 30 0 0 0 43.76 79.34"/>
+      <path d="M46.86 79.84 A30 30 0 0 0 70.07 72.29"/>
+      <path d="M74.27 32.37 A30 30 0 0 1 74.27 67.63" stroke-linecap="round"/>
+    </g>
+  </symbol>
+  <symbol id="fav" viewBox="0 0 100 100">
+    <path d="M69.28 27.02 A30 30 0 1 0 69.28 72.98" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="78" cy="50" r="8" fill="#e0a24a"/>
+  </symbol>
+</defs></svg>
+
+<div class="wrap">
+  <header style="padding-top:40px">
+    <div class="eyebrow">Logo system &middot; recommended direction &middot; rough</div>
+    <h1 style="margin-top:8px">CLARA — the loop, built from the five stages</h1>
+  </header>
+
+  <div class="hero">
+    <div class="lock">
+      <svg class="mk" style="width:84px;height:84px;color:var(--teal)"><use href="#m"/></svg>
+      <div>
+        <div class="wm name">CLARA</div>
+        <div class="tag">CAPTURE &middot; LISTEN &middot; ANALYZE &middot; RESPOND &middot; ADAPT</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec">The mark</div>
+  <p class="desc">Five segments build the C — one per CLARA stage — and the amber piece closes the loop. It reads as a C and a loop at a glance, as five deliberate steps up close, and it carries the act of closing (the amber) as the hero. Petrol on light, teal on dark, single colour where needed.</p>
+  <div class="row" style="margin-top:16px">
+    <div class="tile t-light"><svg class="mk" style="width:84px;height:84px"><use href="#m"/></svg><span class="cap">petrol / on light</span></div>
+    <div class="tile t-ink"><svg class="mk" style="width:84px;height:84px"><use href="#m"/></svg><span class="cap">teal / on dark</span></div>
+    <div class="tile t-paper" style="color:#0c1f23"><svg class="mk" style="width:84px;height:84px"><use href="#mono"/></svg><span class="cap">single colour</span></div>
+  </div>
+
+  <div class="sec">Scales down</div>
+  <p class="desc">The segmented mark holds to roughly 24&nbsp;px. Below that the ticks merge, so the system steps down to a simplified solid C with the signal dot — the favicon / app-icon sibling.</p>
+  <div class="sizes" style="margin-top:16px">
+    <div class="item"><svg class="mk" style="width:72px;height:72px"><use href="#m"/></svg><span class="px">72 px</span></div>
+    <div class="item"><svg class="mk" style="width:40px;height:40px"><use href="#m"/></svg><span class="px">40 px</span></div>
+    <div class="item"><svg class="mk" style="width:24px;height:24px"><use href="#m"/></svg><span class="px">24 px</span></div>
+    <div class="item" style="margin-left:18px;border-left:1px solid var(--line);padding-left:30px"><svg class="mk" style="width:32px;height:32px"><use href="#fav"/></svg><span class="px">favicon 32</span></div>
+    <div class="item"><svg class="mk" style="width:16px;height:16px"><use href="#fav"/></svg><span class="px">favicon 16</span></div>
+  </div>
+
+  <div class="sec">Lockups</div>
+  <div class="locks" style="margin-top:4px">
+    <div class="lk"><div class="h"><svg class="mk" style="width:54px;height:54px;color:var(--petrol)"><use href="#m"/></svg><span class="wm name lt">CLARA</span></div></div>
+    <div class="lk ink"><div class="h"><svg class="mk" style="width:54px;height:54px;color:var(--teal)"><use href="#m"/></svg><span class="wm name dk">CLARA</span></div></div>
+    <div class="lk"><div class="s"><svg class="mk" style="width:58px;height:58px;color:var(--petrol)"><use href="#m"/></svg><span class="wm name lt" style="font-size:28px">CLARA</span></div></div>
+    <div class="lk ink"><div class="s"><svg class="mk" style="width:58px;height:58px;color:var(--teal)"><use href="#m"/></svg><span class="wm name dk" style="font-size:28px">CLARA</span></div></div>
+  </div>
+
+  <div class="sec">Colour</div>
+  <div class="cols">
+    <div class="col"><div class="chip" style="background:#016f60"></div><div class="meta"><b>Petrol</b><span>#016F60</span></div></div>
+    <div class="col"><div class="chip" style="background:#1bb89e"></div><div class="meta"><b>Teal</b><span>#1BB89E</span></div></div>
+    <div class="col"><div class="chip" style="background:#e0a24a"></div><div class="meta"><b>Amber</b><span>#E0A24A · the close</span></div></div>
+    <div class="col"><div class="chip" style="background:#08171a"></div><div class="meta"><b>Ink</b><span>#08171A</span></div></div>
+  </div>
+
+  <div class="sec">Use it right</div>
+  <div class="dd">
+    <div class="b ok"><h4>Do</h4>Keep the amber piece for the close. Give it clearspace equal to the gap height. Petrol on light, teal on dark, the wordmark in Space Grotesk. One flat colour when amber can't reproduce.</div>
+    <div class="b no"><h4>Don't</h4>Don't recolour the amber to a second brand hue, fill the C solid, add a gradient to the mark, stretch it, or set the wordmark in another typeface.</div>
+  </div>
+
+  <p class="desc" style="margin-top:40px;border-top:1px solid var(--line);padding-top:18px">Files: <code>mark.svg</code>, <code>mark-dark.svg</code>, <code>mark-mono.svg</code>, <code>favicon.svg</code>, <code>lockup-horizontal.svg</code>, <code>lockup-stacked.svg</code>. Wordmark here is live Space Grotesk — outline it to paths for final handoff. Local / not committed.</p>
+</div>
+</body>
+</html>

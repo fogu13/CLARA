@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="CLARA mark — C with a pulse closing the loop">
+  <!-- The C (petrol) -->
+  <path d="M69.28 27.02 A30 30 0 1 0 69.28 72.98" fill="none" stroke="#016f60" stroke-width="10" stroke-linecap="round"/>
+  <!-- The pulse about to complete the loop -->
+  <circle cx="78" cy="50" r="11" fill="#e0a24a" opacity="0.18"/>
+  <circle cx="78" cy="50" r="6.5" fill="#e0a24a"/>
+</svg>

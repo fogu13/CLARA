@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 100" role="img" aria-label="CLARA logo">
+  <g transform="translate(2 9) scale(0.82)" fill="none" stroke="#016f60" stroke-width="10">
+    <path d="M70.07 27.71 A30 30 0 0 0 46.86 20.16"/>
+    <path d="M43.76 20.66 A30 30 0 0 0 24.02 35.00"/>
+    <path d="M22.59 37.80 A30 30 0 0 0 22.59 62.20"/>
+    <path d="M24.02 65.00 A30 30 0 0 0 43.76 79.34"/>
+    <path d="M46.86 79.84 A30 30 0 0 0 70.07 72.29"/>
+    <path d="M74.27 32.37 A30 30 0 0 1 74.27 67.63" stroke="#e0a24a" stroke-linecap="round"/>
+  </g>
+  <text x="84" y="67" font-family="'Space Grotesk','Helvetica Neue',Arial,sans-serif" font-weight="700" font-size="48" letter-spacing="1" fill="#0c1f23">CLARA</text>
+</svg>

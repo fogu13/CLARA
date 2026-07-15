@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="CLARA mark — the loop, proven">
+  <!-- The loop, open at the top where the signal enters -->
+  <path d="M61.48 22.28 A30 30 0 1 1 38.52 22.28" fill="none" stroke="#016f60" stroke-width="9" stroke-linecap="round"/>
+  <!-- Proof: the outcome verified inside the loop -->
+  <path d="M40 51 L48 61 L65 39" fill="none" stroke="#e0a24a" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

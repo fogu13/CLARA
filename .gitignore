@@ -38,3 +38,6 @@ pnpm-debug.log*
 .firecrawl/
 .claude/
 .vercel
+.playwright-mcp/
+.understand-anything/
+*.tsbuildinfo
