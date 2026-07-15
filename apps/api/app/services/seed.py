@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from app.domain.models import (
@@ -13,7 +14,21 @@ from app.domain.models import (
 )
 from app.domain.scoring import approval_pressure, impact_band, normalized_impact_score
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+def _find_repo_root() -> Path:
+    """Resolve the repo root both on dev machines (monorepo layout) and in containers.
+
+    Priority: explicit CLARA_REPO_ROOT env var > monorepo parents[4] > container /app.
+    """
+    env_root = os.getenv("CLARA_REPO_ROOT")
+    if env_root:
+        return Path(env_root)
+    try:
+        return Path(__file__).resolve().parents[4]
+    except IndexError:
+        return Path("/app")
+
+
+REPO_ROOT = _find_repo_root()
 PROBLEMS_PATH = REPO_ROOT / "data" / "sample_problems.json"
 SIGNALS_PATH = REPO_ROOT / "data" / "sample_signals.json"
 CUSTOMER_CONTEXT_PATH = REPO_ROOT / "data" / "sample_customer_context.json"
