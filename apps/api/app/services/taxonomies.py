@@ -20,8 +20,7 @@ from app.domain.models import (
     TaxonomyType,
     TerminologyDictionaryEntry,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
+from app.services.paths import REPO_ROOT
 
 
 def load_seed_taxonomies(path: Path | None = None) -> list[TaxonomyCatalog]:
