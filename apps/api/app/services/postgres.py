@@ -6,6 +6,7 @@ import threading
 import json
 import os
 import re
+import time
 from contextlib import contextmanager
 from itertools import count
 from typing import Any
@@ -702,13 +703,24 @@ class PostgresCustomerContextStore(PostgresConnectionMixin, CustomerContextStore
         return len(rows)
 
 
+# Reads tolerate a briefly-stale snapshot: the dashboard's outcome board calls
+# outcome_snapshot + latest_learning_conclusion once per problem, and re-reading
+# the whole clara_workflow_records table 2×N times per request over the session
+# pooler took the production dashboard from seconds to minutes (16 Jul incident).
+# Writes force a refresh regardless — their ID counters must be current, or a
+# collision would silently overwrite another instance's record via ON CONFLICT.
+_WORKFLOW_REFRESH_TTL_SECONDS = 2.0
+
+
 class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
     """DB-backed workflow store.
 
     #23 parity: multiple instances (local dev + Render) share one database, so
     every public operation re-reads the records instead of trusting the
     boot-time snapshot — a boot snapshot served stale approvals/outcomes and
-    reused ID counters across instances.
+    reused ID counters across instances. Reads reuse a snapshot younger than
+    _WORKFLOW_REFRESH_TTL_SECONDS (cross-instance freshness degrades from
+    immediate to <=2s); writes always refresh first.
     """
 
     def __init__(self, url: str) -> None:
@@ -750,7 +762,15 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         self._load_records()
         return WorkflowStore.timeline_for_problem(self, problem, tenant_id=tenant_id)
 
-    def _load_records(self) -> None:
+    def _load_records(self, *, force: bool = False) -> None:
+        # getattr: tests construct via __new__ without __init__, so the
+        # timestamp may not exist yet — treat that as "never loaded".
+        if (
+            not force
+            and time.monotonic() - getattr(self, "_records_loaded_at", 0.0)
+            < _WORKFLOW_REFRESH_TTL_SECONDS
+        ):
+            return
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -801,6 +821,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         self._jira_draft_ids = count(_next_id(jira_drafts, "draft_id", "JIRA-DRAFT") + 1)
         self._transition_ids = count(_next_id(transitions, "transition_id", "TRN") + 1)
         self._closure_ids = count(_next_id(closure_records, "closure_id", "CLR") + 1)
+        self._records_loaded_at = time.monotonic()
 
     def _save_workflow_record(
         self,
@@ -845,7 +866,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
             )
 
     def record_transition(self, *args: Any, **kwargs: Any):
-        self._load_records()
+        self._load_records(force=True)
         transition = WorkflowStore.record_transition(self, *args, **kwargs)
         self._save_workflow_record(
             "transition",
@@ -856,7 +877,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         return transition
 
     def record_approval(self, *args: Any, **kwargs: Any):
-        self._load_records()
+        self._load_records(force=True)
         before_executions = {execution.execution_id for execution in self._executions}
         before_drafts = {draft.draft_id for draft in self._jira_issue_drafts}
         approval = WorkflowStore.record_approval(self, *args, **kwargs)
@@ -885,7 +906,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         return approval
 
     def record_outcome(self, *args: Any, **kwargs: Any):
-        self._load_records()
+        self._load_records(force=True)
         measurement = WorkflowStore.record_outcome(self, *args, **kwargs)
         record_id = (
             f"{measurement.problem_id}:{measurement.metric}:"
@@ -900,7 +921,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         return measurement
 
     def record_learning_conclusion(self, *args: Any, **kwargs: Any):
-        self._load_records()
+        self._load_records(force=True)
         conclusion = WorkflowStore.record_learning_conclusion(self, *args, **kwargs)
         self._save_workflow_record(
             "learning_conclusion",
@@ -913,7 +934,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         return conclusion
 
     def record_closure(self, *args: Any, **kwargs: Any):
-        self._load_records()
+        self._load_records(force=True)
         closure = WorkflowStore.record_closure(self, *args, **kwargs)
         self._save_workflow_record(
             "closure",
@@ -925,7 +946,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         return closure
 
     def add_execution(self, execution):
-        self._load_records()  # syncs the EXE- id counter before assignment
+        self._load_records(force=True)  # syncs the EXE- id counter before assignment
         record = super().add_execution(execution)
         self._save_workflow_record("execution", record.execution_id, record.problem_id, record)
         return record
@@ -933,7 +954,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
     def update_execution(
         self, execution_id, *, status, external_ref=None, detail=None, disclosure_applied=None
     ):
-        self._load_records()
+        self._load_records(force=True)
         # Base class mutates the in-memory record; persist the flip too, or a
         # restart resurrects executions as eternal drafts.
         updated = super().update_execution(
