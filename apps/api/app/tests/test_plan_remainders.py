@@ -175,3 +175,44 @@ class TestFourEyes:
         store.record_approval(problem=problem, decision=_decision("user-aaaa", action_id))
         state = store.state_for_problem(problem)
         assert len(state.executions) == 1
+
+
+# --------------------------------------------------------------------------- #
+# Item 11 (fuzzy tier) — near-duplicate annotation
+# --------------------------------------------------------------------------- #
+
+from app.domain.models import SignalRecord
+from app.services.signals import annotate_near_duplicates
+
+
+def _sig(sid: str, text: str) -> SignalRecord:
+    return SignalRecord(signal_id=sid, feedback_text=text)
+
+
+class TestNearDuplicates:
+    def test_minor_edits_are_annotated_never_dropped(self) -> None:
+        existing = [_sig("s-1", "The checkout page crashes every time I try to pay with my card")]
+        new = [_sig("s-2", "the checkout page crashes every time I try to pay with my card!!")]
+        count = annotate_near_duplicates(new, existing)
+        assert count == 1
+        assert new[0].metadata["near_duplicate_of"] == "s-1"
+
+    def test_different_feedback_is_untouched(self) -> None:
+        existing = [_sig("s-1", "The checkout page crashes every time I try to pay")]
+        new = [_sig("s-2", "Great support experience, my issue was resolved in minutes")]
+        assert annotate_near_duplicates(new, existing) == 0
+        assert "near_duplicate_of" not in new[0].metadata
+
+    def test_short_texts_are_skipped(self) -> None:
+        existing = [_sig("s-1", "app crashes")]
+        new = [_sig("s-2", "app crashes")]
+        # Below the token floor: too little signal to call it a duplicate.
+        assert annotate_near_duplicates(new, existing) == 0
+
+    def test_intra_batch_duplicates_detected(self) -> None:
+        new = [
+            _sig("s-1", "Payment failed twice today and support has not responded to me"),
+            _sig("s-2", "payment failed twice today and support has not responded to me."),
+        ]
+        assert annotate_near_duplicates(new, []) == 1
+        assert new[1].metadata["near_duplicate_of"] == "s-1"

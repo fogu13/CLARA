@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 import json
+import re
 import sqlite3
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -34,6 +35,50 @@ from app.services.language import detect_language
 # Fallback identifiers written when an import row carries no customer/account id
 # (web CSV wizard uses "unknown", the API fallback uses "unknown_customer"/"_account").
 UNKNOWN_IDENTITY_VALUES = {"", "unknown", "unknown_customer", "unknown_account"}
+
+# --------------------------------------------------------------------------- #
+# Near-duplicate detection (external-review item 11, fuzzy tier).
+#
+# Token-set Jaccard against the recent corpus at import time. Matches are
+# ANNOTATED (metadata["near_duplicate_of"]) and still imported — silently
+# dropping a signal is the dishonest failure mode this replaces; the feed
+# shows a "possible duplicate" badge instead.
+# ponytail: O(new × corpus) set intersection, corpus capped at the most recent
+# 2000 signals — MinHash or the embedding infra is the upgrade path at scale.
+# --------------------------------------------------------------------------- #
+NEAR_DUP_JACCARD = 0.85
+NEAR_DUP_MIN_TOKENS = 5
+_NEAR_DUP_CORPUS_CAP = 2000
+_DUP_TOKEN = re.compile(r"[a-zà-ÿäöüß0-9']+")
+
+
+def _dup_tokens(text: str) -> frozenset[str]:
+    return frozenset(t for t in _DUP_TOKEN.findall(text.casefold()) if len(t) > 1)
+
+
+def annotate_near_duplicates(
+    new_records: list[SignalRecord], existing: list[SignalRecord]
+) -> int:
+    """Stamp metadata['near_duplicate_of'] on records that near-match an
+    existing (or same-batch) signal's text. Returns how many were annotated."""
+    corpus: list[tuple[str, frozenset[str]]] = [
+        (signal.signal_id, _dup_tokens(signal.feedback_text))
+        for signal in existing[-_NEAR_DUP_CORPUS_CAP:]
+    ]
+    annotated = 0
+    for record in new_records:
+        tokens = _dup_tokens(record.feedback_text)
+        if len(tokens) >= NEAR_DUP_MIN_TOKENS:
+            for signal_id, other in corpus:
+                if not other:
+                    continue
+                union = len(tokens | other)
+                if union and len(tokens & other) / union >= NEAR_DUP_JACCARD:
+                    record.metadata["near_duplicate_of"] = signal_id
+                    annotated += 1
+                    break
+        corpus.append((record.signal_id, tokens))
+    return annotated
 
 
 def normalize_label(value: str) -> str:
