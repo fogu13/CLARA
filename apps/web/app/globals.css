@@ -1121,6 +1121,11 @@ select {
   color: var(--muted-foreground, #6b7280);
 }
 
+.outcome-board-guardrail-breach {
+  color: #b45309;
+  font-weight: 600;
+}
+
 .outcome-board-empty {
   margin: 0;
   color: hsl(var(--muted-foreground));

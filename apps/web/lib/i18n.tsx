@@ -250,6 +250,8 @@ const en = {
     grade: "Evidence grade",
     gradeTooltip:
       "Design grade of this readout — A randomized holdout · B controlled quasi-experiment · C interrupted time series · D uncontrolled before/after · E manual or unmeasured.",
+    guardrails: "Guardrails",
+    guardrailNoData: "no data source",
   },
   settings: {
     title: "Settings",
@@ -833,6 +835,8 @@ const de: Dict = {
     grade: "Evidenz-Grad",
     gradeTooltip:
       "Design-Grad dieser Messung — A randomisierte Holdout-Gruppe · B kontrolliertes Quasi-Experiment · C unterbrochene Zeitreihe · D unkontrollierter Vorher/Nachher-Vergleich · E manuell oder nicht gemessen.",
+    guardrails: "Guardrails",
+    guardrailNoData: "keine Datenquelle",
   },
   settings: {
     title: "Einstellungen",

@@ -178,6 +178,100 @@ def signal_rate_per_day(
     return round(count / elapsed_days, 4), count
 
 
+# Guardrail measurement (design: docs/engineering/guardrail-measurement-design.md).
+# Non-inferiority vs the pre-window baseline; a breach is informative, never
+# blocking. Unmeasurable guardrails surface "no_data_source" explicitly so a
+# declared guardrail can never silently stay decorative.
+MEASURABLE_GUARDRAILS = {"repeat_signal_rate"}
+GUARDRAIL_BREACH_FACTOR = 1.2  # >20% relative worsening flags a breach
+GUARDRAIL_BASELINE_DAYS = 28
+
+
+def measure_guardrails(
+    problem: ProblemRecord,
+    signals: list[Any],
+    *,
+    executed_at: str,
+    now: str,
+    workflow_store: Any,
+) -> int:
+    """Record one readout per declared guardrail metric. Returns records written."""
+    from app.services.signals import UNKNOWN_IDENTITY_VALUES
+
+    written = 0
+    for metric in problem.outcome_contract.guardrail_metrics:
+        if metric not in MEASURABLE_GUARDRAILS:
+            workflow_store.add_guardrail_measurement(
+                problem_id=problem.problem_id,
+                metric=metric,
+                status="no_data_source",
+                measured_at=now,
+                note=(
+                    "Declared guardrail has no data source yet "
+                    "(requires outbound sends / opt-out events)."
+                ),
+            )
+            written += 1
+            continue
+
+        # repeat_signal_rate: theme signals/day post-execution from customers
+        # already seen in the pre-window. Identity-less signals are excluded —
+        # an "unknown_customer" row cannot prove a repeat complainer.
+        start = _parse_ts(executed_at)
+        pre_start = start - timedelta(days=GUARDRAIL_BASELINE_DAYS)
+        end = _parse_ts(now)
+
+        def _matches(sig: Any) -> bool:
+            return _norm_stage(sig.journey) == _norm_stage(problem.journey) and _norm_stage(
+                sig.journey_stage
+            ) == _norm_stage(problem.journey_stage)
+
+        pre_count = 0
+        pre_customers: set[str] = set()
+        repeat_count = 0
+        for sig in signals:
+            if not _matches(sig) or sig.customer_id in UNKNOWN_IDENTITY_VALUES:
+                continue
+            try:
+                ts = _parse_ts(sig.timestamp)
+            except ValueError:
+                continue
+            if pre_start <= ts < start:
+                pre_count += 1
+                pre_customers.add(sig.customer_id)
+        for sig in signals:
+            if not _matches(sig) or sig.customer_id not in pre_customers:
+                continue
+            try:
+                ts = _parse_ts(sig.timestamp)
+            except ValueError:
+                continue
+            if start <= ts <= end:
+                repeat_count += 1
+
+        pre_days = max((start - pre_start).total_seconds() / 86_400, 1.0)
+        post_days = max((end - start).total_seconds() / 86_400, 1.0)
+        baseline = round(pre_count / pre_days, 4)
+        observed = round(repeat_count / post_days, 4)
+        breached = (
+            observed > baseline * GUARDRAIL_BREACH_FACTOR if baseline > 0 else observed > 0
+        )
+        workflow_store.add_guardrail_measurement(
+            problem_id=problem.problem_id,
+            metric=metric,
+            status="breach" if breached else "ok",
+            observed_value=observed,
+            baseline=baseline,
+            measured_at=now,
+            note=(
+                f"{repeat_count} repeat signal(s) from {len(pre_customers)} pre-window "
+                "customer(s); identity-less signals excluded."
+            ),
+        )
+        written += 1
+    return written
+
+
 def run_due_measurements(
     *,
     plan_store: SQLiteMeasurementPlanStore,
@@ -200,6 +294,18 @@ def run_due_measurements(
             skipped += 1
             continue
 
+        signals = signal_store.list_signals()
+        try:
+            measure_guardrails(
+                problem,
+                signals,
+                executed_at=plan["executed_at"],
+                now=now,
+                workflow_store=workflow_store,
+            )
+        except Exception:  # noqa: BLE001 — guardrails must not stall the loop
+            logger.exception("Guardrail measurement failed for %s", problem.problem_id)
+
         metric = problem.outcome_contract.primary_metric
         if not metric.startswith(SIGNAL_METRIC_PREFIX):
             # CLARA cannot observe this metric — surface a human task, never invent data.
@@ -218,7 +324,7 @@ def run_due_measurements(
 
         journey, _, stage = metric.removeprefix(SIGNAL_METRIC_PREFIX).partition("/")
         rate, sample = signal_rate_per_day(
-            signal_store.list_signals(),
+            signals,
             journey=journey.replace("_", " "),
             journey_stage=stage.replace("_", " "),
             since=plan["executed_at"],

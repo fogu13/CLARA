@@ -168,6 +168,18 @@ def build_evidence_pack(
             "latest_value": state.outcome.latest_value,
             "status": state.outcome.status,
             "improvement_direction": state.outcome.improvement_direction,
+            "evidence_grade": state.outcome.evidence_grade,
+            "guardrails": [
+                {
+                    "metric": g.metric,
+                    "status": g.status,
+                    "observed_value": g.observed_value,
+                    "baseline": g.baseline,
+                    "measured_at": g.measured_at,
+                    "note": g.note,
+                }
+                for g in state.outcome.guardrails
+            ],
         },
         "measurement_checkpoints": [
             {

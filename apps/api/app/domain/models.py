@@ -585,6 +585,24 @@ class JiraIssueDraft(BaseModel):
     created_at: str
 
 
+class GuardrailMeasurement(BaseModel):
+    """A non-inferiority readout for one declared guardrail metric.
+
+    status: "ok" (not worse than baseline within tolerance), "breach"
+    (worsened beyond the threshold — informative, never blocking), or
+    "no_data_source" (declared but unmeasurable — surfaced explicitly so
+    guardrails can never silently stay decorative)."""
+
+    guardrail_id: str
+    problem_id: str
+    metric: str
+    status: str
+    observed_value: float | None = None
+    baseline: float | None = None
+    measured_at: str
+    note: str | None = None
+
+
 class OutcomeMeasurement(BaseModel):
     problem_id: str
     metric: str
@@ -733,6 +751,8 @@ class OutcomeSnapshot(BaseModel):
     # A–E design grade (outcome_engine.evidence_grade): A holdout, C ITS,
     # D before/after, E manual/unmeasured.
     evidence_grade: str | None = None
+    # Latest readout per declared guardrail metric (non-inferiority checks).
+    guardrails: list[GuardrailMeasurement] = Field(default_factory=list)
     # W4 read-time ITS scoring (outcome_engine.its_outcome_for_problem):
     # either {method: "its", effect, ci_low, ci_high, ...} or the honest
     # sparse fallback {method: "delta_insufficient_data", label, delta, ...}.
@@ -759,6 +779,7 @@ class OutcomeBoardItem(BaseModel):
     responsible_owner: str
     measurement_source: str | None = None
     evidence_grade: str | None = None
+    guardrails: list[GuardrailMeasurement] = Field(default_factory=list)
 
 
 class OutcomeBoard(BaseModel):
