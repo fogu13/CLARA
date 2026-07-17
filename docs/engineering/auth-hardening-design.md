@@ -50,10 +50,26 @@ follow-up. Replaces the OWASP-flagged localStorage token storage
    re-authenticate once.
 3. Previews/local keep the legacy flow until intentionally migrated.
 
+## MFA (TOTP) — implemented on top of the cookie routes
+
+- **Login challenge**: the password grant sets NO session cookies for a user
+  with a verified TOTP factor; the AAL1 token is held in a 5-minute HttpOnly
+  `clara_mfa_token` cookie and `/api/auth/mfa/verify` (challenge + verify)
+  mints the real AAL2 session.
+- **Enrollment** (`/api/auth/mfa/enroll`, Settings → Two-factor
+  authentication): GoTrue factor enroll returns the QR/secret once; the
+  confirm step verifies a code and upgrades the session. Factor listing and
+  removal via `/api/auth/mfa/factors`.
+- **Scope**: cookie mode only — the legacy localStorage flow performs no
+  challenge, so an MFA mandate must come server-side:
+- **`CLARA_REQUIRE_AAL2=true`** (API env, default off) rejects password-only
+  (`aal1`) JWTs entirely. Flip it only after every workspace user has
+  enrolled, since non-enrolled users can never reach `aal2`.
+
 ## Follow-up (not in this change)
 
-- **MFA (TOTP)** via GoTrue enroll/challenge/verify: needs an enrollment UI
-  (QR + code confirm) and a challenge step in the login flow; the cookie
-  routes are already the right chokepoint to add it.
+- Recovery codes (GoTrue does not issue them for TOTP; an operator can
+  unenroll a locked-out user's factor via the Supabase dashboard — document
+  this in the runbook when the mandate is enabled).
 - Remove the legacy localStorage path once the canonical domain has run
   cookie-mode for a while and previews are handled (e.g. preview API proxy).

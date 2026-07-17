@@ -3,7 +3,9 @@ import {
   gotrue,
   gotrueConfigured,
   sessionFromToken,
+  setMfaCookie,
   setSessionCookies,
+  verifiedTotpFactor,
 } from "@/lib/auth-cookies";
 
 export async function POST(request: NextRequest) {
@@ -23,6 +25,16 @@ export async function POST(request: NextRequest) {
       { status: 401 }
     );
   }
+  // MFA-enrolled users get NO session cookies from the password alone: hold
+  // the AAL1 token in a 5-minute HttpOnly cookie and demand the TOTP code
+  // (/api/auth/mfa/verify) before a real session exists.
+  const factorId = verifiedTotpFactor(data.user);
+  if (factorId) {
+    const res = NextResponse.json({ mfaRequired: true, factorId });
+    setMfaCookie(res, data.access_token);
+    return res;
+  }
+
   const res = NextResponse.json(sessionFromToken(data.access_token));
   setSessionCookies(res, data);
   return res;

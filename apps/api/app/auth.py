@@ -40,6 +40,9 @@ _jwk_client: PyJWKClient | None = None
 # CLARA_REQUIRE_AUTH=true in any real deployment so missing auth config refuses to boot
 # instead of silently disabling auth.
 REQUIRE_AUTH = (os.getenv("CLARA_REQUIRE_AUTH") or "").strip().lower() in {"1", "true", "yes", "on"}
+# MFA mandate (see the aal check in _resolve_user). Off by default: flip only
+# after every workspace user has enrolled a TOTP factor.
+REQUIRE_AAL2 = (os.getenv("CLARA_REQUIRE_AAL2") or "").strip().lower() in {"1", "true", "yes", "on"}
 if REQUIRE_AUTH and not AUTH_ENABLED:
     raise RuntimeError(
         "CLARA_REQUIRE_AUTH is set but neither SUPABASE_URL (JWKS) nor SUPABASE_JWT_SECRET "
@@ -201,6 +204,12 @@ def _resolve_user(
 
     token = authorization.removeprefix("Bearer ").strip()
     claims = verify_token(token)
+
+    # Optional MFA mandate: once every user is enrolled, CLARA_REQUIRE_AAL2=true
+    # rejects password-only (aal1) sessions — otherwise the legacy bearer flow
+    # could silently bypass the TOTP challenge. Default off (enrollment first).
+    if REQUIRE_AAL2 and claims.get("aal") != "aal2":
+        raise HTTPException(status_code=401, detail="MFA required: sign in with your second factor")
 
     user_id = claims.get("sub", "")
     if not user_id:

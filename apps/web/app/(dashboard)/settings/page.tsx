@@ -6,6 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  authConfigured,
+  confirmMfaEnrollment,
+  cookieAuthEnabled,
+  enrollMfa,
+  listMfaFactors,
+  removeMfaFactor,
+  type MfaFactor,
+} from "@/lib/auth-client";
 import { apiBaseUrl, apiHeaders, getSystemConfig, getWorkspace, updateWorkspace } from "@/lib/client-api";
 import type { SystemConfig, WorkspaceSettings } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
@@ -315,6 +324,153 @@ export default function SettingsPage() {
           <p className="text-xs text-muted-foreground">{t.settings.aiConfigNote}</p>
         </CardContent>
       </Card>
+
+      {cookieAuthEnabled && authConfigured ? <MfaCard /> : null}
     </div>
+  );
+}
+
+function MfaCard() {
+  const { t } = useI18n();
+  const [factors, setFactors] = useState<MfaFactor[]>([]);
+  const [enrollment, setEnrollment] = useState<{
+    factorId: string;
+    qrCode: string | null;
+    secret: string | null;
+  } | null>(null);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [mfaStatus, setMfaStatus] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+
+  async function refresh() {
+    try {
+      setFactors(await listMfaFactors());
+    } catch {
+      // Signed out or endpoint unavailable — card stays in its empty state.
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  async function beginEnrollment() {
+    setBusy(true);
+    setMfaStatus(null);
+    try {
+      setEnrollment(await enrollMfa());
+      setCode("");
+    } catch (error) {
+      setMfaStatus({ tone: "error", text: error instanceof Error ? error.message : "Enrollment failed" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmEnrollment() {
+    if (!enrollment) return;
+    setBusy(true);
+    setMfaStatus(null);
+    try {
+      await confirmMfaEnrollment(enrollment.factorId, code.trim());
+      setEnrollment(null);
+      setCode("");
+      setMfaStatus({ tone: "ok", text: t.settings.mfaEnabledNow });
+      await refresh();
+    } catch (error) {
+      setMfaStatus({ tone: "error", text: error instanceof Error ? error.message : "Invalid code" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(factorId: string) {
+    if (!window.confirm(t.settings.mfaRemoveConfirm)) return;
+    setBusy(true);
+    try {
+      await removeMfaFactor(factorId);
+      await refresh();
+      setMfaStatus(null);
+    } catch (error) {
+      setMfaStatus({ tone: "error", text: error instanceof Error ? error.message : "Could not remove" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const verified = factors.filter((factor) => factor.status === "verified");
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t.settings.mfaTitle}</CardTitle>
+        <CardDescription>{t.settings.mfaSubtitle}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {verified.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-sm text-emerald-600">{t.settings.mfaEnabled}</p>
+            {verified.map((factor) => (
+              <div key={factor.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                <span>{factor.friendlyName || "TOTP"} · {factor.factorType}</span>
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => remove(factor.id)}>
+                  {t.settings.mfaRemove}
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : enrollment ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">{t.settings.mfaScan}</p>
+            {enrollment.qrCode ? (
+              // GoTrue returns the QR as an SVG string; render it as a data URL.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                alt="TOTP QR code"
+                width={176}
+                height={176}
+                src={`data:image/svg+xml;utf8,${encodeURIComponent(enrollment.qrCode)}`}
+              />
+            ) : null}
+            {enrollment.secret ? (
+              <p className="text-xs text-muted-foreground">
+                {t.settings.mfaSecret}: <code className="bg-muted px-1.5 py-0.5 rounded select-all">{enrollment.secret}</code>
+              </p>
+            ) : null}
+            <div className="flex items-end gap-2">
+              <div>
+                <Label htmlFor="mfa-enroll-code">{t.settings.mfaCodeLabel}</Label>
+                <Input
+                  id="mfa-enroll-code"
+                  className="mt-1 w-32"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                />
+              </div>
+              <Button size="sm" disabled={busy || code.trim().length < 6} onClick={confirmEnrollment}>
+                {t.settings.mfaConfirm}
+              </Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEnrollment(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">{t.settings.mfaDisabledNote}</p>
+            <Button size="sm" disabled={busy} onClick={beginEnrollment}>
+              {t.settings.mfaEnable}
+            </Button>
+          </div>
+        )}
+        {mfaStatus ? (
+          <p role="status" className={`text-sm ${mfaStatus.tone === "ok" ? "text-emerald-600" : "text-destructive"}`}>
+            {mfaStatus.text}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
