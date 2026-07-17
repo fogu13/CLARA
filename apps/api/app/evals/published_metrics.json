@@ -1,0 +1,43 @@
+{
+  "published_at": "2026-07-17T07:24:36.280762+00:00",
+  "model": "glm-5.2",
+  "dataset": {
+    "total_items": 80,
+    "note": "Curated golden set; DE stratum authored + adversarially verified. Production config (few-shot exemplars on). Hallucination heuristic covers EN items only."
+  },
+  "overall": {
+    "sentiment_accuracy": 0.975,
+    "sentiment_ci95": [
+      0.9375,
+      1.0
+    ],
+    "urgency_accuracy": 0.85,
+    "urgency_ci95": [
+      0.7625,
+      0.925
+    ],
+    "tag_f1_fuzzy": 0.742436974789916
+  },
+  "by_language": {
+    "de": {
+      "n": 20,
+      "sentiment_accuracy": 0.95,
+      "urgency_accuracy": 0.8,
+      "tag_exact_accuracy": 0.0,
+      "sentiment_ci": [
+        0.85,
+        1.0
+      ]
+    },
+    "en": {
+      "n": 60,
+      "sentiment_accuracy": 0.9833,
+      "urgency_accuracy": 0.8667,
+      "tag_exact_accuracy": 0.2333,
+      "sentiment_ci": [
+        0.95,
+        1.0
+      ]
+    }
+  }
+}

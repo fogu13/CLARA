@@ -1,962 +1,1349 @@
 [
-  {
-    "id": "eval-001",
-    "text": "The checkout page crashes every time I try to pay with my credit card. This is really frustrating!",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.7,
-      "urgency": "high",
-      "tags": [
-        "checkout_failure",
-        "payment_error"
-      ],
-      "category": "product_issue"
-    },
-    "split": "optimization",
-    "latency_ms": 120
+ {
+  "id": "eval-001",
+  "text": "The checkout page crashes every time I try to pay with my credit card. This is really frustrating!",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "checkout_failure",
+    "payment_error"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-002",
-    "text": "I love the new dashboard design, it's so much cleaner and easier to navigate.",
-    "expected": {
-      "sentiment": "positive",
-      "sentiment_score": 0.8,
-      "urgency": "low",
-      "tags": [
-        "positive_trend",
-        "dashboard_design"
-      ],
-      "category": "positive_trend"
-    },
-    "split": "optimization",
-    "latency_ms": 95
+  "split": "optimization",
+  "latency_ms": 120,
+  "language": "en"
+ },
+ {
+  "id": "eval-002",
+  "text": "I love the new dashboard design, it's so much cleaner and easier to navigate.",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.8,
+   "urgency": "low",
+   "tags": [
+    "positive_trend",
+    "dashboard_design"
+   ],
+   "category": "positive_trend"
   },
-  {
-    "id": "eval-003",
-    "text": "I've been waiting 3 weeks for a refund and nobody is responding to my emails. I want to cancel my subscription.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.9,
-      "urgency": "critical",
-      "tags": [
-        "refund_delay",
-        "churn_risk"
-      ],
-      "category": "churn_risk"
-    },
-    "split": "optimization",
-    "latency_ms": 180
+  "split": "optimization",
+  "latency_ms": 95,
+  "language": "en"
+ },
+ {
+  "id": "eval-003",
+  "text": "I've been waiting 3 weeks for a refund and nobody is responding to my emails. I want to cancel my subscription.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.9,
+   "urgency": "critical",
+   "tags": [
+    "refund_delay",
+    "churn_risk"
+   ],
+   "category": "churn_risk"
   },
-  {
-    "id": "eval-004",
-    "text": "The onboarding process was confusing at first but the support team helped me through it.",
-    "expected": {
-      "sentiment": "mixed",
-      "sentiment_score": 0.1,
-      "urgency": "medium",
-      "tags": [
-        "onboarding_friction",
-        "good_support"
-      ],
-      "category": "ux_friction"
-    },
-    "split": "optimization",
-    "latency_ms": 110
+  "split": "optimization",
+  "latency_ms": 180,
+  "language": "en"
+ },
+ {
+  "id": "eval-004",
+  "text": "The onboarding process was confusing at first but the support team helped me through it.",
+  "expected": {
+   "sentiment": "mixed",
+   "sentiment_score": 0.1,
+   "urgency": "medium",
+   "tags": [
+    "onboarding_friction",
+    "good_support"
+   ],
+   "category": "ux_friction"
   },
-  {
-    "id": "eval-005",
-    "text": "Pricing is unclear and I was charged more than what was advertised. This feels deceptive.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.6,
-      "urgency": "high",
-      "tags": [
-        "pricing_unclear",
-        "billing_error"
-      ],
-      "category": "compliance_concern"
-    },
-    "split": "optimization",
-    "latency_ms": 130
+  "split": "optimization",
+  "latency_ms": 110,
+  "language": "en"
+ },
+ {
+  "id": "eval-005",
+  "text": "Pricing is unclear and I was charged more than what was advertised. This feels deceptive.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.6,
+   "urgency": "high",
+   "tags": [
+    "pricing_unclear",
+    "billing_error"
+   ],
+   "category": "compliance_concern"
   },
-  {
-    "id": "eval-006",
-    "text": "The mobile app keeps freezing when I try to upload photos. Happens every single time.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.7,
-      "urgency": "high",
-      "tags": [
-        "mobile_app_freeze",
-        "upload_failure"
-      ],
-      "category": "product_issue"
-    },
-    "split": "optimization",
-    "latency_ms": 140
+  "split": "optimization",
+  "latency_ms": 130,
+  "language": "en"
+ },
+ {
+  "id": "eval-006",
+  "text": "The mobile app keeps freezing when I try to upload photos. Happens every single time.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "mobile_app_freeze",
+    "upload_failure"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-007",
-    "text": "Great product overall! The analytics features have really helped our team make better decisions.",
-    "expected": {
-      "sentiment": "positive",
-      "sentiment_score": 0.9,
-      "urgency": "low",
-      "tags": [
-        "positive_trend",
-        "analytics_feature"
-      ],
-      "category": "positive_trend"
-    },
-    "split": "optimization",
-    "latency_ms": 90
+  "split": "optimization",
+  "latency_ms": 140,
+  "language": "en"
+ },
+ {
+  "id": "eval-007",
+  "text": "Great product overall! The analytics features have really helped our team make better decisions.",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.9,
+   "urgency": "low",
+   "tags": [
+    "positive_trend",
+    "analytics_feature"
+   ],
+   "category": "positive_trend"
   },
-  {
-    "id": "eval-008",
-    "text": "I think the GDPR consent dialog is missing and my data might be processed without proper authorization.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.5,
-      "urgency": "critical",
-      "tags": [
-        "gdpr_concern",
-        "compliance_issue"
-      ],
-      "category": "compliance_concern"
-    },
-    "split": "optimization",
-    "latency_ms": 160
+  "split": "optimization",
+  "latency_ms": 90,
+  "language": "en"
+ },
+ {
+  "id": "eval-008",
+  "text": "I think the GDPR consent dialog is missing and my data might be processed without proper authorization.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.5,
+   "urgency": "critical",
+   "tags": [
+    "gdpr_concern",
+    "compliance_issue"
+   ],
+   "category": "compliance_concern"
   },
-  {
-    "id": "eval-009",
-    "text": "The email campaign I received was completely irrelevant to my use case. Why am I getting these?",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.4,
-      "urgency": "medium",
-      "tags": [
-        "irrelevant_campaign",
-        "marketing_misfire"
-      ],
-      "category": "campaign_performance"
-    },
-    "split": "optimization",
-    "latency_ms": 100
+  "split": "optimization",
+  "latency_ms": 160,
+  "language": "en"
+ },
+ {
+  "id": "eval-009",
+  "text": "The email campaign I received was completely irrelevant to my use case. Why am I getting these?",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.4,
+   "urgency": "medium",
+   "tags": [
+    "irrelevant_campaign",
+    "marketing_misfire"
+   ],
+   "category": "campaign_performance"
   },
-  {
-    "id": "eval-010",
-    "text": "Account setup took forever but once I got through it, the product worked great.",
-    "expected": {
-      "sentiment": "mixed",
-      "sentiment_score": 0.2,
-      "urgency": "medium",
-      "tags": [
-        "onboarding_friction",
-        "setup_delay"
-      ],
-      "category": "ux_friction"
-    },
-    "split": "optimization",
-    "latency_ms": 115
+  "split": "optimization",
+  "latency_ms": 100,
+  "language": "en"
+ },
+ {
+  "id": "eval-010",
+  "text": "Account setup took forever but once I got through it, the product worked great.",
+  "expected": {
+   "sentiment": "mixed",
+   "sentiment_score": 0.2,
+   "urgency": "medium",
+   "tags": [
+    "onboarding_friction",
+    "setup_delay"
+   ],
+   "category": "ux_friction"
   },
-  {
-    "id": "eval-011",
-    "text": "The new bulk export feature saves me hours every week. Fantastic addition to the platform.",
-    "expected": {
-      "sentiment": "positive",
-      "sentiment_score": 0.85,
-      "urgency": "low",
-      "tags": [
-        "bulk_export",
-        "positive_trend"
-      ],
-      "category": "positive_trend"
-    },
-    "split": "optimization",
-    "latency_ms": 95
+  "split": "optimization",
+  "latency_ms": 115,
+  "language": "en"
+ },
+ {
+  "id": "eval-011",
+  "text": "The new bulk export feature saves me hours every week. Fantastic addition to the platform.",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.85,
+   "urgency": "low",
+   "tags": [
+    "bulk_export",
+    "positive_trend"
+   ],
+   "category": "positive_trend"
   },
-  {
-    "id": "eval-012",
-    "text": "Your service has been completely down for 2 hours and we cannot process any orders. This is costing us money.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.9,
-      "urgency": "critical",
-      "tags": [
-        "service_outage",
-        "downtime"
-      ],
-      "category": "product_issue"
-    },
-    "split": "optimization",
-    "latency_ms": 150
+  "split": "optimization",
+  "latency_ms": 95,
+  "language": "en"
+ },
+ {
+  "id": "eval-012",
+  "text": "Your service has been completely down for 2 hours and we cannot process any orders. This is costing us money.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.9,
+   "urgency": "critical",
+   "tags": [
+    "service_outage",
+    "downtime"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-013",
-    "text": "How do I change my billing cycle from monthly to annual?",
-    "expected": {
-      "sentiment": "neutral",
-      "sentiment_score": 0.0,
-      "urgency": "low",
-      "tags": [
-        "billing_cycle",
-        "plan_change"
-      ],
-      "category": "content_clarity"
-    },
-    "split": "optimization",
-    "latency_ms": 80
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "en"
+ },
+ {
+  "id": "eval-013",
+  "text": "How do I change my billing cycle from monthly to annual?",
+  "expected": {
+   "sentiment": "neutral",
+   "sentiment_score": 0.0,
+   "urgency": "low",
+   "tags": [
+    "billing_cycle",
+    "plan_change"
+   ],
+   "category": "content_clarity"
   },
-  {
-    "id": "eval-014",
-    "text": "After the latest update all my saved filters disappeared. I lost hours of configuration work.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.8,
-      "urgency": "high",
-      "tags": [
-        "config_loss",
-        "update_regression"
-      ],
-      "category": "product_issue"
-    },
-    "split": "optimization",
-    "latency_ms": 135
+  "split": "optimization",
+  "latency_ms": 80,
+  "language": "en"
+ },
+ {
+  "id": "eval-014",
+  "text": "After the latest update all my saved filters disappeared. I lost hours of configuration work.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.8,
+   "urgency": "high",
+   "tags": [
+    "config_loss",
+    "update_regression"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-015",
-    "text": "The app is powerful but the learning curve is steep and the documentation could be much clearer.",
-    "expected": {
-      "sentiment": "mixed",
-      "sentiment_score": 0.0,
-      "urgency": "medium",
-      "tags": [
-        "onboarding_friction",
-        "documentation_gap"
-      ],
-      "category": "content_clarity"
-    },
-    "split": "held_out",
-    "latency_ms": 120
+  "split": "optimization",
+  "latency_ms": 135,
+  "language": "en"
+ },
+ {
+  "id": "eval-015",
+  "text": "The app is powerful but the learning curve is steep and the documentation could be much clearer.",
+  "expected": {
+   "sentiment": "mixed",
+   "sentiment_score": 0.0,
+   "urgency": "medium",
+   "tags": [
+    "onboarding_friction",
+    "documentation_gap"
+   ],
+   "category": "content_clarity"
   },
-  {
-    "id": "eval-016",
-    "text": "Pages take 10+ seconds to load since last week, making the tool almost unusable.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.7,
-      "urgency": "high",
-      "tags": [
-        "performance_degradation",
-        "slow_load"
-      ],
-      "category": "product_issue"
-    },
-    "split": "held_out",
-    "latency_ms": 130
+  "split": "held_out",
+  "latency_ms": 120,
+  "language": "en"
+ },
+ {
+  "id": "eval-016",
+  "text": "Pages take 10+ seconds to load since last week, making the tool almost unusable.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "performance_degradation",
+    "slow_load"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-017",
-    "text": "I received a password reset email I never requested. Is my account compromised?",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.6,
-      "urgency": "critical",
-      "tags": [
-        "security_concern",
-        "account_security"
-      ],
-      "category": "compliance_concern"
-    },
-    "split": "held_out",
-    "latency_ms": 150
+  "split": "held_out",
+  "latency_ms": 130,
+  "language": "en"
+ },
+ {
+  "id": "eval-017",
+  "text": "I received a password reset email I never requested. Is my account compromised?",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.6,
+   "urgency": "critical",
+   "tags": [
+    "security_concern",
+    "account_security"
+   ],
+   "category": "compliance_concern"
   },
-  {
-    "id": "eval-018",
-    "text": "Support resolved my issue within minutes. Best customer service I have experienced.",
-    "expected": {
-      "sentiment": "positive",
-      "sentiment_score": 0.9,
-      "urgency": "low",
-      "tags": [
-        "good_support",
-        "positive_trend"
-      ],
-      "category": "positive_trend"
-    },
-    "split": "held_out",
-    "latency_ms": 90
+  "split": "held_out",
+  "latency_ms": 150,
+  "language": "en"
+ },
+ {
+  "id": "eval-018",
+  "text": "Support resolved my issue within minutes. Best customer service I have experienced.",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.9,
+   "urgency": "low",
+   "tags": [
+    "good_support",
+    "positive_trend"
+   ],
+   "category": "positive_trend"
   },
-  {
-    "id": "eval-019",
-    "text": "I'm evaluating competitors because your mobile experience hasn't improved in over a year.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.6,
-      "urgency": "medium",
-      "tags": [
-        "churn_risk",
-        "mobile_experience"
-      ],
-      "category": "churn_risk"
-    },
-    "split": "held_out",
-    "latency_ms": 125
+  "split": "held_out",
+  "latency_ms": 90,
+  "language": "en"
+ },
+ {
+  "id": "eval-019",
+  "text": "I'm evaluating competitors because your mobile experience hasn't improved in over a year.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.6,
+   "urgency": "medium",
+   "tags": [
+    "churn_risk",
+    "mobile_experience"
+   ],
+   "category": "churn_risk"
   },
-  {
-    "id": "eval-020",
-    "text": "The Salesforce integration keeps disconnecting and we lose sync every few hours.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.7,
-      "urgency": "high",
-      "tags": [
-        "integration_failure",
-        "sync_error"
-      ],
-      "category": "product_issue"
-    },
-    "split": "held_out",
-    "latency_ms": 140
+  "split": "held_out",
+  "latency_ms": 125,
+  "language": "en"
+ },
+ {
+  "id": "eval-020",
+  "text": "The Salesforce integration keeps disconnecting and we lose sync every few hours.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "integration_failure",
+    "sync_error"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-021",
-    "text": "Two-factor authentication codes never arrive by SMS, so I am completely locked out of my account.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.7,
-      "urgency": "high",
-      "tags": [
-        "authentication_failure",
-        "account_lockout"
-      ],
-      "category": "product_issue"
-    },
-    "split": "optimization",
-    "latency_ms": 130
+  "split": "held_out",
+  "latency_ms": 140,
+  "language": "en"
+ },
+ {
+  "id": "eval-021",
+  "text": "Two-factor authentication codes never arrive by SMS, so I am completely locked out of my account.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "authentication_failure",
+    "account_lockout"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-022",
-    "text": "Just wanted to say the new dark mode is gorgeous and easy on the eyes during late-night work.",
-    "expected": {
-      "sentiment": "positive",
-      "sentiment_score": 0.8,
-      "urgency": "low",
-      "tags": [
-        "positive_trend",
-        "dark_mode"
-      ],
-      "category": "positive_trend"
-    },
-    "split": "optimization",
-    "latency_ms": 90
+  "split": "optimization",
+  "latency_ms": 130,
+  "language": "en"
+ },
+ {
+  "id": "eval-022",
+  "text": "Just wanted to say the new dark mode is gorgeous and easy on the eyes during late-night work.",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.8,
+   "urgency": "low",
+   "tags": [
+    "positive_trend",
+    "dark_mode"
+   ],
+   "category": "positive_trend"
   },
-  {
-    "id": "eval-023",
-    "text": "We are a hospital and the system showed one patient's records under another patient's profile. This is a serious data breach.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.9,
-      "urgency": "critical",
-      "tags": [
-        "data_breach",
-        "security_concern"
-      ],
-      "category": "compliance_concern"
-    },
-    "split": "optimization",
-    "latency_ms": 170
+  "split": "optimization",
+  "latency_ms": 90,
+  "language": "en"
+ },
+ {
+  "id": "eval-023",
+  "text": "We are a hospital and the system showed one patient's records under another patient's profile. This is a serious data breach.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.9,
+   "urgency": "critical",
+   "tags": [
+    "data_breach",
+    "security_concern"
+   ],
+   "category": "compliance_concern"
   },
-  {
-    "id": "eval-024",
-    "text": "The invoice PDF download button is greyed out on Safari, though it works fine on Chrome.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.3,
-      "urgency": "medium",
-      "tags": [
-        "browser_compatibility",
-        "invoice_download"
-      ],
-      "category": "product_issue"
-    },
-    "split": "optimization",
-    "latency_ms": 110
+  "split": "optimization",
+  "latency_ms": 170,
+  "language": "en"
+ },
+ {
+  "id": "eval-024",
+  "text": "The invoice PDF download button is greyed out on Safari, though it works fine on Chrome.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.3,
+   "urgency": "medium",
+   "tags": [
+    "browser_compatibility",
+    "invoice_download"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-025",
-    "text": "Honestly considering switching to a competitor because your API rate limits are far too low for our scale.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.6,
-      "urgency": "medium",
-      "tags": [
-        "rate_limits",
-        "churn_risk"
-      ],
-      "category": "churn_risk"
-    },
-    "split": "optimization",
-    "latency_ms": 125
+  "split": "optimization",
+  "latency_ms": 110,
+  "language": "en"
+ },
+ {
+  "id": "eval-025",
+  "text": "Honestly considering switching to a competitor because your API rate limits are far too low for our scale.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.6,
+   "urgency": "medium",
+   "tags": [
+    "rate_limits",
+    "churn_risk"
+   ],
+   "category": "churn_risk"
   },
-  {
-    "id": "eval-026",
-    "text": "Your latest invoice double-charged my company 4,000 euros and I need this refunded immediately.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.7,
-      "urgency": "high",
-      "tags": [
-        "billing_error",
-        "double_charge"
-      ],
-      "category": "product_issue"
-    },
-    "split": "optimization",
-    "latency_ms": 135
+  "split": "optimization",
+  "latency_ms": 125,
+  "language": "en"
+ },
+ {
+  "id": "eval-026",
+  "text": "Your latest invoice double-charged my company 4,000 euros and I need this refunded immediately.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "billing_error",
+    "double_charge"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-027",
-    "text": "Can you point me to the API documentation for webhooks? I could not find it anywhere in the help center.",
-    "expected": {
-      "sentiment": "neutral",
-      "sentiment_score": 0.0,
-      "urgency": "low",
-      "tags": [
-        "documentation_gap",
-        "webhooks_question"
-      ],
-      "category": "content_clarity"
-    },
-    "split": "optimization",
-    "latency_ms": 85
+  "split": "optimization",
+  "latency_ms": 135,
+  "language": "en"
+ },
+ {
+  "id": "eval-027",
+  "text": "Can you point me to the API documentation for webhooks? I could not find it anywhere in the help center.",
+  "expected": {
+   "sentiment": "neutral",
+   "sentiment_score": 0.0,
+   "urgency": "low",
+   "tags": [
+    "documentation_gap",
+    "webhooks_question"
+   ],
+   "category": "content_clarity"
   },
-  {
-    "id": "eval-028",
-    "text": "Every time I export a report it times out after five minutes and fails with no error message.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.7,
-      "urgency": "high",
-      "tags": [
-        "export_failure",
-        "timeout_error"
-      ],
-      "category": "product_issue"
-    },
-    "split": "optimization",
-    "latency_ms": 140
+  "split": "optimization",
+  "latency_ms": 85,
+  "language": "en"
+ },
+ {
+  "id": "eval-028",
+  "text": "Every time I export a report it times out after five minutes and fails with no error message.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "export_failure",
+    "timeout_error"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-029",
-    "text": "The targeted promo you sent offered me a plan I already pay for. Your segmentation seems broken.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.4,
-      "urgency": "medium",
-      "tags": [
-        "irrelevant_campaign",
-        "segmentation_error"
-      ],
-      "category": "campaign_performance"
-    },
-    "split": "optimization",
-    "latency_ms": 100
+  "split": "optimization",
+  "latency_ms": 140,
+  "language": "en"
+ },
+ {
+  "id": "eval-029",
+  "text": "The targeted promo you sent offered me a plan I already pay for. Your segmentation seems broken.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.4,
+   "urgency": "medium",
+   "tags": [
+    "irrelevant_campaign",
+    "segmentation_error"
+   ],
+   "category": "campaign_performance"
   },
-  {
-    "id": "eval-030",
-    "text": "Setup was smooth and the guided checklist made onboarding painless. Really impressed so far.",
-    "expected": {
-      "sentiment": "positive",
-      "sentiment_score": 0.8,
-      "urgency": "low",
-      "tags": [
-        "onboarding_experience",
-        "positive_trend"
-      ],
-      "category": "positive_trend"
-    },
-    "split": "optimization",
-    "latency_ms": 90
+  "split": "optimization",
+  "latency_ms": 100,
+  "language": "en"
+ },
+ {
+  "id": "eval-030",
+  "text": "Setup was smooth and the guided checklist made onboarding painless. Really impressed so far.",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.8,
+   "urgency": "low",
+   "tags": [
+    "onboarding_experience",
+    "positive_trend"
+   ],
+   "category": "positive_trend"
   },
-  {
-    "id": "eval-031",
-    "text": "We need to cancel our enterprise contract effective immediately. The repeated outages have made the platform unusable.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.9,
-      "urgency": "critical",
-      "tags": [
-        "churn_risk",
-        "service_outage"
-      ],
-      "category": "churn_risk"
-    },
-    "split": "optimization",
-    "latency_ms": 165
+  "split": "optimization",
+  "latency_ms": 90,
+  "language": "en"
+ },
+ {
+  "id": "eval-031",
+  "text": "We need to cancel our enterprise contract effective immediately. The repeated outages have made the platform unusable.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.9,
+   "urgency": "critical",
+   "tags": [
+    "churn_risk",
+    "service_outage"
+   ],
+   "category": "churn_risk"
   },
-  {
-    "id": "eval-032",
-    "text": "Minor thing: the tooltip on the export screen has a typo, 'recieve' should be 'receive'.",
-    "expected": {
-      "sentiment": "neutral",
-      "sentiment_score": -0.1,
-      "urgency": "low",
-      "tags": [
-        "typo",
-        "ui_copy"
-      ],
-      "category": "content_clarity"
-    },
-    "split": "optimization",
-    "latency_ms": 80
+  "split": "optimization",
+  "latency_ms": 165,
+  "language": "en"
+ },
+ {
+  "id": "eval-032",
+  "text": "Minor thing: the tooltip on the export screen has a typo, 'recieve' should be 'receive'.",
+  "expected": {
+   "sentiment": "neutral",
+   "sentiment_score": -0.1,
+   "urgency": "low",
+   "tags": [
+    "typo",
+    "ui_copy"
+   ],
+   "category": "content_clarity"
   },
-  {
-    "id": "eval-033",
-    "text": "Your fraud-detection alerts are firing on every legitimate transaction, blocking our customers from paying.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.8,
-      "urgency": "critical",
-      "tags": [
-        "false_positive_fraud",
-        "payment_blocked"
-      ],
-      "category": "product_issue"
-    },
-    "split": "optimization",
-    "latency_ms": 155
+  "split": "optimization",
+  "latency_ms": 80,
+  "language": "en"
+ },
+ {
+  "id": "eval-033",
+  "text": "Your fraud-detection alerts are firing on every legitimate transaction, blocking our customers from paying.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.8,
+   "urgency": "critical",
+   "tags": [
+    "false_positive_fraud",
+    "payment_blocked"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-034",
-    "text": "Love the product, but it would be great to have a native iOS app at some point.",
-    "expected": {
-      "sentiment": "positive",
-      "sentiment_score": 0.5,
-      "urgency": "low",
-      "tags": [
-        "positive_trend",
-        "native_app_request"
-      ],
-      "category": "positive_trend"
-    },
-    "split": "optimization",
-    "latency_ms": 90
+  "split": "optimization",
+  "latency_ms": 155,
+  "language": "en"
+ },
+ {
+  "id": "eval-034",
+  "text": "Love the product, but it would be great to have a native iOS app at some point.",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.5,
+   "urgency": "low",
+   "tags": [
+    "positive_trend",
+    "native_app_request"
+   ],
+   "category": "positive_trend"
   },
-  {
-    "id": "eval-035",
-    "text": "Data sync between your platform and our warehouse silently dropped 2,000 records overnight.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.8,
-      "urgency": "critical",
-      "tags": [
-        "data_loss",
-        "sync_error"
-      ],
-      "category": "product_issue"
-    },
-    "split": "held_out",
-    "latency_ms": 150
+  "split": "optimization",
+  "latency_ms": 90,
+  "language": "en"
+ },
+ {
+  "id": "eval-035",
+  "text": "Data sync between your platform and our warehouse silently dropped 2,000 records overnight.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.8,
+   "urgency": "critical",
+   "tags": [
+    "data_loss",
+    "sync_error"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-036",
-    "text": "The free-trial countdown is confusing. It said 14 days but I was charged on day 10.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.6,
-      "urgency": "high",
-      "tags": [
-        "billing_error",
-        "trial_confusion"
-      ],
-      "category": "product_issue"
-    },
-    "split": "held_out",
-    "latency_ms": 130
+  "split": "held_out",
+  "latency_ms": 150,
+  "language": "en"
+ },
+ {
+  "id": "eval-036",
+  "text": "The free-trial countdown is confusing. It said 14 days but I was charged on day 10.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.6,
+   "urgency": "high",
+   "tags": [
+    "billing_error",
+    "trial_confusion"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-037",
-    "text": "Your status page says all systems operational but our dashboard has been blank for an hour.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.7,
-      "urgency": "high",
-      "tags": [
-        "dashboard_outage",
-        "status_page_mismatch"
-      ],
-      "category": "product_issue"
-    },
-    "split": "held_out",
-    "latency_ms": 135
+  "split": "held_out",
+  "latency_ms": 130,
+  "language": "en"
+ },
+ {
+  "id": "eval-037",
+  "text": "Your status page says all systems operational but our dashboard has been blank for an hour.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "dashboard_outage",
+    "status_page_mismatch"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-038",
-    "text": "Thanks for adding SSO. Our security team finally approved the rollout company-wide.",
-    "expected": {
-      "sentiment": "positive",
-      "sentiment_score": 0.85,
-      "urgency": "low",
-      "tags": [
-        "positive_trend",
-        "sso_rollout"
-      ],
-      "category": "positive_trend"
-    },
-    "split": "held_out",
-    "latency_ms": 90
+  "split": "held_out",
+  "latency_ms": 135,
+  "language": "en"
+ },
+ {
+  "id": "eval-038",
+  "text": "Thanks for adding SSO. Our security team finally approved the rollout company-wide.",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.85,
+   "urgency": "low",
+   "tags": [
+    "positive_trend",
+    "sso_rollout"
+   ],
+   "category": "positive_trend"
   },
-  {
-    "id": "eval-039",
-    "text": "I keep getting logged out of my session every few minutes and have to re-authenticate constantly.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.5,
-      "urgency": "high",
-      "tags": [
-        "session_timeout",
-        "authentication_issue"
-      ],
-      "category": "product_issue"
-    },
-    "split": "held_out",
-    "latency_ms": 120
+  "split": "held_out",
+  "latency_ms": 90,
+  "language": "en"
+ },
+ {
+  "id": "eval-039",
+  "text": "I keep getting logged out of my session every few minutes and have to re-authenticate constantly.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.5,
+   "urgency": "high",
+   "tags": [
+    "session_timeout",
+    "authentication_issue"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-040",
-    "text": "The new pricing page is much clearer than before. It is easy to compare tiers now.",
-    "expected": {
-      "sentiment": "positive",
-      "sentiment_score": 0.7,
-      "urgency": "low",
-      "tags": [
-        "positive_trend",
-        "pricing_clarity"
-      ],
-      "category": "positive_trend"
-    },
-    "split": "held_out",
-    "latency_ms": 95
+  "split": "held_out",
+  "latency_ms": 120,
+  "language": "en"
+ },
+ {
+  "id": "eval-040",
+  "text": "The new pricing page is much clearer than before. It is easy to compare tiers now.",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.7,
+   "urgency": "low",
+   "tags": [
+    "positive_trend",
+    "pricing_clarity"
+   ],
+   "category": "positive_trend"
   },
-  {
-    "id": "eval-041",
-    "text": "A wire transfer of 12,000 dollars went to the wrong recipient because your payee list showed stale account numbers.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.9,
-      "urgency": "high",
-      "tags": [
-        "stale_payee_data",
-        "wrong_transfer"
-      ],
-      "category": "product_issue"
-    },
-    "split": "optimization",
-    "latency_ms": 170
+  "split": "held_out",
+  "latency_ms": 95,
+  "language": "en"
+ },
+ {
+  "id": "eval-041",
+  "text": "A wire transfer of 12,000 dollars went to the wrong recipient because your payee list showed stale account numbers.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.9,
+   "urgency": "high",
+   "tags": [
+    "stale_payee_data",
+    "wrong_transfer"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-042",
-    "text": "Your new reconciliation report cut our month-end close from three days to one. Huge time-saver.",
-    "expected": {
-      "sentiment": "positive",
-      "sentiment_score": 0.85,
-      "urgency": "low",
-      "tags": [
-        "positive_trend",
-        "reconciliation_report"
-      ],
-      "category": "positive_trend"
-    },
-    "split": "optimization",
-    "latency_ms": 90
+  "split": "optimization",
+  "latency_ms": 170,
+  "language": "en"
+ },
+ {
+  "id": "eval-042",
+  "text": "Your new reconciliation report cut our month-end close from three days to one. Huge time-saver.",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.85,
+   "urgency": "low",
+   "tags": [
+    "positive_trend",
+    "reconciliation_report"
+   ],
+   "category": "positive_trend"
   },
-  {
-    "id": "eval-043",
-    "text": "The new mobile redesign looks fantastic, but it removed the offline mode we relied on for field work.",
-    "expected": {
-      "sentiment": "mixed",
-      "sentiment_score": 0.0,
-      "urgency": "medium",
-      "tags": [
-        "offline_mode_removed",
-        "mobile_redesign"
-      ],
-      "category": "product_issue"
-    },
-    "split": "optimization",
-    "latency_ms": 120
+  "split": "optimization",
+  "latency_ms": 90,
+  "language": "en"
+ },
+ {
+  "id": "eval-043",
+  "text": "The new mobile redesign looks fantastic, but it removed the offline mode we relied on for field work.",
+  "expected": {
+   "sentiment": "mixed",
+   "sentiment_score": 0.0,
+   "urgency": "medium",
+   "tags": [
+    "offline_mode_removed",
+    "mobile_redesign"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-044",
-    "text": "Does your platform support exporting data in Parquet format, or only CSV?",
-    "expected": {
-      "sentiment": "neutral",
-      "sentiment_score": 0.0,
-      "urgency": "low",
-      "tags": [
-        "export_format",
-        "parquet_question"
-      ],
-      "category": "content_clarity"
-    },
-    "split": "optimization",
-    "latency_ms": 80
+  "split": "optimization",
+  "latency_ms": 120,
+  "language": "en"
+ },
+ {
+  "id": "eval-044",
+  "text": "Does your platform support exporting data in Parquet format, or only CSV?",
+  "expected": {
+   "sentiment": "neutral",
+   "sentiment_score": 0.0,
+   "urgency": "low",
+   "tags": [
+    "export_format",
+    "parquet_question"
+   ],
+   "category": "content_clarity"
   },
-  {
-    "id": "eval-045",
-    "text": "The search function returns completely unrelated results since the last release. I cannot find any of my documents.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.7,
-      "urgency": "high",
-      "tags": [
-        "search_broken",
-        "irrelevant_results"
-      ],
-      "category": "product_issue"
-    },
-    "split": "optimization",
-    "latency_ms": 135
+  "split": "optimization",
+  "latency_ms": 80,
+  "language": "en"
+ },
+ {
+  "id": "eval-045",
+  "text": "The search function returns completely unrelated results since the last release. I cannot find any of my documents.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "search_broken",
+    "irrelevant_results"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-046",
-    "text": "Cancel our subscription at renewal. We have moved to a competitor that actually ships the features we asked for.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.8,
-      "urgency": "critical",
-      "tags": [
-        "churn_risk",
-        "feature_gap"
-      ],
-      "category": "churn_risk"
-    },
-    "split": "optimization",
-    "latency_ms": 160
+  "split": "optimization",
+  "latency_ms": 135,
+  "language": "en"
+ },
+ {
+  "id": "eval-046",
+  "text": "Cancel our subscription at renewal. We have moved to a competitor that actually ships the features we asked for.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.8,
+   "urgency": "critical",
+   "tags": [
+    "churn_risk",
+    "feature_gap"
+   ],
+   "category": "churn_risk"
   },
-  {
-    "id": "eval-047",
-    "text": "Customer support walked me through the API migration step by step. Could not have asked for more.",
-    "expected": {
-      "sentiment": "positive",
-      "sentiment_score": 0.9,
-      "urgency": "low",
-      "tags": [
-        "good_support",
-        "api_migration"
-      ],
-      "category": "positive_trend"
-    },
-    "split": "optimization",
-    "latency_ms": 90
+  "split": "optimization",
+  "latency_ms": 160,
+  "language": "en"
+ },
+ {
+  "id": "eval-047",
+  "text": "Customer support walked me through the API migration step by step. Could not have asked for more.",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.9,
+   "urgency": "low",
+   "tags": [
+    "good_support",
+    "api_migration"
+   ],
+   "category": "positive_trend"
   },
-  {
-    "id": "eval-048",
-    "text": "I unsubscribed from marketing emails twice but I am still receiving your weekly newsletter.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.5,
-      "urgency": "medium",
-      "tags": [
-        "unsubscribe_ignored",
-        "newsletter_spam"
-      ],
-      "category": "compliance_concern"
-    },
-    "split": "optimization",
-    "latency_ms": 100
+  "split": "optimization",
+  "latency_ms": 90,
+  "language": "en"
+ },
+ {
+  "id": "eval-048",
+  "text": "I unsubscribed from marketing emails twice but I am still receiving your weekly newsletter.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.5,
+   "urgency": "medium",
+   "tags": [
+    "unsubscribe_ignored",
+    "newsletter_spam"
+   ],
+   "category": "compliance_concern"
   },
-  {
-    "id": "eval-049",
-    "text": "Promo codes from your Black Friday campaign all return invalid at checkout, so customers cannot claim the discount.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.7,
-      "urgency": "high",
-      "tags": [
-        "promo_code_invalid",
-        "checkout_failure"
-      ],
-      "category": "product_issue"
-    },
-    "split": "optimization",
-    "latency_ms": 140
+  "split": "optimization",
+  "latency_ms": 100,
+  "language": "en"
+ },
+ {
+  "id": "eval-049",
+  "text": "Promo codes from your Black Friday campaign all return invalid at checkout, so customers cannot claim the discount.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "promo_code_invalid",
+    "checkout_failure"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-050",
-    "text": "Audit logs show our staff can access patient records outside their assigned department, violating our access-control policy.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.8,
-      "urgency": "critical",
-      "tags": [
-        "access_control",
-        "compliance_violation"
-      ],
-      "category": "compliance_concern"
-    },
-    "split": "optimization",
-    "latency_ms": 165
+  "split": "optimization",
+  "latency_ms": 140,
+  "language": "en"
+ },
+ {
+  "id": "eval-050",
+  "text": "Audit logs show our staff can access patient records outside their assigned department, violating our access-control policy.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.8,
+   "urgency": "critical",
+   "tags": [
+    "access_control",
+    "compliance_violation"
+   ],
+   "category": "compliance_concern"
   },
-  {
-    "id": "eval-051",
-    "text": "Honestly the onboarding webinar was excellent: clear, concise, and exactly what our new hires needed.",
-    "expected": {
-      "sentiment": "positive",
-      "sentiment_score": 0.85,
-      "urgency": "low",
-      "tags": [
-        "positive_trend",
-        "onboarding_webinar"
-      ],
-      "category": "positive_trend"
-    },
-    "split": "optimization",
-    "latency_ms": 90
+  "split": "optimization",
+  "latency_ms": 165,
+  "language": "en"
+ },
+ {
+  "id": "eval-051",
+  "text": "Honestly the onboarding webinar was excellent: clear, concise, and exactly what our new hires needed.",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.85,
+   "urgency": "low",
+   "tags": [
+    "positive_trend",
+    "onboarding_webinar"
+   ],
+   "category": "positive_trend"
   },
-  {
-    "id": "eval-052",
-    "text": "The date picker defaults to US format and there is no way to switch to DD/MM, which confuses our European team.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.4,
-      "urgency": "medium",
-      "tags": [
-        "date_format",
-        "localization_gap"
-      ],
-      "category": "ux_friction"
-    },
-    "split": "optimization",
-    "latency_ms": 110
+  "split": "optimization",
+  "latency_ms": 90,
+  "language": "en"
+ },
+ {
+  "id": "eval-052",
+  "text": "The date picker defaults to US format and there is no way to switch to DD/MM, which confuses our European team.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.4,
+   "urgency": "medium",
+   "tags": [
+    "date_format",
+    "localization_gap"
+   ],
+   "category": "ux_friction"
   },
-  {
-    "id": "eval-053",
-    "text": "Webhook deliveries have been failing silently for two days and we only noticed when our downstream sync broke.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.7,
-      "urgency": "high",
-      "tags": [
-        "webhook_failure",
-        "silent_errors"
-      ],
-      "category": "product_issue"
-    },
-    "split": "optimization",
-    "latency_ms": 140
+  "split": "optimization",
+  "latency_ms": 110,
+  "language": "en"
+ },
+ {
+  "id": "eval-053",
+  "text": "Webhook deliveries have been failing silently for two days and we only noticed when our downstream sync broke.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "webhook_failure",
+    "silent_errors"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-054",
-    "text": "Great that you finally added SSO, but the setup docs are out of date and cost us a whole afternoon.",
-    "expected": {
-      "sentiment": "mixed",
-      "sentiment_score": 0.0,
-      "urgency": "medium",
-      "tags": [
-        "documentation_gap",
-        "sso_setup"
-      ],
-      "category": "content_clarity"
-    },
-    "split": "optimization",
-    "latency_ms": 115
+  "split": "optimization",
+  "latency_ms": 140,
+  "language": "en"
+ },
+ {
+  "id": "eval-054",
+  "text": "Great that you finally added SSO, but the setup docs are out of date and cost us a whole afternoon.",
+  "expected": {
+   "sentiment": "mixed",
+   "sentiment_score": 0.0,
+   "urgency": "medium",
+   "tags": [
+    "documentation_gap",
+    "sso_setup"
+   ],
+   "category": "content_clarity"
   },
-  {
-    "id": "eval-055",
-    "text": "Your entire API has been returning 503 errors for the past 45 minutes and our app is down for all users.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.9,
-      "urgency": "critical",
-      "tags": [
-        "api_errors",
-        "service_outage"
-      ],
-      "category": "product_issue"
-    },
-    "split": "held_out",
-    "latency_ms": 155
+  "split": "optimization",
+  "latency_ms": 115,
+  "language": "en"
+ },
+ {
+  "id": "eval-055",
+  "text": "Your entire API has been returning 503 errors for the past 45 minutes and our app is down for all users.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.9,
+   "urgency": "critical",
+   "tags": [
+    "api_errors",
+    "service_outage"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-056",
-    "text": "The dark-mode toggle and the faster load times in this release make a real difference day to day.",
-    "expected": {
-      "sentiment": "positive",
-      "sentiment_score": 0.8,
-      "urgency": "low",
-      "tags": [
-        "positive_trend",
-        "faster_load"
-      ],
-      "category": "positive_trend"
-    },
-    "split": "held_out",
-    "latency_ms": 90
+  "split": "held_out",
+  "latency_ms": 155,
+  "language": "en"
+ },
+ {
+  "id": "eval-056",
+  "text": "The dark-mode toggle and the faster load times in this release make a real difference day to day.",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.8,
+   "urgency": "low",
+   "tags": [
+    "positive_trend",
+    "faster_load"
+   ],
+   "category": "positive_trend"
   },
-  {
-    "id": "eval-057",
-    "text": "Bulk editing works, but it silently drops changes when I select more than 50 rows at once.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.5,
-      "urgency": "high",
-      "tags": [
-        "bulk_edit_bug",
-        "silent_data_drop"
-      ],
-      "category": "product_issue"
-    },
-    "split": "held_out",
-    "latency_ms": 130
+  "split": "held_out",
+  "latency_ms": 90,
+  "language": "en"
+ },
+ {
+  "id": "eval-057",
+  "text": "Bulk editing works, but it silently drops changes when I select more than 50 rows at once.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.5,
+   "urgency": "high",
+   "tags": [
+    "bulk_edit_bug",
+    "silent_data_drop"
+   ],
+   "category": "product_issue"
   },
-  {
-    "id": "eval-058",
-    "text": "Where can I find documentation on configuring role-based access for my team?",
-    "expected": {
-      "sentiment": "neutral",
-      "sentiment_score": 0.0,
-      "urgency": "low",
-      "tags": [
-        "rbac_configuration",
-        "documentation_request"
-      ],
-      "category": "content_clarity"
-    },
-    "split": "held_out",
-    "latency_ms": 80
+  "split": "held_out",
+  "latency_ms": 130,
+  "language": "en"
+ },
+ {
+  "id": "eval-058",
+  "text": "Where can I find documentation on configuring role-based access for my team?",
+  "expected": {
+   "sentiment": "neutral",
+   "sentiment_score": 0.0,
+   "urgency": "low",
+   "tags": [
+    "rbac_configuration",
+    "documentation_request"
+   ],
+   "category": "content_clarity"
   },
-  {
-    "id": "eval-059",
-    "text": "A penetration test we ran found that session tokens never expire, leaving accounts open to hijacking.",
-    "expected": {
-      "sentiment": "negative",
-      "sentiment_score": -0.7,
-      "urgency": "critical",
-      "tags": [
-        "session_token_expiry",
-        "security_vulnerability"
-      ],
-      "category": "compliance_concern"
-    },
-    "split": "held_out",
-    "latency_ms": 150
+  "split": "held_out",
+  "latency_ms": 80,
+  "language": "en"
+ },
+ {
+  "id": "eval-059",
+  "text": "A penetration test we ran found that session tokens never expire, leaving accounts open to hijacking.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "critical",
+   "tags": [
+    "session_token_expiry",
+    "security_vulnerability"
+   ],
+   "category": "compliance_concern"
   },
-  {
-    "id": "eval-060",
-    "text": "Performance is much better after the upgrade, though a few of our custom dashboards now render blank.",
-    "expected": {
-      "sentiment": "mixed",
-      "sentiment_score": 0.1,
-      "urgency": "medium",
-      "tags": [
-        "dashboard_rendering",
-        "upgrade_regression"
-      ],
-      "category": "product_issue"
-    },
-    "split": "held_out",
-    "latency_ms": 120
-  }
+  "split": "held_out",
+  "latency_ms": 150,
+  "language": "en"
+ },
+ {
+  "id": "eval-060",
+  "text": "Performance is much better after the upgrade, though a few of our custom dashboards now render blank.",
+  "expected": {
+   "sentiment": "mixed",
+   "sentiment_score": 0.1,
+   "urgency": "medium",
+   "tags": [
+    "dashboard_rendering",
+    "upgrade_regression"
+   ],
+   "category": "product_issue"
+  },
+  "split": "held_out",
+  "latency_ms": 120,
+  "language": "en"
+ },
+ {
+  "id": "eval-061",
+  "text": "Seit dem Update bricht die Bezahlung jedes Mal ab — ich habe es dreimal mit Kreditkarte und PayPal versucht, das Geld wurde abgebucht, aber die Bestellung erscheint nirgends. Ich komme an mein Guthaben nicht mehr ran.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.8,
+   "urgency": "critical",
+   "tags": [
+    "payment_error",
+    "checkout_failure"
+   ],
+   "category": "product_issue"
+  },
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-062",
+  "text": "Die Synchronisation zwischen Handy-App und Web-Version funktioniert seit Tagen nicht zuverlässig. Zum Glück kann ich am Rechner weiterarbeiten, aber unterwegs fehlen mir ständig die aktuellen Daten.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.6,
+   "urgency": "high",
+   "tags": [
+    "sync_error"
+   ],
+   "category": "product_issue"
+  },
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-063",
+  "text": "Nach dem Passwort-Reset war ich plötzlich im Konto eines fremden Nutzers eingeloggt und konnte dessen Rechnungsadresse sehen. Das ist ein massives Datenschutzproblem, das müsst ihr sofort prüfen.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.9,
+   "urgency": "critical",
+   "tags": [
+    "security_concern"
+   ],
+   "category": "compliance_concern"
+  },
+  "split": "held_out",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-064",
+  "text": "Mir wurde der Jahresbetrag doppelt abgebucht und der Support vertröstet mich seit zwei Wochen auf die Erstattung. So langsam verliere ich die Geduld.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "billing_error",
+    "refund_delay"
+   ],
+   "category": "product_issue"
+  },
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-065",
+  "text": "Großes Lob an euren Support: Innerhalb von zehn Minuten hatte ich eine kompetente Antwort und mein Problem war gelöst. So stellt man sich Kundenservice vor!",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.8,
+   "urgency": "low",
+   "tags": [
+    "positive_trend",
+    "good_support"
+   ],
+   "category": "positive_trend"
+  },
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-066",
+  "text": "Die Anleitung zur API-Einrichtung ist nur auf Englisch verfügbar und die deutschen Hilfeseiten sind veraltet. Ohne das Forum hätte ich die Einrichtung nie geschafft.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.4,
+   "urgency": "medium",
+   "tags": [
+    "documentation_gap"
+   ],
+   "category": "content_clarity"
+  },
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-067",
+  "text": "Die neue Preisstruktur ist völlig undurchsichtig — plötzlich kostet mein Tarif 40 Prozent mehr, ohne dass ich informiert wurde. Wenn das so bleibt, wechsle ich zum Mitbewerber.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "pricing_unclear",
+    "churn_risk"
+   ],
+   "category": "churn_risk"
+  },
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-068",
+  "text": "Das neue Dashboard sieht deutlich moderner aus, aber ich finde die Exportfunktion nicht mehr und brauche für alles einen Klick mehr als vorher.",
+  "expected": {
+   "sentiment": "mixed",
+   "sentiment_score": -0.1,
+   "urgency": "medium",
+   "tags": [
+    "dashboard_design"
+   ],
+   "category": "ux_friction"
+  },
+  "split": "held_out",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-069",
+  "text": "Seit heute Morgen ist die Plattform komplett nicht erreichbar — Fehlermeldung 502 bei jedem Aufruf. Wir können keine einzige Kundenanfrage bearbeiten, unser gesamtes Team steht still.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.9,
+   "urgency": "critical",
+   "tags": [
+    "service_outage"
+   ],
+   "category": "product_issue"
+  },
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-070",
+  "text": "Ich nutze das Tool jetzt seit einem halben Jahr und bin rundum zufrieden — läuft stabil, die Updates bringen regelmäßig sinnvolle Verbesserungen. Klare Empfehlung!",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.9,
+   "urgency": "low",
+   "tags": [
+    "positive_trend"
+   ],
+   "category": "positive_trend"
+  },
+  "split": "held_out",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-071",
+  "text": "Die Registrierung ist umständlich: Erst nach drei E-Mail-Bestätigungen und einem Captcha konnte ich loslegen, und die Einführungstour ließ sich nicht überspringen.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.5,
+   "urgency": "medium",
+   "tags": [
+    "onboarding_friction"
+   ],
+   "category": "ux_friction"
+  },
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-072",
+  "text": "Kurze Frage: Gilt der Rabatt für Jahresabos auch für Bestandskunden oder nur für Neukunden? Auf der Preisseite steht dazu leider nichts.",
+  "expected": {
+   "sentiment": "neutral",
+   "sentiment_score": 0.0,
+   "urgency": "low",
+   "tags": [
+    "pricing_unclear"
+   ],
+   "category": "content_clarity"
+  },
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-073",
+  "text": "In eurem Newsletter steht 'jederzeit kündbar', aber im Vertrag ist eine Mindestlaufzeit von zwölf Monaten versteckt. Das grenzt an Irreführung und gehört gemeldet.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "misleading_terms"
+   ],
+   "category": "compliance_concern"
+  },
+  "split": "held_out",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-074",
+  "text": "Ehrlich, euer Team ist der Wahnsinn — hab Freitagabend noch 'ne Antwort bekommen und Samstag lief wieder alles. Danke euch!",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.8,
+   "urgency": "low",
+   "tags": [
+    "positive_trend",
+    "good_support"
+   ],
+   "category": "positive_trend"
+  },
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-075",
+  "text": "Beim Import wurden etwa die Hälfte meiner Kontakte einfach verschluckt — zum Glück hatte ich vorher ein Backup exportiert, sonst wären die Daten weg gewesen.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.6,
+   "urgency": "high",
+   "tags": [
+    "data_loss"
+   ],
+   "category": "product_issue"
+  },
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-076",
+  "text": "Das Webinar für Einsteiger war gut gemeint, aber viel zu schnell — die Hälfte der gezeigten Menüs sieht bei mir anders aus als im Video.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.3,
+   "urgency": "medium",
+   "tags": [
+    "documentation_gap",
+    "onboarding_friction"
+   ],
+   "category": "content_clarity"
+  },
+  "split": "held_out",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-077",
+  "text": "An sich mag ich die App, aber die ständigen Preiserhöhungen nerven. Meine Kollegin ist schon zu einem günstigeren Anbieter gewechselt und ich überlege auch.",
+  "expected": {
+   "sentiment": "mixed",
+   "sentiment_score": -0.3,
+   "urgency": "medium",
+   "tags": [
+    "churn_risk"
+   ],
+   "category": "churn_risk"
+  },
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-078",
+  "text": "Ganz großes Kino: Der neue Dunkelmodus macht die Schrift grau auf grau. Lesen kann ich jetzt nur noch mit Taschenlampe.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.5,
+   "urgency": "medium",
+   "tags": [
+    "dark_mode_contrast"
+   ],
+   "category": "ux_friction"
+  },
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-079",
+  "text": "Wir setzen die Software seit dem Frühjahr im gesamten Vertrieb ein und die Einarbeitung neuer Kolleginnen und Kollegen geht erstaunlich schnell. Vielen Dank für das gelungene Produkt.",
+  "expected": {
+   "sentiment": "positive",
+   "sentiment_score": 0.7,
+   "urgency": "low",
+   "tags": [
+    "positive_trend"
+   ],
+   "category": "positive_trend"
+  },
+  "split": "optimization",
+  "latency_ms": 150,
+  "language": "de"
+ },
+ {
+  "id": "eval-080",
+  "text": "Jede Woche mindestens ein Ausfall zur Mittagszeit — langsam frage ich mich, wofür wir den Enterprise-Tarif bezahlen. Beim nächsten Vorfall eskaliere ich das an die Geschäftsführung.",
+  "expected": {
+   "sentiment": "negative",
+   "sentiment_score": -0.7,
+   "urgency": "high",
+   "tags": [
+    "service_outage",
+    "churn_risk"
+   ],
+   "category": "product_issue"
+  },
+  "split": "held_out",
+  "latency_ms": 150,
+  "language": "de"
+ }
 ]

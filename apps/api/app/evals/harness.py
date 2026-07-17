@@ -195,6 +195,8 @@ def check_pii_leak(text: str) -> int:
 def check_hallucination(
     enrichment: dict[str, Any],
     original_text: str,
+    *,
+    language: str = "en",
 ) -> bool:
     """Check if an enrichment contains fabricated information.
 
@@ -204,7 +206,15 @@ def check_hallucination(
 
     This is a heuristic check — not a full hallucination detector, but catches
     obvious fabrication for the thesis evaluation.
+
+    ENGLISH-ONLY by construction: grounding is token overlap between the
+    (English) tag vocabulary and the text, so on non-English texts every
+    correct tag would be flagged (e.g. payment_error on "Bezahlung bricht ab").
+    Non-English items are excluded rather than reported with a meaningless
+    number — the model card states this coverage limit.
     """
+    if language != "en":
+        return False
     tags = enrichment.get("tags", [])
     text_lower = original_text.lower()
 
@@ -346,8 +356,12 @@ class EvalHarness:
             tag_precisions_exact.append(pe)
             tag_recalls_exact.append(re_)
 
-            # Hallucination check
-            if check_hallucination(actual_enrichment, item.get("text", "")):
+            # Hallucination check (EN items only — see check_hallucination)
+            if check_hallucination(
+                actual_enrichment,
+                item.get("text", ""),
+                language=item.get("language", "en"),
+            ):
                 hallucination_count += 1
 
             # PII leak check

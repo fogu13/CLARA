@@ -123,7 +123,25 @@ def _score_enrichment(*, exemplars: list[dict] | None) -> dict[str, Any]:
             "urgency": urgency_correct,
             "tag_exact": tag_exact_correct,
         },
+        # Aligned with the vectors: golden-item language per position, so the
+        # caller can report per-language (DE vs EN) accuracy with denominators.
+        "languages": [g.get("language", "en") for g in golden],
     }
+
+
+def _by_language(vectors: dict[str, list[int]], languages: list[str]) -> dict[str, Any]:
+    """Per-language accuracy breakdown with explicit denominators (n)."""
+    out: dict[str, Any] = {}
+    for lang in sorted(set(languages)):
+        idx = [i for i, item_lang in enumerate(languages) if item_lang == lang]
+        n = len(idx)
+        entry: dict[str, Any] = {"n": n}
+        for metric, vec in vectors.items():
+            entry[f"{metric}_accuracy"] = round(sum(vec[i] for i in idx) / n, 4) if n else None
+        ci_vec = [vectors["sentiment"][i] for i in idx]
+        entry["sentiment_ci"] = list(bootstrap_ci(ci_vec)) if n >= 5 else None
+        out[lang] = entry
+    return out
 
 
 def _mcnemar_ab(off_vec: list[int], on_vec: list[int]) -> dict[str, Any]:
@@ -405,6 +423,7 @@ def main() -> int:
         "enrichment_ab": enrichment_ab,
         "ci": {"sentiment": list(bootstrap_ci(on_vec["sentiment"])),
                "urgency": list(bootstrap_ci(on_vec["urgency"]))},
+        "by_language": _by_language(on_vec, scored_on["languages"]),
         "synthesis": synthesis,
         "learning_influence": influence,
         "failures": scored_on["failures"],
@@ -414,6 +433,32 @@ def main() -> int:
     report_path = REPORTS_DIR / f"report_{now.strftime('%Y%m%dT%H%M%SZ')}.json"
     report_path.write_text(json.dumps(report, indent=2))
     report["_report_path"] = str(report_path)
+
+    if "--publish" in sys.argv:
+        # Committed model-card snapshot: what /compliance shows buyers. Only
+        # written on an explicit flag so casual loop runs don't churn it.
+        published = {
+            "published_at": report["timestamp"],
+            "model": AI_MODEL,
+            "dataset": {
+                "total_items": enrichment_on["total_signals"],
+                "note": (
+                    "Curated golden set; DE stratum authored + adversarially "
+                    "verified. Production config (few-shot exemplars on). "
+                    "Hallucination heuristic covers EN items only."
+                ),
+            },
+            "overall": {
+                "sentiment_accuracy": enrichment_on["sentiment_accuracy"],
+                "sentiment_ci95": report["ci"]["sentiment"],
+                "urgency_accuracy": enrichment_on["urgency_accuracy"],
+                "urgency_ci95": report["ci"]["urgency"],
+                "tag_f1_fuzzy": enrichment_on["tag_f1"],
+            },
+            "by_language": report["by_language"],
+        }
+        (EVALS_DIR / "published_metrics.json").write_text(json.dumps(published, indent=2) + "\n")
+        print(f"published model-card metrics -> {EVALS_DIR / 'published_metrics.json'}")
 
     ledger = {
         "kind": "eval",
