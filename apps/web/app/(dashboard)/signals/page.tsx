@@ -34,6 +34,8 @@ const fieldLabels: Record<string, string> = {
   timestamp: "Timestamp"
 };
 
+const FEED_PAGE_SIZE = 25;
+
 export default function SignalsPage() {
   const { t } = useI18n();
   const [signals, setSignals] = useState<any[]>([]);
@@ -41,6 +43,10 @@ export default function SignalsPage() {
   const [status, setStatus] = useState<Status>({ tone: "idle", message: "" });
   const [fileCsv, setFileCsv] = useState<FileCsv | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [languageFilter, setLanguageFilter] = useState("all");
+  const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
 
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -61,6 +67,13 @@ export default function SignalsPage() {
       /* keep current list */
     }
   }
+
+  const filteredSignals = signals.filter((s) => {
+    if (sourceFilter !== "all" && s.source !== sourceFilter) return false;
+    if (languageFilter !== "all" && s.language !== languageFilter) return false;
+    if (query && !(s.feedback_text ?? "").toLowerCase().includes(query.toLowerCase())) return false;
+    return true;
+  });
 
   // CSV imports carry their batch in the signal id (csv-<batch>-<row>), so a
   // mis-mapped import can be undone as a unit.
@@ -313,7 +326,38 @@ export default function SignalsPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {signals.slice(0, 20).map(s => (
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="search"
+                  placeholder="Search feedback text…"
+                  className="h-8 flex-1 min-w-48 rounded-md border bg-background px-2 text-sm"
+                  value={query}
+                  onChange={(e) => { setQuery(e.target.value); setVisibleCount(FEED_PAGE_SIZE); }}
+                />
+                <select
+                  className="h-8 rounded-md border bg-background px-2 text-sm"
+                  value={sourceFilter}
+                  aria-label="Filter by source"
+                  onChange={(e) => { setSourceFilter(e.target.value); setVisibleCount(FEED_PAGE_SIZE); }}
+                >
+                  <option value="all">All sources</option>
+                  {[...new Set(signals.map((s) => s.source).filter(Boolean))].sort().map((source) => (
+                    <option key={source} value={source}>{source}</option>
+                  ))}
+                </select>
+                <select
+                  className="h-8 rounded-md border bg-background px-2 text-sm"
+                  value={languageFilter}
+                  aria-label="Filter by language"
+                  onChange={(e) => { setLanguageFilter(e.target.value); setVisibleCount(FEED_PAGE_SIZE); }}
+                >
+                  <option value="all">All languages</option>
+                  {[...new Set(signals.map((s) => s.language).filter(Boolean))].sort().map((lang) => (
+                    <option key={lang} value={lang}>{lang}</option>
+                  ))}
+                </select>
+              </div>
+              {filteredSignals.slice(0, visibleCount).map(s => (
                 <div key={s.signal_id} className="flex items-start gap-3 border-b pb-3">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{s.feedback_text?.slice(0, 200)}</p>
@@ -334,9 +378,19 @@ export default function SignalsPage() {
                   </div>
                 </div>
               ))}
-              {signals.length > 20 ? (
-                <p className="pt-2 text-xs text-muted-foreground">{t.common.showingOf.replace("{n}", "20").replace("{total}", String(signals.length))}</p>
-              ) : null}
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs text-muted-foreground">
+                  {t.common.showingOf
+                    .replace("{n}", String(Math.min(visibleCount, filteredSignals.length)))
+                    .replace("{total}", String(filteredSignals.length))}
+                  {filteredSignals.length !== signals.length ? ` (of ${signals.length} unfiltered)` : ""}
+                </p>
+                {filteredSignals.length > visibleCount ? (
+                  <Button size="sm" variant="outline" onClick={() => setVisibleCount((n) => n + FEED_PAGE_SIZE)}>
+                    Show more
+                  </Button>
+                ) : null}
+              </div>
             </div>
           )}
         </CardContent>

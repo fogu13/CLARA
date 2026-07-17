@@ -14,7 +14,9 @@ engine, no PDF library. Browser print-to-PDF covers the PDF need.
 
 from __future__ import annotations
 
+import hashlib
 import html
+import json
 from typing import Any
 
 from app.domain.models import ProblemRecord, WorkflowState
@@ -57,6 +59,18 @@ def _execution_entry(execution, approvals) -> dict[str, Any]:
     }
 
 
+def pack_content_hash(pack: dict[str, Any]) -> str:
+    """Canonical sha256 over the pack minus volatile fields.
+
+    Two exports of unchanged underlying records hash identically, so a stored
+    hash (ApprovalRecord.evidence_pack_hash) proves whether the pack an
+    approver saw has since changed — the pack itself is regenerated on read.
+    """
+    stable = {k: v for k, v in pack.items() if k not in ("generated_at", "content_hash")}
+    canonical = json.dumps(stable, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def build_evidence_pack(
     problem: ProblemRecord,
     state: WorkflowState,
@@ -64,13 +78,17 @@ def build_evidence_pack(
     *,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
-    """Assemble the structured evidence pack from stored records only."""
+    """Assemble the structured evidence pack from stored records only.
+
+    The result carries a canonical `content_hash` (see pack_content_hash), so
+    consumers can verify a re-export against the hash stamped on approvals.
+    """
     contract = problem.outcome_contract
     plans = [
         plan for plan in (measurement_plans or []) if plan.get("problem_id") == problem.problem_id
     ]
 
-    return {
+    pack = {
         "generated_at": generated_at or utc_now(),
         "problem": {
             "problem_id": problem.problem_id,
@@ -133,6 +151,7 @@ def build_evidence_pack(
                 "reviewer": approval.reviewer,
                 "note": approval.note,
                 "created_at": approval.created_at,
+                "evidence_pack_hash": approval.evidence_pack_hash,
             }
             for approval in state.approvals
         ],
@@ -178,6 +197,8 @@ def build_evidence_pack(
             for closure in state.closure_records
         ],
     }
+    pack["content_hash"] = pack_content_hash(pack)
+    return pack
 
 
 def _esc(value: Any) -> str:
@@ -270,6 +291,7 @@ def render_evidence_pack_html(pack: dict[str, Any]) -> str:
 <h1>Evidence Pack: {_esc(problem['title'])}</h1>
 <p class="meta">
   {_esc(problem['problem_id'])} · generated {_esc(pack['generated_at'])} ·
+  content-hash {_esc(str(pack.get('content_hash', ''))[:16])}… ·
   <span class="badge">status: {_esc(problem['status'])}</span>
   <span class="badge">impact: {_esc(problem['impact_band'])} ({_esc(problem['impact_score'])})</span>
   <span class="badge">owner: {_esc(problem['owner'])}</span>
