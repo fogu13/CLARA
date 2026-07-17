@@ -436,9 +436,9 @@ const en = {
     evalHallucination: "Hallucination rate",
     evalPii: "PII leaks",
     evalCitation:
-      "Source: eval run 2026-07-03, model glm-5.2, golden set n=60. A versioned report snapshot — not live numbers.",
+      "Source: eval run 2026-07-17, model glm-5.2, golden set n=80 (60 EN / 20 DE, adversarially verified). The published snapshot on the model card is the authoritative copy — not live numbers.",
     evalCaveat:
-      "n=60 is a small sample: differences of a few points are not statistically significant (the McNemar test is underpowered at this size). Growing the labelled set to 100 is planned. We state this plainly because honest limits are part of the product.",
+      "n=80 is still a modest sample and the DE stratum (n=20) carries wide confidence intervals: differences of a few points are not statistically significant. Growing the labelled set remains planned. We state this plainly because honest limits are part of the product.",
     s3Title: "When and how to override",
     s3B1: "You are the editor-in-chief. Approving an AI proposal makes it your editorial decision (EU AI Act Art. 50(4)) — so override whenever your judgement disagrees.",
     s3B2: "Reject a proposal when the evidence does not support it. A rejection is a recorded decision, not a failure.",
@@ -1036,9 +1036,9 @@ const de: Dict = {
     evalHallucination: "Halluzinationsrate",
     evalPii: "PII-Lecks",
     evalCitation:
-      "Quelle: Eval-Lauf 2026-07-03, Modell glm-5.2, Golden Set n=60. Versionierter Report-Snapshot — keine Live-Zahlen.",
+      "Quelle: Eval-Lauf 2026-07-17, Modell glm-5.2, Golden Set n=80 (60 EN / 20 DE, adversariell verifiziert). Der veröffentlichte Snapshot auf der Modellkarte ist die maßgebliche Fassung — keine Live-Zahlen.",
     evalCaveat:
-      "n=60 ist eine kleine Stichprobe: Unterschiede von wenigen Punkten sind statistisch nicht signifikant (der McNemar-Test hat bei dieser Größe zu wenig Power). Der Ausbau des gelabelten Sets auf 100 ist geplant. Wir sagen das offen, weil ehrliche Grenzen Teil des Produkts sind.",
+      "n=80 ist weiterhin eine überschaubare Stichprobe, und das DE-Stratum (n=20) hat breite Konfidenzintervalle: Unterschiede von wenigen Punkten sind statistisch nicht signifikant. Der weitere Ausbau des gelabelten Sets ist geplant. Wir sagen das offen, weil ehrliche Grenzen Teil des Produkts sind.",
     s3Title: "Wann und wie Sie eingreifen",
     s3B1: "Sie sind Chefredakteur:in. Mit der Freigabe wird ein KI-Vorschlag zu Ihrer redaktionellen Entscheidung (EU AI Act Art. 50 Abs. 4) — greifen Sie also immer ein, wenn Ihr Urteil abweicht.",
     s3B2: "Lehnen Sie einen Vorschlag ab, wenn die Evidenz ihn nicht trägt. Eine Ablehnung ist eine dokumentierte Entscheidung, kein Fehler.",
