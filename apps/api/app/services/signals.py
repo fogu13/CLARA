@@ -31,6 +31,11 @@ from app.services.common import SerializedConnection, utc_now  # re-exported for
 from app.services.language import detect_language
 
 
+# Fallback identifiers written when an import row carries no customer/account id
+# (web CSV wizard uses "unknown", the API fallback uses "unknown_customer"/"_account").
+UNKNOWN_IDENTITY_VALUES = {"", "unknown", "unknown_customer", "unknown_account"}
+
+
 def normalize_label(value: str) -> str:
     return value.replace("_", " ").strip().title()
 
@@ -262,8 +267,19 @@ def build_candidates(signals: list[SignalRecord]) -> list[ProblemCandidate]:
     candidates: list[ProblemCandidate] = []
     for (journey, journey_stage), group in grouped.items():
         sorted_group = sorted(group, key=lambda signal: signal.timestamp)
-        customers = {signal.customer_id for signal in group}
-        accounts = {signal.account_id for signal in group}
+        # Fallback ids ("unknown", "unknown_customer") are identity gaps, not a
+        # real customer: counting them let 153 identifier-less signals reconcile
+        # to "1 customer / 1 account" on the problem detail.
+        customers = {
+            signal.customer_id
+            for signal in group
+            if signal.customer_id not in UNKNOWN_IDENTITY_VALUES
+        }
+        accounts = {
+            signal.account_id
+            for signal in group
+            if signal.account_id not in UNKNOWN_IDENTITY_VALUES
+        }
         sources = sorted({signal.source for signal in group})
         languages = sorted({signal.language for signal in group})
         product_events = Counter(event for signal in group for event in signal.product_events)
@@ -631,6 +647,15 @@ class SignalStore:
             total_signals=len(self._signals),
         )
 
+    def update_enrichment(
+        self, signal_id: str, *, sentiment: str | None, urgency: str | None
+    ) -> None:
+        signal = self._signals.get(signal_id)
+        if signal is not None:
+            self._signals[signal_id] = signal.model_copy(
+                update={"sentiment": sentiment, "urgency": urgency, "enriched": True}
+            )
+
     def candidates(self) -> list[ProblemCandidate]:
         return build_candidates(self.list_signals())
 
@@ -681,15 +706,24 @@ class SQLiteSignalStore:
                 feedback_text TEXT NOT NULL,
                 language TEXT NOT NULL,
                 timestamp TEXT NOT NULL,
-                metadata TEXT NOT NULL DEFAULT '{}'
+                metadata TEXT NOT NULL DEFAULT '{}',
+                sentiment TEXT,
+                urgency TEXT,
+                enriched INTEGER NOT NULL DEFAULT 0
             )
             """
         )
-        # Add the metadata column to databases created before it existed.
+        # Add columns to databases created before they existed.
         columns = {row["name"] for row in self._connection.execute("PRAGMA table_info(signals)")}
         if "metadata" not in columns:
             self._connection.execute(
                 "ALTER TABLE signals ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'"
+            )
+        if "enriched" not in columns:
+            self._connection.execute("ALTER TABLE signals ADD COLUMN sentiment TEXT")
+            self._connection.execute("ALTER TABLE signals ADD COLUMN urgency TEXT")
+            self._connection.execute(
+                "ALTER TABLE signals ADD COLUMN enriched INTEGER NOT NULL DEFAULT 0"
             )
         self._connection.execute(
             """
@@ -707,6 +741,15 @@ class SQLiteSignalStore:
     def list_signals(self) -> list[SignalRecord]:
         rows = self._connection.execute("SELECT * FROM signals ORDER BY timestamp").fetchall()
         return [self._signal_from_row(row) for row in rows]
+
+    def update_enrichment(
+        self, signal_id: str, *, sentiment: str | None, urgency: str | None
+    ) -> None:
+        self._connection.execute(
+            "UPDATE signals SET sentiment = ?, urgency = ?, enriched = 1 WHERE signal_id = ?",
+            (sentiment, urgency, signal_id),
+        )
+        self._connection.commit()
 
     def delete_by_customer(self, customer_id: str) -> int:
         """GDPR Art. 17: remove every signal belonging to a customer."""
@@ -748,9 +791,12 @@ class SQLiteSignalStore:
                         feedback_text,
                         language,
                         timestamp,
-                        metadata
+                        metadata,
+                        sentiment,
+                        urgency,
+                        enriched
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         signal.signal_id,
@@ -765,6 +811,9 @@ class SQLiteSignalStore:
                         signal.language,
                         signal.timestamp,
                         json.dumps(signal.metadata),
+                        signal.sentiment,
+                        signal.urgency,
+                        1 if signal.enriched else 0,
                     ),
                 )
                 imported += 1
@@ -841,6 +890,9 @@ class SQLiteSignalStore:
             language=row["language"],
             timestamp=row["timestamp"],
             metadata=json.loads(row["metadata"]) if "metadata" in row.keys() else {},
+            sentiment=row["sentiment"] if "sentiment" in row.keys() else None,
+            urgency=row["urgency"] if "urgency" in row.keys() else None,
+            enriched=bool(row["enriched"]) if "enriched" in row.keys() else False,
         )
 
     @staticmethod

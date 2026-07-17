@@ -150,7 +150,12 @@ export function OutcomeBoardPanel() {
                 </div>
                 <div>
                   <dt>{t.outcomeBoard.latest}</dt>
-                  <dd>{formatMetric(item.latest_value)}</dd>
+                  <dd>
+                    {formatMetric(item.latest_value)}
+                    {item.measurement_source === "manual" && item.latest_value != null ? (
+                      <span className="outcome-board-manual-note"> · {t.outcomeBoard.manualValue}</span>
+                    ) : null}
+                  </dd>
                 </div>
                 <div>
                   <dt>{t.outcomeBoard.target}</dt>
