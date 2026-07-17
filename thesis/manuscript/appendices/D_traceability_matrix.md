@@ -19,7 +19,7 @@ This appendix makes the chain from claim to evidence auditable, and states hones
 
 | Principle | Source decision | Evaluated by | Status |
 |---|---|---|---|
-| DP1 — Closure is a contract, not a side effect | §4.3 outcome contract | Demonstration (Ch 4); perception (§5B); measurement design shipped and regression-tested (§3.5.5: ITS estimator, approval-time contract proposal, scheduled re-measurement; since 17–19 July 2026 also A–E evidence grading, measurement provenance, and guardrail measurement — table below); **live outcome contract on real data = future work** (in-repo outcome data still simulated) | demonstrated; **not yet measured** |
+| DP1 — Closure is a contract, not a side effect | §4.3 outcome contract | Demonstration (Ch 4); perception (§5B); measurement design shipped and regression-tested (§3.5.5: ITS estimator, approval-time contract proposal, scheduled re-measurement; since 17 July 2026 also A–E evidence grading, measurement provenance, and guardrail measurement — table below); **live outcome contract on real data = future work** (in-repo outcome data still simulated) | demonstrated; **not yet measured** |
 | DP2 — Organisational memory is perishable | §4.3.2 confidence decay | Demonstration (Ch 4); **influence measured**: remedy adoption 21%→71%, alignment lift 0.503 (§5A.7; `CLARA/…/evals/history.jsonl`, 2026-07-03); outcome benefit pending real outcomes | **partially measured** (influence yes; benefit pending) |
 | DP3 — Severity emerges from the set | §4.3.3 cross-signal severity | Demonstration; gold-set risk field (proxy) | demonstrated; partly measured |
 | DP4 — Graduate authority; make conflicts explicit | §4.3.1 rule resolution | Demonstration; task sessions (§5B); approval→outcome loop verified running in production after interrupt-resume fix (§4.7, §4.9) | demonstrated + pending (perception) |
@@ -45,7 +45,7 @@ The **measured** rows concern triage quality (RQ3) — a precondition of the loo
 | Guardrail measurement at every checkpoint (`repeat_signal_rate` vs the 28-day pre-window baseline, non-inferiority; breach = >20% relative worsening; informative, never blocking; unmeasurable guardrails surface an explicit "no data source" marker) | `measurement_scheduler.measure_guardrails` |
 | Detectability note at contract proposal (two-sample Poisson normal-approximation MDE at 80% power; explicitly labelled a heuristic, not a formal power analysis) | `outcome_engine.detectability_note` |
 
-## Trust and governance hardening → implementation (17–19 July 2026)
+## Trust and governance hardening → implementation (17 July 2026)
 
 | Design element | Code |
 |---|---|

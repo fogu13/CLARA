@@ -1,12 +1,13 @@
 // MSc thesis defense deck — 15–20 min, OPIT RAI-9001.
 // Palette "Midnight Executive": navy 1E2761 dominant, ice CADCFC support, white accent.
 // Motif: the loop stages as small navy circles with white numerals; Cambria heads + Calibri body.
+const path = require("path");
 const pptxgen = require("pptxgenjs");
 const pres = new pptxgen();
 pres.layout = "LAYOUT_WIDE"; // 13.3 x 7.5
 
 const NAVY = "1E2761", ICE = "CADCFC", WHITE = "FFFFFF", INK = "1A1A2E", MUTE = "5A6478", GOOD = "2C5F2D", WARN = "990011";
-const T = "/Users/olamakri/Documents/Thesis_writing";
+const T = path.join(__dirname, ".."); // repo thesis/ dir (was the pre-unification Thesis_writing folder)
 const HEAD = { fontFace: "Cambria", color: INK }, BODY = { fontFace: "Calibri", color: INK };
 
 function title(s, txt, sub) {
@@ -132,7 +133,7 @@ s = pres.addSlide();
 title(s, "Evaluation: two independent streams", "Objective accuracy × practitioner judgement — neither alone suffices");
 loopMotif(s, 11.4, 0.45, 3);
 s.addImage({ path: `${T}/diagrams/rendered/07_evaluation_pipeline.png`, x: 0.6, y: 1.75, w: 10.4, h: 4.05 });
-s.addText("188 real, public, paraphrased signals · 3 sectors (fintech / food delivery / B2B industrial) · EN+DE · human seed labels, authored independently of the artifact. Plus: the artifact's own committed in-repo evaluation (60-case golden set, live LLM) as convergent evidence.",
+s.addText("188 real, public, paraphrased signals · 3 sectors (fintech / food delivery / B2B industrial) · EN+DE · human seed labels, authored independently of the artifact. Plus: the artifact's own committed in-repo evaluation (80-case bilingual golden set — 60 EN / 20 DE, live LLM) as convergent evidence.",
   { ...BODY, x: 0.6, y: 6.0, w: 12.1, h: 0.85, fontSize: 13.5, color: MUTE });
 s.addNotes("90s. Stress the honesty features: real data only (synthetic excluded), star ratings as a NON-CIRCULAR sentiment gold, seed labels external to the artifact, every number written by a reproducible harness — no hand-typed metrics.");
 
@@ -144,16 +145,16 @@ const rows = [
   [{ text: "Predictor", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "Sentiment acc (n=153)", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "Risk macro-F1 (n=106)", options: { bold: true, color: WHITE, fill: NAVY } }],
   ["Lexicon / keyword floor", "0.37", "0.26"],
   ["TF-IDF + LogReg (5-fold CV)", "0.78", "0.65"],
-  ["LLM path (in-repo, 60-case golden set)", "0.97 (sentiment)", "0.82 (urgency)"],
+  ["LLM path (in-repo, 80-case bilingual golden set)", "0.975 (sentiment)", "0.863 (urgency)"],
 ];
 s.addTable(rows, { x: 0.6, y: 1.8, w: 7.3, colW: [3.4, 1.95, 1.95], fontFace: "Calibri", fontSize: 13, border: { color: ICE, pt: 1 }, rowH: 0.5, valign: "middle" });
 s.addText("Why the floor fails: paraphrased operational complaints (\"transaction history cannot be exported…\") carry no sentiment words — 58 of 94 negatives misread as neutral. Substantive finding, not a strawman.",
   { ...BODY, x: 0.6, y: 4.15, w: 7.3, h: 1.1, fontSize: 13 });
-s.addText("Convergent in-repo run (CLARA, GLM-5.2, 3 Jul 2026): sentiment 96.7% · urgency 81.7% · theme 80.8% by meaning vs 45.8% exact — semantic scoring vindicated. Real-data star-proxy: ≈90% across all three sectors, zero fine-tuning.",
+s.addText("Convergent in-repo run (CLARA, GLM-5.2, 17 Jul 2026, n=80 incl. 20 DE): sentiment 97.5% (CI 94–100) · urgency 86.3% (CI 79–94) · tag F1 80.2% by meaning vs 55.5% exact-string — semantic scoring vindicated; DE within 1.7pp of EN on urgency. Real-data star-proxy: ≈90% across all three sectors, zero fine-tuning.",
   { ...BODY, x: 0.6, y: 5.3, w: 7.3, h: 1.35, fontSize: 13, color: NAVY });
 s.addImage({ path: `${T}/evaluation/results/risk_confusion.png`, x: 8.35, y: 1.8, w: 4.3, h: 3.82 });
 s.addText("Keyword floor collapses risk to \"low\" — 19 of 27 critical signals missed.", { ...BODY, x: 8.35, y: 5.75, w: 4.3, h: 0.8, fontSize: 11.5, color: MUTE, italic: true });
-s.addNotes("2 min. The three-rung story. Be precise about gold standards: the 0.37/0.78 rows are the thesis harness (188 seed-labelled signals); the LLM numbers are the artifact's committed in-repo eval on a DIFFERENT 60-case golden set — convergent evidence, not the same table. If probed: exemplar A/B lift was NOT significant at n=60 (McNemar p≈1.0) — we report that ourselves.");
+s.addNotes("2 min. The three-rung story. Be precise about gold standards: the 0.37/0.78 rows are the thesis harness (188 seed-labelled signals); the LLM numbers are the artifact's committed in-repo eval on a DIFFERENT 80-case bilingual golden set (20 authored German cases — disclosed) — convergent evidence, not the same table. If probed on exemplars: at n=60 the A/B was not significant (p≈1.0); at n=80, after adding German exemplars, the exact-tag-set lift IS significant (8.75%→28.75% per item, in-run paired McNemar p=0.001) while urgency stays underpowered (81.25%→86.25%, p=0.219) — we report both ourselves. The in-run paired A/B is the designed inference; the model is non-deterministic even at temperature 0.");
 
 // ---------- 9 · Learning loop measured ----------
 s = pres.addSlide();
@@ -161,7 +162,7 @@ title(s, "Result 2: the memory steers, honestly bounded", "The perishable-learni
 loopMotif(s, 11.4, 0.45, 3);
 stat(s, 0.8, 2.2, 3.6, "21% → 71%", "share of a past remedy appearing in the new recommendation when retrieval is ON (66.7% adoption)");
 stat(s, 4.85, 2.2, 3.6, "0.503", "alignment lift vs a same-run noise floor that absorbs model jitter", GOOD);
-stat(s, 8.9, 2.2, 3.6, "0 / 6.7%", "PII leaks across ledger / hallucination rate, latest run");
+stat(s, 8.9, 2.2, 3.6, "0 / 2.5%", "PII leaks across ledger / hallucination rate, latest run (hallucination check EN-scope by construction)");
 s.addShape("roundRect", { x: 0.8, y: 4.6, w: 11.7, h: 2.0, rectRadius: 0.06, fill: { color: "FDF3F3" }, line: { color: WARN, width: 1 } });
 s.addText("The honest boundary", { ...BODY, x: 1.05, y: 4.75, w: 11.2, h: 0.35, fontSize: 14, bold: true, color: WARN, margin: 0 });
 s.addText("Outcome data behind these learnings is still SIMULATED. Adoption shows the loop steers recommendations; whether the steered remedy is BETTER requires a live outcome contract on real data — the single most important open step. We claim mechanism, not benefit.",
@@ -183,7 +184,7 @@ const tm = [
 s.addTable(tm, { x: 0.6, y: 1.8, w: 12.1, colW: [4.4, 2.8, 4.9], fontFace: "Calibri", fontSize: 13.5, border: { color: ICE, pt: 1 }, rowH: 0.55, valign: "middle" });
 s.addText("A claim's status is stated once, in one place, and the chapters must agree with it. This is the discipline that keeps a design-science thesis honest when the artifact is also a company.",
   { ...BODY, x: 0.6, y: 5.5, w: 12.1, h: 0.8, fontSize: 14, italic: true, color: MUTE });
-s.addNotes("90s. Pre-empt the researcher-as-founder question here: externally-labelled gold sets, standardised instruments, reproducible harness, and this matrix. Conflict of interest is declared in the front matter and managed by method, not denial.");
+s.addNotes("90s. Pre-empt the researcher-as-founder question here: externally-labelled gold sets, standardised instruments, reproducible harness, and this matrix. Conflict of interest is declared in the front matter and managed by method, not denial. If asked about the July external reviews (§5A.8): two independent LLM strategic reviews, 45 claims adversarially verified (27 confirmed / 13 partial / 2 refuted), 20 hardening PRs, 17/17 live production checks — and the refuted claims are themselves a finding: unsurfaced capability reads as absent.");
 
 // ---------- 11 · Positioning ----------
 s = pres.addSlide();
@@ -221,7 +222,7 @@ s.addText([
 s.addText("Future work", { ...HEAD, x: 7.0, y: 1.7, w: 5.7, h: 0.4, fontSize: 17, bold: true, color: NAVY });
 s.addText([
   { text: "① One LIVE outcome contract on real data — scored by interrupted time series; then synthetic difference-in-differences as panels accumulate (Arkhangelsky et al., 2021)", options: { bullet: true, breakLine: true } },
-  { text: "② Unify the two LLM evidence streams on one gold standard; grow the golden set past significance", options: { bullet: true, breakLine: true } },
+  { text: "② Unify the two LLM evidence streams on one gold standard; golden set grown 60→80 bilingual (exact-tag lift now significant, p=0.001) — grow further for urgency power", options: { bullet: true, breakLine: true } },
   { text: "③ Connector parity + broader pulls", options: { bullet: true, breakLine: true } },
   { text: "④ Standing fairness monitoring of routing across segments and languages", options: { bullet: true } },
 ], { ...BODY, x: 7.2, y: 2.2, w: 5.5, h: 3.4, fontSize: 13, paraSpaceAfter: 8 });
@@ -247,4 +248,4 @@ s.addText("Closing the loop and governing the closing are not in opposition — 
 s.addText("Thank you — questions welcome.", { fontFace: "Cambria", color: WHITE, x: 0.9, y: 6.75, w: 11.5, h: 0.5, fontSize: 18, bold: true });
 s.addNotes("60s. Read the four contributions crisply, end on the one-liner, invite questions. Likely probes: novelty vs MemoryBank (answered on slide 5), founder COI (slide 10), simulated outcomes (slide 9), why not RCTs (slide 12 — ITS/SDID).");
 
-pres.writeFile({ fileName: "/Users/olamakri/Documents/Thesis_writing/defense/defense_deck.pptx" }).then(() => console.log("written"));
+pres.writeFile({ fileName: path.join(__dirname, "defense_deck.pptx") }).then(() => console.log("written"));
