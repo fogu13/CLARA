@@ -209,6 +209,14 @@ Sources: DDG/Impressum + Datenschutzerklärung — <https://www.it-recht-kanzlei
 ### Phase 3 — Scale hardening (as revenue/PII grows)
 
 - ☐ Pursue **ISO 27001 / SOC 2** early — DACH shortlists filter on these
+- ☐ **BSI C5** (Type 1 → Type 2): Germany's cloud attestation; expected by public sector and
+  BaFin-supervised finance (ICP #3!), mandatory in healthcare since 1 Jul 2025 (§393 SGB V), and
+  doubles as NIS2/DORA supply-chain evidence. Sequence AFTER ISO 27001 (large control overlap) —
+  flagged as a gap by both external reviews (Jul 2026).
+- ☐ **Accessibility / BFSG**: the Barrierefreiheitsstärkungsgesetz has applied to consumer-facing
+  digital services since 28 Jun 2025 and public tenders require WCAG 2.1 AA / EN 301 549. CLARA is
+  B2B (BFSG likely not directly binding), but publish an accessibility statement + run a WCAG AA
+  self-audit before any public-sector pilot — also an external-review gap.
 - ☐ Re-run ROPA + subprocessor list on each new feature/vendor (at least annually)
 - ☐ Consider a **UG/GmbH** liability shield once handling real customer PII at scale (legal/tax decision, out of scope here)
 

@@ -165,6 +165,12 @@ willingness-to-pay and differentiator fit; run ICP #1 in parallel for volume and
 **Named-adjacent proof cases (one per ICP):** e-commerce = Lieferando · fintech = Trade Republic ·
 brand/CPG = Henkel. Present as "validated on real scraped data from…", never as paying customers.
 
+**Prospect-list extension (from the Jul-2026 external reviews, not a new ICP):** add **utilities/
+energy (KRITIS)** and **telco** to the outbound prospect list under ICP #3's governed-action pitch —
+both are service-intensive, works-council-heavy and regulation-driven, where US tools are weakest.
+Keep avoiding healthcare data, employee-performance and credit/underwriting use cases until the
+security assurance matures (same rationale as the AI-Act classification memo).
+
 **Reconciling with the thesis scope:** the thesis targets SMB marketing/CX teams (10–500). Treat that as
 the **entry motion** (Starter tier, self-serve-lite later); ICP #1/#3 mid-market is where the first paid
 ACVs come from. Same product, two sizes.

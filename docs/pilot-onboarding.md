@@ -89,3 +89,28 @@ speculatively.
   want the methodology.
 - Residency + transparency, never "more secure than X": EU-resident by design,
   certification roadmap dated and budgeted, audit rights contractual.
+
+## Pilot success metrics (agree these BEFORE the pilot starts)
+
+Adopted from the Jul-2026 external strategic review — a six-week "Governed CX
+Action Pilot" is judged on numbers both sides can verify in the product:
+
+- **Time from signal to validated problem** (telemetry: time-to-first-insight).
+- **Precision of high-priority alerts** (emerging "action" candidates the team
+  confirms as real — corroboration floor keeps this honest).
+- **% of claims with traceable evidence** (evidence-pack coverage; content hash
+  proves what the approver saw).
+- **Approval cycle time** and **policy-block rate + justified overrides**
+  (governance working ≠ governance stalling).
+- **Action execution completion** (approved → pushed, with external refs).
+- **Outcome measurement coverage** (% of executed actions with a readout;
+  evidence grade A–E on each readout) and the **estimated effect ± CI**.
+- **Reviewer agreement / override behaviour** (how often humans overrule the
+  model — trust calibration, not a performance score for individuals; keep
+  works-council mode semantics in mind: aggregates only).
+- **Connector uptime and data freshness** during the pilot window.
+
+Walk the prospect through this list at kickoff, capture baseline values in the
+first week, and export the evidence pack + telemetry CSVs for the closing
+readout. "Prove it worked" is only claimable for grade A/B readouts — grade C/D
+say "estimated effect", grade E says "observed, unverified".
