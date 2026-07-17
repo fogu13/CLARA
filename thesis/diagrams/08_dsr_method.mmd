@@ -1,0 +1,25 @@
+%% Research method — Design Science (Hevner three cycles + Peffers DSRM). Edit freely.
+flowchart LR
+    subgraph ENV["Environment (Relevance)"]
+        E1["Feedback-to-action gap<br/>practitioners · VoC practice"]
+        E2["EU regulatory context<br/>EU AI Act · GDPR"]
+    end
+    subgraph DS["Design Science (Design cycle)"]
+        B["Build<br/>artifact + 5 design decisions"]
+        EV["Evaluate<br/>gold-set (RQ3) + practitioner study (RQ4)"]
+        B <--> EV
+    end
+    subgraph KB["Knowledge base (Rigour)"]
+        K1["VoC · NLP · BI · workflow · org learning"]
+        K2["DSR methodology<br/>Hevner 2004 · Peffers 2007 · Gregor & Hevner 2013"]
+        K3["Responsible-AI literature"]
+    end
+
+    ENV -->|"requirements / field test"| DS
+    DS -->|"design principles + artifact"| ENV
+    KB -->|"grounding"| DS
+    DS -->|"additions to the knowledge base"| KB
+
+    subgraph DSRM["DSRM activities (Peffers et al., 2007)"]
+        A1["1 Problem"] --> A2["2 Objectives"] --> A3["3 Design & develop"] --> A4["4 Demonstrate"] --> A5["5 Evaluate"] --> A6["6 Communicate"]
+    end

@@ -1,0 +1,97 @@
+%% Data model (ER). Edit freely. The runnable schema is in schema.sql.
+erDiagram
+    WORKSPACES ||--o{ SIGNALS : owns
+    WORKSPACES ||--o{ TAXONOMY_NODES : owns
+    WORKSPACES ||--o{ FEEDBACK_RULES : owns
+    WORKSPACES ||--o{ INSIGHTS : owns
+    WORKSPACES ||--o{ EVENTS : logs
+
+    TAXONOMY_NODES ||--o{ TAXONOMY_NODES : "parent of"
+    SIGNALS }o--o{ TAXONOMY_NODES : "mapped via SIGNAL_NODE_MAP"
+    SIGNALS }o--o{ INSIGHTS : "clustered via INSIGHT_SIGNALS"
+
+    INSIGHTS ||--o{ ACTIONS_LOG : triggers
+    FEEDBACK_RULES ||--o{ ACTIONS_LOG : fires
+    ACTIONS_LOG ||--|| OUTCOME_CONTRACTS : "binds at creation"
+    OUTCOME_CONTRACTS ||--o{ OUTCOME_MEASUREMENTS : "measured by"
+    INSIGHTS ||--o{ AB_LEARNINGS : "produces / informs"
+
+    SIGNALS {
+        uuid id PK
+        uuid workspace_id FK
+        text signal_type
+        text source
+        text category
+        text text_content
+        text original_language
+        text metric_name
+        numeric metric_value
+        text sentiment
+        text urgency
+        timestamptz recorded_at
+    }
+    INSIGHTS {
+        uuid id PK
+        uuid workspace_id FK
+        text title
+        text severity_band
+        numeric severity_score
+        text status
+    }
+    FEEDBACK_RULES {
+        uuid id PK
+        uuid workspace_id FK
+        int priority
+        jsonb conditions
+        text action_type
+        bool auto_execute
+    }
+    ACTIONS_LOG {
+        uuid id PK
+        uuid insight_id FK
+        uuid rule_id FK
+        text status
+        text executor
+        jsonb params
+        jsonb result
+        timestamptz created_at
+    }
+    OUTCOME_CONTRACTS {
+        uuid id PK
+        uuid action_id FK
+        text metric
+        numeric baseline
+        int window_days
+        timestamptz measurement_due_at
+    }
+    OUTCOME_MEASUREMENTS {
+        uuid id PK
+        uuid contract_id FK
+        numeric value
+        numeric resolution_score
+        text closure_level
+    }
+    AB_LEARNINGS {
+        uuid id PK
+        uuid workspace_id FK
+        text conclusion
+        numeric base_confidence
+        timestamptz last_validated_at
+        int half_life_days
+    }
+    TAXONOMY_NODES {
+        uuid id PK
+        uuid workspace_id FK
+        uuid parent_id FK
+        int level
+        text label
+        numeric confidence
+        int half_life_days
+    }
+    EVENTS {
+        uuid id PK
+        uuid workspace_id FK
+        text type
+        jsonb payload
+        timestamptz created_at
+    }

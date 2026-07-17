@@ -6,7 +6,7 @@ Tracks task performance during prototype demonstrations:
 - Task completion rates
 - Routing accuracy (did they route to the correct team?)
 - Confidence ratings
-- Pre/post comparison (current workflow vs CLARA)
+- Pre/post comparison (current workflow vs Odradek)
 """
 
 import json
@@ -39,7 +39,7 @@ class TaskAttempt:
 
 @dataclass
 class PrePostComparison:
-    """Pre/post comparison of current workflow vs CLARA."""
+    """Pre/post comparison of current workflow vs Odradek."""
     participant_id: str
     # Current workflow (self-reported, pre-demo)
     current_time_to_action_hours: float = None  # avg hours from feedback to first action
@@ -47,10 +47,10 @@ class PrePostComparison:
     current_weekly_triage_hours: float = None  # hours/week on manual triage
     current_feedback_sources: int = None  # number of feedback sources
     current_satisfaction: int = None  # 1-5 satisfaction with current process
-    # After CLARA demo (post-demo)
+    # After Odradek demo (post-demo)
     expected_time_to_action_hours: float = None
     expected_weekly_triage_hours: float = None
-    clara_satisfaction: int = None  # 1-5 satisfaction with CLARA
+    odradek_satisfaction: int = None  # 1-5 satisfaction with Odradek
     would_adopt: bool = None
     adoption_barriers: list = field(default_factory=list)
 
@@ -220,7 +220,7 @@ class PrototypeEvaluation:
 
 
 # --- Event-log telemetry (Phase F1) ---------------------------------------
-# The CLARA app records an `events` table (see supabase/migrations). Export it
+# The Odradek app records an `events` table (see supabase/migrations). Export it
 # to a JSON array and summarise the timed-task telemetry here. This complements the
 # facilitator-recorded TaskAttempt data with objective in-app measurements.
 

@@ -1,0 +1,49 @@
+%% Logical system architecture (build-agnostic). Edit freely.
+%% Render: paste into Obsidian / mermaid.live / VS Code Mermaid preview, or import into draw.io.
+flowchart LR
+    subgraph SRC["Feedback sources (integrate, not rebuild)"]
+        S1["Surveys<br/>NPS / CSAT / CES"]
+        S2["Support<br/>Zendesk / Intercom"]
+        S3["Reviews and social"]
+        S4["Product analytics"]
+    end
+
+    subgraph ING["Ingestion"]
+        I1["CSV / Webhook / Connectors"]
+    end
+
+    subgraph CORE["Governed loop · Signal to Insight to Action to Learning"]
+        E["Enrichment<br/>sentiment · theme · urgency"]
+        SY["Synthesis<br/>cross-signal severity"]
+        R["Action engine<br/>rules · conflict resolution"]
+        AP{"Human approval?"}
+        EX["Execute action"]
+        M["Measurement<br/>outcome contract · closure"]
+        L["Learning store<br/>confidence decay"]
+    end
+
+    subgraph OUT["Execution targets (integrate)"]
+        O1["Jira / Zendesk / CRM"]
+    end
+
+    subgraph GOV["Responsible-AI governance (cross-cutting)"]
+        G1["Audit · Art 12"]
+        G2["Transparency · Art 50"]
+        G3["Compliance checker"]
+        G4["Model sovereignty"]
+    end
+
+    S1 --> I1
+    S2 --> I1
+    S3 --> I1
+    S4 --> I1
+    I1 --> E --> SY --> R --> AP
+    AP -->|"approved or auto"| EX
+    AP -->|"queued"| EX
+    EX --> O1
+    EX --> M --> L
+    L -.->|"informs"| R
+    G1 -.-> EX
+    G2 -.-> E
+    G3 -.-> R
+    G4 -.-> E

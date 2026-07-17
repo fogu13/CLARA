@@ -1,0 +1,30 @@
+%% Sequence — a signal's lifecycle with human-in-the-loop approval. Edit freely.
+sequenceDiagram
+    autonumber
+    actor Cust as Customer
+    participant Src as Source (survey/ticket/review)
+    participant Ing as Ingestion
+    participant LLM as Enrichment (LLM)
+    participant Eng as Action engine (rules)
+    actor Op as Practitioner
+    participant Sys as Execution + audit
+    participant Meas as Measurement
+    participant Mem as Learning store
+
+    Cust->>Src: leaves feedback
+    Src->>Ing: signal (CSV / webhook)
+    Ing->>LLM: enrich (sentiment, theme, urgency)
+    LLM->>Eng: insight + composite severity
+    Eng->>Eng: match rules, resolve conflicts
+    alt auto_execute = false (risk)
+        Eng->>Op: queue for approval (Art 14)
+        Op-->>Eng: approve / reject
+    else auto_execute = true
+        Note over Eng: proceed automatically
+    end
+    Eng->>Sys: execute action
+    Sys->>Sys: write audit record (Art 12)
+    Sys->>Meas: set outcome contract + window
+    Meas-->>Meas: re-measure after window
+    Meas->>Mem: codify learning (confidence + half-life)
+    Mem-->>Eng: retrieved on next similar decision

@@ -1,0 +1,24 @@
+%% Evaluation harness — real-data gold-set (Chapter 5 §5A). Edit freely.
+flowchart LR
+    subgraph DATA["Real public datasets (Thesis_ChatGPT/)"]
+        D1["Trade Republic · 67 · fintech · EN"]
+        D2["Henkel · 39 · B2B industrial · DE"]
+        D3["Lieferando · 82 · food delivery · DE/EN"]
+    end
+    GOLD["Gold labels (human seeds)<br/>theme · journey_stage · owner · action · risk · star"]
+    D1 & D2 & D3 --> LOAD["load_datasets.py<br/>188 labelled signals"]
+    LOAD --> GOLD
+
+    subgraph PRED["Predictors (same gold labels)"]
+        P1["Rule-based floor<br/>lexicon + keywords"]
+        P2["Classical ML<br/>TF-IDF + LogReg · 5-fold CV"]
+        P3["LLM enrichment path<br/>artifact's enrich-signal (needs API key)"]
+    end
+    LOAD --> P1 & P2 & P3
+
+    P1 & P2 & P3 --> METR["metrics.py<br/>P/R/F1 · confusion · per sector/language"]
+    GOLD --> METR
+    METR --> RES["results/*.csv + figures + summary.json"]
+
+    classDef pending fill:#f3f3f3,stroke:#999,color:#555,stroke-dasharray:4 3;
+    class P3 pending;

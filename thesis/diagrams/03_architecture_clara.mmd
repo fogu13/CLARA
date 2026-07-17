@@ -1,0 +1,42 @@
+%% Implementation architecture — CLARA build (Next.js + FastAPI + LangGraph). Edit freely.
+%% CLARA = Capture, Listen, Analyze, Respond, Adapt. Updated Jul 2026: real action push + learning loop.
+flowchart TB
+    subgraph FE["Frontend · Vercel"]
+        UI["Next.js + TypeScript<br/>shadcn/ui · Tailwind"]
+    end
+
+    subgraph API["Backend · Docker on an EU VPS (Caddy reverse proxy)"]
+        FAST["FastAPI (Python)<br/>~43 REST endpoints<br/>auth-gated reads · rate limiter"]
+        subgraph LG["LangGraph orchestration"]
+            N1["enrich node<br/>+ few-shot exemplars"]
+            N2["synthesize node<br/>+ retrieved learnings"]
+            N3["evaluate-rules node"]
+            INT{{"interrupt:<br/>human approval · Art 14"}}
+            N4["execute node"]
+            N5["measure node"]
+            N6["learning node"]
+        end
+        PUSH["action_push<br/>real Jira/Slack write on approval<br/>idempotent · draft fallback"]
+    end
+
+    subgraph DATA["Data"]
+        DB[("PostgreSQL + pgvector · RLS<br/>signals · insights · rules<br/>actions_log · outcome_* · ab_learnings · events")]
+        LSTORE[("learning store")]
+        XSTORE[("exemplar store")]
+    end
+
+    AI["ai.py · provider-agnostic LLM<br/>hosted or self-hosted (Ollama/vLLM)"]
+    OBS["Langfuse<br/>LLM tracing / observability"]
+    CONN["Connectors (SSRF-guarded)<br/>Jira · Slack · Zendesk pull"]
+
+    UI --> FAST --> LG
+    LG --> DB
+    N1 --> AI
+    N2 --> AI
+    N6 --> AI
+    LG --> OBS
+    N3 --> INT --> N4 --> PUSH --> CONN
+    N4 --> N5 --> N6
+    N6 --> LSTORE
+    LSTORE -.->|"decayed-confidence retrieval<br/>(adoption 21%→71%)"| N2
+    XSTORE -.->|"label vocabulary + urgency rubric"| N1

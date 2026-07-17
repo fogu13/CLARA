@@ -1,0 +1,74 @@
+{
+  "corpus_n": 188,
+  "datasets": [
+    "henkel",
+    "lieferando",
+    "trade_republic"
+  ],
+  "sentiment_baseline": {
+    "n": 153,
+    "accuracy": 0.3725,
+    "precision_macro": 0.5788,
+    "recall_macro": 0.432,
+    "f1_macro": 0.3728,
+    "precision_weighted": 0.8235,
+    "recall_weighted": 0.3725,
+    "f1_weighted": 0.4828
+  },
+  "sentiment_by_language": {
+    "de": 0.4216,
+    "en": 0.2667
+  },
+  "sentiment_by_sector": {
+    "b2b_industrial": 0.4483,
+    "fintech": 0.2849,
+    "food_delivery": 0.3392
+  },
+  "risk_baseline": {
+    "n": 106,
+    "accuracy": 0.4057,
+    "precision_macro": 0.4714,
+    "recall_macro": 0.3229,
+    "f1_macro": 0.2623,
+    "precision_weighted": 0.4879,
+    "recall_weighted": 0.4057,
+    "f1_weighted": 0.3033
+  },
+  "risk_binary_escalation": {
+    "n": 106,
+    "accuracy": 0.5943,
+    "precision_macro": 0.7279,
+    "recall_macro": 0.5711,
+    "f1_macro": 0.4951,
+    "precision_weighted": 0.7188,
+    "recall_weighted": 0.5943,
+    "f1_weighted": 0.5077
+  },
+  "risk_n_datasets": [
+    "henkel",
+    "trade_republic"
+  ],
+  "sentiment_ml_tfidf_lr": {
+    "n": 153,
+    "accuracy": 0.7843,
+    "precision_macro": 0.5155,
+    "recall_macro": 0.5348,
+    "f1_macro": 0.5243,
+    "precision_weighted": 0.7404,
+    "recall_weighted": 0.7843,
+    "f1_weighted": 0.7609,
+    "cv_folds": 5
+  },
+  "risk_ml_tfidf_lr": {
+    "n": 106,
+    "accuracy": 0.6792,
+    "precision_macro": 0.6586,
+    "recall_macro": 0.6552,
+    "f1_macro": 0.6534,
+    "precision_weighted": 0.674,
+    "recall_weighted": 0.6792,
+    "f1_weighted": 0.6734,
+    "cv_folds": 5
+  },
+  "llm_path": "not run (no predictions_llm.json; set AI_API_KEY and run predict_llm.py)"
+}

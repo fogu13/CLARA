@@ -1,0 +1,2 @@
+n,accuracy,precision_macro,recall_macro,f1_macro,precision_weighted,recall_weighted,f1_weighted
+106,0.4057,0.4714,0.3229,0.2623,0.4879,0.4057,0.3033

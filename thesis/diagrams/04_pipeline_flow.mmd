@@ -1,0 +1,22 @@
+%% Data pipeline — Signal → Insight → Action → Learning, with governance control points. Edit freely.
+flowchart TD
+    A["Raw signal<br/>(qualitative or quantitative)"] --> B["Enrich<br/>sentiment · theme · urgency · evidence<br/>+ PII masking"]
+    B --> C["Map to taxonomy<br/>category → theme → subtheme"]
+    C --> D["Synthesise insight<br/>cluster signals · composite cross-signal severity"]
+    D --> E["Match rules<br/>priority → specificity → action-type dedupe"]
+    E --> F{"Risk gate<br/>auto_execute?"}
+    F -->|"true (low risk)"| H["Execute action"]
+    F -->|"false (needs oversight)"| G["Approval queue<br/>human-in-the-loop · Art 14"]
+    G -->|approve| H
+    G -->|reject| X["Logged · no action"]
+    H --> I["Write audit record<br/>params · executor · result · Art 12"]
+    I --> J["Measure outcome<br/>vs contract · operational/customer/outcome closure"]
+    J --> K{"Resolved?"}
+    K -->|yes| L["Codify learning<br/>confidence + half-life"]
+    K -->|no| E
+    L -->|"decayed-confidence retrieval"| E
+
+    classDef gov fill:#fde2e2,stroke:#c0392b,color:#7b1f1f;
+    classDef llm fill:#e2ecfd,stroke:#3b6ea5,color:#1f3b5b;
+    class G,I gov;
+    class B,D llm;
