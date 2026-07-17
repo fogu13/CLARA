@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from langgraph.types import Command
 
+from app import auth
 from app.auth import UserContext, get_current_user
 from app.domain.models import (
     ActionProposalUpdateRequest,
@@ -50,6 +51,7 @@ from app.services.emerging import build_emerging_problem_report
 from app.services.measurement_scheduler import schedule_measurements
 from app.services.outcome_engine import (
     ITS_COMPARISON_METHOD,
+    detectability_note,
     its_outcome_for_problem,
     propose_outcome_contract,
 )
@@ -295,6 +297,14 @@ def build_router(
                 proposed is not None
                 and problem.outcome_contract.comparison_method != ITS_COMPARISON_METHOD
             ),
+            detectability_note=(
+                detectability_note(
+                    baseline_rate=proposed.baseline,
+                    window_days=proposed.measurement_window_days,
+                )
+                if proposed is not None
+                else None
+            ),
         )
 
     @router.patch(
@@ -423,6 +433,12 @@ def build_router(
         user: UserContext = Depends(get_current_user),  # noqa: B008
     ) -> ApprovalRecord:
         problem = require_problem(problem_id)
+        # The reviewer identity comes from the verified JWT, never the request
+        # body: a self-asserted reviewer would let any editor sign approvals as
+        # someone else, defeating the Art. 50(4) editorial-responsibility stamp
+        # and the audit trail. (Module attr so tests can monkeypatch app.auth.)
+        if auth.AUTH_ENABLED:
+            decision = decision.model_copy(update={"reviewer": _actor_identifier(user)})
         # Hash the evidence pack AS THE APPROVER SAW IT (pre-decision state) and
         # stamp it on the append-only approval record: a later re-export whose
         # content_hash differs proves the pack changed after sign-off. Never set

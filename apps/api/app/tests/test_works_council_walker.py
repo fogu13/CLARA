@@ -34,7 +34,10 @@ from app.services.workspace import SQLiteWorkspaceStore
 SECRET = "works-council-test-secret"
 EDITOR_SUB = "deadbeef-dead-beef-dead-beefdeadbeef"  # -> actor "user-deadbeef"
 
-APPROVAL_REVIEWER = "wc-reviewer@example.com"
+# Approvals record the JWT-derived actor — the body's reviewer is ignored
+# (reviewer identity is never self-asserted), so the seeded approval identity
+# is the editor's pseudonym, same as CLOSURE_ACTOR.
+APPROVAL_REVIEWER = "user-deadbeef"
 CANDIDATE_REVIEWER = "wc-candidate-reviewer@example.com"
 TAXONOMY_ACTOR = "wc-taxonomist-anna"
 CLOSURE_ACTOR = "user-deadbeef"  # _actor_identifier(EDITOR_SUB)

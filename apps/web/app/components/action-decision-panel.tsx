@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { hasRole } from "../../lib/auth-client";
 import { getContractProposal, getWorkflowState, submitApproval } from "../../lib/client-api";
 import { currentUserEmail } from "../../lib/auth-client";
 import { useI18n } from "../../lib/i18n";
@@ -80,6 +81,12 @@ export function ActionDecisionPanel({
     message: "Loading previous decisions..."
   });
   const [contractProposal, setContractProposal] = useState<OutcomeContractProposalPreview | null>(null);
+  // Cosmetic role gate (server stays authoritative); resolved in an effect so
+  // the SSR render (no localStorage) matches the first client render.
+  const [canDecide, setCanDecide] = useState(true);
+  useEffect(() => {
+    setCanDecide(hasRole("editor"));
+  }, []);
   const [acceptContract, setAcceptContract] = useState(true);
 
   useEffect(() => {
@@ -193,6 +200,9 @@ export function ActionDecisionPanel({
             )}{" "}
             / {t.contract.itsMethod}
           </p>
+          {contractProposal?.detectability_note ? (
+            <p className="mt-1 italic">{contractProposal.detectability_note}</p>
+          ) : null}
           <label className="mt-1 flex items-center gap-2">
             <input
               type="checkbox"
@@ -210,18 +220,24 @@ export function ActionDecisionPanel({
         </div>
       ) : null}
       {!matchingApproval && decisionState.state !== "loading" ? (
-        <div className="decision-buttons">
-          {(Object.keys(decisionLabels) as ApprovalDecisionStatus[]).map((decision) => (
-            <button
-              key={decision}
-              type="button"
-              disabled={decisionState.state === "saving"}
-              onClick={() => decide(decision)}
-            >
-              {decisionLabels[decision]}
-            </button>
-          ))}
-        </div>
+        canDecide ? (
+          <div className="decision-buttons">
+            {(Object.keys(decisionLabels) as ApprovalDecisionStatus[]).map((decision) => (
+              <button
+                key={decision}
+                type="button"
+                disabled={decisionState.state === "saving"}
+                onClick={() => decide(decision)}
+              >
+                {decisionLabels[decision]}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="decision-message">
+            Deciding requires the editor role — you have read-only access.
+          </p>
+        )
       ) : null}
       <p className={`decision-message decision-${decisionState.state}`}>{decisionState.message}</p>
       <ActionDiff title={matchingApproval ? "Approved action diff" : "Pending approval diff"} changes={changes} />

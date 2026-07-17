@@ -41,6 +41,32 @@ def clamp01(n: float) -> float:
     return max(0.0, min(1.0, n))
 
 
+def detectability_note(
+    *, baseline_rate: float, window_days: int, pre_days: int = 28
+) -> str | None:
+    """Honest heuristic MDE for a signal-rate contract, or None when meaningless.
+
+    Two-sample Poisson rate comparison, normal approximation, two-sided
+    alpha=.05 at 80% power: relative MDE ~= 2.8 * sqrt((1/W1 + 1/W2) / rate).
+    Deliberately labelled a heuristic — it flags underpowered windows before
+    approval; it is NOT a formal power analysis.
+    """
+    if baseline_rate <= 0 or window_days <= 0:
+        return None
+    relative = 2.8 * math.sqrt((1 / pre_days + 1 / window_days) / baseline_rate)
+    if relative >= 1:
+        return (
+            f"Detectability: at ~{baseline_rate:.1f} signals/day, even a 100% change may "
+            f"not reach significance within {window_days} days — treat the readout as "
+            "directional (80%-power Poisson heuristic)."
+        )
+    return (
+        f"Detectability: at ~{baseline_rate:.1f} signals/day over {window_days} days, "
+        f"changes smaller than ~{round(relative * 100)}% likely won't reach significance "
+        "(80%-power Poisson heuristic, not a formal power analysis)."
+    )
+
+
 def evidence_grade(*, comparison_method: str, measurement_source: str | None) -> str:
     """A–E design grade for an outcome readout (external-review evidence scale).
 
