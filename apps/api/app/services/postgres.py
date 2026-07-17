@@ -23,6 +23,7 @@ from app.domain.models import (
     ExecutionRecord,
     FeedbackRule,
     FeedbackRuleCreate,
+    GuardrailMeasurement,
     JiraIssueDraft,
     JourneyEventImportResult,
     JourneyEventRecord,
@@ -797,6 +798,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         outcomes: dict[str, OutcomeMeasurement] = {}
         learning_conclusions: list[LearningConclusionRecord] = []
         closure_records: list[ClosureRecord] = []
+        guardrails: list[GuardrailMeasurement] = []
 
         for row in rows:
             payload = _payload(row["payload"])
@@ -816,6 +818,8 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
                 learning_conclusions.append(LearningConclusionRecord.model_validate(payload))
             elif record_type == "closure":
                 closure_records.append(ClosureRecord.model_validate(payload))
+            elif record_type == "guardrail":
+                guardrails.append(GuardrailMeasurement.model_validate(payload))
 
         self._approvals = approvals
         self._executions = executions
@@ -831,6 +835,8 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         self._jira_draft_ids = count(_next_id(jira_drafts, "draft_id", "JIRA-DRAFT") + 1)
         self._transition_ids = count(_next_id(transitions, "transition_id", "TRN") + 1)
         self._closure_ids = count(_next_id(closure_records, "closure_id", "CLR") + 1)
+        self._guardrails = guardrails
+        self._guardrail_ids = count(_next_id(guardrails, "guardrail_id", "GRD") + 1)
         self._records_loaded_at = time.monotonic()
 
     def _save_workflow_record(
@@ -914,6 +920,21 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
                     draft,
                 )
         return approval
+
+    def add_guardrail_measurement(self, *args: Any, **kwargs: Any):
+        self._load_records(force=True)
+        record = WorkflowStore.add_guardrail_measurement(self, *args, **kwargs)
+        self._save_workflow_record(
+            "guardrail",
+            record.guardrail_id,
+            record.problem_id,
+            record,
+        )
+        return record
+
+    def list_guardrail_measurements(self, problem_id: str):
+        self._load_records()
+        return WorkflowStore.list_guardrail_measurements(self, problem_id)
 
     def record_outcome(self, *args: Any, **kwargs: Any):
         self._load_records(force=True)

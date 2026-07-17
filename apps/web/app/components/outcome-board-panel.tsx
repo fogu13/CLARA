@@ -173,6 +173,25 @@ export function OutcomeBoardPanel() {
                     <dd>{item.evidence_grade}</dd>
                   </div>
                 ) : null}
+                {item.guardrails?.length ? (
+                  <div>
+                    <dt>{t.outcomeBoard.guardrails}</dt>
+                    <dd>
+                      {item.guardrails.map((g) => (
+                        <span
+                          key={g.metric}
+                          className={g.status === "breach" ? "outcome-board-guardrail-breach" : undefined}
+                          title={g.note ?? undefined}
+                        >
+                          {g.metric}:{" "}
+                          {g.status === "no_data_source"
+                            ? t.outcomeBoard.guardrailNoData
+                            : `${g.status}${g.observed_value != null && g.baseline != null ? ` (${g.observed_value} vs ${g.baseline})` : ""}`}{" "}
+                        </span>
+                      ))}
+                    </dd>
+                  </div>
+                ) : null}
                 <div>
                   <dt>{t.common.owner}</dt>
                   <dd>{item.responsible_owner}</dd>

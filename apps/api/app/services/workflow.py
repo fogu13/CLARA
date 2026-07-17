@@ -22,6 +22,7 @@ from app.domain.models import (
     ExecutionStatus,
     JiraIssueDraft,
     LearningConclusionRecord,
+    GuardrailMeasurement,
     LearningConclusionRequest,
     OutcomeContract,
     OutcomeMeasurement,
@@ -380,6 +381,7 @@ class WorkflowStore:
         self._jira_draft_ids = count(1)
         self._transition_ids = count(1)
         self._closure_ids = count(1)
+        self._guardrail_ids = count(1)
         self._approvals: list[ApprovalRecord] = []
         self._executions: list[ExecutionRecord] = []
         self._jira_issue_drafts: list[JiraIssueDraft] = []
@@ -387,6 +389,41 @@ class WorkflowStore:
         self._transitions: list[ProblemTransitionRecord] = []
         self._learning_conclusions: list[LearningConclusionRecord] = []
         self._closure_records: list[ClosureRecord] = []
+        self._guardrails: list[GuardrailMeasurement] = []
+
+    def add_guardrail_measurement(
+        self,
+        *,
+        problem_id: str,
+        metric: str,
+        status: str,
+        observed_value: float | None = None,
+        baseline: float | None = None,
+        measured_at: str,
+        note: str | None = None,
+    ) -> GuardrailMeasurement:
+        record = GuardrailMeasurement(
+            guardrail_id=f"GRD-{next(self._guardrail_ids):04d}",
+            problem_id=problem_id,
+            metric=metric,
+            status=status,
+            observed_value=observed_value,
+            baseline=baseline,
+            measured_at=measured_at,
+            note=note,
+        )
+        self._guardrails.append(record)
+        return record
+
+    def list_guardrail_measurements(self, problem_id: str) -> list[GuardrailMeasurement]:
+        return [g for g in self._guardrails if g.problem_id == problem_id]
+
+    def latest_guardrails(self, problem_id: str) -> list[GuardrailMeasurement]:
+        """Latest readout per metric (records are append-only)."""
+        latest: dict[str, GuardrailMeasurement] = {}
+        for record in self.list_guardrail_measurements(problem_id):
+            latest[record.metric] = record
+        return [latest[m] for m in sorted(latest)]
 
     def list_approvals(self) -> list[ApprovalRecord]:
         return self._approvals
@@ -635,6 +672,7 @@ class WorkflowStore:
                 comparison_method=contract.comparison_method,
                 measurement_source=measurement_source,
             ),
+            guardrails=self.latest_guardrails(problem.problem_id),
         )
 
     def state_for_problem(self, problem: ProblemRecord, tenant_id: str | None = None) -> WorkflowState:
@@ -838,6 +876,17 @@ class SQLiteWorkflowStore:
                 measured_at TEXT NOT NULL,
                 notes TEXT,
                 measurement_source TEXT NOT NULL DEFAULT 'manual'
+            );
+
+            CREATE TABLE IF NOT EXISTS guardrail_measurements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                problem_id TEXT NOT NULL,
+                metric TEXT NOT NULL,
+                status TEXT NOT NULL,
+                observed_value REAL,
+                baseline REAL,
+                measured_at TEXT NOT NULL,
+                note TEXT
             );
 
             CREATE TABLE IF NOT EXISTS problem_transitions (
@@ -1281,6 +1330,62 @@ class SQLiteWorkflowStore:
         self._connection.commit()
         return record
 
+    def add_guardrail_measurement(
+        self,
+        *,
+        problem_id: str,
+        metric: str,
+        status: str,
+        observed_value: float | None = None,
+        baseline: float | None = None,
+        measured_at: str,
+        note: str | None = None,
+    ) -> GuardrailMeasurement:
+        cursor = self._connection.execute(
+            """
+            INSERT INTO guardrail_measurements
+                (problem_id, metric, status, observed_value, baseline, measured_at, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (problem_id, metric, status, observed_value, baseline, measured_at, note),
+        )
+        self._connection.commit()
+        return GuardrailMeasurement(
+            guardrail_id=f"GRD-{cursor.lastrowid:04d}",
+            problem_id=problem_id,
+            metric=metric,
+            status=status,
+            observed_value=observed_value,
+            baseline=baseline,
+            measured_at=measured_at,
+            note=note,
+        )
+
+    def list_guardrail_measurements(self, problem_id: str) -> list[GuardrailMeasurement]:
+        rows = self._connection.execute(
+            "SELECT * FROM guardrail_measurements WHERE problem_id = ? ORDER BY id",
+            (problem_id,),
+        ).fetchall()
+        return [
+            GuardrailMeasurement(
+                guardrail_id=f"GRD-{row['id']:04d}",
+                problem_id=row["problem_id"],
+                metric=row["metric"],
+                status=row["status"],
+                observed_value=row["observed_value"],
+                baseline=row["baseline"],
+                measured_at=row["measured_at"],
+                note=row["note"],
+            )
+            for row in rows
+        ]
+
+    def latest_guardrails(self, problem_id: str) -> list[GuardrailMeasurement]:
+        latest: dict[str, GuardrailMeasurement] = {}
+        for record in self.list_guardrail_measurements(problem_id):
+            latest[record.metric] = record
+        return [latest[m] for m in sorted(latest)]
+
     def outcome_snapshot(self, problem: ProblemRecord) -> OutcomeSnapshot:
         contract = problem.outcome_contract
         row = self._connection.execute(
@@ -1310,6 +1415,7 @@ class SQLiteWorkflowStore:
                 comparison_method=contract.comparison_method,
                 measurement_source=measurement_source,
             ),
+            guardrails=self.latest_guardrails(problem.problem_id),
         )
 
     def latest_learning_conclusion(

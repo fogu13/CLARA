@@ -504,6 +504,18 @@ export type OutcomeSnapshot = {
   measurement_source?: string | null;
   // A–E design grade: A holdout, C ITS, D before/after, E manual/unmeasured.
   evidence_grade?: string | null;
+  guardrails?: GuardrailMeasurement[];
+};
+
+export type GuardrailMeasurement = {
+  guardrail_id: string;
+  problem_id: string;
+  metric: string;
+  status: "ok" | "breach" | "no_data_source";
+  observed_value?: number | null;
+  baseline?: number | null;
+  measured_at: string;
+  note?: string | null;
 };
 
 export type OutcomeBoardItem = {
@@ -527,6 +539,7 @@ export type OutcomeBoardItem = {
   // "instrumented" (scheduler-computed from signals) vs "manual" (hand-entered).
   measurement_source?: string | null;
   evidence_grade?: string | null;
+  guardrails?: GuardrailMeasurement[];
 };
 
 export type LearningStatus =
