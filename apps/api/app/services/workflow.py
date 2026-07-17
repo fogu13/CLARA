@@ -23,6 +23,7 @@ from app.domain.models import (
     JiraIssueDraft,
     LearningConclusionRecord,
     LearningConclusionRequest,
+    OutcomeContract,
     OutcomeMeasurement,
     OutcomeSnapshot,
     ProblemRecord,
@@ -33,6 +34,7 @@ from app.domain.models import (
     retention_expires_at,
 )
 from app.services.common import SerializedConnection, action_snapshot, utc_now  # re-exported for importers, SerializedConnection
+from app.services import outcome_engine
 
 
 UNRESOLVED_GOVERNANCE_STATUSES = {"fail", "review_required"}
@@ -241,31 +243,28 @@ def label_token(value: str) -> str:
     return value.lower().replace(" ", "-").replace("_", "-")
 
 
-def outcome_direction(*, baseline: float, success_threshold: float) -> str:
-    return "increase" if success_threshold >= baseline else "decrease"
+def _contract_direction(contract: OutcomeContract) -> str:
+    """Improvement direction for a contract's OutcomeSnapshot.
+
+    signal-rate metrics are complaint-style (lower is better) even when the
+    baseline is 0 — deriving direction from target >= baseline there would
+    report a recurrence as "target_met" (the zero-baseline trap that
+    outcome_engine.outcome_status's explicit direction guards against).
+    """
+    if contract.primary_metric.startswith("signal_rate"):
+        return "decrease"
+    return outcome_engine.outcome_direction(
+        baseline=contract.baseline, target=contract.success_threshold
+    )
 
 
-def outcome_status(
-    *,
-    baseline: float,
-    success_threshold: float,
-    latest_value: float | None,
-) -> str:
-    if latest_value is None:
-        return "not_measured"
-
-    if outcome_direction(baseline=baseline, success_threshold=success_threshold) == "increase":
-        if latest_value >= success_threshold:
-            return "target_met"
-        if latest_value > baseline:
-            return "improving"
-        return "not_improved"
-
-    if latest_value <= success_threshold:
-        return "target_met"
-    if latest_value < baseline:
-        return "improving"
-    return "not_improved"
+def _contract_status(contract: OutcomeContract, latest_value: float | None) -> str:
+    return outcome_engine.outcome_status(
+        baseline=contract.baseline,
+        target=contract.success_threshold,
+        measured=latest_value,
+        direction=_contract_direction(contract),
+    )
 
 
 def learning_label(status: str) -> str:
@@ -624,15 +623,8 @@ class WorkflowStore:
             baseline=contract.baseline,
             success_threshold=contract.success_threshold,
             latest_value=latest_value,
-            status=outcome_status(
-                baseline=contract.baseline,
-                success_threshold=contract.success_threshold,
-                latest_value=latest_value,
-            ),
-            improvement_direction=outcome_direction(
-                baseline=contract.baseline,
-                success_threshold=contract.success_threshold,
-            ),
+            status=_contract_status(contract, latest_value),
+            improvement_direction=_contract_direction(contract),
             measurement_window_days=contract.measurement_window_days,
             comparison_method=contract.comparison_method,
         )
@@ -1288,15 +1280,8 @@ class SQLiteWorkflowStore:
             baseline=contract.baseline,
             success_threshold=contract.success_threshold,
             latest_value=latest_value,
-            status=outcome_status(
-                baseline=contract.baseline,
-                success_threshold=contract.success_threshold,
-                latest_value=latest_value,
-            ),
-            improvement_direction=outcome_direction(
-                baseline=contract.baseline,
-                success_threshold=contract.success_threshold,
-            ),
+            status=_contract_status(contract, latest_value),
+            improvement_direction=_contract_direction(contract),
             measurement_window_days=contract.measurement_window_days,
             comparison_method=contract.comparison_method,
         )

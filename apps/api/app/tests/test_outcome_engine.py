@@ -99,11 +99,30 @@ class TestOutcomeStatus:
         # Complaint rate: baseline 50, target 5, measured 60 -> not improved
         assert outcome_status(baseline=50, target=5, measured=60) == "not_improved"
 
+    def test_zero_degenerate_contract_is_not_measured(self) -> None:
+        # "0.0/day from 0 signals · Target met" was meaningless: with nothing
+        # observed against a zero baseline and zero target, report not_measured.
+        assert outcome_status(baseline=0, target=0, measured=0) == "not_measured"
+        assert (
+            outcome_status(baseline=0, target=0, measured=0, direction="decrease")
+            == "not_measured"
+        )
+
+    def test_zero_baseline_recurrence_with_decrease_direction(self) -> None:
+        # Explicit decrease direction: a recurrence after a zero baseline is a
+        # regression, not target_met (the derived direction would flip here).
+        assert (
+            outcome_status(baseline=0, target=0, measured=5, direction="decrease")
+            == "not_improved"
+        )
+
     def test_explicit_direction_wins_over_derivation_for_zero_baseline(self) -> None:
         # target(0) >= baseline(0) derives "increase", which would report ANY
         # recurrence as target_met; the explicit contract direction must win.
         assert outcome_status(baseline=0, target=0, measured=2, direction="decrease") == "not_improved"
-        assert outcome_status(baseline=0, target=0, measured=0, direction="decrease") == "target_met"
+        # measured 0 against baseline 0 / target 0 used to read "target_met";
+        # nothing was ever observed, so it is now reported as not_measured (F14).
+        assert outcome_status(baseline=0, target=0, measured=0, direction="decrease") == "not_measured"
 
 
 class TestResolutionScore:

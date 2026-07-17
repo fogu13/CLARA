@@ -446,7 +446,7 @@ const en = {
     bannerDismiss: "Dismiss",
     onboardingTitle: "Train your team (EU AI Act Art. 4)",
     onboardingDesc:
-      "Five short screens: how triage works, where it fails, and why every action needs a human decision. Discharges your team's AI-literacy duty.",
+      "Five short screens: how triage works, where it fails, and why every action needs a human decision. Supports your team's Art. 4 AI-literacy program.",
     onboardingCta: "Open the module",
     compTitle: "AI literacy (Art. 4)",
     compSubtitle: "Deployer training duty: in-product module plus a downloadable pack for the compliance folder",
@@ -1025,7 +1025,7 @@ const de: Dict = {
     bannerDismiss: "Ausblenden",
     onboardingTitle: "Team schulen (EU AI Act Art. 4)",
     onboardingDesc:
-      "Fünf kurze Schritte: wie die Triage funktioniert, wo sie scheitert und warum jede Maßnahme eine menschliche Entscheidung braucht. Erfüllt die KI-Kompetenz-Pflicht Ihres Teams.",
+      "Fünf kurze Schritte: wie die Triage funktioniert, wo sie scheitert und warum jede Maßnahme eine menschliche Entscheidung braucht. Unterstützt das KI-Kompetenz-Programm Ihres Teams (Art. 4).",
     onboardingCta: "Modul öffnen",
     compTitle: "KI-Kompetenz (Art. 4)",
     compSubtitle: "Schulungspflicht für Betreiber: Modul im Produkt plus Paket für den Compliance-Ordner",

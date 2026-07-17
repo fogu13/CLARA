@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   authConfigured,
+  hasStoredSession,
   isAuthenticated,
   refreshSession,
   sessionExpiresInMs,
@@ -39,7 +40,9 @@ export function AuthGuard({ children }: { children: ReactNode }) {
         if (!cancelled) setReady(true);
         return;
       }
-      if (!cancelled) router.replace("/auth?reason=expired");
+      // Only a browser that actually held a session gets "expired"; a first-time
+      // visitor bouncing off a guarded URL just sees the plain sign-in page.
+      if (!cancelled) router.replace(hasStoredSession() ? "/auth?reason=expired" : "/auth");
     }
 
     void ensureSession();

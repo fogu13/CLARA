@@ -640,11 +640,20 @@ def generate_root_cause_analysis(
     if dictionary_terms:
         terminology_clause = f" involving {', '.join(dictionary_terms[:3])}"
 
-    if primary_factor is not None:
+    if primary_factor is not None and primary_factor.factor_type != "journey_stage":
         hypothesis = (
             f"{candidate.journey_stage} friction is likely driven by "
             f"{primary_factor.label.lower()}{terminology_clause}, based on "
             f"{candidate.signal_count} related signal(s)."
+        )
+    elif primary_factor is not None:
+        # Only the journey-stage factor exists (no taxonomy or terminology match):
+        # naming the stage as its own driver is a tautology ("General friction is
+        # likely driven by general") — abstain honestly instead.
+        hypothesis = (
+            f"Insufficient evidence to name a likely driver for {candidate.journey_stage} "
+            f"friction: {candidate.signal_count} related signal(s) have no taxonomy or "
+            "terminology match yet. Review the signals or refine the taxonomy to sharpen this."
         )
     else:
         hypothesis = candidate.root_cause_hypothesis
