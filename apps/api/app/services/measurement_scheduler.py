@@ -229,6 +229,7 @@ def run_due_measurements(
             metric=metric,
             observed_value=rate,
             measured_at=now,
+            measurement_source="instrumented",
             notes=(
                 f"Auto-measured by the scheduler ({plan['kind']}): {sample} matching"
                 f" signals since action execution. real_data_source=true"

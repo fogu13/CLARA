@@ -3,6 +3,9 @@ import { percent } from "@/lib/format";
 
 
 function formatDate(timestamp: string): string {
+  // Missing timestamps are stored as the 1970 epoch sentinel; showing
+  // "Jan 1, 1970" reads as corrupt data, so name the gap honestly.
+  if (timestamp.startsWith("1970-01-01")) return "no timestamp";
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
 

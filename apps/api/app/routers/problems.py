@@ -120,6 +120,7 @@ def build_outcome_board(
                 measurement_window_days=snapshot.measurement_window_days,
                 comparison_method=snapshot.comparison_method,
                 responsible_owner=problem.outcome_contract.responsible_owner,
+                measurement_source=snapshot.measurement_source,
             )
         )
 
@@ -570,6 +571,9 @@ def build_router(
         if measurement.problem_id != problem_id:
             raise HTTPException(status_code=422, detail="Outcome problem_id must match the route")
 
+        # Anything posted over the API is a manual assertion; only the measurement
+        # scheduler (which calls the store directly) records "instrumented".
+        measurement = measurement.model_copy(update={"measurement_source": "manual"})
         recorded = workflow_store.record_outcome(problem=problem, measurement=measurement)
         # real_data_source flag: manual API entry, NOT the simulated eval path —
         # simulated and real outcome data must never mix in a metrics chart.
@@ -737,6 +741,24 @@ def build_router(
             },
             config=config,
         )
+
+        # Persist enrichment back to the signal store — without this the feed's
+        # "Enriched" tile stays 0 forever and sentiment/urgency badges never
+        # render (enrichment otherwise lives only inside the graph state).
+        for enriched_signal in result.get("enriched_signals") or []:
+            if not enriched_signal.get("enriched"):
+                continue
+            sid = enriched_signal.get("signal_id") or enriched_signal.get("id")
+            if not sid:
+                continue
+            try:
+                signal_store.update_enrichment(
+                    sid,
+                    sentiment=enriched_signal.get("sentiment"),
+                    urgency=enriched_signal.get("urgency"),
+                )
+            except Exception:  # noqa: BLE001 — best-effort; the triage result stands
+                logger.warning("Failed to persist enrichment for %s", sid, exc_info=True)
 
         # A non-empty `next` means the graph paused at the approval interrupt.
         if triage_graph.get_state(config).next:

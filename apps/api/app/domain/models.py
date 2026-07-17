@@ -583,6 +583,10 @@ class OutcomeMeasurement(BaseModel):
     observed_value: float
     measured_at: str
     notes: str | None = None
+    # Provenance: "instrumented" only when the measurement scheduler computed the
+    # value from raw signals; anything hand-entered stays "manual" so the UI can
+    # label it an unverified manual observation (never visually conflated).
+    measurement_source: str = "manual"
 
 
 LEARNING_RETENTION_DAYS = 730
@@ -716,6 +720,8 @@ class OutcomeSnapshot(BaseModel):
     improvement_direction: Literal["increase", "decrease"]
     measurement_window_days: int
     comparison_method: str
+    # Provenance of latest_value ("instrumented" | "manual"), None when unmeasured.
+    measurement_source: str | None = None
     # W4 read-time ITS scoring (outcome_engine.its_outcome_for_problem):
     # either {method: "its", effect, ci_low, ci_high, ...} or the honest
     # sparse fallback {method: "delta_insufficient_data", label, delta, ...}.
@@ -740,6 +746,7 @@ class OutcomeBoardItem(BaseModel):
     measurement_window_days: int
     comparison_method: str
     responsible_owner: str
+    measurement_source: str | None = None
 
 
 class OutcomeBoard(BaseModel):
@@ -782,6 +789,12 @@ class SignalRecord(BaseModel):
     language: str = "unknown"
     timestamp: str = "1970-01-01T00:00:00Z"
     metadata: dict[str, str] = Field(default_factory=dict)
+    # Enrichment written back by the triage pipeline. Without persistence the
+    # feed's "Enriched" tile was permanently 0 and sentiment/urgency badges
+    # never rendered (enrichment lived only inside the triage graph state).
+    sentiment: str | None = None
+    urgency: str | None = None
+    enriched: bool = False
 
 
 class SignalImportRequest(BaseModel):
