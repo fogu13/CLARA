@@ -1,5 +1,5 @@
 {
-  "published_at": "2026-07-17T07:24:36.280762+00:00",
+  "published_at": "2026-07-17T15:22:05.362608+00:00",
   "model": "glm-5.2",
   "dataset": {
     "total_items": 80,
@@ -11,19 +11,19 @@
       0.9375,
       1.0
     ],
-    "urgency_accuracy": 0.85,
+    "urgency_accuracy": 0.8625,
     "urgency_ci95": [
-      0.7625,
-      0.925
+      0.7875,
+      0.9375
     ],
-    "tag_f1_fuzzy": 0.742436974789916
+    "tag_f1_fuzzy": 0.8016536964980545
   },
   "by_language": {
     "de": {
       "n": 20,
       "sentiment_accuracy": 0.95,
-      "urgency_accuracy": 0.8,
-      "tag_exact_accuracy": 0.0,
+      "urgency_accuracy": 0.85,
+      "tag_exact_accuracy": 0.15,
       "sentiment_ci": [
         0.85,
         1.0
@@ -33,7 +33,7 @@
       "n": 60,
       "sentiment_accuracy": 0.9833,
       "urgency_accuracy": 0.8667,
-      "tag_exact_accuracy": 0.2333,
+      "tag_exact_accuracy": 0.3333,
       "sentiment_ci": [
         0.95,
         1.0

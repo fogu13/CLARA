@@ -47,6 +47,18 @@ DEFAULT_EXEMPLARS: list[dict[str, Any]] = [
     {"text": "I can see another customer's invoices in my billing page — a serious privacy breach.",
      "sentiment": "negative", "urgency": "critical",
      "tags": ["security_concern", "data_breach"]},
+    # German coverage (eval 2026-07-17: DE urgency 80% vs EN 86.7%; the set was
+    # EN-only). Teaches the critical-vs-high rule (unrecoverable loss happening
+    # now = critical) and the positive_trend praise-tag convention on German
+    # text. Fresh texts — deliberately NOT golden-set items (no leakage).
+    {"text": "Die Abbuchung ist erfolgt, aber mein Guthaben ist verschwunden und ich komme nicht "
+             "mehr in mein Konto — seit zwei Tagen antwortet niemand.",
+     "sentiment": "negative", "urgency": "critical",
+     "tags": ["payment_error", "account_access"]},
+    {"text": "Kompliment an das Team: Die neue Suche ist deutlich schneller und der Support hat "
+             "meine Frage in wenigen Minuten gelöst.",
+     "sentiment": "positive", "urgency": "low",
+     "tags": ["positive_trend", "good_support"]},
 ]
 
 
