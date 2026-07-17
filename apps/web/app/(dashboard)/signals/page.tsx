@@ -374,6 +374,11 @@ export default function SignalsPage() {
                           {s.urgency}
                         </Badge>
                       )}
+                      {s.metadata?.near_duplicate_of && (
+                        <Badge variant="outline" title={`Similar to ${s.metadata.near_duplicate_of}`}>
+                          possible duplicate
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </div>

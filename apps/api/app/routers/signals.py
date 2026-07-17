@@ -36,6 +36,7 @@ from app.services.contexts import (
 from app.services.journeys import parse_journey_event_csv
 from app.services.seed import to_demo_dataset_summary
 from app.services.signals import (
+    annotate_near_duplicates,
     parse_signal_csv,
     signal_from_row,
     validate_signal_csv,
@@ -87,10 +88,17 @@ def build_router(
         if not report.valid:
             raise HTTPException(status_code=422, detail=report.model_dump(mode="json"))
 
-        result = signal_store.import_signals(parse_signal_csv(request.csv_text))
+        records = parse_signal_csv(request.csv_text)
+        near_dups = annotate_near_duplicates(records, signal_store.list_signals())
+        result = signal_store.import_signals(records)
         telemetry_store.record(
             "signals_imported",
-            metadata={"source": "csv", "imported": result.imported, "skipped": result.skipped_duplicates},
+            metadata={
+                "source": "csv",
+                "imported": result.imported,
+                "skipped": result.skipped_duplicates,
+                "near_duplicates": near_dups,
+            },
         )
         return result
 
@@ -154,10 +162,16 @@ def build_router(
         if not records:
             raise HTTPException(status_code=422, detail="No rows with feedback_text")
 
+        near_dups = annotate_near_duplicates(records, signal_store.list_signals())
         result = signal_store.import_signals(records)
         telemetry_store.record(
             "signals_imported",
-            metadata={"source": "webhook", "imported": result.imported, "skipped": result.skipped_duplicates},
+            metadata={
+                "source": "webhook",
+                "imported": result.imported,
+                "skipped": result.skipped_duplicates,
+                "near_duplicates": near_dups,
+            },
         )
         return result
 
