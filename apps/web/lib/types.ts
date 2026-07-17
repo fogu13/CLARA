@@ -653,6 +653,8 @@ export type WorkspaceSettings = {
   learning_half_life_days: number;
   ai_disclosure_template: string;
   works_council_mode: boolean;
+  // Opt-in: actions need TWO distinct approvers before execution.
+  four_eyes_approval: boolean;
   // ISO date of the workspace-level Art. 4 pack-delivery attestation.
   // No per-user completion tracking exists by design (works-council trap).
   ai_literacy_pack_delivered_at: string | null;

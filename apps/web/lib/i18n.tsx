@@ -284,6 +284,9 @@ const en = {
     mfaConfirm: "Confirm",
     mfaRemove: "Remove",
     mfaRemoveConfirm: "Remove this authenticator? Sign-in will no longer require a code.",
+    fourEyesLabel: "Four-eyes approvals",
+    fourEyesNote:
+      "Consequential actions need two distinct approvers: the first approval is recorded but held, a second reviewer releases execution. Admin-only setting.",
     aiBaseUrl: "Endpoint (OpenAI-compatible)",
     aiModel: "Model",
     aiEmbedModel: "Embedding model (for Ask & taxonomy; leave empty for server default)",
@@ -881,6 +884,9 @@ const de: Dict = {
     mfaConfirm: "Bestätigen",
     mfaRemove: "Entfernen",
     mfaRemoveConfirm: "Diesen Authenticator entfernen? Die Anmeldung erfordert dann keinen Code mehr.",
+    fourEyesLabel: "Vier-Augen-Freigabe",
+    fourEyesNote:
+      "Folgenreiche Maßnahmen brauchen zwei verschiedene Freigebende: die erste Freigabe wird erfasst, aber gehalten; erst die zweite Person löst die Ausführung aus. Nur für Admins änderbar.",
     aiBaseUrl: "Endpunkt (OpenAI-kompatibel)",
     aiModel: "Modell",
     aiEmbedModel: "Embedding-Modell (für Ask & Taxonomie; leer = Server-Standard)",

@@ -186,9 +186,10 @@ def assert_governance_allows_decision(
 
 
 def resolve_approval_state(
-    ordered_decisions: list[tuple[str, str]],
+    ordered_decisions: list[tuple[str, str, str]],
     *,
     decision: ApprovalDecision,
+    four_eyes: bool = False,
 ) -> set[str]:
     """Latest-decision-per-action approval set + repeat-approval guard.
 
@@ -196,20 +197,66 @@ def resolve_approval_state(
     decision per action (a later rejection revokes an earlier approval), and
     re-approving an already-approved action must not mint a duplicate
     execution/Jira draft.
+
+    Four-eyes (opt-in workspace flag): an action needs TWO distinct approvers
+    before it counts as approved — the first approval records the decision but
+    holds execution, the second (different reviewer) releases it, and the same
+    reviewer confirming their own approval is rejected. A rejection resets the
+    approver tally (the revised action needs fresh sign-off).
     """
+    required = 2 if four_eyes else 1
     latest: dict[str, str] = {}
-    for action_id, decision_value in ordered_decisions:
+    approvers: dict[str, list[str]] = {}
+    for action_id, decision_value, reviewer in ordered_decisions:
         latest[action_id] = decision_value
-    if (
-        decision.decision == ApprovalDecisionStatus.approved
-        and latest.get(decision.action_id) == ApprovalDecisionStatus.approved.value
+        if decision_value == ApprovalDecisionStatus.approved.value:
+            names = approvers.setdefault(action_id, [])
+            if reviewer not in names:
+                names.append(reviewer)
+        else:
+            approvers[action_id] = []
+
+    if decision.decision == ApprovalDecisionStatus.approved and (
+        latest.get(decision.action_id) == ApprovalDecisionStatus.approved.value
     ):
-        raise HTTPException(status_code=409, detail="Action is already approved")
+        existing = approvers.get(decision.action_id, [])
+        if len(existing) >= required:
+            raise HTTPException(status_code=409, detail="Action is already approved")
+        if four_eyes and decision.reviewer in existing:
+            raise HTTPException(
+                status_code=409,
+                detail="Four-eyes approval: a different approver must confirm this action",
+            )
+
     return {
         action_id
         for action_id, decision_value in latest.items()
         if decision_value == ApprovalDecisionStatus.approved.value
+        and len(approvers.get(action_id, [])) >= required
     }
+
+
+def fully_approved_now(
+    ordered_decisions: list[tuple[str, str, str]],
+    *,
+    decision: ApprovalDecision,
+    four_eyes: bool,
+) -> bool:
+    """Does THIS approved decision complete the required approver count?"""
+    if decision.decision != ApprovalDecisionStatus.approved:
+        return False
+    if not four_eyes:
+        return True
+    approvers: set[str] = set()
+    for action_id, decision_value, reviewer in ordered_decisions:
+        if action_id != decision.action_id:
+            continue
+        if decision_value == ApprovalDecisionStatus.approved.value:
+            approvers.add(reviewer)
+        else:
+            approvers.clear()
+    approvers.add(decision.reviewer)
+    return len(approvers) >= 2
 
 
 def _parse_measured_at(value: str) -> datetime | None:
@@ -513,15 +560,19 @@ class WorkflowStore:
         problem: ProblemRecord,
         decision: ApprovalDecision,
         evidence_pack_hash: str | None = None,
+        four_eyes: bool = False,
     ) -> ApprovalRecord:
         action = find_action(problem, decision.action_id)
+        ordered = [
+            (approval.action_id, approval.decision.value, approval.reviewer)
+            for approval in self._approvals
+            if approval.problem_id == problem.problem_id
+        ]
         approved_action_ids = resolve_approval_state(
-            [
-                (approval.action_id, approval.decision.value)
-                for approval in self._approvals
-                if approval.problem_id == problem.problem_id
-            ],
-            decision=decision,
+            ordered, decision=decision, four_eyes=four_eyes
+        )
+        completes_approval = fully_approved_now(
+            ordered, decision=decision, four_eyes=four_eyes
         )
         assert_governance_allows_decision(
             problem=problem,
@@ -544,7 +595,9 @@ class WorkflowStore:
         )
         self._approvals.append(record)
 
-        if decision.decision == ApprovalDecisionStatus.approved:
+        # Four-eyes: the first of two approvals records the decision but holds
+        # execution until a different reviewer confirms (completes_approval).
+        if completes_approval:
             execution = ExecutionRecord(
                 execution_id=f"EXE-{next(self._execution_ids):04d}",
                 problem_id=problem.problem_id,
@@ -1090,15 +1143,19 @@ class SQLiteWorkflowStore:
         problem: ProblemRecord,
         decision: ApprovalDecision,
         evidence_pack_hash: str | None = None,
+        four_eyes: bool = False,
     ) -> ApprovalRecord:
         action = find_action(problem, decision.action_id)
         decision_rows = self._connection.execute(
-            "SELECT action_id, decision FROM approvals WHERE problem_id = ? ORDER BY id",
+            "SELECT action_id, decision, reviewer FROM approvals WHERE problem_id = ? ORDER BY id",
             (problem.problem_id,),
         ).fetchall()
+        ordered = [(row["action_id"], row["decision"], row["reviewer"]) for row in decision_rows]
         approved_action_ids = resolve_approval_state(
-            [(row["action_id"], row["decision"]) for row in decision_rows],
-            decision=decision,
+            ordered, decision=decision, four_eyes=four_eyes
+        )
+        completes_approval = fully_approved_now(
+            ordered, decision=decision, four_eyes=four_eyes
         )
         assert_governance_allows_decision(
             problem=problem,
@@ -1137,7 +1194,9 @@ class SQLiteWorkflowStore:
         )
         approval_id = cursor.lastrowid
 
-        if decision.decision == ApprovalDecisionStatus.approved:
+        # Four-eyes: the first of two approvals records the decision but holds
+        # execution until a different reviewer confirms (completes_approval).
+        if completes_approval:
             execution_cursor = self._connection.execute(
                 """
                 INSERT INTO executions

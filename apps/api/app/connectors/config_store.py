@@ -10,6 +10,8 @@ Postgres `integrations` table when multi-tenant config matters.
 from __future__ import annotations
 
 import json
+import logging
+import os
 import sqlite3
 
 from app.services.common import SerializedConnection
@@ -17,6 +19,61 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+# --------------------------------------------------------------------------- #
+# At-rest encryption for connector secrets (external-review item 20).
+#
+# CLARA_CONFIG_SECRET_KEY: a Fernet key — generate with
+#   python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Unset -> plaintext storage (local dev) with a one-time warning. Sealed values
+# carry the "enc:v1:" marker, so legacy plaintext rows keep loading and the
+# next upsert re-seals them. cryptography ships via PyJWT[crypto] — no new dep.
+# --------------------------------------------------------------------------- #
+_ENC_PREFIX = "enc:v1:"
+_warned_plaintext = False
+
+
+def _fernet():
+    key = os.getenv("CLARA_CONFIG_SECRET_KEY")
+    if not key:
+        return None
+    from cryptography.fernet import Fernet
+
+    return Fernet(key.encode())
+
+
+def seal_config(config: dict[str, Any]) -> str:
+    """Serialize a config dict for storage — encrypted when the key is set."""
+    global _warned_plaintext
+    raw = json.dumps(config)
+    fernet = _fernet()
+    if fernet is None:
+        if not _warned_plaintext:
+            logger.warning(
+                "CLARA_CONFIG_SECRET_KEY is unset: connector secrets are stored in "
+                "PLAINTEXT. Set the key in any real deployment."
+            )
+            _warned_plaintext = True
+        return raw
+    return _ENC_PREFIX + fernet.encrypt(raw.encode()).decode()
+
+
+def unseal_config(stored: str | dict[str, Any]) -> dict[str, Any]:
+    """Inverse of seal_config; also accepts legacy plaintext (str json or dict)."""
+    if isinstance(stored, dict):
+        return stored  # legacy Postgres payloads stored the dict directly
+    if stored.startswith(_ENC_PREFIX):
+        fernet = _fernet()
+        if fernet is None:
+            # Fail closed and loud: silently returning {} would look like a
+            # deleted config and invite re-entry of secrets.
+            raise RuntimeError(
+                "Connector config is encrypted but CLARA_CONFIG_SECRET_KEY is unset"
+            )
+        return json.loads(fernet.decrypt(stored[len(_ENC_PREFIX):].encode()))
+    return json.loads(stored)
 
 
 class ConnectorConfig(BaseModel):
@@ -81,7 +138,7 @@ class SQLiteConnectorConfigStore:
     def _from_row(row: sqlite3.Row) -> ConnectorConfig:
         return ConnectorConfig(
             connector_type=row["connector_type"],
-            config=json.loads(row["config"]),
+            config=unseal_config(row["config"]),
             display_name=row["display_name"],
             is_active=bool(row["is_active"]),
         )
@@ -110,7 +167,7 @@ class SQLiteConnectorConfigStore:
             """,
             (
                 config.connector_type,
-                json.dumps(config.config),
+                seal_config(config.config),
                 config.display_name,
                 int(config.is_active),
             ),

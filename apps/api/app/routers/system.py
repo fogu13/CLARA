@@ -132,7 +132,7 @@ def build_router(
     # Governance-bearing settings: an editor toggling works_council_mode off
     # would defeat the §87 BetrVG control it exists for, and blanking the
     # disclosure template silently disables the Art. 50 line.
-    ADMIN_ONLY_SETTINGS = ("works_council_mode", "ai_disclosure_template")
+    ADMIN_ONLY_SETTINGS = ("works_council_mode", "ai_disclosure_template", "four_eyes_approval")
 
     @router.put(
         "/workspace",
