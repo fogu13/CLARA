@@ -45,7 +45,9 @@ export async function primeSession(): Promise<void> {
   }
 }
 
-export async function signIn(email: string, password: string): Promise<void> {
+export type SignInResult = { mfaRequired: boolean; factorId?: string };
+
+export async function signIn(email: string, password: string): Promise<SignInResult> {
   if (cookieAuthEnabled) {
     const response = await fetch("/api/auth/login", {
       method: "POST",
@@ -56,8 +58,12 @@ export async function signIn(email: string, password: string): Promise<void> {
     if (!response.ok) {
       throw new Error(data?.error ?? `Sign-in failed (${response.status})`);
     }
+    if (data?.mfaRequired) {
+      // Password accepted, but no session exists until the TOTP code passes.
+      return { mfaRequired: true, factorId: data.factorId };
+    }
     cookieSession = data;
-    return;
+    return { mfaRequired: false };
   }
 
   const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
@@ -75,6 +81,84 @@ export async function signIn(email: string, password: string): Promise<void> {
   if (data.refresh_token) {
     window.localStorage.setItem(REFRESH_KEY, data.refresh_token);
   }
+  // Legacy mode performs no MFA challenge — MFA is a cookie-mode feature
+  // (docs/engineering/auth-hardening-design.md).
+  return { mfaRequired: false };
+}
+
+// ---------------------------------------------------------------------------
+// MFA (TOTP) — cookie mode only: the flows depend on the HttpOnly session and
+// the /api/auth/mfa/* route handlers.
+// ---------------------------------------------------------------------------
+
+function requireCookieMode(): void {
+  if (!cookieAuthEnabled) {
+    throw new Error("MFA requires cookie sessions (set NEXT_PUBLIC_COOKIE_AUTH=1)");
+  }
+}
+
+async function mfaRequest(url: string, init?: RequestInit): Promise<any> {
+  const response = await fetch(url, init);
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.error ?? `Request failed (${response.status})`);
+  }
+  return data;
+}
+
+export async function verifyMfaLogin(factorId: string, code: string): Promise<void> {
+  requireCookieMode();
+  cookieSession = await mfaRequest("/api/auth/mfa/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ factorId, code }),
+  });
+}
+
+export async function enrollMfa(): Promise<{
+  factorId: string;
+  qrCode: string | null;
+  secret: string | null;
+  uri: string | null;
+}> {
+  requireCookieMode();
+  return mfaRequest("/api/auth/mfa/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+}
+
+export async function confirmMfaEnrollment(factorId: string, code: string): Promise<void> {
+  requireCookieMode();
+  await mfaRequest("/api/auth/mfa/enroll", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ factorId, code }),
+  });
+  await primeSession();
+}
+
+export type MfaFactor = {
+  id: string;
+  friendlyName: string;
+  factorType: string;
+  status: string;
+};
+
+export async function listMfaFactors(): Promise<MfaFactor[]> {
+  requireCookieMode();
+  const data = await mfaRequest("/api/auth/mfa/factors", { cache: "no-store" });
+  return data?.factors ?? [];
+}
+
+export async function removeMfaFactor(factorId: string): Promise<void> {
+  requireCookieMode();
+  await mfaRequest("/api/auth/mfa/factors", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ factorId }),
+  });
 }
 
 export function signOut(): void {
