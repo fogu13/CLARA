@@ -1,11 +1,46 @@
 # CLARA — Deployment Guide
 
+## Production (current): Hetzner VPS + Vercel — since July 2026
+
+- API: https://api.clara.odradekai.com — FastAPI in Docker on a Hetzner VPS behind Caddy (auto-TLS)
+- Frontend: https://clara.odradekai.com — Next.js on Vercel (DNS: CNAME to Vercel; clara-theta-nine.vercel.app also serves); `NEXT_PUBLIC_API_URL=https://api.clara.odradekai.com`
+- DB: Supabase Postgres via the session pooler; Supabase Auth Site URL = the frontend URL
+- Server layout: `/opt/stacks/caddy/` (Caddyfile: `api.clara.odradekai.com { reverse_proxy clara-api:8000 }`) and `/opt/stacks/clara/` (compose + `.env` + repo clone at `./repo`)
+- Compose: builds `./repo/apps/api`, joins the shared external `proxy` network (`external: true` is required — omitting it silently aborts the stack), publishes no ports (Caddy is the only public entry), sets `CLARA_REPO_ROOT=/app` via `environment:`, mounts `./repo/data` read-only at `/app/data`
+- `.env` on the server (chmod 600): `DATABASE_URL` (pooler string), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CLARA_REQUIRE_AUTH=true`, `AI_*` vars, and `APP_CORS_ORIGINS=https://clara.odradekai.com,https://clara-theta-nine.vercel.app,http://localhost:3000`
+- Also in `.env` (Jul 2026 additions): `CLARA_CONFIG_SECRET_KEY` (Fernet key — connector secrets encrypted at rest; **back the key up**: losing it means re-entering connector credentials), optional `CLARA_SMTP_*` (weekly digest email; recipient = workspace notification email), and later `CLARA_REQUIRE_AAL2=true` once every user has enrolled MFA
+- Vercel production env (not previews): `NEXT_PUBLIC_COOKIE_AUTH=1` + `AUTH_COOKIE_DOMAIN=clara.odradekai.com` (HttpOnly cookie sessions); `NEXT_PUBLIC_LEGAL_PAGES=1` publishes `/legal/*` + the launch surface AFTER legal review (fail-closed: DRAFT-marked docs never publish)
+
+Deploy:
+
+1. Locally: commit + `git push origin HEAD:main`
+2. Server: `cd /opt/stacks/clara/repo && git pull`
+3. `cd /opt/stacks/clara && docker compose up -d --build`
+4. Verify: `python3 scripts/live_smoke.py` from any machine → expect **17/17** (checks landing claims, security headers on web+API, fail-closed auth, cookie routes, model-card endpoint; read-only)
+
+Notes:
+
+- `.env` changes need `docker compose up -d --force-recreate` — a plain `restart` does not reload env
+- Caddyfile changes: `docker exec caddy caddy reload --config /etc/caddy/Caddyfile`
+- `NEXT_PUBLIC_*` vars are build-time → redeploy on Vercel after changing them
+- `APP_CORS_ORIGINS` defaults to localhost-only; production must set it (legacy alias `API_CORS_ORIGINS`)
+- `/` returns 404 by design — the health endpoint is `/health`
+- Server access, DNS and backup details are deliberately kept out of this repo (owner's private notes)
+
+---
+
+## From-scratch setup guide (any host)
+
+The steps below reproduce the full stack from zero. Render-specific steps are historical — the
+Render service was decommissioned in July 2026 (production runs on the VPS above); any Docker
+host or PaaS slots into Step 3.
+
 ## Architecture
 
 ```
 User → Vercel (Next.js frontend)
          ↓ API calls
-       Render/Railway (FastAPI backend)
+       Docker host (FastAPI backend)
          ↓ psycopg
        Supabase (Postgres + Auth + pgvector)
          ↑ optional
@@ -58,7 +93,7 @@ git push -u origin main
    _(For the existing **CLARA** project these are already applied via MCP — listed here for
    reproducibility.)_
 
-## Step 3 — Deploy API to Render
+## Step 3 — Deploy API (historical: Render; any Docker host or PaaS works)
 
 1. Go to https://render.com → New → Web Service
 2. Connect your GitHub repo
@@ -132,7 +167,7 @@ The frontend requires a Supabase login (no public signup). Create one admin acco
 
 ## Step 5 — Verify end-to-end
 
-1. Open `https://clara.vercel.app/dashboard`
+1. Open your frontend URL at `/dashboard` (production: `https://clara.odradekai.com/dashboard`)
 2. Navigate to **Integrations** → configure Zendesk/Jira/Slack
 3. Go to **Sources** → import demo data or pull from Zendesk
 4. Run the triage pipeline: `POST /triage/run` (or via the Signals page)
@@ -169,7 +204,7 @@ docker compose -f docker-compose.langfuse.yml up -d
 | Problem | Fix |
 |---|---|
 | CORS error in browser | Check `APP_CORS_ORIGINS` includes your Vercel URL |
-| Auth not working | Verify `SUPABASE_JWT_SECRET` matches Supabase project |
+| Auth not working | Verify `SUPABASE_URL` is set — tokens are ES256, verified via JWKS; `SUPABASE_JWT_SECRET` is only for legacy HS256 |
 | DB connection error | Check `DATABASE_URL` format; Supabase uses port 5432 |
 | pgvector not found | Enable `vector` extension in Supabase dashboard |
 | API cold start (Render free) | First request takes ~30s; upgrade to paid for always-on |
