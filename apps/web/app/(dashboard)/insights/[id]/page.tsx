@@ -408,7 +408,7 @@ export default function InsightDetailPage() {
               try {
                 const res = await fetch(
                   `${apiBaseUrl()}/problems/${problem.problem_id}/evidence-pack`,
-                  { headers: apiHeaders() }
+                  { credentials: "include", headers: apiHeaders() }
                 );
                 if (!res.ok) throw new Error(`${res.status}`);
                 const url = URL.createObjectURL(await res.blob());

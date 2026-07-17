@@ -4,8 +4,10 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   authConfigured,
+  cookieAuthEnabled,
   hasStoredSession,
   isAuthenticated,
+  primeSession,
   refreshSession,
   sessionExpiresInMs,
 } from "@/lib/auth-client";
@@ -26,6 +28,11 @@ export function AuthGuard({ children }: { children: ReactNode }) {
       if (!authConfigured) {
         setReady(true);
         return;
+      }
+      // Cookie mode: session state lives in an HttpOnly cookie JS can't read —
+      // refresh the cached view before the synchronous checks below.
+      if (cookieAuthEnabled) {
+        await primeSession();
       }
       if (isAuthenticated()) {
         setReady(true);

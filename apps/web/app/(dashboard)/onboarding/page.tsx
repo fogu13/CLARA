@@ -40,7 +40,7 @@ export default function OnboardingPage() {
     async function load() {
       // Each probe is independent; a failing one just leaves its step open.
       const [connectors, signals, candidates, approvals, plans] = await Promise.all([
-        fetch(`${apiBaseUrl()}/connectors`, { headers: apiHeaders() })
+        fetch(`${apiBaseUrl()}/connectors`, { credentials: "include", headers: apiHeaders() })
           .then((r) => (r.ok ? r.json() : []))
           .catch(() => []),
         getSignals().catch(() => []),

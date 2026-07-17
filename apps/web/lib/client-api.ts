@@ -80,6 +80,16 @@ export function apiHeaders(headers?: HeadersInit): Headers {
 
 // Failures must stay visible (a 403 must never masquerade as an empty state),
 // but a bare status code helps nobody — translate it once, here.
+// For call sites that need the raw Response (file downloads, custom error
+// handling): same transport rules as requestJson.
+export function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  return fetch(url, {
+    ...init,
+    credentials: "include",
+    headers: apiHeaders(init?.headers)
+  });
+}
+
 export function httpErrorMessage(action: string, status: number): string {
   const reason =
     status === 401
@@ -94,9 +104,14 @@ export function httpErrorMessage(action: string, status: number): string {
   return `${action}: ${reason}.`;
 }
 
+// All API traffic goes through here (or apiFetch below): credentials:"include"
+// sends the HttpOnly session cookie to the same-site API in cookie-auth mode
+// (fetch's default "same-origin" would drop it — same SITE, different ORIGIN).
+// Harmless in legacy bearer mode, where no auth cookie exists.
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
+    credentials: "include",
     headers: apiHeaders(init?.headers)
   });
 

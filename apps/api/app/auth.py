@@ -19,7 +19,7 @@ import os
 from contextvars import ContextVar, Token
 
 import jwt
-from fastapi import Header, HTTPException
+from fastapi import Cookie, Header, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from jwt import PyJWKClient
 from pydantic import BaseModel
@@ -219,6 +219,7 @@ def _resolve_user(
 async def get_current_user(
     authorization: str | None = Header(None),
     x_api_key: str | None = Header(None),
+    clara_access_token: str | None = Cookie(None),
 ) -> UserContext:
     """FastAPI dependency: `_resolve_user` + tenant ContextVar.
 
@@ -228,6 +229,12 @@ async def get_current_user(
     be lost). Verification itself stays off the event loop — token checks can
     hit the JWKS endpoint and the API-key store.
     """
+    # HttpOnly-cookie sessions (docs/engineering/auth-hardening-design.md): the
+    # browser can't attach a Bearer header for a token it can't read, so accept
+    # the access token from the cookie when no Authorization header is present.
+    # Additive — bearer tokens and API keys keep working unchanged.
+    if authorization is None and clara_access_token:
+        authorization = f"Bearer {clara_access_token}"
     user = await run_in_threadpool(_resolve_user, authorization, x_api_key)
     set_current_tenant(user.tenant_setting)
     # Works-council middleware reads this after the route ran (same task).

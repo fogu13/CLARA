@@ -157,7 +157,7 @@ export default function SignalsPage() {
     try {
       const response = await fetch(`${apiBaseUrl()}/triage/run`, {
         method: "POST",
-        headers: apiHeaders(),
+        credentials: "include", headers: apiHeaders(),
         body: JSON.stringify({})
       });
       if (!response.ok) {

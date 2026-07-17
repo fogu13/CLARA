@@ -46,7 +46,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch(`${apiBaseUrl()}/settings/ai`, {
         method: "PUT",
-        headers: apiHeaders(),
+        credentials: "include", headers: apiHeaders(),
         body: JSON.stringify({ base_url: aiUrl, model: aiModel, embed_model: aiEmbedModel, api_key: aiKey }),
       });
       const data = await res.json().catch(() => null);
@@ -69,7 +69,7 @@ export default function SettingsPage() {
     setAiBusy(true);
     setAiStatus(null);
     try {
-      const res = await fetch(`${apiBaseUrl()}/settings/ai/test`, { method: "POST", headers: apiHeaders() });
+      const res = await fetch(`${apiBaseUrl()}/settings/ai/test`, { method: "POST", credentials: "include", headers: apiHeaders() });
       const data = await res.json().catch(() => null);
       if (data?.ok && data?.embed_ok === false)
         setAiStatus({ tone: "error", text: `${t.settings.aiTestEmbedFail} ${data.embed_error ?? data.embed_model}` });

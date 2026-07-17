@@ -256,7 +256,7 @@ function signalTrendSeries(signals: SignalRecord[], days = 30): { day: string; c
 }
 
 async function getConnectors(): Promise<ConnectorSummary[]> {
-  const response = await fetch(`${apiBaseUrl()}/connectors`, { headers: apiHeaders() });
+  const response = await fetch(`${apiBaseUrl()}/connectors`, { credentials: "include", headers: apiHeaders() });
   // Throw on a non-ok status so the caller's .catch records it as a partial source;
   // returning [] here silently hid connector HTTP errors from the "partial data" notice.
   if (!response.ok) throw new Error(`connectors request failed (${response.status})`);
