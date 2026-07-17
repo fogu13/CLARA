@@ -722,6 +722,9 @@ class OutcomeSnapshot(BaseModel):
     comparison_method: str
     # Provenance of latest_value ("instrumented" | "manual"), None when unmeasured.
     measurement_source: str | None = None
+    # A–E design grade (outcome_engine.evidence_grade): A holdout, C ITS,
+    # D before/after, E manual/unmeasured.
+    evidence_grade: str | None = None
     # W4 read-time ITS scoring (outcome_engine.its_outcome_for_problem):
     # either {method: "its", effect, ci_low, ci_high, ...} or the honest
     # sparse fallback {method: "delta_insufficient_data", label, delta, ...}.
@@ -747,6 +750,7 @@ class OutcomeBoardItem(BaseModel):
     comparison_method: str
     responsible_owner: str
     measurement_source: str | None = None
+    evidence_grade: str | None = None
 
 
 class OutcomeBoard(BaseModel):

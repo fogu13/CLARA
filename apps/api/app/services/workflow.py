@@ -616,6 +616,7 @@ class WorkflowStore:
         contract = problem.outcome_contract
         measurement = self._outcomes.get(problem.problem_id)
         latest_value = None if measurement is None else measurement.observed_value
+        measurement_source = None if measurement is None else measurement.measurement_source
 
         return OutcomeSnapshot(
             problem_id=problem.problem_id,
@@ -627,7 +628,11 @@ class WorkflowStore:
             improvement_direction=_contract_direction(contract),
             measurement_window_days=contract.measurement_window_days,
             comparison_method=contract.comparison_method,
-            measurement_source=None if measurement is None else measurement.measurement_source,
+            measurement_source=measurement_source,
+            evidence_grade=outcome_engine.evidence_grade(
+                comparison_method=contract.comparison_method,
+                measurement_source=measurement_source,
+            ),
         )
 
     def state_for_problem(self, problem: ProblemRecord, tenant_id: str | None = None) -> WorkflowState:
@@ -1295,6 +1300,10 @@ class SQLiteWorkflowStore:
             measurement_window_days=contract.measurement_window_days,
             measurement_source=measurement_source,
             comparison_method=contract.comparison_method,
+            evidence_grade=outcome_engine.evidence_grade(
+                comparison_method=contract.comparison_method,
+                measurement_source=measurement_source,
+            ),
         )
 
     def latest_learning_conclusion(
