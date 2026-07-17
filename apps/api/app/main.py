@@ -543,19 +543,28 @@ def create_app(
 
     def _run_alert_sweep() -> dict[str, int]:
         """Hourly: Slack alerts for new action-grade emerging problems + the
-        weekly digest. No-op without an active Slack connector."""
+        weekly digest (Slack and/or email). No-op without either channel."""
         from app.connectors import get_destination
         from app.services.alerts import run_alert_sweep
         from app.services.digest import build_digest
+        from app.services.email import send_email, smtp_configured
 
         def push_slack(title: str, description: str, config: dict) -> None:
             get_destination("slack").push({"title": title, "description": description}, config)
+
+        # Digest email goes to the workspace's notification address when SMTP
+        # is configured (CLARA_SMTP_*); the default workspace drives the loop.
+        digest_email = (
+            workspace_store.get(1).notification_email if smtp_configured() else None
+        ) or None
 
         return run_alert_sweep(
             emerging_report=build_emerging_problem_report(current_candidates()),
             connector_config_store=connector_config_store,
             telemetry=telemetry_store,
             push_slack=push_slack,
+            send_email=send_email,
+            digest_email=digest_email,
             build_digest_text=lambda: build_digest(
                 emerging=build_emerging_problem_report(current_candidates()),
                 outcome_board=build_outcome_board(

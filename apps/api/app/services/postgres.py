@@ -1316,9 +1316,12 @@ class PostgresConnectorConfigStore(PostgresConnectionMixin):
     a PaaS ephemeral disk (losing them silently killed continuous sync)."""
 
     def _to_config(self, row: Any):
-        from app.connectors.config_store import ConnectorConfig
+        from app.connectors.config_store import ConnectorConfig, unseal_config
 
-        return ConnectorConfig.model_validate(_payload(row["payload"]))
+        payload = _payload(row["payload"])
+        # config is sealed (enc:v1: string) by upsert; legacy rows hold the dict.
+        payload["config"] = unseal_config(payload.get("config", {}))
+        return ConnectorConfig.model_validate(payload)
 
     def list_configs(self) -> list[Any]:
         with self._connect() as conn:
@@ -1336,13 +1339,17 @@ class PostgresConnectorConfigStore(PostgresConnectionMixin):
         return self._to_config(row) if row else None
 
     def upsert_config(self, config: Any):
+        from app.connectors.config_store import seal_config
+
+        payload = config.model_dump()
+        payload["config"] = seal_config(config.config)
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO clara_connector_configs (connector_type, payload)"
                 " VALUES (%s, %s)"
                 " ON CONFLICT (connector_type) DO UPDATE"
                 " SET payload = excluded.payload, updated_at = now()",
-                (config.connector_type, self._jsonb(config.model_dump())),
+                (config.connector_type, self._jsonb(payload)),
             )
         return config
 

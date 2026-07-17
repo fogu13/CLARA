@@ -456,7 +456,10 @@ def build_router(
         except Exception:  # noqa: BLE001
             logger.warning("Evidence-pack hashing failed for %s", problem_id, exc_info=True)
         record = workflow_store.record_approval(
-            problem=problem, decision=decision, evidence_pack_hash=pack_hash
+            problem=problem,
+            decision=decision,
+            evidence_pack_hash=pack_hash,
+            four_eyes=workspace_store.get(user.workspace_id).four_eyes_approval,
         )
         # approval-cycle-time denominator + decision mix.
         telemetry_store.record(

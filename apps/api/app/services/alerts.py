@@ -45,16 +45,26 @@ def run_alert_sweep(
     telemetry: Any,
     push_slack: Callable[[str, str, dict[str, Any]], None],
     build_digest_text: Callable[[], str],
+    send_email: Callable[[str, str, str], bool] | None = None,
+    digest_email: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, int]:
     """One sweep: alert new action-grade emerging problems, send the weekly
-    digest when due. Returns {alerted, digest_sent} counts for the loop log."""
+    digest when due (Slack and/or email — an email-only workspace still gets
+    its digest). Returns {alerted, digest_sent} counts for the loop log."""
     slack = connector_config_store.get_config("slack")
-    if slack is None or not slack.is_active:
+    if slack is not None and not slack.is_active:
+        slack = None
+    email_ready = bool(send_email and digest_email)
+    if slack is None and not email_ready:
         return {"alerted": 0, "digest_sent": 0}
 
     alerted = 0
-    for item in getattr(emerging_report, "signals", None) or []:
+    if slack is None:
+        emerging_iter: list[Any] = []  # emerging alerts stay Slack-only for now
+    else:
+        emerging_iter = list(getattr(emerging_report, "signals", None) or [])
+    for item in emerging_iter:
         if item.trend_label != "action":
             continue
         key = _emerging_key(item)
@@ -84,11 +94,24 @@ def run_alert_sweep(
     last_raw = telemetry.latest_event_at(DIGEST_EVENT)
     last = _parse_ts(last_raw) if last_raw else None
     if last is None or current - last >= DIGEST_INTERVAL:
-        try:
-            push_slack("CLARA weekly digest", build_digest_text(), slack.config)
-            telemetry.record(DIGEST_EVENT, metadata={"channel": "slack", "trigger": "scheduled"})
+        digest_text = build_digest_text()
+        channels: list[str] = []
+        if slack is not None:
+            try:
+                push_slack("CLARA weekly digest", digest_text, slack.config)
+                channels.append("slack")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Scheduled Slack digest failed: %s", str(exc)[:200])
+        if email_ready:
+            try:
+                if send_email(digest_email, "CLARA weekly digest", digest_text):
+                    channels.append("email")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Scheduled email digest failed: %s", str(exc)[:200])
+        if channels:
+            telemetry.record(
+                DIGEST_EVENT, metadata={"channel": ",".join(channels), "trigger": "scheduled"}
+            )
             digest_sent = 1
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Scheduled digest failed: %s", str(exc)[:200])
 
     return {"alerted": alerted, "digest_sent": digest_sent}
