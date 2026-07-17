@@ -2,7 +2,7 @@
 
 ## Document purpose
 
-This document maps the CLARA CLARA platform's features against the
+This document maps the CLARA platform's features against the
 EU AI Act requirements and GDPR obligations. It serves as both a thesis
 chapter contribution and a commercial compliance artifact.
 
@@ -46,7 +46,7 @@ where the biometric qualifier could be met.
 | Requirement | Platform implementation | Status |
 |---|---|---|
 | AI system shall be designed to allow human oversight | LangGraph `interrupt()` at the approval node — graph pauses, human reviews and approves/rejects | **Compliant** |
-| Natural person shall have the technical capability to oversee | All consequential actions (Jira tickets, Slack notifications) require explicit approval via the UI | **Compliant** |
+| Natural person shall have the technical capability to oversee | All consequential actions (Jira tickets, Slack notifications) require explicit approval via the UI; the approving reviewer's identity is bound to the verified login (JWT-derived pseudonym, e.g. `user-3fa2b1c9`), replacing the earlier self-asserted request-body identity; an opt-in, admin-only **four-eyes** workspace flag requires two distinct approvers — the first approval is recorded but holds execution, self-confirmation is rejected, and a rejection resets the tally | **Compliant** |
 | Human shall be able to disregard or override output | Human can reject any proposed action; rejection routes to END, no action executed | **Compliant** |
 | Human shall be able to interrupt or stop the system | The graph can be stopped at the approval interrupt; no auto-execution without approval | **Compliant** |
 
@@ -62,7 +62,7 @@ where the biometric qualifier could be met.
 
 | Requirement | Platform implementation | Status |
 |---|---|---|
-| AI system shall achieve appropriate level of accuracy | Eval harness measures classification precision/recall/F1 against a golden set; results documented in the thesis | **Implemented** |
+| AI system shall achieve appropriate level of accuracy | Eval harness measures classification accuracy/F1 against an 80-item bilingual golden set (60 en / 20 de; the German stratum is **authored**, not naturally occurring — disclosed in the model card). Published snapshot (run 2026-07-17T15:22Z, production config, n=80): sentiment 97.50% (95% CI 94–100%), urgency 86.25% (CI 79–94%), tag F1 fuzzy 80.17%; per-language with denominators: EN (n=60) sentiment 98.33% / urgency 86.67%, DE (n=20) 95.00% / 85.00%. Metrics are committed only via an explicit `--publish` flag (`published_metrics.json`), served at `GET /model-card/metrics`, and rendered in the product's model card; the hallucination heuristic is EN-scope only by construction (non-EN items excluded rather than misreported — disclosed) | **Implemented** |
 | AI system shall be resilient to errors, faults, inconsistencies | Enrichment batch failures are logged and skipped (graceful degradation); connector failures are non-fatal | **Compliant** |
 | Model output is treated as untrusted | `AGENTS.md` rule: "treat model output as untrusted"; evidence/confidence/limitations on every AI claim | **Compliant** |
 
@@ -70,15 +70,21 @@ where the biometric qualifier could be met.
 
 | Requirement | Platform implementation | Status |
 |---|---|---|
-| AI system shall enable automatic logging of events | `events` table (migration 005) + `action_logs` table; Langfuse traces all LLM calls | **Compliant** |
+| AI system shall enable automatic logging of events | `events` table (migration 005) + `action_logs` table; Langfuse traces all LLM calls; approval decisions are recorded on an **append-only** approval record carrying the reviewer's JWT-derived pseudonym and the canonical sha256 content hash of the evidence pack as it stood pre-decision — the hash is stable across re-exports of unchanged records, so whether the pack an approver saw has since changed is provable | **Compliant** |
 | Logs shall be kept for a period appropriate to the system's purpose | Learning conclusions have `retention_expires_at` (730 days default) | **Compliant** |
 
-### Article 13 — Quality Management
+### Article 17 — Quality Management
 
 | Requirement | Platform implementation | Status |
 |---|---|---|
 | Quality management system shall be established | Eval harness + golden set + CI (npm run check); tests cover the full pipeline | **Implemented** |
 | Quality management shall include risk management | Governance gate (PolicyRule) blocks compliance_concern actions; PII redaction in learning conclusions | **Compliant** |
+
+### Article 4 — AI Literacy
+
+| Requirement | Platform implementation | Status |
+|---|---|---|
+| Providers and deployers shall take measures to ensure a sufficient level of AI literacy of their staff | An in-product AI-literacy module (EN + DE) explains the system's capabilities and limits — including that the displayed "model score" (renamed from "confidence") is an uncalibrated heuristic blending LLM self-report with volume/source counts, not a validated probability. The product copy was corrected from "discharges your team's AI-literacy duty" to "**supports your Art. 4 program**" (EN + DE): the module records only a workspace-level pack-delivery attestation and deliberately no per-user completion tracking, so it *supports* — and does not discharge — the deployer's own Art. 4 obligation | **Implemented** |
 
 ## GDPR compliance
 
@@ -89,7 +95,7 @@ where the biometric qualifier could be met.
 | Lawfulness, fairness, transparency | AI outputs are labelled with audit metadata; human oversight is mandatory |
 | Purpose limitation | Signals are processed for feedback analysis only; no secondary use |
 | Data minimisation | Feedback text capped at 2000 chars for LLM context; PII redaction in learning conclusions |
-| Accuracy | Confidence scores + limitations on every AI claim; human validation encouraged |
+| Accuracy | Model score (renamed from "confidence"; explained in the UI as an uncalibrated heuristic, not a validated probability) + limitations on every AI claim; human validation encouraged |
 | Storage limitation | Learning conclusions have `retention_expires_at` (730 days); configurable |
 | Integrity and confidentiality | RLS policies on all tables; workspace isolation; JWT auth |
 
