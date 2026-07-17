@@ -493,6 +493,9 @@ class OutcomeContractProposalPreview(BaseModel):
     current: OutcomeContract
     proposed: OutcomeContract | None = None
     is_promotion_default: bool
+    # Honest MDE heuristic for the proposed window (outcome_engine.detectability_note);
+    # None when the baseline rate makes the estimate meaningless.
+    detectability_note: str | None = None
 
 
 class ProblemTransitionRequest(BaseModel):

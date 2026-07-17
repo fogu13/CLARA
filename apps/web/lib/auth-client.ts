@@ -108,6 +108,31 @@ export async function refreshSession(): Promise<boolean> {
   return refreshInFlight;
 }
 
+export function currentUserRole(): string | null {
+  // Role from the JWT's app_metadata (admin-controlled, not user-editable).
+  // null when auth is unconfigured or no session exists.
+  if (typeof window === "undefined") return null;
+  const token = window.localStorage.getItem(TOKEN_KEY);
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload?.app_metadata?.user_role ?? payload?.user_role ?? "viewer";
+  } catch {
+    return null;
+  }
+}
+
+const ROLE_LEVEL: Record<string, number> = { viewer: 0, editor: 1, admin: 2, owner: 3 };
+
+export function hasRole(required: "viewer" | "editor" | "admin" | "owner"): boolean {
+  // Purely cosmetic gating (hide controls a request would 403 on) — the API
+  // stays authoritative. No session (dev mode / auth off) shows everything,
+  // matching the API's permissive local default.
+  const role = currentUserRole();
+  if (role === null) return true;
+  return (ROLE_LEVEL[role] ?? 0) >= ROLE_LEVEL[required];
+}
+
 export function currentUserEmail(): string | null {
   if (typeof window === "undefined") return null;
   const token = window.localStorage.getItem(TOKEN_KEY);

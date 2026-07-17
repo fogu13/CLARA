@@ -332,6 +332,8 @@ export type OutcomeContractProposalPreview = {
   current: OutcomeContract;
   proposed?: OutcomeContract | null;
   is_promotion_default: boolean;
+  // Honest MDE heuristic for the proposed window; null when meaningless.
+  detectability_note?: string | null;
 };
 
 export type ProblemRecord = {
