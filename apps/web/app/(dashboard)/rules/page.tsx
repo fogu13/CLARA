@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollText, Plus, Trash2, X } from "lucide-react";
 import { createRule, deleteRule, getRules } from "@/lib/client-api";
 import type { FeedbackRule, RuleAction, RuleCondition } from "@/lib/types";
+import { PolicyRulesPanel } from "@/app/components/policy-rules-panel";
 
 type Draft = Omit<FeedbackRule, "rule_id">;
 
@@ -267,7 +268,13 @@ export default function RulesPage() {
           {loadFailed ? (
             <p className="text-sm text-destructive">{t.common.error}</p>
           ) : rules.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No rules yet. Create one with “New Rule”.</p>
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <p>No automation rules yet. Create one with “New Rule” to tag and route incoming feedback.</p>
+              <p>
+                Governance doesn&apos;t depend on this list — the policy checks below already gate
+                every approval and customer-facing execution.
+              </p>
+            </div>
           ) : (
             <div className="space-y-3">
               {rules.map((rule) => (
@@ -289,6 +296,11 @@ export default function RulesPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* The seeded, citable governance policy catalog (consent, evidence
+          thresholds, privacy review …) — lives on this page so "Rules" never
+          reads as an empty governance engine. */}
+      <PolicyRulesPanel />
 
       <Card>
         <CardHeader><CardTitle className="text-base">Conflict Resolution</CardTitle></CardHeader>

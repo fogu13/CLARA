@@ -165,6 +165,14 @@ export function OutcomeBoardPanel() {
                   <dt>{t.outcomeBoard.direction}</dt>
                   <dd>{directionLabel(item.improvement_direction, t)}</dd>
                 </div>
+                {item.evidence_grade ? (
+                  <div>
+                    <dt title={t.outcomeBoard.gradeTooltip} style={{ cursor: "help" }}>
+                      {t.outcomeBoard.grade}
+                    </dt>
+                    <dd>{item.evidence_grade}</dd>
+                  </div>
+                ) : null}
                 <div>
                   <dt>{t.common.owner}</dt>
                   <dd>{item.responsible_owner}</dd>

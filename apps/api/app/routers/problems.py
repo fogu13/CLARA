@@ -121,6 +121,7 @@ def build_outcome_board(
                 comparison_method=snapshot.comparison_method,
                 responsible_owner=problem.outcome_contract.responsible_owner,
                 measurement_source=snapshot.measurement_source,
+                evidence_grade=snapshot.evidence_grade,
             )
         )
 

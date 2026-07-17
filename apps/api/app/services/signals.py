@@ -212,7 +212,9 @@ def _fallback_signal_id(row: dict) -> str:
     file stays idempotent.
     """
     basis = "|".join(
-        (row.get(field) or "").strip()
+        # Casefold + collapse whitespace so trivial variants of the same row
+        # ("Great app" vs "great  app ") hash identically and dedupe on import.
+        " ".join((row.get(field) or "").split()).casefold()
         for field in ("feedback_text", "customer_id", "timestamp", "source", "journey_stage")
     )
     return "CSV-" + hashlib.sha256(basis.encode("utf-8")).hexdigest()[:12]

@@ -10,6 +10,12 @@ from app.services.signals import utc_now
 
 ACTION_THRESHOLD = 0.68
 WATCH_THRESHOLD = 0.48
+# Corroboration floor for "action": the score is volume-dominated, so a burst
+# from one source (or one identifier-less CSV) could page someone on its own.
+# Acting additionally requires multi-source evidence or several distinct
+# identified customers; otherwise the candidate is held at "watch".
+MIN_ACTION_SOURCES = 2
+MIN_ACTION_CUSTOMERS = 3
 
 
 def build_emerging_problem_report(
@@ -37,9 +43,18 @@ def emerging_signal_for_candidate(
     if score < WATCH_THRESHOLD:
         return None
 
-    trend_label = "action" if score >= ACTION_THRESHOLD else "watch"
+    corroborated = (
+        len(candidate.sources) >= MIN_ACTION_SOURCES
+        or candidate.customer_count >= MIN_ACTION_CUSTOMERS
+    )
+    trend_label = "action" if score >= ACTION_THRESHOLD and corroborated else "watch"
     taxonomy_labels = [classification.label for classification in candidate.classifications[:3]]
     drivers = emerging_drivers(candidate)
+    if score >= ACTION_THRESHOLD and not corroborated:
+        drivers.insert(
+            0, "Held at watch: single-source evidence with few identified customers"
+        )
+        drivers = drivers[:5]
     return EmergingProblemSignal(
         candidate_id=candidate.candidate_id,
         title=candidate.title,
