@@ -66,7 +66,7 @@ export default function SignalsPage() {
   // mis-mapped import can be undone as a unit.
   const importBatches = Object.entries(
     signals.reduce<Record<string, string[]>>((acc, s) => {
-      const match = /^csv-([a-z0-9]+)-/.exec(s.signal_id ?? "");
+      const match = /^csv-(.+)-\d+$/.exec(s.signal_id ?? "");
       if (match) (acc[match[1]] ??= []).push(s.signal_id);
       return acc;
     }, {})
@@ -113,7 +113,16 @@ export default function SignalsPage() {
     }
     setStatus({ tone: "busy", message: `Importing ${fileCsv.rows.length} row(s)…` });
     try {
-      const batchId = Date.now().toString(36);
+      // Batch label = filename slug + timestamp, embedded in each signal_id
+      // (csv-<batch>-<row>), so the Import batches card shows "checkout-feedback-
+      // mr6u0z1m" instead of a bare machine code and survives reloads.
+      const fileSlug = fileCsv.fileName
+        .toLowerCase()
+        .replace(/\.[^.]+$/, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 32);
+      const batchId = `${fileSlug ? `${fileSlug}-` : ""}${Date.now().toString(36)}`;
       const canonical = toCanonicalSignalCsvWithDefaults(fileCsv.rows, fileCsv.mapping, batchId, fileCsv.headers);
       const report = await validateSignalCsv(canonical);
       if (!report.valid) {

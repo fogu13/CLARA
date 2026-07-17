@@ -9,6 +9,41 @@ import json
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+
+class SecurityHeadersMiddleware:
+    """Baseline security headers on every HTTP response.
+
+    The API fronts Caddy/uvicorn, which set none of these by default; browsers
+    hitting the API directly (or via a misconfigured proxy) should still get
+    HSTS + no-sniff + no-framing. Pure ASGI (no BaseHTTPMiddleware buffering).
+    """
+
+    _HEADERS = [
+        (b"strict-transport-security", b"max-age=63072000; includeSubDomains"),
+        (b"x-content-type-options", b"nosniff"),
+        (b"x-frame-options", b"DENY"),
+        (b"referrer-policy", b"no-referrer"),
+    ]
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = message.setdefault("headers", [])
+                existing = {key.lower() for key, _ in headers}
+                headers.extend(
+                    (key, value) for key, value in self._HEADERS if key not in existing
+                )
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
 from app.auth import AUTH_ENABLED
 import app.services.ai as ai
 from app.domain.models import (
@@ -274,6 +309,7 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    api.add_middleware(SecurityHeadersMiddleware)
 
     active_problem_store = problem_store
     if active_problem_store is None and problems is not None:

@@ -77,6 +77,22 @@ export function apiHeaders(headers?: HeadersInit): Headers {
   return merged;
 }
 
+// Failures must stay visible (a 403 must never masquerade as an empty state),
+// but a bare status code helps nobody — translate it once, here.
+export function httpErrorMessage(action: string, status: number): string {
+  const reason =
+    status === 401
+      ? "your session is no longer valid — sign in again"
+      : status === 403
+        ? "you don't have permission (ask a workspace admin)"
+        : status === 404
+          ? "not found"
+          : status >= 500
+            ? "the server hit an error — try again shortly"
+            : `request failed (HTTP ${status})`;
+  return `${action}: ${reason}.`;
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
@@ -85,7 +101,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const error = await response.json().catch(() => null);
-    throw new Error(error?.detail ?? `Request failed with status ${response.status}`);
+    throw new Error(error?.detail ?? httpErrorMessage("Request failed", response.status));
   }
 
   return response.json() as Promise<T>;

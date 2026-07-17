@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { apiBaseUrl, apiHeaders } from "@/lib/client-api";
+import { apiBaseUrl, apiHeaders, httpErrorMessage } from "@/lib/client-api";
 import { Plug, Trash2, CheckCircle, Loader2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
@@ -31,7 +31,7 @@ const CONNECTOR_CATALOG = [
     fields: [
       { key: "subdomain", label: "Subdomain", placeholder: "company" },
       { key: "email", label: "Email", placeholder: "user@company.com" },
-      { key: "api_token", label: "API Token", placeholder: "..." },
+      { key: "api_token", label: "API Token", placeholder: "...", secret: true },
     ],
   },
   {
@@ -50,7 +50,7 @@ const CONNECTOR_CATALOG = [
     category: "Source (Pull)",
     descKey: "descTrustpilot" as const,
     fields: [
-      { key: "api_key", label: "API Key", placeholder: "your Trustpilot Business API key" },
+      { key: "api_key", label: "API Key", placeholder: "your Trustpilot Business API key", secret: true },
       { key: "business_unit_id", label: "Business Unit ID", placeholder: "46d5a5..." },
     ],
   },
@@ -61,7 +61,7 @@ const CONNECTOR_CATALOG = [
     descKey: "descGooglePlay" as const,
     fields: [
       { key: "package_name", label: "Package Name", placeholder: "com.example.app" },
-      { key: "service_account_json", label: "Service Account JSON", placeholder: "paste the full key JSON" },
+      { key: "service_account_json", label: "Service Account JSON", placeholder: "paste the full key JSON", secret: true },
     ],
   },
   {
@@ -71,8 +71,8 @@ const CONNECTOR_CATALOG = [
     descKey: "descGoogleBusiness" as const,
     fields: [
       { key: "client_id", label: "OAuth Client ID", placeholder: "....apps.googleusercontent.com" },
-      { key: "client_secret", label: "OAuth Client Secret", placeholder: "GOCSPX-..." },
-      { key: "refresh_token", label: "Refresh Token", placeholder: "1//..." },
+      { key: "client_secret", label: "OAuth Client Secret", placeholder: "GOCSPX-...", secret: true },
+      { key: "refresh_token", label: "Refresh Token", placeholder: "1//...", secret: true },
       { key: "account_id", label: "Account ID", placeholder: "1234567890" },
       { key: "location_id", label: "Location ID", placeholder: "9876543210" },
     ],
@@ -83,7 +83,7 @@ const CONNECTOR_CATALOG = [
     category: "Source (Pull)",
     descKey: "descWebhook" as const,
     fields: [
-      { key: "secret", label: "Shared Secret (HMAC-SHA256)", placeholder: "generate a long random string" },
+      { key: "secret", label: "Shared Secret (HMAC-SHA256)", placeholder: "generate a long random string", secret: true },
     ],
   },
   {
@@ -94,7 +94,7 @@ const CONNECTOR_CATALOG = [
     fields: [
       { key: "base_url", label: "Base URL", placeholder: "https://company.atlassian.net" },
       { key: "email", label: "Email", placeholder: "user@company.com" },
-      { key: "api_token", label: "API Token", placeholder: "..." },
+      { key: "api_token", label: "API Token", placeholder: "...", secret: true },
       { key: "project_key", label: "Project Key", placeholder: "PROJ" },
     ],
   },
@@ -104,7 +104,7 @@ const CONNECTOR_CATALOG = [
     category: "Destination (Push)",
     descKey: "descSlack" as const,
     fields: [
-      { key: "bot_token", label: "Bot Token", placeholder: "xoxb-..." },
+      { key: "bot_token", label: "Bot Token", placeholder: "xoxb-...", secret: true },
       { key: "channel", label: "Channel", placeholder: "#customer-feedback" },
     ],
   },
@@ -150,7 +150,7 @@ export default function IntegrationsPage() {
         body: JSON.stringify({ name: keyName, role: keyRole }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.detail ?? `Create failed (${res.status})`);
+      if (!res.ok) throw new Error(data?.detail ?? httpErrorMessage("Couldn't create the key", res.status));
       setNewKey(data.key);
       setKeyName("");
       await loadApiKeys();
@@ -165,7 +165,7 @@ export default function IntegrationsPage() {
     if (!window.confirm(`Revoke API key "${name}"? Requests using it will stop working immediately.`)) return;
     try {
       const res = await fetch(`${API_URL}/api-keys/${id}`, { method: "DELETE", headers: apiHeaders() });
-      if (!res.ok) throw new Error(`Revoke failed (${res.status})`);
+      if (!res.ok) throw new Error(httpErrorMessage("Couldn't revoke the key", res.status));
       setNewKey(null);
       await loadApiKeys();
     } catch (e) {
@@ -181,7 +181,7 @@ export default function IntegrationsPage() {
         setLoadError(null);
       } else {
         // A 403/500 must not masquerade as "nothing configured".
-        setLoadError(`Couldn't load connectors (${res.status}).`);
+        setLoadError(httpErrorMessage("Couldn't load connectors", res.status));
       }
     } catch {
       setLoadError("API unreachable. Connector status unknown.");
@@ -216,7 +216,7 @@ export default function IntegrationsPage() {
       });
       if (!res.ok) {
         const detail = await res.json().catch(() => null);
-        throw new Error(detail?.detail ?? `Save failed (${res.status})`);
+        throw new Error(detail?.detail ?? httpErrorMessage("Couldn't save", res.status));
       }
       await loadConnectors();
       setEditingConnector(null);
@@ -234,7 +234,7 @@ export default function IntegrationsPage() {
       const res = await fetch(`${API_URL}/connectors/${type}`, { method: "DELETE", headers: apiHeaders() });
       if (!res.ok) {
         const detail = await res.json().catch(() => null);
-        throw new Error(detail?.detail ?? `Delete failed (${res.status})`);
+        throw new Error(detail?.detail ?? httpErrorMessage("Couldn't delete", res.status));
       }
       await loadConnectors();
       setNotice({ tone: "ok", text: `${type} connector deleted.` });
@@ -257,7 +257,7 @@ export default function IntegrationsPage() {
       if (data?.status === "ok") {
         setTestResult("success");
       } else {
-        setTestResult(`error: ${data?.message ?? data?.detail ?? `test failed (${res.status})`}`);
+        setTestResult(`error: ${data?.message ?? data?.detail ?? httpErrorMessage("Connection test", res.status)}`);
       }
     } catch (e) {
       setTestResult(`error: ${e instanceof Error ? e.message : "unknown"}`);
@@ -275,7 +275,7 @@ export default function IntegrationsPage() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(data?.detail ?? `Pull failed (${res.status})`);
+        throw new Error(data?.detail ?? httpErrorMessage("Couldn't pull from the source", res.status));
       }
       setNotice({ tone: "ok", text: `Pulled ${data.pulled} signals (${data.imported} new, ${data.skipped_duplicates} duplicates)` });
     } catch (e) {
@@ -346,6 +346,8 @@ export default function IntegrationsPage() {
                                 <Label className="text-xs">{field.label}</Label>
                                 <Input
                                   className="mt-1 h-8 text-sm"
+                                  type={"secret" in field && field.secret ? "password" : "text"}
+                                  autoComplete={"secret" in field && field.secret ? "off" : undefined}
                                   placeholder={field.placeholder}
                                   value={formData[field.key] || ""}
                                   onChange={e => setFormData({ ...formData, [field.key]: e.target.value })}

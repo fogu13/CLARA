@@ -73,6 +73,12 @@ def outcome_status(
     if measured is None:
         return "not_measured"
 
+    # Degenerate contract: zero baseline, zero target, zero measured means
+    # nothing was ever observed — reporting "target_met" there (Learnings card
+    # "0.0/day from 0 signals · Target met") is meaningless, not a success.
+    if baseline == 0 and target == 0 and measured == 0:
+        return "not_measured"
+
     if direction is None:
         direction = outcome_direction(baseline=baseline, target=target)
 

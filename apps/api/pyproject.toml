@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "API prototype for the CLARA Feedback-to-Outcome platform."
 requires-python = ">=3.9"
 dependencies = [
-  "fastapi>=0.115.0",
+  # <0.129 pins starlette to the validated 0.x line: fastapi 0.129+ moves to
+  # starlette 1.x, where include_router no longer flattens APIRoutes into
+  # app.routes (breaks the works-council walker) — bump deliberately, not by
+  # CI drift.
+  "fastapi>=0.115.0,<0.129",
   "psycopg[binary]>=3.2.0",
   "pydantic>=2.7.0",
   "uvicorn[standard]>=0.30.0",

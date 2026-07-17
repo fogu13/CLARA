@@ -101,8 +101,11 @@ export default function ActionsPage() {
           <CardContent><div className="text-2xl font-bold">{items.length}</div></CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Policy Blocked</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold">{blockedActions}</div></CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Held by policy checks</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{blockedActions}</div>
+            <p className="mt-1 text-xs text-muted-foreground">Awaiting evidence or approval — nothing ships outside policy.</p>
+          </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Destinations</CardTitle></CardHeader>

@@ -45,6 +45,16 @@ function decodeExp(token: string): number | null {
   }
 }
 
+export function hasStoredSession(): boolean {
+  // True when this browser held a session at some point (tokens still stored),
+  // so an auth bounce can honestly say "expired" instead of showing that to
+  // first-time visitors who never signed in.
+  if (typeof window === "undefined") return false;
+  return Boolean(
+    window.localStorage.getItem(TOKEN_KEY) || window.localStorage.getItem(REFRESH_KEY)
+  );
+}
+
 export function isAuthenticated(): boolean {
   if (typeof window === "undefined") return false;
   const token = window.localStorage.getItem(TOKEN_KEY);
