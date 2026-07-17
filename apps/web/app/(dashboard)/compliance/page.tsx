@@ -28,7 +28,7 @@ export default function CompliancePage() {
 
   async function downloadCsv(entity: string) {
     try {
-      const res = await fetch(`${apiBaseUrl()}/export/${entity}.csv`, { headers: apiHeaders() });
+      const res = await fetch(`${apiBaseUrl()}/export/${entity}.csv`, { credentials: "include", headers: apiHeaders() });
       if (!res.ok) throw new Error(`Export failed (${res.status})`);
       const url = URL.createObjectURL(await res.blob());
       const anchor = document.createElement("a");
@@ -45,7 +45,7 @@ export default function CompliancePage() {
     setExporting(true);
     setExportError(null);
     try {
-      const res = await fetch(`${apiBaseUrl()}/audit-export`, { headers: apiHeaders() });
+      const res = await fetch(`${apiBaseUrl()}/audit-export`, { credentials: "include", headers: apiHeaders() });
       if (!res.ok) {
         // Only blame the role when it IS the role; a down API is not a 403.
         throw new Error(

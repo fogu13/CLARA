@@ -139,7 +139,7 @@ export default function IntegrationsPage() {
 
   async function loadApiKeys() {
     try {
-      const res = await fetch(`${API_URL}/api-keys`, { headers: apiHeaders() });
+      const res = await fetch(`${API_URL}/api-keys`, { credentials: "include", headers: apiHeaders() });
       if (res.ok) setApiKeysList(await res.json());
     } catch {
       // keys panel degrades silently; connector load errors already surface
@@ -151,7 +151,7 @@ export default function IntegrationsPage() {
     try {
       const res = await fetch(`${API_URL}/api-keys`, {
         method: "POST",
-        headers: apiHeaders(),
+        credentials: "include", headers: apiHeaders(),
         body: JSON.stringify({ name: keyName, role: keyRole }),
       });
       const data = await res.json().catch(() => null);
@@ -169,7 +169,7 @@ export default function IntegrationsPage() {
   async function revokeKey(id: number, name: string) {
     if (!window.confirm(`Revoke API key "${name}"? Requests using it will stop working immediately.`)) return;
     try {
-      const res = await fetch(`${API_URL}/api-keys/${id}`, { method: "DELETE", headers: apiHeaders() });
+      const res = await fetch(`${API_URL}/api-keys/${id}`, { method: "DELETE", credentials: "include", headers: apiHeaders() });
       if (!res.ok) throw new Error(httpErrorMessage("Couldn't revoke the key", res.status));
       setNewKey(null);
       await loadApiKeys();
@@ -180,7 +180,7 @@ export default function IntegrationsPage() {
 
   async function loadConnectors() {
     try {
-      const res = await fetch(`${API_URL}/connectors`, { headers: apiHeaders() });
+      const res = await fetch(`${API_URL}/connectors`, { credentials: "include", headers: apiHeaders() });
       if (res.ok) {
         setConnectors(await res.json());
         setLoadError(null);
@@ -216,7 +216,7 @@ export default function IntegrationsPage() {
     try {
       const res = await fetch(`${API_URL}/connectors/${editingConnector}`, {
         method: "PUT",
-        headers: apiHeaders(),
+        credentials: "include", headers: apiHeaders(),
         body: JSON.stringify(formData),
       });
       if (!res.ok) {
@@ -236,7 +236,7 @@ export default function IntegrationsPage() {
   async function deleteConnector(type: string) {
     if (!window.confirm(`Delete the ${type} connector configuration?`)) return;
     try {
-      const res = await fetch(`${API_URL}/connectors/${type}`, { method: "DELETE", headers: apiHeaders() });
+      const res = await fetch(`${API_URL}/connectors/${type}`, { method: "DELETE", credentials: "include", headers: apiHeaders() });
       if (!res.ok) {
         const detail = await res.json().catch(() => null);
         throw new Error(detail?.detail ?? httpErrorMessage("Couldn't delete", res.status));
@@ -255,7 +255,7 @@ export default function IntegrationsPage() {
     try {
       const res = await fetch(`${API_URL}/connectors/test/${editingConnector}`, {
         method: "POST",
-        headers: apiHeaders(),
+        credentials: "include", headers: apiHeaders(),
         body: JSON.stringify(formData),
       });
       const data = await res.json();
@@ -275,7 +275,7 @@ export default function IntegrationsPage() {
     try {
       const res = await fetch(`${API_URL}/connectors/${connectorType}/pull`, {
         method: "POST",
-        headers: apiHeaders(),
+        credentials: "include", headers: apiHeaders(),
         body: JSON.stringify({}),
       });
       const data = await res.json().catch(() => null);
