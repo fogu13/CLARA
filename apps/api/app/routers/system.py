@@ -253,6 +253,22 @@ def build_router(
             response["embed_error"] = str(exc)[:300]
         return response
 
+    @router.get("/model-card/metrics", dependencies=[read_dep])
+    def model_card_metrics() -> dict:
+        """Published evaluation metrics for the model card (/compliance).
+
+        Serves the committed snapshot written by `run_live --publish` — real
+        numbers with denominators and dataset date, never live-computed, so
+        what buyers see is exactly what was measured and signed off.
+        """
+        import json as _json
+        from pathlib import Path
+
+        path = Path(__file__).parents[1] / "evals" / "published_metrics.json"
+        if not path.exists():
+            return {"published": False}
+        return {"published": True, **_json.loads(path.read_text())}
+
     @router.get("/system-config", response_model=SystemConfig, dependencies=[read_dep])
     def get_system_config() -> SystemConfig:
         from app.auth import AUTH_ENABLED

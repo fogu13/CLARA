@@ -37,6 +37,7 @@ import type {
   SignalImportResult,
   SignalRecord,
   SignalValidationReport,
+  ModelCardMetrics,
   SystemConfig,
   TaxonomyBootstrapReport,
   TaxonomyCatalog,
@@ -435,6 +436,10 @@ export async function updateWorkspace(
 
 export async function getSystemConfig(): Promise<SystemConfig> {
   return requestJson<SystemConfig>(`${apiBaseUrl()}/system-config`);
+}
+
+export async function getModelCardMetrics(): Promise<ModelCardMetrics> {
+  return requestJson<ModelCardMetrics>(`${apiBaseUrl()}/model-card/metrics`);
 }
 
 export async function getArticle50Status(): Promise<Article50Status> {

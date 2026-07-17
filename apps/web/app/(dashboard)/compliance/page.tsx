@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ShieldCheck, FileText, AlertTriangle, BookOpen, CheckCircle, Download, Cpu, Globe, HelpCircle, UserX, Server, Scale } from "lucide-react";
-import { apiBaseUrl, apiHeaders, getArticle50Status, getSystemConfig, getWorkspace } from "@/lib/client-api";
-import type { Article50Status, SystemConfig, WorkspaceSettings } from "@/lib/types";
+import { apiBaseUrl, apiHeaders, getArticle50Status, getModelCardMetrics, getSystemConfig, getWorkspace } from "@/lib/client-api";
+import type { Article50Status, ModelCardMetrics, SystemConfig, WorkspaceSettings } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
 
 export default function CompliancePage() {
@@ -17,11 +17,13 @@ export default function CompliancePage() {
   const [workspace, setWorkspace] = useState<WorkspaceSettings | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [evalMetrics, setEvalMetrics] = useState<ModelCardMetrics | null>(null);
 
   useEffect(() => {
     getSystemConfig().then(setConfig).catch(() => {});
     getArticle50Status().then(setArt50).catch(() => {});
     getWorkspace().then(setWorkspace).catch(() => {});
+    getModelCardMetrics().then(setEvalMetrics).catch(() => {});
   }, []);
 
   async function downloadCsv(entity: string) {
@@ -156,6 +158,32 @@ export default function CompliancePage() {
               </>
             ) : (
               <p className="text-muted-foreground">{t.compliance.configUnavailable}</p>
+            )}
+            {evalMetrics?.published && evalMetrics.overall ? (
+              <div className="mt-3 rounded-md border p-2 text-xs">
+                <p className="font-semibold">
+                  Measured quality — n={evalMetrics.dataset?.total_items}, {evalMetrics.published_at?.slice(0, 10)}, {evalMetrics.model}
+                </p>
+                <div className="mt-1 grid grid-cols-3 gap-2">
+                  <span>Sentiment {Math.round(evalMetrics.overall.sentiment_accuracy * 100)}% (CI {Math.round(evalMetrics.overall.sentiment_ci95[0] * 100)}–{Math.round(evalMetrics.overall.sentiment_ci95[1] * 100)}%)</span>
+                  <span>Urgency {Math.round(evalMetrics.overall.urgency_accuracy * 100)}% (CI {Math.round(evalMetrics.overall.urgency_ci95[0] * 100)}–{Math.round(evalMetrics.overall.urgency_ci95[1] * 100)}%)</span>
+                  <span>Tag F1 (fuzzy) {Math.round(evalMetrics.overall.tag_f1_fuzzy * 100)}%</span>
+                </div>
+                {evalMetrics.by_language ? (
+                  <div className="mt-1 space-y-0.5 text-muted-foreground">
+                    {Object.entries(evalMetrics.by_language).map(([lang, m]) => (
+                      <p key={lang}>
+                        {lang.toUpperCase()} (n={m.n}): sentiment {m.sentiment_accuracy != null ? `${Math.round(m.sentiment_accuracy * 100)}%` : "–"} · urgency {m.urgency_accuracy != null ? `${Math.round(m.urgency_accuracy * 100)}%` : "–"}
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
+                <p className="mt-1 text-muted-foreground">{evalMetrics.dataset?.note}</p>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-muted-foreground">
+                No published evaluation snapshot yet — run the eval harness with --publish.
+              </p>
             )}
             <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
               <li>• Purpose: classify + summarize customer feedback; propose (never execute) actions.</li>

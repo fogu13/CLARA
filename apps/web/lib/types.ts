@@ -614,6 +614,24 @@ export type SignalRecord = {
   enriched?: boolean;
 };
 
+export type ModelCardMetrics = {
+  published: boolean;
+  published_at?: string;
+  model?: string;
+  dataset?: { total_items: number; note: string };
+  overall?: {
+    sentiment_accuracy: number;
+    sentiment_ci95: [number, number];
+    urgency_accuracy: number;
+    urgency_ci95: [number, number];
+    tag_f1_fuzzy: number;
+  };
+  by_language?: Record<
+    string,
+    { n: number; sentiment_accuracy: number | null; urgency_accuracy: number | null }
+  >;
+};
+
 export type WorkspaceSettings = {
   name: string;
   slug: string;
