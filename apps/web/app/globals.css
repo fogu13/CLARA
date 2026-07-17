@@ -1113,6 +1113,14 @@ select {
   font-size: 13px;
 }
 
+/* Manual (non-instrumented) outcome values are labeled, never visually
+   conflated with scheduler-measured ones. */
+.outcome-board-manual-note {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--muted-foreground, #6b7280);
+}
+
 .outcome-board-empty {
   margin: 0;
   color: hsl(var(--muted-foreground));

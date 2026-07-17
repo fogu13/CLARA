@@ -499,6 +499,7 @@ export type OutcomeSnapshot = {
   measurement_window_days: number;
   comparison_method: string;
   its?: ItsResult | null;
+  measurement_source?: string | null;
 };
 
 export type OutcomeBoardItem = {
@@ -519,6 +520,8 @@ export type OutcomeBoardItem = {
   measurement_window_days: number;
   comparison_method: string;
   responsible_owner: string;
+  // "instrumented" (scheduler-computed from signals) vs "manual" (hand-entered).
+  measurement_source?: string | null;
 };
 
 export type LearningStatus =
@@ -600,6 +603,10 @@ export type SignalRecord = {
   language: string;
   timestamp: string;
   metadata?: Record<string, string>;
+  // Written back by the triage pipeline once a signal has been enriched.
+  sentiment?: string | null;
+  urgency?: string | null;
+  enriched?: boolean;
 };
 
 export type WorkspaceSettings = {

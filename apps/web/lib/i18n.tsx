@@ -246,6 +246,7 @@ const en = {
     target: "Target",
     direction: "Direction",
     learning: "Learning",
+    manualValue: "unverified manual observation",
   },
   settings: {
     title: "Settings",
@@ -825,6 +826,7 @@ const de: Dict = {
     target: "Ziel",
     direction: "Richtung",
     learning: "Learning",
+    manualValue: "unbestätigte manuelle Angabe",
   },
   settings: {
     title: "Einstellungen",

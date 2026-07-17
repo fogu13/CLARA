@@ -627,6 +627,7 @@ class WorkflowStore:
             improvement_direction=_contract_direction(contract),
             measurement_window_days=contract.measurement_window_days,
             comparison_method=contract.comparison_method,
+            measurement_source=None if measurement is None else measurement.measurement_source,
         )
 
     def state_for_problem(self, problem: ProblemRecord, tenant_id: str | None = None) -> WorkflowState:
@@ -828,7 +829,8 @@ class SQLiteWorkflowStore:
                 metric TEXT NOT NULL,
                 observed_value REAL NOT NULL,
                 measured_at TEXT NOT NULL,
-                notes TEXT
+                notes TEXT,
+                measurement_source TEXT NOT NULL DEFAULT 'manual'
             );
 
             CREATE TABLE IF NOT EXISTS problem_transitions (
@@ -866,6 +868,7 @@ class SQLiteWorkflowStore:
         )
         self._ensure_column("approvals", "action_snapshot", "TEXT")
         self._ensure_column("approvals", "action_diff", "TEXT NOT NULL DEFAULT '[]'")
+        self._ensure_column("outcomes", "measurement_source", "TEXT NOT NULL DEFAULT 'manual'")
         self._ensure_column("learning_conclusions", "tenant_id", "TEXT NOT NULL DEFAULT 'legacy'")
         self._ensure_column("learning_conclusions", "retention_expires_at", "TEXT NOT NULL DEFAULT ''")
         self._ensure_column("executions", "external_ref", "TEXT")
@@ -1160,13 +1163,14 @@ class SQLiteWorkflowStore:
         )
         self._connection.execute(
             """
-            INSERT INTO outcomes (problem_id, metric, observed_value, measured_at, notes)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO outcomes (problem_id, metric, observed_value, measured_at, notes, measurement_source)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(problem_id) DO UPDATE SET
                 metric = excluded.metric,
                 observed_value = excluded.observed_value,
                 measured_at = excluded.measured_at,
-                notes = excluded.notes
+                notes = excluded.notes,
+                measurement_source = excluded.measurement_source
             """,
             (
                 measurement.problem_id,
@@ -1174,6 +1178,7 @@ class SQLiteWorkflowStore:
                 measurement.observed_value,
                 measurement.measured_at,
                 measurement.notes,
+                measurement.measurement_source,
             ),
         )
         self._connection.commit()
@@ -1273,6 +1278,11 @@ class SQLiteWorkflowStore:
         ).fetchone()
 
         latest_value = None if row is None else float(row["observed_value"])
+        measurement_source = None
+        if row is not None:
+            measurement_source = (
+                row["measurement_source"] if "measurement_source" in row.keys() else "manual"
+            )
 
         return OutcomeSnapshot(
             problem_id=problem.problem_id,
@@ -1283,6 +1293,7 @@ class SQLiteWorkflowStore:
             status=_contract_status(contract, latest_value),
             improvement_direction=_contract_direction(contract),
             measurement_window_days=contract.measurement_window_days,
+            measurement_source=measurement_source,
             comparison_method=contract.comparison_method,
         )
 
