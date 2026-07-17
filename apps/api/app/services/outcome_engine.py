@@ -41,6 +41,29 @@ def clamp01(n: float) -> float:
     return max(0.0, min(1.0, n))
 
 
+def evidence_grade(*, comparison_method: str, measurement_source: str | None) -> str:
+    """A–E design grade for an outcome readout (external-review evidence scale).
+
+    A  randomized holdout / control group, instrumented measurement
+    B  controlled quasi-experiment (diff-in-diff, matched control) — reserved,
+       CLARA does not produce this design yet
+    C  interrupted time series (segmented regression)
+    D  uncontrolled before/after, instrumented
+    E  manual assertion or nothing measured yet (descriptive only)
+
+    Grades the *design*, from fields available on every snapshot — the same
+    inputs on the board and the problem detail, so grades never disagree.
+    """
+    if measurement_source is None or measurement_source == "manual":
+        return "E"
+    method = comparison_method.lower()
+    if "holdout" in method or "control" in method:
+        return "A"
+    if "its" in method:
+        return "C"
+    return "D"
+
+
 def outcome_direction(*, baseline: float, target: float) -> str:
     """Determine if higher or lower values are better.
 

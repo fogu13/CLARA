@@ -43,7 +43,14 @@ export function EvidencePanel({
 
       <dl className="evidence-summary">
         <div>
-          <dt>Confidence</dt>
+          {/* "Model score", not "confidence": the value is an uncalibrated
+              heuristic, not a validated probability (external-review item 12). */}
+          <dt
+            title="Uncalibrated model score: blends signal volume, source count and the model's self-reported certainty. Not a validated probability."
+            style={{ cursor: "help" }}
+          >
+            Model score
+          </dt>
           <dd>{percent(confidence)}</dd>
         </div>
         <div>
