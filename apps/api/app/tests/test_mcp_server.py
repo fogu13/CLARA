@@ -101,9 +101,11 @@ class TestToolSurface:
         assert names == {
             "list_problems",
             "get_problem",
+            "get_evidence_pack",
             "get_outcome_board",
             "get_emerging_problems",
             "get_measurement_checkpoints",
+            "get_model_card_metrics",
             "ask_clara",
         }
         # Governance boundary: no approval/execution/write tools, ever.
