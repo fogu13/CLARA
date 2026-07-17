@@ -121,6 +121,7 @@ def build_outcome_board(
                 comparison_method=snapshot.comparison_method,
                 responsible_owner=problem.outcome_contract.responsible_owner,
                 measurement_source=snapshot.measurement_source,
+                evidence_grade=snapshot.evidence_grade,
             )
         )
 
@@ -422,7 +423,24 @@ def build_router(
         user: UserContext = Depends(get_current_user),  # noqa: B008
     ) -> ApprovalRecord:
         problem = require_problem(problem_id)
-        record = workflow_store.record_approval(problem=problem, decision=decision)
+        # Hash the evidence pack AS THE APPROVER SAW IT (pre-decision state) and
+        # stamp it on the append-only approval record: a later re-export whose
+        # content_hash differs proves the pack changed after sign-off. Never set
+        # from the request body (spoof-proof), best-effort (approval must not fail).
+        pack_hash: str | None = None
+        try:
+            from app.services.evidence_pack import build_evidence_pack
+
+            pack_hash = build_evidence_pack(
+                enrich_problem_for_response(problem),
+                workflow_store.state_for_problem(problem),
+                measurement_plan_store.list_plans(),
+            )["content_hash"]
+        except Exception:  # noqa: BLE001
+            logger.warning("Evidence-pack hashing failed for %s", problem_id, exc_info=True)
+        record = workflow_store.record_approval(
+            problem=problem, decision=decision, evidence_pack_hash=pack_hash
+        )
         # approval-cycle-time denominator + decision mix.
         telemetry_store.record(
             "approval_recorded",

@@ -538,6 +538,11 @@ class ApprovalRecord(ApprovalDecision):
     created_at: str
     action_snapshot: ActionProposalSnapshot | None = None
     action_diff: list[ActionProposalChange] = Field(default_factory=list)
+    # Content hash of the evidence pack as it stood when this decision was made
+    # (set server-side, never from the request body). Re-exporting and comparing
+    # hashes proves whether the pack the approver saw has since changed.
+    # ponytail: hash-only tamper evidence; full frozen pack copies if audits demand.
+    evidence_pack_hash: str | None = None
 
 
 class ExecutionRecord(BaseModel):
@@ -722,6 +727,9 @@ class OutcomeSnapshot(BaseModel):
     comparison_method: str
     # Provenance of latest_value ("instrumented" | "manual"), None when unmeasured.
     measurement_source: str | None = None
+    # A–E design grade (outcome_engine.evidence_grade): A holdout, C ITS,
+    # D before/after, E manual/unmeasured.
+    evidence_grade: str | None = None
     # W4 read-time ITS scoring (outcome_engine.its_outcome_for_problem):
     # either {method: "its", effect, ci_low, ci_high, ...} or the honest
     # sparse fallback {method: "delta_insufficient_data", label, delta, ...}.
@@ -747,6 +755,7 @@ class OutcomeBoardItem(BaseModel):
     comparison_method: str
     responsible_owner: str
     measurement_source: str | None = None
+    evidence_grade: str | None = None
 
 
 class OutcomeBoard(BaseModel):

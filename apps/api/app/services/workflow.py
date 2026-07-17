@@ -475,6 +475,7 @@ class WorkflowStore:
         *,
         problem: ProblemRecord,
         decision: ApprovalDecision,
+        evidence_pack_hash: str | None = None,
     ) -> ApprovalRecord:
         action = find_action(problem, decision.action_id)
         approved_action_ids = resolve_approval_state(
@@ -502,6 +503,7 @@ class WorkflowStore:
             created_at=utc_now(),
             action_snapshot=action_snapshot(action),
             action_diff=action_diff(action),
+            evidence_pack_hash=evidence_pack_hash,
         )
         self._approvals.append(record)
 
@@ -616,6 +618,7 @@ class WorkflowStore:
         contract = problem.outcome_contract
         measurement = self._outcomes.get(problem.problem_id)
         latest_value = None if measurement is None else measurement.observed_value
+        measurement_source = None if measurement is None else measurement.measurement_source
 
         return OutcomeSnapshot(
             problem_id=problem.problem_id,
@@ -627,7 +630,11 @@ class WorkflowStore:
             improvement_direction=_contract_direction(contract),
             measurement_window_days=contract.measurement_window_days,
             comparison_method=contract.comparison_method,
-            measurement_source=None if measurement is None else measurement.measurement_source,
+            measurement_source=measurement_source,
+            evidence_grade=outcome_engine.evidence_grade(
+                comparison_method=contract.comparison_method,
+                measurement_source=measurement_source,
+            ),
         )
 
     def state_for_problem(self, problem: ProblemRecord, tenant_id: str | None = None) -> WorkflowState:
@@ -868,6 +875,7 @@ class SQLiteWorkflowStore:
         )
         self._ensure_column("approvals", "action_snapshot", "TEXT")
         self._ensure_column("approvals", "action_diff", "TEXT NOT NULL DEFAULT '[]'")
+        self._ensure_column("approvals", "evidence_pack_hash", "TEXT")
         self._ensure_column("outcomes", "measurement_source", "TEXT NOT NULL DEFAULT 'manual'")
         self._ensure_column("learning_conclusions", "tenant_id", "TEXT NOT NULL DEFAULT 'legacy'")
         self._ensure_column("learning_conclusions", "retention_expires_at", "TEXT NOT NULL DEFAULT ''")
@@ -1032,6 +1040,7 @@ class SQLiteWorkflowStore:
         *,
         problem: ProblemRecord,
         decision: ApprovalDecision,
+        evidence_pack_hash: str | None = None,
     ) -> ApprovalRecord:
         action = find_action(problem, decision.action_id)
         decision_rows = self._connection.execute(
@@ -1060,9 +1069,10 @@ class SQLiteWorkflowStore:
                 note,
                 created_at,
                 action_snapshot,
-                action_diff
+                action_diff,
+                evidence_pack_hash
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 problem.problem_id,
@@ -1073,6 +1083,7 @@ class SQLiteWorkflowStore:
                 created_at,
                 json.dumps(action_snapshot(action).model_dump(mode="json", by_alias=True)),
                 json.dumps([change.model_dump(mode="json") for change in action_diff(action)]),
+                evidence_pack_hash,
             ),
         )
         approval_id = cursor.lastrowid
@@ -1295,6 +1306,10 @@ class SQLiteWorkflowStore:
             measurement_window_days=contract.measurement_window_days,
             measurement_source=measurement_source,
             comparison_method=contract.comparison_method,
+            evidence_grade=outcome_engine.evidence_grade(
+                comparison_method=contract.comparison_method,
+                measurement_source=measurement_source,
+            ),
         )
 
     def latest_learning_conclusion(
@@ -1442,6 +1457,7 @@ class SQLiteWorkflowStore:
             if snapshot_payload
             else None,
             action_diff=[ActionProposalChange.model_validate(item) for item in json.loads(diff_payload or "[]")],
+            evidence_pack_hash=row["evidence_pack_hash"] if "evidence_pack_hash" in row.keys() else None,
         )
 
     @staticmethod
