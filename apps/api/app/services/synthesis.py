@@ -534,6 +534,45 @@ def synthesize_insights(
                 ],
             },
         }
+        _route_churn_save_desk(insight, sigs)
         insights.append(insight)
 
     return insights
+
+
+# Tags that state leaving intent (the model is taught `churn_risk` by the
+# exemplar store; `cancellation_intent` covers workspace-taxonomy variants).
+CHURN_TAGS = {"churn_risk", "cancellation_intent"}
+
+
+def _route_churn_save_desk(insight: dict[str, Any], sigs: list[dict[str, Any]]) -> None:
+    """Deterministic churn routing: stated leaving-intent at high/critical
+    urgency always carries a save-desk recovery action.
+
+    Lives in code, not the prompt, so the routing is auditable and holds even
+    when the LLM's own suggested actions drift. The action still passes the
+    normal governance gate and human approval — this proposes, never executes.
+    """
+    churn_hits = [s for s in sigs if CHURN_TAGS & set(s.get("tags") or [])]
+    if not churn_hits:
+        return
+    if URGENCY_RANK.get(insight.get("max_urgency") or "medium", 2) < URGENCY_RANK["high"]:
+        return
+    insight["churn_save_desk"] = True
+    actions = insight.setdefault("suggested_actions", [])
+    if not any(a.get("type") == "customer_recovery" for a in actions):
+        actions.insert(0, {
+            "type": "customer_recovery",
+            "title": "Route to save-desk: customers stating churn intent",
+            "description": (
+                f"{len(churn_hits)} signal(s) in this cluster state intent to "
+                "leave. Open a save-desk task: contact each affected customer "
+                "with a direct human owner before the next billing/renewal "
+                "touchpoint, and record the outcome so retention effect is "
+                "measurable."
+            ),
+            "priority": 1,
+        })
+    insight["audit"].setdefault("routing", []).append(
+        "churn_save_desk: deterministic (stated churn intent + high/critical urgency)"
+    )
