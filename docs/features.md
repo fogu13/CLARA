@@ -356,8 +356,12 @@ worse outcome than a 404.
     vocabulary) plus FR/ES/IT golden strata would widen the EU story with the same honesty
     discipline.
 11. **Operational hardening for pilots** — uptime monitoring (still pending from the review
-    response), API rate limiting, and the AAL2 flip once all users are MFA-enrolled; none are
-    features, all are pilot-readiness.
+    response) and the AAL2 flip once all users are MFA-enrolled. Rate limiting: two complementary
+    layers now exist — a pre-existing per-workspace plan-quota dependency (`app/rate_limit.py`,
+    wired on the expensive triage `/run` endpoint; its plan lookup is stubbed to the FREE tier
+    until billing lands) and the Jul-2026 global per-client envelope middleware
+    (`CLARA_RATE_LIMIT_PER_MINUTE`). Cataloging lesson re-learned: the first draft of this list
+    claimed no rate limiting existed — unsurfaced capability reads as absent, even to the author.
 12. **Self-serve entry tier** — the thesis targets 10–500-employee teams but onboarding still
     assumes a guided setup; a constrained self-serve Starter (CSV + one connector + read-only
     board) would let the GTM's volume motion run without founder time per seat.
