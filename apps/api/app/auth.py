@@ -51,6 +51,18 @@ else:
 # MFA mandate (see the aal check in _resolve_user). Off by default: flip only
 # after every workspace user has enrolled a TOTP factor.
 REQUIRE_AAL2 = (os.getenv("CLARA_REQUIRE_AAL2") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+# Founder/owner bootstrap. Roles normally live in Supabase app_metadata, but a
+# user whose app_metadata has no user_role defaults to `viewer` — which locked
+# the founder out of every admin feature with no admin present to fix it
+# (chicken-and-egg). Any verified JWT whose email is listed here is elevated to
+# `owner`. Safe: the email comes from the verified token (a user can't claim
+# someone else's verified email), and it can only ELEVATE, never demote.
+OWNER_EMAILS = frozenset(
+    e.strip().lower()
+    for e in (os.getenv("CLARA_OWNER_EMAILS") or "").split(",")
+    if e.strip()
+)
 if REQUIRE_AUTH and not AUTH_ENABLED:
     raise RuntimeError(
         "CLARA_REQUIRE_AUTH is set but neither SUPABASE_URL (JWKS) nor SUPABASE_JWT_SECRET "
@@ -229,6 +241,12 @@ def _resolve_user(
     workspace_id = app_metadata.get("workspace_id", claims.get("workspace_id", 1))
     role = app_metadata.get("user_role", claims.get("user_role", "viewer"))
     email = claims.get("email", "")
+
+    # Founder bootstrap: a configured owner email is always `owner`, so the
+    # operator can never be locked out of admin features by a missing
+    # app_metadata role. `owner` is the highest role, so this only ever elevates.
+    if email and email.lower() in OWNER_EMAILS:
+        role = "owner"
 
     return UserContext(user_id=user_id, workspace_id=workspace_id, email=email, role=role)
 
