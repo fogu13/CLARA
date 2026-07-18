@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any
 
 from app.services.ai import AIProviderError, call_tool
@@ -92,6 +93,16 @@ def enrich_signals(
     fewshot = format_fewshot(exemplars) + "\n\n" if exemplars else ""
     all_enrichments: list[dict[str, Any]] = []
 
+    # Lexical tag canonicalization (ENRICH_TAG_CANON=0 disables): exemplar
+    # tags seed the vocabulary; canonical results accumulate so later batches
+    # converge on the names earlier batches used.
+    canonicalizer = None
+    if os.getenv("ENRICH_TAG_CANON", "1").lower() not in ("0", "false", "no"):
+        from app.services.tag_canon import TagCanonicalizer
+
+        seed_tags = [t for ex in (exemplars or []) for t in ex.get("tags", [])]
+        canonicalizer = TagCanonicalizer(seed_tags)
+
     for i in range(0, len(signals), batch_size):
         batch = signals[i : i + batch_size]
         items = [{"id": s["id"], "text": s["text"]} for s in batch]
@@ -105,6 +116,13 @@ def enrich_signals(
                 trace_name="enrich_signals",
             )
             enrichments = result.get("enrichments", [])
+            if canonicalizer is not None:
+                for enrichment in enrichments:
+                    tags = enrichment.get("tags")
+                    if isinstance(tags, list):
+                        enrichment["tags"] = canonicalizer.canonicalize_all(
+                            [str(t) for t in tags]
+                        )
             all_enrichments.extend(enrichments)
         except AIProviderError:
             logger.warning(
