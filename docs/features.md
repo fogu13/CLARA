@@ -322,9 +322,12 @@ worse outcome than a 404.
    benefit-pending until a real action's contract completes on non-simulated data. The pilot
    motion should be designed around producing exactly this artifact.
 2. **Tag canonicalization at enrichment time** — fuzzy tag F1 is 80.2% while exact-string is
-   55.5%; the gap is vocabulary drift the semantic taxonomy already knows how to close. Wiring
-   canonicalization into the enrichment path (not just post-hoc hygiene) would move exact-match
-   metrics and clustering quality together. Cheap, high-leverage.
+   55.5%. Lexical canonicalization (shipped Jul 2026, `tag_canon.py`) closes the wording-variant
+   part safely (offline re-score on the 17-Jul predictions: 2/80 items touched, both toward gold,
+   zero regressions, exact-set unchanged) — the remaining gap is mostly *semantic*
+   (pricing_confusion vs pricing_unclear), so the real close needs the embeddings path (#5) or a
+   richer exemplar vocabulary. Revised from "high-leverage" to "cheap clustering-hygiene win"
+   after measurement.
 3. **Urgency significance + calibration** — the exemplar lift on urgency is unproven (p = 0.219 at
    n = 80). Grow the golden set (more DE, plus the eval-077-style "churn musing vs urgent" boundary
    cases) until the A/B is powered, and add a calibration exemplar for the critical-vs-high rule.
