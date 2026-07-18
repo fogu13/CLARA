@@ -310,3 +310,46 @@ def test_deployment_fails_closed_without_auth_env(
         monkeypatch.setenv("DATABASE_URL", "")
         monkeypatch.delenv("CLARA_REQUIRE_AUTH", raising=False)
         importlib.reload(auth_mod)
+
+
+def test_owner_email_bootstrap_elevates_to_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A CLARA_OWNER_EMAILS address is always owner, even with no app_metadata
+    role — the founder-lockout fix. Case-insensitive; non-listed stays viewer."""
+    import importlib
+
+    import app.auth as auth_mod
+
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-jwt-secret-for-hybrid")
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("CLARA_REQUIRE_AUTH", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "")
+    monkeypatch.setenv("CLARA_OWNER_EMAILS", "Founder@Example.com, ops@x.com")
+    importlib.reload(auth_mod)
+    try:
+        founder = _make_token(
+            "test-jwt-secret-for-hybrid", sub="f-1", email="founder@example.com"
+        )
+        assert auth_mod._resolve_user(authorization=f"Bearer {founder}").role == "owner"
+
+        # Not on the list -> default viewer, unchanged.
+        other = _make_token(
+            "test-jwt-secret-for-hybrid", sub="v-1", email="nobody@example.com"
+        )
+        assert auth_mod._resolve_user(authorization=f"Bearer {other}").role == "viewer"
+
+        # An explicit app_metadata role is preserved for non-owner emails.
+        editor = _make_token(
+            "test-jwt-secret-for-hybrid", sub="e-1", email="ed@example.com",
+            app_metadata={"user_role": "editor"},
+        )
+        assert auth_mod._resolve_user(authorization=f"Bearer {editor}").role == "editor"
+    finally:
+        # Fully restore the auth-disabled test default BEFORE reloading —
+        # monkeypatch only reverts env at teardown (after this block), so the
+        # reload must see clean env or AUTH_ENABLED leaks True into later tests.
+        monkeypatch.delenv("CLARA_OWNER_EMAILS", raising=False)
+        monkeypatch.delenv("SUPABASE_JWT_SECRET", raising=False)
+        monkeypatch.delenv("SUPABASE_URL", raising=False)
+        importlib.reload(auth_mod)

@@ -216,3 +216,17 @@ docker compose -f docker-compose.langfuse.yml up -d
   restart to activate; unset/0 keeps it off. Per-process fixed window; `/health` exempt.
 - The model card serves the n=100 eval snapshot (urgency significance) after the next pull+restart;
   verify with `python3 scripts/live_smoke.py` as usual.
+
+## User roles (fixing "requires an admin role" / 403 on connectors, api-keys, exports)
+
+CLARA reads each user's role from the Supabase JWT `app_metadata.user_role`
+(`owner` > `admin` > `editor` > `viewer`). A user with none set defaults to
+**viewer** — read-only, and blocked from connector/API-key/export management.
+
+- **Founder / to never get locked out:** set `CLARA_OWNER_EMAILS=your@email` in
+  the API env and restart. That email is always `owner`, no DB write needed.
+  Sign out and back in afterwards so a fresh token carries the role.
+- **Other teammates:** grant a role in the DB (they re-login after):
+  `DATABASE_URL=... python3 apps/api/scripts/set_user_role.py --email x@y.z --role admin`
+  or one-off SQL in the Supabase SQL editor:
+  `UPDATE auth.users SET raw_app_meta_data = coalesce(raw_app_meta_data,'{}'::jsonb) || '{"user_role":"admin"}'::jsonb WHERE email='x@y.z';`
