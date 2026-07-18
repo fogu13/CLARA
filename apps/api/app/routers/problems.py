@@ -794,6 +794,7 @@ def build_router(
                     sid,
                     sentiment=enriched_signal.get("sentiment"),
                     urgency=enriched_signal.get("urgency"),
+                    tags=enriched_signal.get("tags"),
                 )
             except Exception:  # noqa: BLE001 — best-effort; the triage result stands
                 logger.warning("Failed to persist enrichment for %s", sid, exc_info=True)

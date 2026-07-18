@@ -209,3 +209,10 @@ docker compose -f docker-compose.langfuse.yml up -d
 | pgvector not found | Enable `vector` extension in Supabase dashboard |
 | API cold start (Render free) | First request takes ~30s; upgrade to paid for always-on |
 | LLM calls fail | Check `AI_BASE_URL` + `AI_API_KEY` + `AI_MODEL` are set |
+
+## Post-merge notes (18 Jul 2026)
+
+- **Rate limiting** (PR #122): add `CLARA_RATE_LIMIT_PER_MINUTE=120` to the API env on the VPS and
+  restart to activate; unset/0 keeps it off. Per-process fixed window; `/health` exempt.
+- The model card serves the n=100 eval snapshot (urgency significance) after the next pull+restart;
+  verify with `python3 scripts/live_smoke.py` as usual.

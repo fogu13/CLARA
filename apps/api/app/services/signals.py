@@ -695,12 +695,22 @@ class SignalStore:
         )
 
     def update_enrichment(
-        self, signal_id: str, *, sentiment: str | None, urgency: str | None
+        self,
+        signal_id: str,
+        *,
+        sentiment: str | None,
+        urgency: str | None,
+        tags: list[str] | None = None,
     ) -> None:
         signal = self._signals.get(signal_id)
         if signal is not None:
             self._signals[signal_id] = signal.model_copy(
-                update={"sentiment": sentiment, "urgency": urgency, "enriched": True}
+                update={
+                    "sentiment": sentiment,
+                    "urgency": urgency,
+                    "tags": list(tags or []),
+                    "enriched": True,
+                }
             )
 
     def candidates(self) -> list[ProblemCandidate]:
@@ -756,6 +766,7 @@ class SQLiteSignalStore:
                 metadata TEXT NOT NULL DEFAULT '{}',
                 sentiment TEXT,
                 urgency TEXT,
+                tags TEXT NOT NULL DEFAULT '[]',
                 enriched INTEGER NOT NULL DEFAULT 0
             )
             """
@@ -771,6 +782,10 @@ class SQLiteSignalStore:
             self._connection.execute("ALTER TABLE signals ADD COLUMN urgency TEXT")
             self._connection.execute(
                 "ALTER TABLE signals ADD COLUMN enriched INTEGER NOT NULL DEFAULT 0"
+            )
+        if "tags" not in columns:
+            self._connection.execute(
+                "ALTER TABLE signals ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'"
             )
         self._connection.execute(
             """
@@ -790,11 +805,17 @@ class SQLiteSignalStore:
         return [self._signal_from_row(row) for row in rows]
 
     def update_enrichment(
-        self, signal_id: str, *, sentiment: str | None, urgency: str | None
+        self,
+        signal_id: str,
+        *,
+        sentiment: str | None,
+        urgency: str | None,
+        tags: list[str] | None = None,
     ) -> None:
         self._connection.execute(
-            "UPDATE signals SET sentiment = ?, urgency = ?, enriched = 1 WHERE signal_id = ?",
-            (sentiment, urgency, signal_id),
+            "UPDATE signals SET sentiment = ?, urgency = ?, tags = ?, enriched = 1"
+            " WHERE signal_id = ?",
+            (sentiment, urgency, json.dumps(list(tags or [])), signal_id),
         )
         self._connection.commit()
 
@@ -841,9 +862,10 @@ class SQLiteSignalStore:
                         metadata,
                         sentiment,
                         urgency,
+                        tags,
                         enriched
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         signal.signal_id,
@@ -860,6 +882,7 @@ class SQLiteSignalStore:
                         json.dumps(signal.metadata),
                         signal.sentiment,
                         signal.urgency,
+                        json.dumps(signal.tags),
                         1 if signal.enriched else 0,
                     ),
                 )
@@ -939,6 +962,7 @@ class SQLiteSignalStore:
             metadata=json.loads(row["metadata"]) if "metadata" in row.keys() else {},
             sentiment=row["sentiment"] if "sentiment" in row.keys() else None,
             urgency=row["urgency"] if "urgency" in row.keys() else None,
+            tags=json.loads(row["tags"]) if "tags" in row.keys() else [],
             enriched=bool(row["enriched"]) if "enriched" in row.keys() else False,
         )
 
