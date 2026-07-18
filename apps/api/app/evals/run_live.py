@@ -92,6 +92,10 @@ def _score_enrichment(*, exemplars: list[dict] | None) -> dict[str, Any]:
 
     by_id = {e.get("id"): e for e in enrichments}
     failures: list[dict] = []
+    # Full per-item predictions, persisted in the report so future calibration
+    # work (model-score -> correctness mapping) can pool dated runs instead of
+    # reconstructing predictions from the failures list.
+    per_item: list[dict] = []
     sentiment_correct: list[int] = []
     urgency_correct: list[int] = []
     tag_exact_correct: list[int] = []
@@ -113,10 +117,22 @@ def _score_enrichment(*, exemplars: list[dict] | None) -> dict[str, Any]:
             problems.append(f"tags pred={act_tags} exp={exp_tags}")
         if problems:
             failures.append({"id": g["id"], "problems": problems})
+        per_item.append({
+            "id": g["id"],
+            "language": g.get("language", "en"),
+            "pred": {
+                "sentiment": act.get("sentiment"),
+                "sentiment_score": act.get("sentiment_score"),
+                "urgency": act.get("urgency"),
+                "tags": act_tags,
+            },
+            "correct": {"sentiment": s_ok, "urgency": u_ok, "tag_exact": t_ok},
+        })
 
     return {
         "result": result,
         "failures": failures,
+        "per_item": per_item,
         "elapsed_ms": elapsed_ms,
         "vectors": {
             "sentiment": sentiment_correct,
@@ -427,6 +443,7 @@ def main() -> int:
         "synthesis": synthesis,
         "learning_influence": influence,
         "failures": scored_on["failures"],
+        "per_item": scored_on["per_item"],
     }
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)

@@ -75,6 +75,13 @@ def build_router(
     def list_signals() -> list[SignalRecord]:
         return signal_store.list_signals()
 
+    @router.get("/signals/entities", dependencies=[read_dep])
+    def list_signal_entities() -> list[dict]:
+        """Per-entity attribution rollup (metadata['entity'] convention)."""
+        from app.services.entities import entity_rollup
+
+        return entity_rollup(signal_store.list_signals())
+
     @router.post("/signals/import", response_model=SignalImportResult, dependencies=[Depends(require_role(Role.editor))])
     def import_signals(request: SignalImportRequest) -> SignalImportResult:
         return signal_store.import_signals(request.signals)
