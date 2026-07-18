@@ -16,7 +16,8 @@ import {
   renameTaxonomyCategory,
   reviewTaxonomyCategory,
   runTaxonomyHygiene,
-  splitTaxonomyCategory
+  splitTaxonomyCategory,
+  wrongOriginHint
 } from "@/lib/client-api";
 import type { TaxonomyHygieneReport } from "@/lib/client-api";
 import { useI18n } from "@/lib/i18n";
@@ -264,7 +265,7 @@ export default function TaxonomyPage() {
       } catch {
         setState({
           status: "fallback",
-          message: "API unreachable. Showing sample taxonomy data.",
+          message: "API unreachable. Showing sample taxonomy data." + wrongOriginHint(),
           catalogs: fallbackTaxonomies,
           terms: fallbackTerminologyDictionary
         });

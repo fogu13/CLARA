@@ -51,6 +51,34 @@ export function apiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 }
 
+// The canonical web origin the API's CORS accepts, derived from the API URL
+// (api.clara.odradekai.com -> clara.odradekai.com). Used to steer users off a
+// preview / non-canonical host, where every API call is browser-blocked by
+// CORS and shows up as "API unreachable" + a failed token refresh.
+export function canonicalWebUrl(): string | null {
+  const api = process.env.NEXT_PUBLIC_API_URL;
+  if (!api) return null;
+  try {
+    const url = new URL(api);
+    return `${url.protocol}//${url.hostname.replace(/^api\./, "")}`;
+  } catch {
+    return null;
+  }
+}
+
+// A one-line hint appended to connectivity errors when the browser is on an
+// origin the API won't accept (notably *.vercel.app preview URLs). Empty when
+// the origin already matches the canonical site, so it never nags in prod.
+export function wrongOriginHint(): string {
+  if (typeof window === "undefined") return "";
+  const canonical = canonicalWebUrl();
+  if (!canonical) return "";
+  if (window.location.origin === canonical) return "";
+  const host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") return ""; // local dev
+  return ` If you opened a preview or shared link, use the official app at ${canonical} instead.`;
+}
+
 function browserAccessToken(): string | null {
   if (typeof window === "undefined") return null;
 

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { apiBaseUrl, apiHeaders, httpErrorMessage } from "@/lib/client-api";
+import { apiBaseUrl, apiHeaders, httpErrorMessage, wrongOriginHint } from "@/lib/client-api";
 import { hasRole } from "@/lib/auth-client";
 import { Plug, Trash2, CheckCircle, Loader2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
@@ -189,7 +189,7 @@ export default function IntegrationsPage() {
         setLoadError(httpErrorMessage("Couldn't load connectors", res.status));
       }
     } catch {
-      setLoadError("API unreachable. Connector status unknown.");
+      setLoadError("API unreachable. Connector status unknown." + wrongOriginHint());
     } finally {
       setLoading(false);
     }

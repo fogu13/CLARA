@@ -7,7 +7,7 @@ import { useI18n } from "@/lib/i18n";
 import { Badge } from "@/components/ui/badge";
 import { ActionDecisionPanel } from "@/app/components/action-decision-panel";
 import { WorksCouncilBanner } from "@/app/components/works-council-banner";
-import { getExecutions, getProblem, getProblems } from "@/lib/client-api";
+import { getExecutions, getProblem, getProblems, wrongOriginHint } from "@/lib/client-api";
 import { fallbackProblems } from "@/lib/sample-data";
 import type { ActionProposal, ExecutionRecord, ProblemRecord } from "@/lib/types";
 import { CheckCircle, XCircle, Clock, ArrowRight } from "lucide-react";
@@ -91,7 +91,7 @@ export default function ActionsPage() {
 
       {usingFallback ? (
         <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
-          API unreachable. Showing sample action proposals.
+          API unreachable. Showing sample action proposals.{wrongOriginHint()}
         </div>
       ) : null}
 
