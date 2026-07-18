@@ -6,9 +6,16 @@ public JSON feed, the cleanest possible entry into organic feedback.
 
 Config = {
     "app_id": "1279625243",          # the numeric App Store id
-    "countries": "de,at,ch",         # comma-separated or list; default "de"
+    "countries": "de,at,ch",         # comma-separated or list; default "de,at,ch"
     "last_synced_at": "...",          # optional incremental cursor (ISO)
 }
+
+Field notes the retry logic encodes (verified against the live feed, Jul 2026):
+the feed intermittently returns HTTP 200 with an entry-less body even when
+reviews exist (so first-page emptiness is retried, not trusted); transient
+403/429/5xx happen and resolve on retry; and the *German* storefront currently
+serves no review entries at all — hence the "de,at,ch" default, so a
+German-language app still gets coverage via AT/CH while DE is dark.
 
 GDPR stance (see business-ops/competitive/social-listening-plan.md): reviewer
 names are pseudonymized AT INGESTION — CLARA analyzes themes, never people.
@@ -19,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from datetime import datetime
 from typing import Any
 
@@ -31,6 +39,9 @@ logger = logging.getLogger(__name__)
 
 FEED_URL = "https://itunes.apple.com/{country}/rss/customerreviews/page={page}/id={app_id}/sortby=mostrecent/json"
 MAX_PAGES_PER_COUNTRY = 10  # Apple caps the feed at 10 pages x 50 reviews
+FETCH_ATTEMPTS = 3  # per page: transient errors AND empty-but-200 first pages
+RETRY_WAIT_S = 1.0  # patched to 0 in tests
+RETRYABLE_STATUSES = {403, 429, 500, 502, 503, 504}
 
 
 def _label(node: Any) -> str:
@@ -47,7 +58,9 @@ def _pseudonym(author: str) -> str:
 
 
 def _parse_countries(config: dict[str, Any]) -> list[str]:
-    raw = config.get("countries") or "de"
+    # Default includes AT/CH because the DE storefront currently serves no
+    # review entries via this feed (see module docstring).
+    raw = config.get("countries") or "de,at,ch"
     if isinstance(raw, str):
         parts = [part.strip().lower() for part in raw.split(",")]
     else:
@@ -92,27 +105,13 @@ class AppStoreSourceConnector:
         try:
             with httpx.Client(timeout=30.0) as client:
                 for country in countries:
+                    country_reviews = 0
                     for page in range(1, MAX_PAGES_PER_COUNTRY + 1):
-                        url = FEED_URL.format(country=country, page=page, app_id=app_id)
-                        resp = client.get(url, follow_redirects=True)
-                        if resp.status_code == 404:
-                            raise ConnectorError(
-                                f"App {app_id} not found in the '{country}' App Store",
-                                connector="app_store",
-                                status=404,
-                            )
-                        if resp.status_code != 200:
-                            raise ConnectorError(
-                                f"App Store feed error {resp.status_code} for '{country}'",
-                                connector="app_store",
-                                status=resp.status_code,
-                            )
-
-                        entries = (resp.json().get("feed") or {}).get("entry") or []
-                        if isinstance(entries, dict):  # RSS-JSON quirk: single entry = object
-                            entries = [entries]
-                        # Entries without a rating are app-metadata rows, not reviews.
-                        reviews = [e for e in entries if _label(e.get("im:rating"))]
+                        reviews = self._fetch_page(
+                            client, app_id=app_id, country=country, page=page
+                        )
+                        if reviews is None:  # 404 past page 1: end of feed
+                            break
                         if not reviews:
                             break
 
@@ -126,12 +125,23 @@ class AppStoreSourceConnector:
                             signal = self._map_review(entry, country=country)
                             if signal:
                                 signals.append(signal)
+                                country_reviews += 1
                                 if updated:
                                     latest_by_country[country] = max(
                                         latest_by_country.get(country, ""), updated
                                     )
                         if stop_country:
                             break
+                    if country_reviews == 0 and not cursor:
+                        # First sync yielding nothing is suspicious, not normal —
+                        # notably the DE storefront serves no entries at all.
+                        logger.warning(
+                            "app_store: 0 reviews from the '%s' storefront for app %s"
+                            " (the 'de' feed currently serves no entries; consider"
+                            " countries='de,at,ch')",
+                            country,
+                            app_id,
+                        )
         except httpx.RequestError as exc:
             raise ConnectorError(
                 f"App Store feed unreachable: {exc}", connector="app_store"
@@ -144,6 +154,62 @@ class AppStoreSourceConnector:
             cursor_value = min(latest_by_country.values())
             signals[0].setdefault("_sync_metadata", {})["last_synced_at"] = cursor_value
         return signals
+
+    def _fetch_page(
+        self, client: httpx.Client, *, app_id: str, country: str, page: int
+    ) -> list[dict[str, Any]] | None:
+        """Fetch one feed page with retries; returns review entries.
+
+        Returns None for a 404 past page 1 (end of feed). Raises ConnectorError
+        for a 404 on page 1 (app not in this storefront) and for persistent
+        non-retryable errors. An empty-but-200 FIRST page is treated as a
+        transient fault and retried (the live feed does this); deeper pages
+        accept emptiness as the natural end.
+        """
+        url = FEED_URL.format(country=country, page=page, app_id=app_id)
+        last_status: int | None = None
+        for attempt in range(1, FETCH_ATTEMPTS + 1):
+            if attempt > 1:
+                time.sleep(RETRY_WAIT_S * (attempt - 1))
+            try:
+                resp = client.get(url, follow_redirects=True)
+            except httpx.RequestError:
+                if attempt == FETCH_ATTEMPTS:
+                    raise
+                continue
+            last_status = resp.status_code
+            if resp.status_code == 404:
+                if page == 1:
+                    raise ConnectorError(
+                        f"App {app_id} not found in the '{country}' App Store",
+                        connector="app_store",
+                        status=404,
+                    )
+                return None
+            if resp.status_code in RETRYABLE_STATUSES:
+                continue
+            if resp.status_code != 200:
+                raise ConnectorError(
+                    f"App Store feed error {resp.status_code} for '{country}'",
+                    connector="app_store",
+                    status=resp.status_code,
+                )
+            entries = (resp.json().get("feed") or {}).get("entry") or []
+            if isinstance(entries, dict):  # RSS-JSON quirk: single entry = object
+                entries = [entries]
+            # Entries without a rating are app-metadata rows, not reviews.
+            reviews = [e for e in entries if _label(e.get("im:rating"))]
+            if reviews or page > 1:
+                return reviews
+            # 200-but-empty first page: transient feed fault — retry.
+        if last_status in RETRYABLE_STATUSES:
+            raise ConnectorError(
+                f"App Store feed error {last_status} for '{country}'"
+                f" after {FETCH_ATTEMPTS} attempts",
+                connector="app_store",
+                status=last_status,
+            )
+        return []  # first page stayed empty through all attempts
 
     def _map_review(self, entry: dict[str, Any], *, country: str) -> dict[str, Any] | None:
         review_id = _label(entry.get("id"))
