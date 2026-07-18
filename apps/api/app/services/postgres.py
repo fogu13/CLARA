@@ -583,9 +583,19 @@ class PostgresSignalStore(PostgresConnectionMixin):
         return record
 
     def update_enrichment(
-        self, signal_id: str, *, sentiment: str | None, urgency: str | None
+        self,
+        signal_id: str,
+        *,
+        sentiment: str | None,
+        urgency: str | None,
+        tags: list[str] | None = None,
     ) -> None:
-        patch = {"sentiment": sentiment, "urgency": urgency, "enriched": True}
+        patch = {
+            "sentiment": sentiment,
+            "urgency": urgency,
+            "tags": list(tags or []),
+            "enriched": True,
+        }
         with self._connect() as conn:
             conn.execute(
                 "UPDATE clara_signals SET payload = payload || %s WHERE signal_id = %s",

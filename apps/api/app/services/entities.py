@@ -8,9 +8,7 @@ insurance verticals, delivery partners, BPO providers all fit.
 The rollup answers "which entity drives which pain" from signals already
 ingested — the July-2026 GetYourGuide teardown lesson: complaints map to
 *named suppliers*, and a supplier intervention needs a per-entity view to be
-proposed and a per-entity baseline to be measured. Tags are not yet persisted
-on signal records, so the rollup keys on sentiment/urgency; theme-level
-per-entity views ride on that once tag write-back lands.
+proposed and a per-entity baseline to be measured.
 """
 
 from __future__ import annotations
@@ -41,6 +39,7 @@ def entity_rollup(signals: list[SignalRecord]) -> list[dict[str, Any]]:
         enriched = [s for s in group if s.sentiment]
         negative = sum(1 for s in enriched if s.sentiment in NEGATIVE_SENTIMENTS)
         urgency_counts = Counter(s.urgency for s in group if s.urgency)
+        tag_counts = Counter(t for s in group for t in (s.tags or []))
         timestamps = sorted(s.timestamp for s in group)
         rollup.append({
             "entity": entity,
@@ -52,6 +51,7 @@ def entity_rollup(signals: list[SignalRecord]) -> list[dict[str, Any]]:
                 count for urgency, count in urgency_counts.items() if urgency in URGENT
             ),
             "urgency_counts": dict(urgency_counts),
+            "top_tags": tag_counts.most_common(5),
             "sources": sorted({s.source for s in group}),
             "first_seen": timestamps[0],
             "last_seen": timestamps[-1],

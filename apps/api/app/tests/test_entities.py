@@ -16,21 +16,24 @@ from app.services.workflow import WorkflowStore
 
 
 def _signal(sid: str, entity: str | None = None, sentiment: str | None = None,
-            urgency: str | None = None, ts: str = "2026-07-01T00:00:00Z") -> SignalRecord:
+            urgency: str | None = None, ts: str = "2026-07-01T00:00:00Z",
+            tags: list[str] | None = None) -> SignalRecord:
     return SignalRecord(
         signal_id=sid,
         feedback_text="text",
         metadata={"entity": entity} if entity else {},
         sentiment=sentiment,
         urgency=urgency,
+        tags=tags or [],
         timestamp=ts,
     )
 
 
 def test_rollup_groups_ranks_and_excludes_entityless() -> None:
     signals = [
-        _signal("s1", "acme_tours", "negative", "high"),
-        _signal("s2", "acme_tours", "negative", "critical", ts="2026-07-03T00:00:00Z"),
+        _signal("s1", "acme_tours", "negative", "high", tags=["overbooking", "refund_issue"]),
+        _signal("s2", "acme_tours", "negative", "critical", ts="2026-07-03T00:00:00Z",
+                tags=["overbooking"]),
         _signal("s3", "acme_tours", "positive", "low"),
         _signal("s4", "beta_travel", "positive", "low"),
         _signal("s5", "beta_travel", "mixed", "medium"),
@@ -45,6 +48,7 @@ def test_rollup_groups_ranks_and_excludes_entityless() -> None:
     assert acme["negative_count"] == 2
     assert acme["negative_share"] == round(2 / 3, 4)
     assert acme["urgent_count"] == 2
+    assert acme["top_tags"][0] == ["overbooking", 2] or acme["top_tags"][0] == ("overbooking", 2)
     assert acme["first_seen"] == "2026-07-01T00:00:00Z"
     assert acme["last_seen"] == "2026-07-03T00:00:00Z"
 

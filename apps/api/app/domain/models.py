@@ -831,6 +831,7 @@ class SignalRecord(BaseModel):
     # never rendered (enrichment lived only inside the triage graph state).
     sentiment: str | None = None
     urgency: str | None = None
+    tags: list[str] = Field(default_factory=list)
     enriched: bool = False
 
 
