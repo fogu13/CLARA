@@ -47,6 +47,14 @@ DEFAULT_EXEMPLARS: list[dict[str, Any]] = [
     {"text": "I can see another customer's invoices in my billing page — a serious privacy breach.",
      "sentiment": "negative", "urgency": "critical",
      "tags": ["security_concern", "data_breach"]},
+    # Churn-musing calibration (eval 2026-07-17, eval-077-class disputes):
+    # CONDITIONAL, future-tense leaving talk is medium — only explicit,
+    # decided cancellation (exemplar above) is critical. Fresh text, no
+    # golden-set leakage.
+    {"text": "If the reporting module stays this slow after the next release, we'll "
+             "probably have to look around for something else eventually.",
+     "sentiment": "negative", "urgency": "medium",
+     "tags": ["performance_degradation", "churn_risk"]},
     # German coverage (eval 2026-07-17: DE urgency 80% vs EN 86.7%; the set was
     # EN-only). Teaches the critical-vs-high rule (unrecoverable loss happening
     # now = critical) and the positive_trend praise-tag convention on German

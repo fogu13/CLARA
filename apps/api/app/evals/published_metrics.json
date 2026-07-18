@@ -1,43 +1,48 @@
 {
-  "published_at": "2026-07-17T15:22:05.362608+00:00",
-  "model": "glm-5.2",
-  "dataset": {
-    "total_items": 80,
-    "note": "Curated golden set; DE stratum authored + adversarially verified. Production config (few-shot exemplars on). Hallucination heuristic covers EN items only."
+ "published_at": "2026-07-18T12:25:59.805958+00:00",
+ "model": "glm-5.2",
+ "dataset": {
+  "total_items": 100,
+  "note": "Curated golden set; DE stratum authored + adversarially verified. Production config (few-shot exemplars on). Hallucination heuristic covers EN items only."
+ },
+ "overall": {
+  "sentiment_accuracy": 0.96,
+  "sentiment_ci95": [
+   0.92,
+   0.99
+  ],
+  "urgency_accuracy": 0.9,
+  "urgency_ci95": [
+   0.84,
+   0.95
+  ],
+  "tag_f1_fuzzy": 0.7868571428571428
+ },
+ "by_language": {
+  "de": {
+   "n": 28,
+   "sentiment_accuracy": 0.9643,
+   "urgency_accuracy": 0.8571,
+   "tag_exact_accuracy": 0.1786,
+   "sentiment_ci": [
+    0.8928571428571429,
+    1.0
+   ]
   },
-  "overall": {
-    "sentiment_accuracy": 0.975,
-    "sentiment_ci95": [
-      0.9375,
-      1.0
-    ],
-    "urgency_accuracy": 0.8625,
-    "urgency_ci95": [
-      0.7875,
-      0.9375
-    ],
-    "tag_f1_fuzzy": 0.8016536964980545
-  },
-  "by_language": {
-    "de": {
-      "n": 20,
-      "sentiment_accuracy": 0.95,
-      "urgency_accuracy": 0.85,
-      "tag_exact_accuracy": 0.15,
-      "sentiment_ci": [
-        0.85,
-        1.0
-      ]
-    },
-    "en": {
-      "n": 60,
-      "sentiment_accuracy": 0.9833,
-      "urgency_accuracy": 0.8667,
-      "tag_exact_accuracy": 0.3333,
-      "sentiment_ci": [
-        0.95,
-        1.0
-      ]
-    }
+  "en": {
+   "n": 72,
+   "sentiment_accuracy": 0.9583,
+   "urgency_accuracy": 0.9167,
+   "tag_exact_accuracy": 0.2639,
+   "sentiment_ci": [
+    0.9027777777777778,
+    1.0
+   ]
   }
+ },
+ "notes": [
+  "2026-07-18: golden set grown 80->100 (20 urgency-boundary items, 12 EN / 8 DE, adversarially verified by two independent auditors; 4 label corrections applied from their disputes and the harness's grounding invariant). A churn-musing calibration exemplar was added. The urgency exemplar effect is now statistically significant: 82%->90% in-run paired McNemar p=0.021 (was p=0.219 at n=80). EN urgency 91.7% (was 86.7%).",
+  "Sentiment accuracy is run-to-run noisy on mixed-vs-polar boundary items: two same-day runs of this config scored 99% and 96%; the in-run paired A/B (off 98% -> on 96%, p=0.5) shows the exemplar change is not the cause. Reported as measured, not re-run for a better number.",
+  "Tag metrics are NOT comparable to the 2026-07-17 snapshot: the 20 new items introduce fresh vocabulary and deliberately adversarial boundaries, and exact-tag agreement wobbles across runs at temperature 0. The designed inference remains the in-run A/B (7%->24%, p=0.001)."
+ ]
 }
