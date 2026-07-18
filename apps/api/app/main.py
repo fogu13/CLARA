@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import time
@@ -51,18 +50,28 @@ class RateLimitMiddleware:
     """Fixed-window per-client rate limit (pilot-ops hardening).
 
     Off unless CLARA_RATE_LIMIT_PER_MINUTE is set to a positive integer, so
-    dev and the test suite are untouched. Client identity: X-Api-Key, else
-    the Authorization token, else the first X-Forwarded-For hop (Caddy fronts
-    the API), else the socket peer. /health stays exempt for probes.
+    dev and the test suite are untouched. /health stays exempt for probes.
 
-    Ceiling, stated: counters are per-process memory — with multiple uvicorn
-    workers the effective limit is limit×workers, and restarts reset windows.
-    Good enough to stop runaway clients and naive scraping; move to the edge
-    (Caddy) if exactness across workers ever matters.
+    Client identity is the NETWORK address only — never a client-supplied
+    credential header. Behind the single trusted proxy (Caddy appends the real
+    peer to X-Forwarded-For), the LAST XFF hop is the client IP Caddy saw;
+    earlier hops and any X-Api-Key/Authorization value are attacker-controlled,
+    so keying on them let a caller mint a fresh bucket per request (audit
+    finding). Set CLARA_RATE_LIMIT_TRUST_XFF=0 if the API is exposed WITHOUT a
+    proxy, so the (then-forgeable) XFF header is ignored in favour of the peer.
+
+    Memory is bounded: a single current-window bucket map, dropped wholesale at
+    each minute rollover (O(1)); within a window, once _MAX_KEYS distinct
+    clients are seen the limiter fails OPEN for new keys rather than growing
+    unbounded (the earlier per-key cleanup reclaimed nothing under a flood).
+
+    Ceiling, stated: counters are per-process — with multiple uvicorn workers
+    the effective limit is limit×workers, and restarts reset windows. A coarse
+    safety net; move to the edge (Caddy) for exactness across workers.
     """
 
     EXEMPT_PATHS = {"/health"}
-    _MAX_KEYS = 10_000  # stale-bucket cleanup threshold
+    _MAX_KEYS = 100_000  # hard cap on tracked clients per window (fail-open above)
 
     def __init__(self, app, *, limit_per_minute: int | None = None):
         self.app = app
@@ -72,17 +81,21 @@ class RateLimitMiddleware:
             except ValueError:
                 limit_per_minute = 0
         self.limit = max(0, limit_per_minute)
-        self._buckets: dict[str, tuple[int, int]] = {}  # key -> (window, count)
+        self._trust_xff = (
+            os.getenv("CLARA_RATE_LIMIT_TRUST_XFF", "1").strip().lower()
+            not in ("0", "false", "no")
+        )
+        self._window = -1
+        self._buckets: dict[str, int] = {}  # key -> count, current window only
+        self._saturated_logged = False
 
     def _client_key(self, scope) -> str:
-        headers = {k.decode("latin1").lower(): v for k, v in scope.get("headers", [])}
-        for header in ("x-api-key", "authorization"):
-            value = headers.get(header)
-            if value:
-                return hashlib.sha256(value).hexdigest()[:16]
-        forwarded = headers.get("x-forwarded-for")
-        if forwarded:
-            return forwarded.decode("latin1").split(",")[0].strip()
+        if self._trust_xff:
+            for name, value in scope.get("headers", []):
+                if name == b"x-forwarded-for":
+                    # LAST hop = the peer Caddy observed; earlier hops are
+                    # client-supplied and spoofable.
+                    return value.decode("latin1").split(",")[-1].strip()
         client = scope.get("client")
         return client[0] if client else "unknown"
 
@@ -92,16 +105,25 @@ class RateLimitMiddleware:
             return
 
         window = int(time.time() // 60)
+        if window != self._window:  # O(1) rollover: drop the whole prior window
+            self._window = window
+            self._buckets = {}
+            self._saturated_logged = False
+
         key = self._client_key(scope)
-        bucket_window, count = self._buckets.get(key, (window, 0))
-        if bucket_window != window:
-            count = 0
-        count += 1
-        self._buckets[key] = (window, count)
-        if len(self._buckets) > self._MAX_KEYS:
-            self._buckets = {
-                k: v for k, v in self._buckets.items() if v[0] == window
-            }
+        count = self._buckets.get(key)
+        if count is None and len(self._buckets) >= self._MAX_KEYS:
+            # Key space saturated this window — fail open instead of growing.
+            if not self._saturated_logged:
+                logger.warning(
+                    "rate limiter: >%d distinct clients in one window; new keys "
+                    "untracked until rollover", self._MAX_KEYS,
+                )
+                self._saturated_logged = True
+            await self.app(scope, receive, send)
+            return
+        count = (count or 0) + 1
+        self._buckets[key] = count
 
         if count > self.limit:
             retry_after = 60 - int(time.time() % 60)

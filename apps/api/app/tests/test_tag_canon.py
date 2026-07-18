@@ -50,3 +50,17 @@ def test_first_registered_wins_and_dedup() -> None:
     canon = TagCanonicalizer(["service_outage"])
     out = canon.canonicalize_all(["service_outages", "service_outage"])
     assert out == ["service_outage"]  # merged variants dedup to one entry
+
+
+def test_specific_tag_not_collapsed_onto_bare_single_token() -> None:
+    # audit finding: checkout_crash must NOT drop "crash" onto a bare vocab
+    # 'checkout' — a specific tag keeps its detail.
+    canon = TagCanonicalizer(["checkout"])
+    assert canon.canonicalize("checkout_crash") == "checkout_crash"
+
+
+def test_vocabulary_growth_is_capped() -> None:
+    canon = TagCanonicalizer([])
+    for i in range(TagCanonicalizer._MAX_VOCAB + 50):
+        canon.register(f"tag_{i}")
+    assert len(canon._exact) == TagCanonicalizer._MAX_VOCAB

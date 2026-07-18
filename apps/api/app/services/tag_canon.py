@@ -50,6 +50,11 @@ def _key(tag: str) -> frozenset[str]:
 class TagCanonicalizer:
     """Vocabulary-anchored canonicalizer; register() order sets precedence."""
 
+    # Bound in-run vocabulary growth so a large import stays O(M·cap), not
+    # O(M²): once the cap is hit, canonicalize still works against the learned
+    # set but stops adding new variants.
+    _MAX_VOCAB = 2_000
+
     def __init__(self, vocabulary: Iterable[str] = ()) -> None:
         self._exact: set[str] = set()
         self._by_key: dict[frozenset[str], str] = {}
@@ -58,7 +63,7 @@ class TagCanonicalizer:
 
     def register(self, tag: str) -> None:
         tag = tag.strip()
-        if not tag or tag in self._exact:
+        if not tag or tag in self._exact or len(self._exact) >= self._MAX_VOCAB:
             return
         self._exact.add(tag)
         self._by_key.setdefault(_key(tag), tag)
@@ -71,10 +76,14 @@ class TagCanonicalizer:
         hit = self._by_key.get(key)
         if hit is not None:
             return hit
-        # Near-miss: one token added or removed, rest contained.
+        # Near-miss: one token added or removed, rest contained. Require the
+        # smaller side to keep >=2 tokens, so a specific tag never collapses
+        # onto a bare single-token vocab entry (checkout_crash -> checkout
+        # would silently drop "crash"); mobile_app_freeze -> app_freeze, where
+        # both sides are >=2 tokens, still normalizes.
         for vocab_key, vocab_tag in self._by_key.items():
             small, large = sorted((key, vocab_key), key=len)
-            if small < large and len(large - small) == 1:
+            if len(small) >= 2 and small < large and len(large - small) == 1:
                 return vocab_tag
         return tag
 
