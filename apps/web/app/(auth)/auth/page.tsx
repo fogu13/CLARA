@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authConfigured, signIn, verifyMfaLogin } from "@/lib/auth-client";
+import { wrongOriginHint } from "@/lib/client-api";
 
 function AuthForm() {
   const router = useRouter();
@@ -114,7 +115,7 @@ function AuthForm() {
         )}
       {reason === "expired" ? (
         <p role="status" className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Your session expired. Please sign in again.
+          Your session expired. Please sign in again.{wrongOriginHint()}
         </p>
       ) : null}
 
