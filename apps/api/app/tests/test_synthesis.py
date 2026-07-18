@@ -502,3 +502,100 @@ class TestSynthesizeInsights:
         assert freq["source_count"] == 1
         assert freq["first_seen"] is not None
         assert freq["last_seen"] is not None
+
+
+class TestChurnSaveDeskRouting:
+    """Deterministic churn routing: stated leaving intent at high/critical
+    urgency always proposes a save-desk recovery action (code, not prompt)."""
+
+    def _respond(self, httpx_mock: Any, tag: str) -> None:
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json={
+                "choices": [{
+                    "message": {
+                        "tool_calls": [{
+                            "function": {
+                                "name": "submit_insight",
+                                "arguments": json.dumps(_synth_response(tag)),
+                            }
+                        }]
+                    }
+                }],
+                "usage": {},
+            },
+        )
+
+    def test_churn_cluster_at_high_urgency_gets_save_desk_action(
+        self, _mock_ai_env: None, httpx_mock: Any
+    ) -> None:
+        from app.services.synthesis import synthesize_insights
+
+        signals = _make_enriched_signals(
+            "churn_risk", 3, urgency="high", tags=["churn_risk", "service_outage"]
+        )
+        self._respond(httpx_mock, "churn_risk")
+
+        insights = synthesize_insights(signals, min_cluster_size=3)
+        assert len(insights) == 1
+        insight = insights[0]
+        assert insight["churn_save_desk"] is True
+        first = insight["suggested_actions"][0]
+        assert first["type"] == "customer_recovery"
+        assert "save-desk" in first["title"]
+        # The LLM's own action is preserved behind the routed one.
+        assert any(a["type"] == "create_ticket" for a in insight["suggested_actions"])
+        assert any("churn_save_desk" in note for note in insight["audit"]["routing"])
+
+    def test_low_urgency_churn_mentions_are_not_routed(
+        self, _mock_ai_env: None, httpx_mock: Any
+    ) -> None:
+        from app.services.synthesis import synthesize_insights
+
+        signals = _make_enriched_signals(
+            "churn_risk", 3, urgency="medium", tags=["churn_risk"]
+        )
+        self._respond(httpx_mock, "churn_risk")
+
+        insights = synthesize_insights(signals, min_cluster_size=3)
+        assert len(insights) == 1
+        assert "churn_save_desk" not in insights[0]
+        assert insights[0]["suggested_actions"][0]["type"] == "create_ticket"
+
+    def test_existing_recovery_action_is_not_duplicated(
+        self, _mock_ai_env: None, httpx_mock: Any
+    ) -> None:
+        from app.services.synthesis import synthesize_insights
+
+        response = _synth_response("churn_risk")
+        response["suggested_actions"] = [{
+            "type": "customer_recovery",
+            "title": "Call the affected customers",
+            "description": "Personal outreach",
+            "priority": 1,
+        }]
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json={
+                "choices": [{
+                    "message": {
+                        "tool_calls": [{
+                            "function": {
+                                "name": "submit_insight",
+                                "arguments": json.dumps(response),
+                            }
+                        }]
+                    }
+                }],
+                "usage": {},
+            },
+        )
+        signals = _make_enriched_signals(
+            "churn_risk", 3, urgency="critical", tags=["churn_risk"]
+        )
+        insights = synthesize_insights(signals, min_cluster_size=3)
+        actions = insights[0]["suggested_actions"]
+        assert insights[0]["churn_save_desk"] is True
+        assert sum(1 for a in actions if a["type"] == "customer_recovery") == 1
