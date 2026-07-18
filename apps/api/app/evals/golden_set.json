@@ -1044,7 +1044,8 @@
       "sentiment_score": -0.6,
       "urgency": "high",
       "tags": [
-        "sync_error"
+        "sync_error",
+        "mobile_app"
       ],
       "category": "product_issue"
     },
@@ -1060,7 +1061,8 @@
       "sentiment_score": -0.9,
       "urgency": "critical",
       "tags": [
-        "security_concern"
+        "security_concern",
+        "data_breach"
       ],
       "category": "compliance_concern"
     },
@@ -1110,7 +1112,8 @@
       "sentiment_score": -0.4,
       "urgency": "medium",
       "tags": [
-        "documentation_gap"
+        "documentation_gap",
+        "localization_gap"
       ],
       "category": "content_clarity"
     },
@@ -1143,7 +1146,8 @@
       "sentiment_score": -0.1,
       "urgency": "medium",
       "tags": [
-        "dashboard_design"
+        "dashboard_design",
+        "missing_export"
       ],
       "category": "ux_friction"
     },
@@ -1159,7 +1163,8 @@
       "sentiment_score": -0.9,
       "urgency": "critical",
       "tags": [
-        "service_outage"
+        "service_outage",
+        "downtime"
       ],
       "category": "product_issue"
     },
@@ -1175,7 +1180,8 @@
       "sentiment_score": 0.9,
       "urgency": "low",
       "tags": [
-        "positive_trend"
+        "positive_trend",
+        "product_stability"
       ],
       "category": "positive_trend"
     },
@@ -1191,7 +1197,8 @@
       "sentiment_score": -0.5,
       "urgency": "medium",
       "tags": [
-        "onboarding_friction"
+        "onboarding_friction",
+        "unskippable_tour"
       ],
       "category": "ux_friction"
     },
@@ -1207,7 +1214,8 @@
       "sentiment_score": 0.0,
       "urgency": "low",
       "tags": [
-        "pricing_unclear"
+        "pricing_unclear",
+        "discount_eligibility"
       ],
       "category": "content_clarity"
     },
@@ -1223,7 +1231,8 @@
       "sentiment_score": -0.7,
       "urgency": "high",
       "tags": [
-        "misleading_terms"
+        "misleading_terms",
+        "cancellation_policy"
       ],
       "category": "compliance_concern"
     },
@@ -1256,7 +1265,8 @@
       "sentiment_score": -0.6,
       "urgency": "high",
       "tags": [
-        "data_loss"
+        "data_loss",
+        "import_failure"
       ],
       "category": "product_issue"
     },
@@ -1289,7 +1299,8 @@
       "sentiment_score": -0.3,
       "urgency": "medium",
       "tags": [
-        "churn_risk"
+        "churn_risk",
+        "price_increase"
       ],
       "category": "churn_risk"
     },
@@ -1305,7 +1316,8 @@
       "sentiment_score": -0.5,
       "urgency": "medium",
       "tags": [
-        "dark_mode_contrast"
+        "dark_mode_contrast",
+        "readability_issue"
       ],
       "category": "ux_friction"
     },
@@ -1321,7 +1333,8 @@
       "sentiment_score": 0.7,
       "urgency": "low",
       "tags": [
-        "positive_trend"
+        "positive_trend",
+        "easy_onboarding"
       ],
       "category": "positive_trend"
     },
