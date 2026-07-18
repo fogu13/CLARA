@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
+import time
 from pathlib import Path
 
 import json
@@ -43,6 +45,81 @@ class SecurityHeadersMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_with_headers)
+
+
+class RateLimitMiddleware:
+    """Fixed-window per-client rate limit (pilot-ops hardening).
+
+    Off unless CLARA_RATE_LIMIT_PER_MINUTE is set to a positive integer, so
+    dev and the test suite are untouched. Client identity: X-Api-Key, else
+    the Authorization token, else the first X-Forwarded-For hop (Caddy fronts
+    the API), else the socket peer. /health stays exempt for probes.
+
+    Ceiling, stated: counters are per-process memory — with multiple uvicorn
+    workers the effective limit is limit×workers, and restarts reset windows.
+    Good enough to stop runaway clients and naive scraping; move to the edge
+    (Caddy) if exactness across workers ever matters.
+    """
+
+    EXEMPT_PATHS = {"/health"}
+    _MAX_KEYS = 10_000  # stale-bucket cleanup threshold
+
+    def __init__(self, app, *, limit_per_minute: int | None = None):
+        self.app = app
+        if limit_per_minute is None:
+            try:
+                limit_per_minute = int(os.getenv("CLARA_RATE_LIMIT_PER_MINUTE", "0"))
+            except ValueError:
+                limit_per_minute = 0
+        self.limit = max(0, limit_per_minute)
+        self._buckets: dict[str, tuple[int, int]] = {}  # key -> (window, count)
+
+    def _client_key(self, scope) -> str:
+        headers = {k.decode("latin1").lower(): v for k, v in scope.get("headers", [])}
+        for header in ("x-api-key", "authorization"):
+            value = headers.get(header)
+            if value:
+                return hashlib.sha256(value).hexdigest()[:16]
+        forwarded = headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.decode("latin1").split(",")[0].strip()
+        client = scope.get("client")
+        return client[0] if client else "unknown"
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or not self.limit or scope["path"] in self.EXEMPT_PATHS:
+            await self.app(scope, receive, send)
+            return
+
+        window = int(time.time() // 60)
+        key = self._client_key(scope)
+        bucket_window, count = self._buckets.get(key, (window, 0))
+        if bucket_window != window:
+            count = 0
+        count += 1
+        self._buckets[key] = (window, count)
+        if len(self._buckets) > self._MAX_KEYS:
+            self._buckets = {
+                k: v for k, v in self._buckets.items() if v[0] == window
+            }
+
+        if count > self.limit:
+            retry_after = 60 - int(time.time() % 60)
+            body = b'{"detail":"Rate limit exceeded"}'
+            await send({
+                "type": "http.response.start",
+                "status": 429,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"retry-after", str(retry_after).encode("latin1")),
+                    (b"x-ratelimit-limit", str(self.limit).encode("latin1")),
+                ],
+            })
+            await send({"type": "http.response.body", "body": body})
+            return
+
+        await self.app(scope, receive, send)
+
 
 from app.auth import AUTH_ENABLED
 import app.services.ai as ai
@@ -310,6 +387,7 @@ def create_app(
         allow_headers=["*"],
     )
     api.add_middleware(SecurityHeadersMiddleware)
+    api.add_middleware(RateLimitMiddleware)
 
     active_problem_store = problem_store
     if active_problem_store is None and problems is not None:
