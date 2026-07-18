@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+import app.connectors.app_store as app_store_module
 from app.connectors.app_store import AppStoreSourceConnector
 from app.connectors.base import ConnectorError
 from app.connectors.config_store import ConnectorConfig, ConnectorConfigStore
@@ -98,6 +99,49 @@ class TestConnector:
             {**CONFIG, "last_synced_at": "2026-06-15T00:00:00Z"}
         )
         assert [s["signal_id"] for s in signals] == ["as-de-new"]
+
+    def test_transient_error_then_success(
+        self, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(app_store_module, "RETRY_WAIT_S", 0.0)
+        httpx_mock.add_response(url=_url("de"), status_code=503)
+        httpx_mock.add_response(url=_url("de"), json=_feed([
+            _entry("903", text="Crash beim Start nach dem letzten Update."),
+        ]))
+        httpx_mock.add_response(url=_url("de", 2), json=_feed([]))
+        signals = AppStoreSourceConnector().pull(CONFIG)
+        assert [s["signal_id"] for s in signals] == ["as-de-903"]
+
+    def test_empty_first_page_is_retried(
+        self, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The live feed intermittently answers 200 with no entries — the first
+        # page must be retried, not trusted.
+        monkeypatch.setattr(app_store_module, "RETRY_WAIT_S", 0.0)
+        httpx_mock.add_response(url=_url("de"), json=_feed([]))
+        httpx_mock.add_response(url=_url("de"), json=_feed([
+            _entry("904", text="Überweisung seit drei Tagen nicht angekommen."),
+        ]))
+        httpx_mock.add_response(url=_url("de", 2), json=_feed([]))
+        signals = AppStoreSourceConnector().pull(CONFIG)
+        assert [s["signal_id"] for s in signals] == ["as-de-904"]
+
+    def test_deep_page_404_ends_feed_without_error(self, httpx_mock: Any) -> None:
+        httpx_mock.add_response(url=_url("de"), json=_feed([
+            _entry("905", text="Support antwortet nur mit Textbausteinen."),
+        ]))
+        httpx_mock.add_response(url=_url("de", 2), status_code=404)
+        signals = AppStoreSourceConnector().pull(CONFIG)
+        assert [s["signal_id"] for s in signals] == ["as-de-905"]
+
+    def test_persistent_transient_errors_raise(
+        self, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(app_store_module, "RETRY_WAIT_S", 0.0)
+        for _ in range(3):
+            httpx_mock.add_response(url=_url("de"), status_code=503)
+        with pytest.raises(ConnectorError):
+            AppStoreSourceConnector().pull(CONFIG)
 
     def test_invalid_config_and_missing_app(self, httpx_mock: Any) -> None:
         with pytest.raises(ConnectorError):
