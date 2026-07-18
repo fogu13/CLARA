@@ -129,3 +129,17 @@ class TestConnector:
         httpx_mock.add_response(url=f"{REVIEWS_URL}?maxResults=100", status_code=403)
         with pytest.raises(ConnectorError, match="link the service account"):
             GooglePlaySourceConnector().pull(_config(service_account))
+
+
+class TestSsrfGuard:
+    def test_internal_token_uri_is_rejected(self, service_account: dict) -> None:
+        # audit finding S1: an admin-supplied token_uri pointing at an internal
+        # host must be blocked before the server POSTs the signed assertion.
+        evil = {**service_account, "token_uri": "http://169.254.169.254/token"}
+        with pytest.raises(ConnectorError):
+            GooglePlaySourceConnector().pull(_config(evil))
+
+    def test_localhost_token_uri_is_rejected(self, service_account: dict) -> None:
+        evil = {**service_account, "token_uri": "http://localhost:8000/token"}
+        with pytest.raises(ConnectorError):
+            GooglePlaySourceConnector().pull(_config(evil))

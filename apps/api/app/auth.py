@@ -36,10 +36,18 @@ _JWKS_URL = f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json" if SUPABASE_URL else
 _jwk_client: PyJWKClient | None = None
 
 # Fail-closed guard. The dev fallback below grants role=owner to every unauthenticated
-# request, which is convenient locally but catastrophic in production. Set
-# CLARA_REQUIRE_AUTH=true in any real deployment so missing auth config refuses to boot
-# instead of silently disabling auth.
-REQUIRE_AUTH = (os.getenv("CLARA_REQUIRE_AUTH") or "").strip().lower() in {"1", "true", "yes", "on"}
+# request, which is convenient locally but catastrophic in production. To avoid a prod
+# deploy silently running open if the JWT env is ever lost, CLARA_REQUIRE_AUTH now
+# DEFAULTS to on whenever a real backend (DATABASE_URL) is configured — i.e. a
+# deployment. Dev and the test suite run without DATABASE_URL (conftest blanks it) and
+# keep the open dev context. An explicit CLARA_REQUIRE_AUTH=false still overrides.
+_require_auth_env = (os.getenv("CLARA_REQUIRE_AUTH") or "").strip().lower()
+if _require_auth_env in {"1", "true", "yes", "on"}:
+    REQUIRE_AUTH = True
+elif _require_auth_env in {"0", "false", "no", "off"}:
+    REQUIRE_AUTH = False
+else:
+    REQUIRE_AUTH = bool((os.getenv("DATABASE_URL") or "").strip())
 # MFA mandate (see the aal check in _resolve_user). Off by default: flip only
 # after every workspace user has enrolled a TOTP factor.
 REQUIRE_AAL2 = (os.getenv("CLARA_REQUIRE_AAL2") or "").strip().lower() in {"1", "true", "yes", "on"}

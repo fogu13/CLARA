@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import logging
 import threading
 
 import json
@@ -54,6 +55,8 @@ from app.services.taxonomies import (
     load_seed_terminology,
 )
 from app.services.workflow import WorkflowStore
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS clara_problems (
@@ -377,6 +380,45 @@ class PostgresConnectionMixin:
                 # their policies.
                 cursor.execute("ALTER TABLE clara_api_keys FORCE ROW LEVEL SECURITY")
                 cursor.execute("ALTER TABLE clara_workflow_records FORCE ROW LEVEL SECURITY")
+                # Defense in depth for the other clara_ tables (audit finding T1):
+                # migration 011 FORCEs RLS on all of them, but if 011 was never
+                # applied they stay merely ENABLEd and the owner (the app role)
+                # bypasses RLS -> cross-workspace reads. Self-heal that here so
+                # isolation lives in code, not only in a migration. FORCE only
+                # where a policy already exists (else FORCE = deny-all); a table
+                # with RLS but no policy is logged loudly instead of bricked.
+                cursor.execute(
+                    """
+                    SELECT c.relname,
+                           c.relrowsecurity  AS enabled,
+                           c.relforcerowsecurity AS forced,
+                           EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid) AS has_policy
+                    FROM pg_class c
+                    JOIN pg_namespace n ON n.oid = c.relnamespace
+                    WHERE n.nspname = current_schema()
+                      AND c.relkind = 'r'
+                      AND c.relname LIKE 'clara\\_%'
+                    """
+                )
+                for row in cursor.fetchall():
+                    name = row["relname"] if isinstance(row, dict) else row[0]
+                    forced = row["forced"] if isinstance(row, dict) else row[2]
+                    has_policy = row["has_policy"] if isinstance(row, dict) else row[3]
+                    if forced:
+                        continue
+                    if has_policy:
+                        # name is a clara_ table identifier from pg_class, never
+                        # user input — safe to interpolate.
+                        cursor.execute(  # noqa: S608
+                            f"ALTER TABLE {name} FORCE ROW LEVEL SECURITY"
+                        )
+                    else:
+                        logger.critical(
+                            "RLS NOT enforced on %s (no policy, not forced) — apply "
+                            "migration 011; cross-workspace isolation is not guaranteed "
+                            "for this table until then.",
+                            name,
+                        )
                 cursor.execute(
                     """
                     DROP POLICY IF EXISTS clara_workflow_records_tenant_isolation

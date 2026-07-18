@@ -283,3 +283,30 @@ class TestAuthInFastAPI:
         resp = client.get("/me")
         assert resp.status_code == 200
         assert resp.json() == {"user_id": "dev-user", "workspace_id": 1}
+
+
+def test_deployment_fails_closed_without_auth_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Audit finding A1: with a real backend (DATABASE_URL) but no JWT env and
+    no explicit override, auth must refuse to boot rather than run role=owner."""
+    import importlib
+
+    import app.auth as auth_mod
+
+    monkeypatch.delenv("SUPABASE_JWT_SECRET", raising=False)
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("CLARA_REQUIRE_AUTH", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x/y")
+    try:
+        with pytest.raises(RuntimeError, match="refusing to start"):
+            importlib.reload(auth_mod)
+
+        # Explicit opt-out still permitted (e.g. a deliberately open staging box).
+        monkeypatch.setenv("CLARA_REQUIRE_AUTH", "false")
+        importlib.reload(auth_mod)
+        assert auth_mod.AUTH_ENABLED is False
+    finally:
+        monkeypatch.setenv("DATABASE_URL", "")
+        monkeypatch.delenv("CLARA_REQUIRE_AUTH", raising=False)
+        importlib.reload(auth_mod)

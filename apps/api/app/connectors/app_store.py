@@ -39,7 +39,8 @@ logger = logging.getLogger(__name__)
 
 FEED_URL = "https://itunes.apple.com/{country}/rss/customerreviews/page={page}/id={app_id}/sortby=mostrecent/json"
 MAX_PAGES_PER_COUNTRY = 10  # Apple caps the feed at 10 pages x 50 reviews
-FETCH_ATTEMPTS = 3  # per page: transient errors AND empty-but-200 first pages
+FETCH_ATTEMPTS = 3  # per page: transient errors get the full budget
+EMPTY_RETRY_ATTEMPTS = 2  # a 200-empty first page: retry once, then accept it
 RETRY_WAIT_S = 1.0  # patched to 0 in tests
 RETRYABLE_STATUSES = {403, 429, 500, 502, 503, 504}
 
@@ -201,7 +202,11 @@ class AppStoreSourceConnector:
             reviews = [e for e in entries if _label(e.get("im:rating"))]
             if reviews or page > 1:
                 return reviews
-            # 200-but-empty first page: transient feed fault — retry.
+            # 200-but-empty first page: a transient feed fault OR a permanently
+            # dark storefront (e.g. 'de'). Retry once; don't burn the full
+            # error budget + cumulative sleeps on every sync of a dark store.
+            if attempt >= EMPTY_RETRY_ATTEMPTS:
+                return []
         if last_status in RETRYABLE_STATUSES:
             raise ConnectorError(
                 f"App Store feed error {last_status} for '{country}'"

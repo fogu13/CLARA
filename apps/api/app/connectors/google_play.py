@@ -30,7 +30,7 @@ from typing import Any
 import httpx
 import jwt
 
-from app.connectors.base import ConnectorError
+from app.connectors.base import ConnectorError, validate_external_url
 from app.services.language import detect_language
 
 logger = logging.getLogger(__name__)
@@ -78,8 +78,14 @@ def _access_token(client: httpx.Client, service_account: dict[str, Any]) -> str:
             connector="google_play",
         ) from exc
 
+    # token_uri comes from the admin-supplied service-account JSON; guard it
+    # like jira's base URL so a malicious/misconfigured account can't make the
+    # server POST the signed assertion at an internal/metadata host (SSRF).
+    token_uri = validate_external_url(
+        service_account["token_uri"], connector="google_play"
+    )
     response = client.post(
-        service_account["token_uri"],
+        token_uri,
         data={
             "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
             "assertion": assertion,
