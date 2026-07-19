@@ -26,6 +26,7 @@ Notes:
 - `APP_CORS_ORIGINS` defaults to localhost-only; production must set it (legacy alias `API_CORS_ORIGINS`)
 - `/` returns 404 by design — the health endpoint is `/health`
 - Server access, DNS and backup details are deliberately kept out of this repo (owner's private notes)
+- Uptime: `.github/workflows/uptime.yml` runs this smoke every 30 min from GitHub Actions (independent of both Vercel and the VPS); two consecutive failures open a "Production smoke failing" issue, auto-closed on recovery
 
 ---
 
