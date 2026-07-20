@@ -1,0 +1,49 @@
+name: Uptime
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Live smoke (one retry to absorb transient blips)
+        run: |
+          python3 scripts/live_smoke.py && exit 0
+          echo "First attempt failed — retrying in 60s"
+          sleep 60
+          python3 scripts/live_smoke.py
+
+      - name: Open incident issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open_count=$(gh issue list --state open --search "\"Production smoke failing\" in:title" --json number --jq 'length')
+          if [ "$open_count" = "0" ]; then
+            gh issue create \
+              --title "Production smoke failing" \
+              --body "scripts/live_smoke.py failed twice in a row (60s apart) on the scheduled uptime check.
+
+          Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Runbook: DEPLOY.md production section; VPS details in the owner's private notes. Auto-closes when the check recovers."
+          fi
+
+      - name: Close incident issue on recovery
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for n in $(gh issue list --state open --search "\"Production smoke failing\" in:title" --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "Recovered — the scheduled smoke check is back to green."
+          done
