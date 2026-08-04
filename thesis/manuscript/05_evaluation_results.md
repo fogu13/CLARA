@@ -1,10 +1,10 @@
 # Chapter 5: Evaluation and Results
 
-This chapter reports the two evaluation streams introduced in Chapter 3. Section 5A presents the **quantitative gold-set evaluation** of the artifact's enrichment and routing pipeline against human-curated labels on real customer feedback (RQ3). Section 5B presents the **qualitative practitioner study** — its protocol, instruments, and analysis plan — with results sections held open for the interview data being collected (RQ4). All §5A numbers are computed by the reproducible harness in `evaluation/` and read from `evaluation/results/`; none are hand-entered.
+This chapter reports the two evaluation streams introduced in Chapter 3. Section 5A presents the **quantitative gold-set evaluation** of the artifact's enrichment and routing pipeline against human-assigned labels on real customer feedback (RQ3a accuracy, RQ3b equity). Section 5B presents the **qualitative practitioner study** — its protocol, instruments, and analysis plan — with results sections held open for the interview data being collected (RQ4). All §5A numbers are computed by the reproducible harness in `evaluation/` and read from `evaluation/results/`; none are hand-entered.
 
 ---
 
-## 5A. Quantitative Gold-Set Evaluation (RQ3)
+## 5A. Quantitative Gold-Set Evaluation (RQ3a, RQ3b)
 
 ### 5A.1 The corpus
 
@@ -17,7 +17,7 @@ The evaluation corpus is **188 real, publicly-sourced, paraphrased and de-identi
 | B2B industrial | Henkel (adhesives) | 39 | DE |
 | **Total** | | **188** | EN 102 · DE 84 · other 2 |
 
-Signals originate from Trustpilot (70), the Apple App Store (38), Reddit (33), Amazon (26), Google Play (10), and DIY retailers Hornbach and OBI (11). Human-curated gold labels are present as follows: a **1–5 star rating** for 153 signals (the independent sentiment reference), a closed-set **risk/severity** label for 106 signals (Trade Republic and Henkel), and open-vocabulary **theme** (176 distinct values), **journey stage** (27), and **recommended owner** (51) labels for the full corpus. The high cardinality of the latter three confirms the methodological choice (Chapter 3, §3.5.2) to treat them as open-vocabulary fields evaluated by semantic agreement rather than exact match.
+Signals originate from Trustpilot (70), the Apple App Store (38), Reddit (33), Amazon (26), Google Play (10), and DIY retailers Hornbach and OBI (11). Gold labels are present as follows. **Scored in this thesis:** a 1–5 **star rating** on 153 signals (the independent sentiment reference) and a closed-set **risk/severity** label on 106 signals (Trade Republic and Henkel). **Present but not scored:** **theme**, **journey stage**, **recommended owner** and **recommended action**, each labelled on all 188 signals but with very different vocabulary sizes — 176 distinct themes, 184 distinct actions, 51 owners, 27 journey stages. (Coverage and cardinality are stated separately here deliberately: journey stage, for instance, has complete coverage over only 27 values, so it is closed-set in practice despite being authored free-form.) These four fields are not scored because the semantic-agreement procedure designed for them (Chapter 3, §3.5.2) was not executed; extending the evaluation to them is future work (§6.5), and §5A makes no accuracy claim about them.
 
 ### 5A.2 Method recap
 
@@ -82,7 +82,7 @@ The keyword floor escalates **not one** of the eight genuinely critical German s
 
 ### 5A.6 Interpretation and threats
 
-The results support a clear, defensible claim for RQ3: **the accuracy of the loop's automated triage is strongly method-dependent, and a learned model is necessary** — naive lexical methods fail on real, paraphrased, multilingual feedback, while even a lightweight learned model reaches usable accuracy (sentiment 0.78, risk 0.68) and the artifact's contextual LLM path is the strongest predictor on both tasks (sentiment 0.86, risk 0.72).
+The results support a clear, defensible claim for RQ3a: **the accuracy of the loop's automated triage is strongly method-dependent, and a learned model is necessary** — naive lexical methods fail on real, paraphrased, multilingual feedback, while even a lightweight learned model reaches usable accuracy (sentiment 0.78, risk 0.68) and the artifact's contextual LLM path is the strongest predictor on both tasks (sentiment 0.86, risk 0.72).
 
 The gain is not uniform, and the shape of it is itself the finding. Contextual reasoning buys a great deal on sentiment (macro-F1 0.52 → 0.67) and comparatively little on severity (0.65 → 0.68), while changing escalation equity substantially: the keyword floor escalates none of the eight critical German signals, the LLM path reaches near-parity with English (§5A.5). Read together, these say that the loop's precondition is satisfied by more than one method, and that the choice among them is a design trade-off — cost, latency and model sovereignty against a measurable accuracy margin — rather than a foregone conclusion. That is a more useful result for a design-science thesis than a single dominant number would have been, because it hands a deployer an actual decision rather than an instruction.
 

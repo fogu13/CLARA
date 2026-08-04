@@ -29,20 +29,22 @@ The four research questions (Chapter 1, §1.3) subsume the project's eight worki
 |---|---|---|---|
 | H1 (primary) | Teams have insights but struggle to act — the insight-action gap | RQ1, RQ4 | Interviews; artifact demonstration |
 | H2 (primary) | Signals are fragmented across sources; unified prioritisation is rare | RQ1, RQ4 | Interviews; artifact design |
-| H3 | Signal type affects how reliably feedback can be classified and routed | RQ3 | Gold-set evaluation |
-| H4 | Journey stage materially shapes prioritisation | RQ3, RQ4 | Gold-set evaluation; interviews |
-| H5 | Routing to the right owner is a recurring failure point | RQ1, RQ3 | Gold-set evaluation (owner field) |
+| H3 | Signal type affects how reliably feedback can be classified and routed | RQ3a | Gold-set evaluation (sentiment, risk/severity) |
+| H4 | Journey stage materially shapes prioritisation | RQ4 | Interviews *(the journey-stage field is not scored — see §3.5.2)* |
+| H5 | Routing to the right owner is a recurring failure point | RQ1, RQ4 | Interviews *(the owner field is not scored — see §3.5.2)* |
 | H6 | Clear ownership and approval improve perceived trust | RQ2, RQ4 | Interviews; task sessions |
 | H7 | Stakeholders distrust action they cannot audit | RQ2, RQ4 | Interviews; SUS/TAM |
 | H8 | Outcome measurement (closure) is rarely practised and valued when offered | RQ1, RQ4 | Interviews |
 
 Each hypothesis is reported in Chapter 5 as **confirmed**, **refined**, or **rejected** against the evidence. Consistent with the methodological stance below, hypotheses are treated as design propositions to be assessed for plausibility and utility, not as statistical effects to be tested for significance.
 
+**RQ3b is not derived from H1–H8.** The eight working hypotheses were formulated at proposal stage and none anticipates a language-equity effect. The equity question arose *from* the evaluation — the observation that the rule-based floor escalated no critical German signal at all (§5A.5) — and is answered directly by that evidence rather than through a prior hypothesis. This is a legitimate design-science outcome rather than an omission: the build–evaluate cycle is expected to surface questions the design cycle did not pose (Hevner, 2007), and reporting the question as emergent is more honest than retrofitting a hypothesis to a result already in hand.
+
 ## 3.3 Research Design Overview: Mixed Methods
 
 The artifact is evaluated through a **convergent mixed-methods** design that triangulates two independent evidence streams:
 
-- a **quantitative** gold-set evaluation that measures how well the artifact's AI enrichment and routing reproduce human-curated labels on real feedback (objective accuracy; RQ3); and
+- a **quantitative** gold-set evaluation that measures how well the artifact's AI enrichment reproduces human-assigned sentiment and risk/severity labels on real feedback, and whether escalation differs by language (RQ3a, RQ3b); and
 - a **qualitative** practitioner study — semi-structured interviews and task-based prototype sessions — that captures perceived usefulness, usability, and trust (RQ4), supplemented by standardised SUS and TAM instruments.
 
 The qualitative stream is the *primary* evidence for the design's validity with practitioners; the quantitative stream provides *supporting* evidence that the automated triage underpinning the loop is good enough to be useful. Neither stream alone is sufficient: accuracy without practitioner trust does not close the gap, and practitioner enthusiasm without demonstrated accuracy is not credible. Their convergence (or divergence) is the object of analysis.
@@ -51,7 +53,7 @@ The qualitative stream is the *primary* evidence for the design's validity with 
 
 The artifact was built in iterative build–evaluate cycles. Deterministic responsibilities (schema validation, rule conflict resolution, audit logging, action execution, outcome scoring) were implemented in code; bounded language-model reasoning (enrichment, synthesis, learning extraction) was confined behind a single provider-agnostic interface, so that model behaviour is isolated, swappable, and testable. Ahead of evaluation the platform was placed under a **feature freeze**: only fixes required by the evaluation (bug fixes, demonstration data, task-metric instrumentation) were permitted, to hold the artifact stable across participants. The platform records an `events` telemetry stream (rule creation, approvals, status advances carrying time-to-action, measurement, learning retrieval), which feeds the task-metric analysis in §5B.
 
-## 3.5 Quantitative Evaluation Design (RQ3)
+## 3.5 Quantitative Evaluation Design (RQ3a, RQ3b)
 
 ### 3.5.1 Gold-set construction
 

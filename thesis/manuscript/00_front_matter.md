@@ -9,7 +9,7 @@
 **Institution:** Open Institute of Technology (OPIT)
 **Capstone:** RAI-9001 (30 ECTS)
 **Supervisor:** Prof. Zorina Alliata
-**Submission:** September 2026 *(target)*
+**Submission:** Autumn 2026 *(target)*
 
 > **Artifact note.** The artifact of this thesis is **CLARA** (*Capture, Listen, Analyze, Respond, Adapt*): a Next.js front end on a FastAPI/LangGraph backend, in production since July 2026 (Chapter 4). The design was first instantiated on a different stack — a React/Vite single-page application on Supabase Edge Functions — which served as the first design-cycle iteration and is superseded by the build documented here (§4.7). Build-agnostic discussion refers to "the platform" or "the artifact".
 
