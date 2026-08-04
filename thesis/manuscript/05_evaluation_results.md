@@ -27,7 +27,7 @@ Three predictors are compared on the same gold labels, forming a deliberate prog
 
 1. **Rule-based floor** — a bilingual (EN/DE) lexicon sentiment classifier and a keyword severity classifier (the pre-LLM tradition; Taboada et al., 2011). No training, fully transparent.
 2. **Classical ML** — TF-IDF character n-grams + Logistic Regression, evaluated by stratified 5-fold cross-validation with out-of-fold predictions (no train/test leakage), class-balanced to handle the skew toward negative feedback.
-3. **LLM enrichment path** — the artifact's own enrichment reasoning. Its run against *this* harness's 188-signal seed-label corpus is wired and reproducible (`evaluation/predict_llm.py`) but still pending; however, the artifact now carries its own **committed, live LLM evaluation** — an **80-case bilingual golden set** (60 English, 20 authored German; grown from the initial 60 cases, §5A.7) plus a real-data run over the same three public datasets — whose results are reported as convergent evidence in §5A.7 rather than filled into this table, because the gold standards differ.
+3. **LLM enrichment path** — the artifact's own enrichment reasoning, mirroring the platform's production prompt so the gold set scores the same reasoning the product uses. It was run against this harness's 188-signal seed-label corpus on 4 August 2026 (`evaluation/predict_llm.py`, model GLM-5.2 at temperature 0), enriching **188 of 188** signals; the scored results appear in the tables below. Separately, the artifact carries its own **committed, live LLM evaluation** — a curated bilingual golden set (§5A.7) — whose results are reported as convergent evidence in §5A.7 rather than merged into these tables, because the gold standards differ.
 
 Sentiment is scored against the star-rating gold (1–2 → negative, 3 → neutral, 4–5 → positive), a non-circular reference because it is independent of the text the classifier reads.
 
@@ -36,10 +36,12 @@ Sentiment is scored against the star-rating gold (1–2 → negative, 3 → neut
 | Predictor | n | Accuracy | Macro-F1 | Weighted-F1 |
 |---|---:|---:|---:|---:|
 | Rule-based lexicon (floor) | 153 | 0.37 | 0.37 | 0.48 |
-| TF-IDF + Logistic Regression (5-fold CV) | 153 | **0.78** | **0.52** | **0.76** |
-| LLM enrichment path | 153 | *(pending — see §5A.7)* | *(pending)* | *(pending)* |
+| TF-IDF + Logistic Regression (5-fold CV) | 153 | 0.78 | 0.52 | 0.76 |
+| LLM enrichment path | 153 | **0.86** | **0.67** | **0.86** |
 
-The classical-ML baseline improves accuracy by **41 points** and macro-F1 by **15 points** over the lexicon floor. The per-class and confusion analysis explains why the floor is weak: of 94 gold-negative signals the lexicon labels **58 as neutral**, because the *paraphrased, operational* phrasing of real feedback ("Transaction history cannot be exported to CSV") carries few overt sentiment words. Lexicon precision on the negative class is high (0.94) but recall is low (0.34) — when an explicit negative word appears the call is reliable, but most real complaints are stated descriptively. This is a substantive finding, not merely a baseline artefact: **surface-lexicon sentiment is inadequate for operational customer feedback, motivating contextual models.** The neutral class is small (9 of 153) and noisy, depressing macro-F1 for both methods.
+The classical-ML baseline improves accuracy by **41 points** and macro-F1 by **15 points** over the lexicon floor. The per-class and confusion analysis explains why the floor is weak: of 94 gold-negative signals the lexicon labels **58 as neutral**, because the *paraphrased, operational* phrasing of real feedback ("Transaction history cannot be exported to CSV") carries few overt sentiment words. Lexicon precision on the negative class is high (0.94) but recall is low (0.34) — when an explicit negative word appears the call is reliable, but most real complaints are stated descriptively. This is a substantive finding, not merely a baseline artefact: **surface-lexicon sentiment is inadequate for operational customer feedback, motivating contextual models.** The neutral class is small (9 of 153) and noisy, depressing macro-F1 for all three methods.
+
+The LLM path extends the progression rather than merely matching it: accuracy rises from 0.78 to **0.86** and macro-F1 from 0.52 to **0.67** over the classical baseline, a further 8-point accuracy gain on top of the 41-point gain the learned model already delivered. The macro-F1 improvement is the more informative of the two, since it is not inflated by the dominant negative class: the contextual model recovers minority-class signal that the character n-grams do not. The ordering floor → learned → contextual is therefore monotone on both metrics, which is the result the loop's precondition argument requires.
 
 ![Figure 5.2 — Sentiment confusion matrix, lexicon floor vs star-rating gold (n = 153). Gold-negative signals are frequently mislabelled neutral.](../evaluation/results/sentiment_confusion.png)
 
@@ -50,10 +52,12 @@ Risk is scored on the 106 signals (Trade Republic + Henkel) carrying a closed-se
 | Predictor | n | Accuracy | Macro-F1 | Weighted-F1 |
 |---|---:|---:|---:|---:|
 | Keyword severity (floor) | 106 | 0.41 | 0.26 | 0.30 |
-| TF-IDF + Logistic Regression (5-fold CV) | 106 | **0.68** | **0.65** | **0.67** |
-| LLM enrichment path | 106 | *(pending — see §5A.7)* | *(pending)* | *(pending)* |
+| TF-IDF + Logistic Regression (5-fold CV) | 106 | 0.68 | 0.65 | 0.67 |
+| LLM enrichment path | 106 | **0.72** | **0.68** | **0.71** |
 
 The keyword floor collapses almost everything to "low": it correctly tags all 36 low-risk signals but mislabels 18 of 23 high and 19 of 27 critical signals as low, because severity in paraphrased text is rarely signalled by a fixed keyword. Its one strength is precision on "critical" (1.00) — when an unambiguous critical term ("blocked", "fraud") fires, it is right — but recall is only 0.15. Collapsed to a binary **escalate (high+critical) vs routine** decision, the floor reaches 0.59 accuracy and 0.50 macro-F1, still weak. The classical-ML model recovers most of the lost signal (macro-F1 0.26 → **0.65**), learning sector-specific severity cues from character n-grams across both languages.
+
+The LLM path leads on risk as well (accuracy 0.72, macro-F1 0.68), but its margin over the classical baseline is **markedly slimmer than on sentiment** — three macro-F1 points here against fifteen there. This asymmetry is worth stating rather than smoothing over, and it qualifies the case for contextual triage. Severity in this corpus is carried substantially by lexical markers that character n-grams already capture once they are *learned* rather than hand-listed, so the additional benefit of contextual reasoning is small; sentiment, by contrast, depends on reading descriptively-phrased dissatisfaction that has no reliable surface form. For a deployment weighing cost, latency and model sovereignty (§4.4), the defensible reading is that a learned local model is close to sufficient for severity routing, while the contextual path earns its cost on sentiment. The corpus is modest (n = 106) and the two models' intervals are not separated by a significance test, so this is reported as an observed ordering, not a demonstrated superiority.
 
 ![Figure 5.3 — Risk/severity confusion matrix, keyword floor vs risk_seed gold (n = 106). The floor collapses most signals to "low".](../evaluation/results/risk_confusion.png)
 
@@ -61,11 +65,27 @@ The keyword floor collapses almost everything to "low": it correctly tags all 36
 
 Lexicon sentiment macro-F1 varies by slice — B2B industrial 0.45, food delivery 0.34, fintech 0.28; German 0.42, English 0.27 — confirming that a fixed lexicon transfers poorly and unevenly across domains and languages (relevant to H3 and to the fairness concern that some languages are triaged less reliably; Mehrabi et al., 2021). The classical-ML model, trained across the pooled multilingual corpus with character n-grams, is more uniform. The per-slice tables are written to `evaluation/results/sentiment_by_sector.csv` and `sentiment_by_language.csv`.
 
-![Figure 5.4 — Baseline sentiment macro-F1 by sector, showing uneven transfer of a fixed lexicon across domains.](../evaluation/results/f1_breakdown.png) *(The LLM path's per-slice behaviour will be reported once run; the hypothesis, grounded in the multilingual NLP literature of Chapter 2, is that it narrows the cross-language gap further.)*
+The LLM path was scored on the same slices, with the same minimum of five signals per slice, so the comparison is like with like:
+
+| Slice | Lexicon floor (macro-F1) | LLM path (macro-F1) |
+|---|---:|---:|
+| German | 0.42 | **0.67** |
+| English | 0.27 | **0.61** |
+| B2B industrial | 0.45 | **0.63** |
+| Food delivery | 0.34 | **0.53** |
+| Fintech | 0.28 | **0.58** |
+
+Two things follow. First, the LLM path improves **every** slice, and improves the weakest ones most — fintech, the floor's worst sector, roughly doubles (0.28 → 0.58). Second, and more consequential for this thesis's Responsible-AI framing, **the cross-language disparity narrows sharply**: the floor triages German far more reliably than English (a 15-point macro-F1 gap), whereas the LLM path reduces that gap to under seven points while lifting both. The direction is the one the multilingual NLP literature of Chapter 2 predicts, and it matters beyond accuracy: an uneven triage layer means some customers' problems are systematically less likely to be escalated, which is a fairness property of the *loop*, not merely of a classifier (§6.2). The residual gap is not eliminated, and the hallucination heuristic remains English-scope by construction (§3.5.2), so this is a reduction in a known disparity rather than a claim of parity. Food delivery remains the weakest sector under both methods, suggesting a domain difficulty that neither approach resolves.
+
+![Figure 5.4 — Baseline sentiment macro-F1 by sector, showing uneven transfer of a fixed lexicon across domains.](../evaluation/results/f1_breakdown.png) *(The figure shows the lexicon floor; the LLM path's per-slice values are tabulated above.)*
 
 ### 5A.6 Interpretation and threats
 
-The results support a clear, defensible claim for RQ3: **the accuracy of the loop's automated triage is strongly method-dependent, and a learned model is necessary** — naive lexical methods fail on real, paraphrased, multilingual feedback, while even a lightweight learned model reaches usable accuracy (sentiment 0.78, risk 0.68), with the contextual LLM path positioned to improve further.
+The results support a clear, defensible claim for RQ3: **the accuracy of the loop's automated triage is strongly method-dependent, and a learned model is necessary** — naive lexical methods fail on real, paraphrased, multilingual feedback, while even a lightweight learned model reaches usable accuracy (sentiment 0.78, risk 0.68) and the artifact's contextual LLM path is the strongest predictor on both tasks (sentiment 0.86, risk 0.72).
+
+The gain is not uniform, and the shape of it is itself the finding. Contextual reasoning buys a great deal on sentiment (macro-F1 0.52 → 0.67) and comparatively little on severity (0.65 → 0.68), while narrowing the cross-language disparity that the fixed lexicon exhibits (§5A.5). Read together, these say that the loop's precondition is satisfied by more than one method, and that the choice among them is a design trade-off — cost, latency and model sovereignty against a measurable accuracy margin — rather than a foregone conclusion. That is a more useful result for a design-science thesis than a single dominant number would have been, because it hands a deployer an actual decision rather than an instruction.
+
+Two limits on the comparison should be stated. The three predictors are scored on identical gold labels, but only the classical model is cross-validated; the lexicon requires no training and the LLM path was run once, at temperature 0, without repetition, so run-to-run variation for the contextual path is uncharacterised here (the in-repo evaluation, which does test this, observes a 96–99% sentiment band across same-day runs, §5A.7). And the LLM path scores 0.86 on this corpus against 0.97 on the artifact's own curated golden set — a divergence that is expected and is precisely why the two streams are never merged: this harness scores against an independent star-rating proxy, the in-repo set against curated labels. The lower number here is the more conservative estimate and the one that should be quoted.
 
 What §5A tests, and what it does not, should be stated plainly. It evaluates a **precondition** of the contribution — that the enrichment feeding the loop is good enough to act on — not the contribution itself. The thesis's distinctive claims (DP1 measured closure; DP2 perishable learning memory; §1.2) are evaluated by *design demonstration* (Chapter 4) and *practitioner perception* (§5B), not by these numbers; that an outcome contract or a decaying memory improves real decisions is argued and demonstrated, not yet measured. The honest reading of §5A is therefore narrow but firm: the triage layer the loop depends on clears the bar a learned model can reach, and would otherwise fail. The threats of Chapter 3, §3.5.4 further bound these claims: the gold labels are defensible human judgements rather than an oracle; the corpus is modest (188 signals) and balanced rather than population-representative; and the open-vocabulary theme/journey/owner fields are evaluated semantically and reported with caution. The headline numbers therefore characterise the pipeline *on this corpus* and are not population estimates.
 
