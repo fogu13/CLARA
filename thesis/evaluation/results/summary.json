@@ -16,13 +16,33 @@
     "f1_weighted": 0.4828
   },
   "sentiment_by_language": {
-    "de": 0.4216,
-    "en": 0.2667
+    "de": {
+      "n": 81,
+      "accuracy": 0.4198,
+      "f1_macro": 0.4216
+    },
+    "en": {
+      "n": 70,
+      "accuracy": 0.3143,
+      "f1_macro": 0.2667
+    }
   },
   "sentiment_by_sector": {
-    "b2b_industrial": 0.4483,
-    "fintech": 0.2849,
-    "food_delivery": 0.3392
+    "b2b_industrial": {
+      "n": 37,
+      "accuracy": 0.4865,
+      "f1_macro": 0.4483
+    },
+    "fintech": {
+      "n": 45,
+      "accuracy": 0.2889,
+      "f1_macro": 0.2849
+    },
+    "food_delivery": {
+      "n": 71,
+      "accuracy": 0.3662,
+      "f1_macro": 0.3392
+    }
   },
   "risk_baseline": {
     "n": 106,
@@ -81,13 +101,60 @@
     "f1_weighted": 0.8596
   },
   "sentiment_llm_by_language": {
-    "de": 0.6745,
-    "en": 0.6074
+    "de": {
+      "n": 81,
+      "accuracy": 0.8148,
+      "f1_macro": 0.6745
+    },
+    "en": {
+      "n": 70,
+      "accuracy": 0.9143,
+      "f1_macro": 0.6074
+    }
   },
   "sentiment_llm_by_sector": {
-    "b2b_industrial": 0.6305,
-    "fintech": 0.5829,
-    "food_delivery": 0.528
+    "b2b_industrial": {
+      "n": 37,
+      "accuracy": 0.7838,
+      "f1_macro": 0.6305
+    },
+    "fintech": {
+      "n": 45,
+      "accuracy": 0.8222,
+      "f1_macro": 0.5829
+    },
+    "food_delivery": {
+      "n": 71,
+      "accuracy": 0.9296,
+      "f1_macro": 0.528
+    }
+  },
+  "sentiment_llm_by_language_sector": {
+    "de|b2b_industrial": {
+      "n": 37,
+      "accuracy": 0.7838,
+      "f1_macro": 0.6305
+    },
+    "de|fintech": {
+      "n": 7,
+      "accuracy": 0.4286,
+      "f1_macro": 0.3556
+    },
+    "en|fintech": {
+      "n": 36,
+      "accuracy": 0.8889,
+      "f1_macro": 0.6287
+    },
+    "de|food_delivery": {
+      "n": 37,
+      "accuracy": 0.9189,
+      "f1_macro": 0.8398
+    },
+    "en|food_delivery": {
+      "n": 34,
+      "accuracy": 0.9412,
+      "f1_macro": 0.3282
+    }
   },
   "risk_llm": {
     "n": 106,
@@ -99,5 +166,33 @@
     "recall_weighted": 0.717,
     "f1_weighted": 0.7076
   },
-  "llm_path": "scored 153 sentiment / 106 risk predictions"
+  "llm_path": "scored 153 sentiment / 106 risk predictions",
+  "escalation_recall_by_language": {
+    "de": {
+      "n_signals": 45,
+      "n_gold_escalate": 8,
+      "base_rate": 0.1778,
+      "recall_floor": 0.0,
+      "recall_llm": 0.875,
+      "n_gold_escalate_llm": 8
+    },
+    "en": {
+      "n_signals": 59,
+      "n_gold_escalate": 41,
+      "base_rate": 0.6949,
+      "recall_floor": 0.1951,
+      "recall_llm": 0.878,
+      "n_gold_escalate_llm": 41
+    }
+  },
+  "language_sector_composition": {
+    "de|b2b_industrial": 38,
+    "de|fintech": 7,
+    "de|food_delivery": 37,
+    "en|b2b_industrial": 1,
+    "en|fintech": 58,
+    "en|food_delivery": 34,
+    "es|fintech": 1,
+    "nl|fintech": 1
+  }
 }

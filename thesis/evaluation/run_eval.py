@@ -110,8 +110,11 @@ def eval_sentiment(sigs, summary):
     _w("sentiment_by_language.csv", by_lang, cols)
     _w("sentiment_by_sector.csv", by_sector, cols)
     summary["sentiment_baseline"] = overall
-    summary["sentiment_by_language"] = {r["slice"]: r["f1_macro"] for r in by_lang}
-    summary["sentiment_by_sector"] = {r["slice"]: r["f1_macro"] for r in by_sector}
+    # Both metrics, never macro-F1 alone: on small slices with sparse minority
+    # classes macro-F1 swings wildly and can invert the accuracy story.
+    _pair = lambda r: {"n": r["n"], "accuracy": r["accuracy"], "f1_macro": r["f1_macro"]}
+    summary["sentiment_by_language"] = {r["slice"]: _pair(r) for r in by_lang}
+    summary["sentiment_by_sector"] = {r["slice"]: _pair(r) for r in by_sector}
     return by_sector
 
 
@@ -133,6 +136,50 @@ def eval_risk(sigs, summary):
     summary["risk_baseline"] = overall
     summary["risk_binary_escalation"] = binary
     summary["risk_n_datasets"] = sorted({s.dataset for s in have})
+
+
+def equity_slices(sigs, summary, preds=None):
+    """Per-language escalation recall, and the language x sector composition.
+
+    Escalation recall (TPR on gold-escalate) is the equal-opportunity metric:
+    it conditions on the gold label, so the very different base rates across
+    language strata do not distort it the way a raw escalation *rate* would.
+
+    The composition table is reported alongside because language is confounded
+    with dataset on this corpus (German is largely the B2B stratum, English
+    largely fintech). Any per-language claim has to be read against it, so the
+    harness emits it rather than leaving it to prose.
+    """
+    esc = lambda x: x in ("high", "critical")
+    have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
+    rows = {}
+    for lang in sorted({s.language for s in have}):
+        gold = [s for s in have if s.language == lang and esc(s.risk)]
+        if len(gold) < 5:  # too small to report; counted in composition instead
+            continue
+        row = {
+            "n_signals": len([s for s in have if s.language == lang]),
+            "n_gold_escalate": len(gold),
+            "base_rate": round(len(gold) / len([s for s in have if s.language == lang]), 4),
+            "recall_floor": round(
+                sum(1 for s in gold if esc(bl.predict_risk(s.text))) / len(gold), 4),
+        }
+        if preds:
+            scored = [s for s in gold if s.id in preds]
+            if scored:
+                row["recall_llm"] = round(
+                    sum(1 for s in scored if esc(preds[s.id].get("risk", "low")))
+                    / len(scored), 4)
+                row["n_gold_escalate_llm"] = len(scored)
+        rows[lang] = row
+    summary["escalation_recall_by_language"] = rows
+
+    comp = {}
+    for s in sigs:
+        if s.star_rating is None and s.risk not in RISK_LABELS:
+            continue
+        comp[f"{s.language}|{s.sector}"] = comp.get(f"{s.language}|{s.sector}", 0) + 1
+    summary["language_sector_composition"] = dict(sorted(comp.items()))
 
 
 def f1_breakdown(by_sector):
@@ -186,8 +233,23 @@ def score_llm(sigs, summary):
             sub = [(t, p) for t, p, s in zip(y_true, y_pred, rated)
                    if getattr(s, attr) == val]
             if len(sub) >= 5:
-                out[val] = M.score([a for a, _ in sub], [b for _, b in sub])["f1_macro"]
+                r = M.score([a for a, _ in sub], [b for _, b in sub])
+                out[val] = {"n": r["n"], "accuracy": r["accuracy"], "f1_macro": r["f1_macro"]}
         summary[f"sentiment_llm_by_{attr}"] = out
+
+    # Language x sector, because language is confounded with sector here: any
+    # aggregate per-language gap may be a composition effect. Only a sector
+    # carrying both languages supports a within-sector language claim.
+    cross = {}
+    for sec in sorted({s.sector for s in rated}):
+        for lang in sorted({s.language for s in rated}):
+            sub = [(t, p) for t, p, s in zip(y_true, y_pred, rated)
+                   if s.sector == sec and s.language == lang]
+            if len(sub) >= 5:
+                r = M.score([a for a, _ in sub], [b for _, b in sub])
+                cross[f"{lang}|{sec}"] = {
+                    "n": r["n"], "accuracy": r["accuracy"], "f1_macro": r["f1_macro"]}
+    summary["sentiment_llm_by_language_sector"] = cross
     have = [s for s in sigs if s.risk in RISK_LABELS and s.id in preds and s.text]
     if have:
         summary["risk_llm"] = M.score([s.risk for s in have],
@@ -205,6 +267,10 @@ def main():
     eval_ml(sigs, summary)
     f1_breakdown(by_sector)
     score_llm(sigs, summary)
+    cache = os.path.join(RESULTS, "predictions_llm.json")
+    llm_preds = ({p["id"]: p for p in json.load(open(cache))}
+                 if os.path.exists(cache) else None)
+    equity_slices(sigs, summary, llm_preds)
     with open(os.path.join(RESULTS, "summary.json"), "w") as fh:
         json.dump(summary, fh, indent=2)
     print(json.dumps(summary, indent=2))
