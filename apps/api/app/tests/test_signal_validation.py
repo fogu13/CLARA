@@ -82,8 +82,10 @@ def test_import_csv_preserves_extra_columns_as_metadata() -> None:
 
     listed = client.get("/signals").json()
     metadatas = [signal["metadata"] for signal in listed]
-    assert {"rating": "5", "region": "EU"} in metadatas
-    assert {"rating": "2", "region": "US"} in metadatas
+    # Subset, not equality: this CSV carries no timestamp column, so every row
+    # also gets the timestamp_defaulted audit flag (see test_timestamp_normalization).
+    assert any({"rating": "5", "region": "EU"}.items() <= m.items() for m in metadatas)
+    assert any({"rating": "2", "region": "US"}.items() <= m.items() for m in metadatas)
 
 
 def test_validate_csv_warns_for_existing_signal_ids() -> None:

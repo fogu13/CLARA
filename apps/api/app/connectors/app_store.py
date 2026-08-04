@@ -33,6 +33,7 @@ from typing import Any
 import httpx
 
 from app.connectors.base import ConnectorError
+from app.services.common import normalize_timestamp
 from app.services.language import detect_language
 
 logger = logging.getLogger(__name__)
@@ -226,6 +227,7 @@ class AppStoreSourceConnector:
 
         author = _label((entry.get("author") or {}).get("name"))
         rating = _label(entry.get("im:rating"))
+        timestamp, timestamp_defaulted = normalize_timestamp(_label(entry.get("updated")))
         return {
             "signal_id": f"as-{country}-{review_id}",
             # Pseudonymized at ingestion; the reviewer's name is never stored.
@@ -238,8 +240,9 @@ class AppStoreSourceConnector:
             "product_events": [],
             "feedback_text": text[:2000],
             "language": detect_language(text),
-            "timestamp": _label(entry.get("updated")) or "1970-01-01T00:00:00Z",
+            "timestamp": timestamp,
             "metadata": {
+                **({"timestamp_defaulted": "true"} if timestamp_defaulted else {}),
                 "rating": rating,
                 "app_version": _label(entry.get("im:version")),
                 "country": country,

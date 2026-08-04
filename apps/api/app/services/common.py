@@ -12,6 +12,31 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
+def normalize_timestamp(value: object) -> tuple[str, bool]:
+    """Parse an ISO-8601 timestamp to UTC. Returns (timestamp, was_defaulted).
+
+    Missing or unparseable values fall back to ingestion time, never to a
+    fabricated epoch date. `1970-01-01` is worse than useless here: outcome
+    measurement buckets by calendar day, so an epoch-stamped signal silently
+    drops out of every pre/post window instead of erroring, and it corrupts
+    first_seen/last_seen, which order by string compare.
+
+    Callers persist the flag so a defaulted timestamp stays auditable rather
+    than becoming indistinguishable from a real one.
+    """
+    text = str(value).strip() if value is not None else ""
+    if text:
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            pass  # fall through to the flagged default
+        else:
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            return parsed.astimezone(UTC).isoformat().replace("+00:00", "Z"), False
+    return utc_now(), True
+
+
 def action_snapshot(action: ActionProposal) -> ActionProposalSnapshot:
     """Immutable by-alias snapshot of an action proposal (for audit records)."""
     return ActionProposalSnapshot.model_validate(action.model_dump(by_alias=True))

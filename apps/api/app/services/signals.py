@@ -28,7 +28,11 @@ from app.domain.models import (
     SignalValidationReport,
 )
 from app.domain.scoring import approval_pressure, impact_band, normalized_impact_score
-from app.services.common import SerializedConnection, utc_now  # re-exported for existing importers, SerializedConnection
+from app.services.common import (  # re-exported for existing importers, SerializedConnection
+    SerializedConnection,
+    normalize_timestamp,
+    utc_now,
+)
 from app.services.language import detect_language
 
 
@@ -276,6 +280,9 @@ def signal_from_row(row: dict[str, str], *, default_source: str = "csv_upload") 
         for key, value in row.items()
         if key and key not in KNOWN_SIGNAL_COLUMNS and (value or "").strip()
     }
+    timestamp, timestamp_defaulted = normalize_timestamp(row.get("timestamp"))
+    if timestamp_defaulted:
+        metadata["timestamp_defaulted"] = "true"
     return SignalRecord(
         signal_id=row.get("signal_id") or _fallback_signal_id(row),
         customer_id=row.get("customer_id") or "unknown_customer",
@@ -289,7 +296,7 @@ def signal_from_row(row: dict[str, str], *, default_source: str = "csv_upload") 
         # No language field -> detect from the text (DE/EN heuristic), so
         # German handling fires on real imports instead of "unknown".
         language=row.get("language") or detect_language(row.get("feedback_text") or ""),
-        timestamp=row.get("timestamp") or "1970-01-01T00:00:00Z",
+        timestamp=timestamp,
         metadata=metadata,
     )
 
