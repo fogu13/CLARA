@@ -178,6 +178,16 @@ def score_llm(sigs, summary):
     y_true = [bl.gold_sentiment_from_stars(s.star_rating) for s in rated]
     y_pred = [preds[s.id].get("sentiment", "neutral") for s in rated]
     summary["sentiment_llm"] = M.score(y_true, y_pred)
+    # Same slices as the lexicon floor (same >=5 minimum), so §5A.5 compares
+    # like with like instead of a floor-only breakdown.
+    for attr in ("language", "sector"):
+        out = {}
+        for val in sorted({getattr(s, attr) for s in rated}):
+            sub = [(t, p) for t, p, s in zip(y_true, y_pred, rated)
+                   if getattr(s, attr) == val]
+            if len(sub) >= 5:
+                out[val] = M.score([a for a, _ in sub], [b for _, b in sub])["f1_macro"]
+        summary[f"sentiment_llm_by_{attr}"] = out
     have = [s for s in sigs if s.risk in RISK_LABELS and s.id in preds and s.text]
     if have:
         summary["risk_llm"] = M.score([s.risk for s in have],
