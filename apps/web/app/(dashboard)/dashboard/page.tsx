@@ -25,7 +25,8 @@ import {
   getExecutions,
   getOutcomeBoard,
   getProblems,
-  getSignals
+  getSignals,
+  wrongOriginHint
 } from "@/lib/client-api";
 import { AiLiteracyBanner } from "@/app/components/ai-literacy-banner";
 import { WorksCouncilBanner } from "@/app/components/works-council-banner";
@@ -54,6 +55,7 @@ type DashboardData = {
   signals: SignalRecord[];
   emerging: EmergingProblemReport | null;
   usingFallback: boolean;
+  fallbackReason: string;
   partialSources: string[];
 };
 
@@ -327,8 +329,17 @@ export default function DashboardPage() {
             return null;
           })
         ]);
-        setData({ problems, outcomeBoard, approvals, executions, connectors, signals, emerging, usingFallback: false, partialSources });
-      } catch {
+        setData({ problems, outcomeBoard, approvals, executions, connectors, signals, emerging, usingFallback: false, fallbackReason: "", partialSources });
+      } catch (error) {
+        // Say why. requestJson turns an HTTP status into a sentence ("your
+        // session is no longer valid — sign in again"); only a transport
+        // failure is actually an unreachable API, and that one gets the
+        // wrong-origin hint. Blaming reachability for a 401 sent people
+        // debugging the server when they just needed to sign in again.
+        const message = error instanceof Error ? error.message : "";
+        const reason = message.startsWith("Failed to fetch") || message.includes("NetworkError") || !message
+          ? `The API is unreachable.${wrongOriginHint()}`
+          : message;
         setData({
           problems: fallbackSummaries(),
           outcomeBoard: fallbackOutcomeBoard(),
@@ -338,6 +349,7 @@ export default function DashboardPage() {
           signals: [],
           emerging: null,
           usingFallback: true,
+          fallbackReason: reason,
           partialSources: []
         });
       } finally {
@@ -403,7 +415,7 @@ export default function DashboardPage() {
 
       {data?.usingFallback ? (
         <div role="alert" className="flex items-center justify-between gap-3 rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
-          <span>{t.dashboard.sampleBanner}</span>
+          <span>{data.fallbackReason ? `${data.fallbackReason} ${t.dashboard.sampleBanner}` : t.dashboard.sampleBanner}</span>
           <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="shrink-0 rounded-md border px-2 py-1 text-xs font-medium hover:bg-yellow-500/10">
             {t.common.retry}
           </button>

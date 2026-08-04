@@ -46,6 +46,7 @@ import type {
   WorkflowState,
   WorkspaceSettings
 } from "./types";
+import { cookieAuthEnabled } from "./auth-client";
 
 export function apiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -81,6 +82,11 @@ export function wrongOriginHint(): string {
 
 function browserAccessToken(): string | null {
   if (typeof window === "undefined") return null;
+  // Cookie mode: the session is an HttpOnly cookie JS can't read. A token left
+  // in localStorage by an older legacy-mode login would still go out as a Bearer
+  // header, and the API prefers the header over the cookie (auth.py
+  // get_current_user) — so a stale one 401s every request for a signed-in user.
+  if (cookieAuthEnabled) return null;
 
   try {
     return window.localStorage.getItem("clara_access_token");

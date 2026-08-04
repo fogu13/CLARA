@@ -166,8 +166,10 @@ export function signOut(): void {
   if (cookieAuthEnabled) {
     cookieSession = NO_SESSION;
     void fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
-    return;
   }
+  // Also in cookie mode: a browser that signed in under legacy mode still holds
+  // real tokens here. Leaving them is both a credential-hygiene problem and the
+  // source of stale-Bearer 401s (see browserAccessToken in client-api).
   window.localStorage.removeItem(TOKEN_KEY);
   window.localStorage.removeItem(REFRESH_KEY);
 }
