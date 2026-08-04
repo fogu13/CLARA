@@ -43,3 +43,7 @@ pnpm-debug.log*
 .playwright-mcp/
 .understand-anything/
 *.tsbuildinfo
+
+# Derived thesis exports (rebuild: thesis/build_docx.sh, pandoc)
+thesis/short-draft-*.docx
+thesis/short-draft-*.epub
