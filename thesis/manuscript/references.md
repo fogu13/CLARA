@@ -34,6 +34,8 @@ Batini, C., Cappiello, C., Francalanci, C., & Maurino, A. (2009). Methodologies 
 
 Beauchamp, T. L., & Childress, J. F. (2001). *Principles of biomedical ethics* (5th ed.). Oxford University Press.
 
+Bender, E. M., Gebru, T., McMillan-Major, A., & Shmitchell, S. (2021). On the dangers of stochastic parrots: Can language models be too big? In *Proceedings of the 2021 ACM Conference on Fairness, Accountability, and Transparency (FAccT '21)* (pp. 610–623). ACM.
+
 Bertsimas, D., & Kallus, N. (2020). From predictive to prescriptive analytics. *Management Science*, 66(3), 1025–1044.
 
 Bifet, A., & Gavalda, R. (2007). Learning from time-changing data with adaptive windowing. *Proceedings of the ACM Symposium on Applied Computing*, 443–448.
@@ -130,6 +132,8 @@ Guo, C., Pleiss, G., Sun, Y., & Weinberger, K. Q. (2017). On calibration of mode
 
 Gupta, S., et al. (2006). Modeling customer lifetime value. *Journal of Service Research*, 9(2), 139–155.
 
+Hardt, M., Price, E., & Srebro, N. (2016). Equality of opportunity in supervised learning. In *Advances in Neural Information Processing Systems 29 (NIPS 2016)* (pp. 3315–3323).
+
 Harel, D. (1987). Statecharts. *Science of Computer Programming*, 8(3), 231–274.
 
 Harrower, M., & Brewer, C. A. (2003). ColorBrewer.org. *The Cartographic Journal*, 40(1), 27–37.
@@ -146,11 +150,15 @@ Hollingsworth, D. (1995). *The Workflow Reference Model*. WfMC-TC-1003.
 
 Homburg, C., Jozic, D., & Kuehnl, C. (2017). Customer experience management. *Journal of Marketing*, 81(5), 69–96.
 
+Joshi, P., Santy, S., Budhiraja, A., Bali, K., & Choudhury, M. (2020). The state and fate of linguistic diversity and inclusion in the NLP world. In *Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics (ACL 2020)* (pp. 6282–6293).
+
 Keiningham, T. L., Cooil, B., Andreassen, T. W., & Aksoy, L. (2007). A longitudinal examination of Net Promoter. *Journal of Marketing*, 71(3), 39–51.
 
 Jobin, A., Ienca, M., & Vayena, E. (2019). The global landscape of AI ethics guidelines. *Nature Machine Intelligence*, 1(9), 389–399.
 
 Kimball, R., & Ross, M. (2013). *The Data Warehouse Toolkit* (3rd ed.). Wiley.
+
+Kiritchenko, S., & Mohammad, S. M. (2018). Examining gender and race bias in two hundred sentiment analysis systems. In *Proceedings of the Seventh Joint Conference on Lexical and Computational Semantics (*SEM 2018)* (pp. 43–53). Association for Computational Linguistics.
 
 Kohavi, R., Longbotham, R., Sommerfield, D., & Henne, R. M. (2009). Controlled experiments on the web. *Data Mining and Knowledge Discovery*, 18(1), 140–181.
 

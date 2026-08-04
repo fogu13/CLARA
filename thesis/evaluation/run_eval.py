@@ -138,6 +138,59 @@ def eval_risk(sigs, summary):
     summary["risk_n_datasets"] = sorted({s.dataset for s in have})
 
 
+def score_taxonomy(sigs, summary):
+    """Closed-set scoring for journey_stage and owner (the §3.5.2 design).
+
+    Scored from the CONSTRAINED run (`predict_llm.py --constrained`), where the
+    workspace's inventory is supplied, because free-form generation cannot be
+    compared to the gold vocabulary. Reported separately from §5A.3-5A.4, which
+    come from the production-config run.
+
+    Three numbers travel together: a majority-class floor (accuracy over 27 or
+    51 classes is meaningless without one), the model's accuracy, and the
+    in-vocabulary rate — if the model ignores the inventory, the comparison is
+    void and the reader has to be able to see that.
+    """
+    cache = os.path.join(RESULTS, "predictions_llm_taxonomy.json")
+    if not os.path.exists(cache):
+        summary["taxonomy_path"] = ("not run — `python3 predict_llm.py --constrained`"
+                                    " writes predictions_llm_taxonomy.json")
+        return
+    preds = {p["id"]: p for p in json.load(open(cache))}
+    for field in ("journey_stage", "owner"):
+        have = [s for s in sigs if getattr(s, field) and s.id in preds and s.text]
+        if not have:
+            continue
+        y_true = [getattr(s, field) for s in have]
+        y_pred = [str(preds[s.id].get(field, "") or "").strip() for s in have]
+        vocab = set(y_true)
+        overall = M.score(y_true, y_pred)
+        top = collections.Counter(y_true).most_common(1)[0]
+        # Per-class rows only where support >= 5, the harness-wide slice minimum;
+        # a 51-class macro-F1 dominated by singletons reports noise.
+        supported = sorted({v for v, n in collections.Counter(y_true).items() if n >= 5})
+        idx = [i for i, t in enumerate(y_true) if t in supported]
+        sup = M.score([y_true[i] for i in idx], [y_pred[i] for i in idx]) if idx else {}
+        _w(f"{field}_perclass.csv",
+           M.per_class(y_true, y_pred, sorted(vocab)),
+           ["label", "precision", "recall", "f1", "support"])
+        summary[f"{field}_llm_closed_set"] = {
+            "n": overall["n"],
+            "n_classes": len(vocab),
+            "accuracy": overall["accuracy"],
+            "f1_macro_all_classes": overall["f1_macro"],
+            "majority_class_floor": round(top[1] / len(y_true), 4),
+            "majority_class": top[0],
+            "in_vocabulary_rate": round(
+                sum(1 for p in y_pred if p in vocab) / len(y_pred), 4),
+            "classes_with_support_5plus": len(supported),
+            "coverage_of_those_classes": round(len(idx) / len(y_true), 4),
+            "accuracy_on_supported": sup.get("accuracy"),
+            "f1_macro_on_supported": sup.get("f1_macro"),
+        }
+    summary["taxonomy_path"] = "scored from the constrained run (inventory supplied)"
+
+
 def equity_slices(sigs, summary, preds=None):
     """Per-language escalation recall, and the language x sector composition.
 
@@ -267,6 +320,7 @@ def main():
     eval_ml(sigs, summary)
     f1_breakdown(by_sector)
     score_llm(sigs, summary)
+    score_taxonomy(sigs, summary)
     cache = os.path.join(RESULTS, "predictions_llm.json")
     llm_preds = ({p["id"]: p for p in json.load(open(cache))}
                  if os.path.exists(cache) else None)

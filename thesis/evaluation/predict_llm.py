@@ -27,14 +27,29 @@ SYSTEM = (
     "owner (short snake_case team). No prose, JSON only."
 )
 
+# Closed-set variant for journey_stage and owner. Free-form generation cannot be
+# scored against the gold: the vocabularies barely intersect (journey ~15%,
+# owner ~1% exact overlap), so an unconstrained run measures wording, not
+# routing. Supplying the inventory matches how the platform is actually
+# deployed — a workspace configures its owner list and journey taxonomy
+# (§4.3, taxonomy governance) — and matches the closed-set treatment §3.5.2
+# designed for exactly these two fields. Written to a SEPARATE predictions
+# file so the production-config run backing §5A.3-5A.4 stays untouched.
+SYSTEM_CONSTRAINED = (
+    "You triage customer feedback for a feedback-to-action platform. "
+    "For each signal return STRICT JSON with keys: journey_stage and owner. "
+    "You MUST choose each value from the supplied inventory exactly as written. "
+    "Do not invent new values. No prose, JSON only."
+)
 
-def _call(base, key, model, text):
+
+def _call(base, key, model, text, system=SYSTEM, prefix=""):
     body = json.dumps({
         "model": model,
         "temperature": 0,
         "messages": [
-            {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": f"Signal: {text}"},
+            {"role": "system", "content": system},
+            {"role": "user", "content": f"{prefix}Signal: {text}"},
         ],
         "response_format": {"type": "json_object"},
     }).encode()
@@ -60,10 +75,20 @@ def main():
         print("The deterministic baseline in run_eval.py does not need this.")
         sys.exit(0)
     sigs = load()
+    constrained = "--constrained" in sys.argv
+    system, prefix, outfile = SYSTEM, "", "predictions_llm.json"
+    if constrained:
+        stages = sorted({s.journey_stage for s in sigs if s.journey_stage})
+        owners = sorted({s.owner for s in sigs if s.owner})
+        prefix = (f"Allowed journey_stage values: {', '.join(stages)}.\n"
+                  f"Allowed owner values: {', '.join(owners)}.\n")
+        system, outfile = SYSTEM_CONSTRAINED, "predictions_llm_taxonomy.json"
+        print(f"constrained mode: {len(stages)} journey stages, {len(owners)} owners")
+
     out = []
     for i, s in enumerate(sigs, 1):
         try:
-            p = _call(base, key, model, s.text)
+            p = _call(base, key, model, s.text, system=system, prefix=prefix)
         except Exception as e:  # keep going; partial cache is still useful
             print(f"  [{i}/{len(sigs)}] {s.id} error: {e}")
             continue
@@ -79,9 +104,9 @@ def main():
               "predictions. Fix the endpoint/credentials and re-run.")
         sys.exit(1)
     os.makedirs(RESULTS, exist_ok=True)
-    with open(os.path.join(RESULTS, "predictions_llm.json"), "w") as fh:
+    with open(os.path.join(RESULTS, outfile), "w") as fh:
         json.dump(out, fh, indent=2)
-    print(f"wrote {len(out)}/{len(sigs)} LLM predictions -> results/predictions_llm.json")
+    print(f"wrote {len(out)}/{len(sigs)} LLM predictions -> results/{outfile}")
 
 
 if __name__ == "__main__":
