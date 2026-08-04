@@ -1,6 +1,7 @@
 # CLARA — logo exploration
 
-**Status: rough / local / brainstorming.** Nothing here is committed or deployed.
+**Status: settled and shipped.** The chosen mark in `clara-logo/` is live on the site, and everything
+here is committed. The eight numbered concepts below are kept only as exploration history.
 Open `index.html` to compare all options on light + dark with the wordmark.
 
 ## ➜ Chosen direction → `clara-logo/`

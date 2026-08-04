@@ -41,13 +41,22 @@ This repository starts with the smallest credible slice:
 
 ```text
 apps/
-  api/      FastAPI backend prototype
-  web/      Next.js frontend prototype
-data/       Seed data for local development and demos
+  api/      FastAPI backend (in production)
+  web/      Next.js frontend (in production)
+data/       Seed data imported by the apps at build time — not documentation
+infra/      docker-compose for a local Postgres + Langfuse stack
+scripts/    live_smoke.py, the post-deploy production check
 docs/       Product, architecture, and MVP notes
+thesis/     MSc capstone: manuscript, evaluation harness, defense deck
+business/   Locked positioning and strategy
+business-ops/  Go-to-market playbooks, pitch, and legal pack
+            (legal/*.md is read by the web build — see apps/web/app/legal/)
+design/     Brand source of truth; clara-logo/ is the live mark
+reference/  Frozen snapshot of the predecessor codebase, kept as port reference
 ```
 
-The full phased product plan is tracked in `docs/roadmap.md`.
+`docs/repo-map.md` explains every folder in detail, including what is safe to
+change. The full phased product plan is tracked in `docs/roadmap.md`.
 
 ## Run The API
 

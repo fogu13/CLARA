@@ -75,4 +75,4 @@ Subprozessorenliste) zur Verfügung.
 ---
 
 _Stand: {{DATUM}} · Produktfunktion `works_council_mode` ausgeliefert mit Workstream W1
-(Juli 2026, siehe `../../docs/plan-strategy-implementation-2026-07.md`)._
+(Juli 2026, siehe `../../docs/archive/plan-strategy-implementation-2026-07.md`)._

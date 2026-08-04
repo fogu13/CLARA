@@ -89,7 +89,10 @@ for customer pitching.
 > not overhead.*
 
 ## Notes
-- These docs are **local only** (not committed to git) — they hold pricing/strategy/financials. Tell me
-  if you want them versioned in the repo or kept out.
+- These docs **are committed to git**, including pricing, strategy and financials. Treat the repo as
+  the place they live, and keep that in mind before sharing the repository.
+- `legal/` is not just reference: `impressum.md`, `datenschutzerklaerung.md` and `agb-b2b.md` are read
+  by the website at build time (`apps/web/app/legal/[slug]/page.tsx`). Renaming or moving them breaks
+  the web build.
 - Figures, thresholds, and deadlines were current at research time; re-verify the moving ones (Kleinunternehmer
   limits, e-invoicing rollout, AI-Act/Digital-Omnibus dates) against official sources before acting.

@@ -45,7 +45,7 @@ on the critical path is sales/thesis work — see §5/§11 dates, which all stil
 
 _12 Jul 2026: X8 re-statused from cut-first to protected (§1, §2, §12) and claims-discipline items 6–9 +
 never-say additions (§7) applied, per the Jul-2026 five-angle research sweep — companion doc:
-[plan-strategy-implementation-2026-07.md](../../docs/plan-strategy-implementation-2026-07.md)._
+[plan-strategy-implementation-2026-07.md](../../docs/archive/plan-strategy-implementation-2026-07.md)._
 
 ---
 
