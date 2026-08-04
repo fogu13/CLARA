@@ -40,7 +40,13 @@ def _call(base, key, model, text):
     }).encode()
     req = urllib.request.Request(
         base.rstrip("/") + "/chat/completions", data=body,
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            # Gateways in front of OpenAI-compatible endpoints reject the default
+            # Python-urllib agent (observed: 403/500 on every call).
+            "User-Agent": "clara-thesis-eval/1.0",
+        },
     )
     with urllib.request.urlopen(req, timeout=60) as resp:
         data = json.load(resp)
@@ -65,10 +71,17 @@ def main():
         out.append(p)
         if i % 20 == 0:
             print(f"  enriched {i}/{len(sigs)}")
+    # Never write an empty/thin prediction file: run_eval.py would score it as a
+    # result. A wholesale failure (bad key, blocked agent, endpoint down) must be
+    # loud, not a silent zero.
+    if len(out) < len(sigs) // 2:
+        print(f"ABORT: only {len(out)}/{len(sigs)} signals enriched — not writing "
+              "predictions. Fix the endpoint/credentials and re-run.")
+        sys.exit(1)
     os.makedirs(RESULTS, exist_ok=True)
     with open(os.path.join(RESULTS, "predictions_llm.json"), "w") as fh:
         json.dump(out, fh, indent=2)
-    print(f"wrote {len(out)} LLM predictions -> results/predictions_llm.json")
+    print(f"wrote {len(out)}/{len(sigs)} LLM predictions -> results/predictions_llm.json")
 
 
 if __name__ == "__main__":
