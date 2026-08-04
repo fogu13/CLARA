@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.request
 
 from load_datasets import load
@@ -87,10 +88,20 @@ def main():
 
     out = []
     for i, s in enumerate(sigs, 1):
-        try:
-            p = _call(base, key, model, s.text, system=system, prefix=prefix)
-        except Exception as e:  # keep going; partial cache is still useful
-            print(f"  [{i}/{len(sigs)}] {s.id} error: {e}")
+        # The endpoint 500s intermittently (~8% observed). Dropping those would
+        # not lose a random sample — it would lose whichever signals happened to
+        # fail — so retry rather than skip.
+        for attempt in range(3):
+            try:
+                p = _call(base, key, model, s.text, system=system, prefix=prefix)
+                break
+            except Exception as e:
+                if attempt == 2:
+                    print(f"  [{i}/{len(sigs)}] {s.id} gave up after 3 tries: {e}")
+                    p = None
+                else:
+                    time.sleep(2 ** attempt)
+        if p is None:
             continue
         p["id"] = s.id
         out.append(p)
