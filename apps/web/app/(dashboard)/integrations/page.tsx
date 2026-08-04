@@ -185,8 +185,14 @@ export default function IntegrationsPage() {
         setConnectors(await res.json());
         setLoadError(null);
       } else {
-        // A 403/500 must not masquerade as "nothing configured".
-        setLoadError(httpErrorMessage("Couldn't load connectors", res.status));
+        // A 403/500 must not masquerade as "nothing configured" — and a 401 must
+        // not masquerade as "session expired" either. The API distinguishes five
+        // 401s (missing header, expired, invalid, revoked key, MFA required);
+        // reporting only the status turns all of them into one misleading
+        // sentence, so surface the server's reason like every other call here.
+        const body = await res.json().catch(() => null);
+        const generic = httpErrorMessage("Couldn't load connectors", res.status);
+        setLoadError(body?.detail ? `${generic} (${body.detail})` : generic);
       }
     } catch {
       setLoadError("API unreachable. Connector status unknown." + wrongOriginHint());
