@@ -120,7 +120,7 @@ export default function IntegrationsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [notice, setNotice] = useState<{ tone: "ok" | "warn" | "error"; text: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [apiKeysList, setApiKeysList] = useState<Array<{ id: number; name: string; role: string; key_prefix: string; revoked_at: string | null }>>([]);
   const [keyName, setKeyName] = useState("");
@@ -288,7 +288,16 @@ export default function IntegrationsPage() {
       if (!res.ok) {
         throw new Error(data?.detail ?? httpErrorMessage("Couldn't pull from the source", res.status));
       }
-      setNotice({ tone: "ok", text: `Pulled ${data.pulled} signals (${data.imported} new, ${data.skipped_duplicates} duplicates)` });
+      // A pull can succeed and still have found nothing for a reason worth
+      // saying out loud — a green "Pulled 0 signals" sends people hunting for a
+      // bad config when the source itself came back blank.
+      const notes: string[] = data.notes ?? [];
+      const summary = `Pulled ${data.pulled} signals (${data.imported} new, ${data.skipped_duplicates} duplicates)`;
+      setNotice(
+        notes.length
+          ? { tone: "warn", text: `${summary}. ${notes.join(" ")}` }
+          : { tone: "ok", text: summary }
+      );
     } catch (e) {
       setNotice({ tone: "error", text: `Pull failed: ${e instanceof Error ? e.message : "unknown"}` });
     }
@@ -324,7 +333,7 @@ export default function IntegrationsPage() {
       </div>
 
       {notice ? (
-        <div className={`rounded-md border px-3 py-2 text-sm ${notice.tone === "ok" ? "border-emerald-300 text-emerald-700" : "border-destructive text-destructive"}`}>
+        <div className={`rounded-md border px-3 py-2 text-sm ${notice.tone === "ok" ? "border-emerald-300 text-emerald-700" : notice.tone === "warn" ? "border-amber-400 text-amber-700 dark:text-amber-400" : "border-destructive text-destructive"}`}>
           {notice.text}
         </div>
       ) : null}

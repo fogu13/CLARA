@@ -126,6 +126,41 @@ class TestConnector:
         signals = AppStoreSourceConnector().pull(CONFIG)
         assert [s["signal_id"] for s in signals] == ["as-de-904"]
 
+    def test_dark_storefront_returns_a_note_not_a_silent_zero(
+        self, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Apple answers 200 with no entries for a live app (measured across
+        # every storefront on 2026-08-05). That can't raise — it's identical to
+        # a genuinely review-free app — but it must not report a contented 0.
+        monkeypatch.setattr(app_store_module, "RETRY_WAIT_S", 0.0)
+        for _ in range(app_store_module.EMPTY_RETRY_ATTEMPTS):
+            httpx_mock.add_response(url=_url("de"), json=_feed([]))
+        signals = AppStoreSourceConnector().pull(CONFIG)
+        assert len(signals) == 1
+        assert "de" in signals[0]["_pull_note"]
+        assert APP_ID in signals[0]["_pull_note"]
+
+    def test_no_note_on_an_incremental_sync_that_finds_nothing(
+        self, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # With a cursor set, "nothing new" is the normal, quiet outcome.
+        monkeypatch.setattr(app_store_module, "RETRY_WAIT_S", 0.0)
+        for _ in range(app_store_module.EMPTY_RETRY_ATTEMPTS):
+            httpx_mock.add_response(url=_url("de"), json=_feed([]))
+        signals = AppStoreSourceConnector().pull(
+            {**CONFIG, "last_synced_at": "2026-06-15T00:00:00Z"}
+        )
+        assert signals == []
+
+    def test_partial_darkness_notes_only_the_dark_storefront(self, httpx_mock: Any) -> None:
+        httpx_mock.add_response(url=_url("de"), json=_feed([]))
+        httpx_mock.add_response(url=_url("de"), json=_feed([]))
+        httpx_mock.add_response(url=_url("at"), json=_feed([_entry("7", text="Login broken after the update.")]))
+        httpx_mock.add_response(url=_url("at", 2), json=_feed([]))
+        signals = AppStoreSourceConnector().pull({**CONFIG, "countries": "de,at"})
+        assert [s["signal_id"] for s in signals] == ["as-at-7"]
+        assert "de" in signals[0]["_pull_note"]
+
     def test_deep_page_404_ends_feed_without_error(self, httpx_mock: Any) -> None:
         httpx_mock.add_response(url=_url("de"), json=_feed([
             _entry("905", text="Support antwortet nur mit Textbausteinen."),
@@ -187,6 +222,21 @@ class TestGeneralizedPullRoute:
         signals = {s["signal_id"]: s for s in client.get("/signals").json()}
         assert "as-de-77" in signals
         assert config_store.get_config("app_store").config["last_synced_at"]
+
+    def test_note_reaches_the_route_without_importing_a_phantom_signal(
+        self, tmp_path: Path, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(app_store_module, "RETRY_WAIT_S", 0.0)
+        for _ in range(app_store_module.EMPTY_RETRY_ATTEMPTS):
+            httpx_mock.add_response(url=_url("de"), json=_feed([]))
+        client, _, _ = _client(tmp_path, [APP_STORE_CONFIG])
+
+        body = client.post("/connectors/app_store/pull", json={}).json()
+        assert body["pulled"] == 0 and body["imported"] == 0
+        assert body["signals"] == []  # the note carrier is not a signal
+        assert len(body["notes"]) == 1 and "empty feed" in body["notes"][0]
+        stored = client.get("/signals").json()
+        assert not [s for s in stored if s["signal_id"].startswith("as-")]
 
     def test_unknown_source_404s(self, tmp_path: Path) -> None:
         client, _, _ = _client(tmp_path, [])

@@ -605,11 +605,17 @@ def create_app(
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
         last_synced_at = None
+        notes: list[str] = []
         records = []
         for item in raw_signals:
             sync_meta = item.pop("_sync_metadata", None)
+            note = item.pop("_pull_note", None)
+            if note:
+                notes.append(str(note))
             if sync_meta and sync_meta.get("last_synced_at"):
                 last_synced_at = sync_meta["last_synced_at"]
+            if not item:
+                continue  # note-only carrier: a diagnosis, not a signal
             metadata = {
                 key: value if isinstance(value, str) else json.dumps(value)
                 for key, value in (item.get("metadata") or {}).items()
@@ -638,7 +644,8 @@ def create_app(
             "imported": result.imported,
             "skipped_duplicates": result.skipped_duplicates,
             "last_synced_at": last_synced_at,
-            "signals": raw_signals[:10],
+            "notes": notes,
+            "signals": [item for item in raw_signals if item][:10],
         }
 
     def _run_alert_sweep() -> dict[str, int]:
