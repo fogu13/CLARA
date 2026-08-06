@@ -24,7 +24,7 @@ Eleven thematic strands → industry corroboration → DSR methodology → RAI a
 
 Framing moves worth knowing: the novelty claim is self-narrowed against MemoryBank (decayed *evidence confidence over action-outcome learnings, retrieved under governance*); Halperin et al. 2022 (the 1.5M-customer Uber field experiment — apologies can *reduce* future spending) as the strongest case for measuring closure; Laux & Ruschemeier 2025 on why Art 14 awareness-oversight won't de-bias on its own.
 
-[Known issue: Ch 2 is 75k words and §2.1–2.13 still carry artifact-referential prose. Prune? → question 8.]
+**Fixed 7 Aug.** Ch 2 carried 65 trailing "the platform does X" clauses bolted onto prior-work paragraphs — a chapter arguing *for* the artifact while claiming to survey the field, which is what an examiner reads as motivated reasoning. All are now cut or restated as impersonal design implications, with forward references to the chapters that make artifact-specific claims. Two concrete defects went with them: **30 sentence-initial lowercase "the platform"** (leftovers from the Odradek find-replace, visible on nearly every page) and internal class names in the literature chapter (`ActionLog`, `FeedbackRule`, `AbLearning`, `InsightStatus`, `workspace_id`, `auto_execute`). *Correction to my own note: the chapter is **~11k words, not 75k** — that figure was the file's byte size. Length was never the problem; the framing was.*
 
 ## 3 Methodology (Ch 3)
 
@@ -85,9 +85,9 @@ The loop can be closed by design, and governed while closing. RQ3a's honest answ
 
 ## Text debts remaining
 
-- Ch 2: prune the artifact-referential passages and the 75k word count. → question 8
-- The external-review episode appears in four places (§4.9, §5A.8, §6.4, Ch 7). → question 9
-- Theme and recommended action remain unscored; the semantic-agreement procedure in §3.5.2 has not been executed.
+- Theme and recommended action remain unscored; the semantic-agreement procedure in §3.5.2 has not been executed. This is the only *evidence* debt left — the rest below are done.
+- Routing fields need scoring in the free-form production condition, not only under the supplied inventory.
+- Citation verification pass; repository URL / DOI in front matter; sign the declaration.
 
 *(Cleared this week: the n=80 → n=100 propagation, the 191-vs-188 dataset table, the "remains pending" 188-run references, Appendix B's superseded published snapshot, the H4/H5 "not scored" rows, and the stale `build/thesis.docx` — rebuilt 7 Aug, display math verified.)*
 
@@ -102,6 +102,6 @@ If we only get through three: 1, 2, 3.
 5. **Routing fields under a supplied taxonomy** — fair to report, or does an examiner read it as scoring an easier task than the one deployed?
 6. **DP5 vs free-roaming agents:** should Ch 6 add an explicit comparison to pre-empt "why not an agent?" — or is that scope creep? (The routing result is now my best empirical answer to it.)
 7. **MemoryBank boundary** — tight enough as stated in §4.3.2/§6.1? The abstract still mentions decay without the boundary sentence.
-8. **Ch 2 and per-industry placement** — does the distributed treatment suffice, and should Ch 2 be cut to a tighter prior-work chapter?
-9. **The external-review episode in four places** — strengthens the thread, or reads as inflation? Keep / compress / appendix.
+8. **Per-industry placement** — does the distributed treatment (§5A.5 + §5A.7 + §4.3.5) suffice, or does it need one consolidated section? *(The Ch 2 half of this ask is withdrawn — the artifact-referential prose is fixed, and the chapter is ~11k words, so there is no length problem to solve.)*
+9. **The external-review episode** — I compressed it from four full retellings to one canonical account in §5A.8, with §4.9, §6.4 and Ch 7 now carrying only their own consequence and a cross-reference. Does that read right, or would you still rather it moved to an appendix?
 10. Logistics: the IP-letter process (due 31 Aug), the defense window, and whether you want the deck ahead of time.

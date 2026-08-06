@@ -59,7 +59,7 @@ RQ3 was doing two jobs, so it is now **RQ3a (accuracy)** and **RQ3b (equity)** �
 
 The new results forced a currency problem I have now repaired. Chapter 5's own §5A.7, plus Chapters 3, 4, 6, 7 and Appendices B and D, were still telling the pre-run story — §6.4 listed the completed run as "remains pending", and Appendix B published a superseded accuracy snapshot as the EU AI Act accuracy evidence. All of that is propagated and the prose that reasoned from the old state has been rewritten, not merely renumbered.
 
-Two known debts remain and I would value your steer on both: Chapter 2 is 75,000 words and still carries artifact-referential prose from an earlier draft, and the external-review episode now appears in four places.
+Two debts I had been carrying are also now cleared, and both turned out to be worth doing rather than asking about. Chapter 2 was arguing *for* the artifact while claiming to survey the field — sixty-five paragraphs ended with a clause explaining what the platform does about the literature just reviewed, and several named internal class names. Those are now cut or restated as impersonal design implications. (A correction to my own earlier note: the chapter is about **11,000 words, not 75,000** — I had been quoting the file's byte size. Length was never the problem.) Separately, the external-review episode was being retold in full four times; it now has one canonical account in §5A.8, with the other three sections carrying only their own consequence and a cross-reference.
 
 **6. Unchanged and still the critical path**
 
@@ -92,9 +92,9 @@ Elvis
 
 7. **MemoryBank novelty boundary** — tight enough as stated in §4.3.2/§6.1? The abstract still mentions decay without the boundary sentence.
 
-8. **Chapter 2 and per-industry placement.** Does the distributed per-industry treatment (§5A.5 + §5A.7 + §4.3.5) suffice? And should the 75k-word Chapter 2 be cut to a tighter prior-work chapter that lands faster on the gap table?
+8. **Per-industry placement.** Does the distributed per-industry treatment (§5A.5 + §5A.7 + §4.3.5) suffice, or would you rather see it consolidated into one section? *(The Chapter 2 half of this ask is withdrawn — the artifact-referential prose is fixed and there is no length problem: the chapter is ~11k words.)*
 
-9. **The external-review episode appears in four places** (§4.9, §5A.8, §6.4, Ch 7). Does it strengthen the verify-before-believe thread, or start to read as inflation? Keep / compress / move to an appendix.
+9. **The external-review episode.** I have compressed it from four full retellings to a single canonical account in §5A.8; §4.9, §6.4 and Chapter 7 now carry only their own consequence plus a cross-reference. Does that land, or would you still prefer it in an appendix?
 
 10. **Logistics** — the IP-letter process (due 31 Aug), the defense window, and whether you want the deck ahead of time.
 
