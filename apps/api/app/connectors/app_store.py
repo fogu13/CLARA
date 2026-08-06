@@ -5,7 +5,7 @@ them to canonical signal dicts. No auth, no scraping: this is an Apple-provided
 public JSON feed, the cleanest possible entry into organic feedback.
 
 Config = {
-    "app_id": "1279625243",          # the numeric App Store id
+    "app_id": "1517121245",          # the numeric App Store id
     "countries": "de,at,ch",         # comma-separated or list; default "de,at,ch"
     "last_synced_at": "...",          # optional incremental cursor (ISO)
 }
@@ -104,6 +104,7 @@ class AppStoreSourceConnector:
 
         signals: list[dict[str, Any]] = []
         latest_by_country: dict[str, str] = {}
+        dark: list[str] = []  # storefronts that answered 200 with no reviews
         try:
             with httpx.Client(timeout=30.0) as client:
                 for country in countries:
@@ -137,6 +138,7 @@ class AppStoreSourceConnector:
                     if country_reviews == 0 and not cursor:
                         # First sync yielding nothing is suspicious, not normal —
                         # notably the DE storefront serves no entries at all.
+                        dark.append(country)
                         logger.warning(
                             "app_store: 0 reviews from the '%s' storefront for app %s"
                             " (the 'de' feed currently serves no entries; consider"
@@ -155,6 +157,24 @@ class AppStoreSourceConnector:
             # stores; min() never drops anything (dedup absorbs re-fetches).
             cursor_value = min(latest_by_country.values())
             signals[0].setdefault("_sync_metadata", {})["last_synced_at"] = cursor_value
+
+        if dark:
+            # An entry-less 200 is indistinguishable from a genuinely
+            # review-free app, so this can't be an error — but reporting it as a
+            # contented "0 signals" sends people hunting for a bad app_id. Ride
+            # the same side-channel as _sync_metadata; a note-only carrier when
+            # nothing at all came back. Measured 2026-08-05: Apple served
+            # entry-less 200s for every app tried (Instagram/WhatsApp included)
+            # across de/at/ch/gb/us, so a total blank usually means Apple, not you.
+            note = (
+                f"App Store: the {', '.join(dark)} storefront(s) returned an empty feed"
+                f" for app {app_id}. Apple's review feed serves entry-less responses"
+                " intermittently — if the app does have written reviews, retry later."
+            )
+            if signals:
+                signals[0]["_pull_note"] = note
+            else:
+                return [{"_pull_note": note}]
         return signals
 
     def _fetch_page(

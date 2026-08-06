@@ -25,6 +25,7 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from dotenv import load_dotenv
@@ -42,10 +43,17 @@ AI_BASE_URL = (os.getenv("AI_BASE_URL") or "https://api.openai.com/v1").rstrip("
 AI_API_KEY = os.getenv("AI_API_KEY") or ""
 AI_MODEL = os.getenv("AI_MODEL") or "gpt-4o-mini"
 AI_EMBED_MODEL = os.getenv("AI_EMBED_MODEL") or "gemini-embedding-001"
-# Must match the pgvector column dimension (taxonomy_nodes.embedding vector(768)).
+# Must match the pgvector column dimension of taxonomy_nodes.embedding — vector(768)
+# from migration 003, or vector(1024) once 012 has been applied for mistral-embed.
 # gemini-embedding-001 defaults to 3072; request 768. Cosine distance is scale-invariant
 # so the reduced (un-normalised) vectors are fine for nearest-neighbour matching.
 AI_EMBED_DIM = int(os.getenv("AI_EMBED_DIM") or "768")
+# Embeddings may live on a different provider than chat. Unset = same host and key
+# as chat, which is every existing deployment and the keyless Ollama path. Needed
+# because chat-only gateways exist: OpenCode Zen serves 61 chat models and 404s on
+# /embeddings, so no AI_EMBED_MODEL value can make embeddings work there.
+AI_EMBED_BASE_URL = (os.getenv("AI_EMBED_BASE_URL") or "").rstrip("/")
+AI_EMBED_API_KEY = os.getenv("AI_EMBED_API_KEY") or ""
 
 # --- Runtime override (set from the Settings GUI via main.py) ---
 # None field = fall back to the env value above. ponytail: a dict, not a
@@ -89,6 +97,23 @@ def effective_api_key() -> str:
 def effective_embed_model() -> str:
     return _RUNTIME_OVERRIDE.get("embed_model") or os.getenv("AI_EMBED_MODEL") or AI_EMBED_MODEL
 
+
+def effective_embed_base_url() -> str:
+    # Falls back to the chat host, so an unset AI_EMBED_BASE_URL behaves exactly
+    # as before the split. No runtime override: this is deployment topology, not
+    # a Settings-GUI knob.
+    return (os.getenv("AI_EMBED_BASE_URL") or AI_EMBED_BASE_URL).rstrip("/") or effective_base_url()
+
+
+def effective_embed_api_key() -> str:
+    # Only falls back to the chat key when the embed host is the chat host —
+    # sending the chat provider's key to a different provider is a credential
+    # leak, so a split host with no AI_EMBED_API_KEY sends no key at all.
+    explicit = os.getenv("AI_EMBED_API_KEY") or AI_EMBED_API_KEY
+    if explicit:
+        return explicit
+    return effective_api_key() if effective_embed_base_url() == effective_base_url() else ""
+
 # --- Langfuse (optional tracing + evals) ---
 _LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY") or ""
 _LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY") or ""
@@ -122,11 +147,14 @@ def _get_langfuse() -> Any | None:
 
 
 class AIProviderError(RuntimeError):
-    """Raised on AI provider HTTP failure. Carries .status."""
+    """Raised on AI provider HTTP failure. Carries .status and the host it came
+    from — chat and embeddings can now be different providers, so the error has
+    to say which one failed."""
 
-    def __init__(self, message: str, status: int | None = None) -> None:
+    def __init__(self, message: str, status: int | None = None, host: str | None = None) -> None:
         super().__init__(message)
         self.status = status
+        self.host = host
 
 
 class RateLimitError(AIProviderError):
@@ -141,20 +169,63 @@ class NoStructuredResponseError(AIProviderError):
     pass
 
 
-def _headers() -> dict[str, str]:
+def provider_error_detail(exc: AIProviderError) -> str:
+    """An actionable sentence for an AI failure, safe to show a signed-in user.
+
+    Names the knob to check rather than echoing the provider's raw body. The
+    4xx case matters most: a model name the configured provider doesn't serve
+    (e.g. the default embed model `gemini-embedding-001` against a Mistral
+    AI_BASE_URL) is a config error that read as "provider unavailable" and sent
+    people looking at the provider's status page instead of their own env.
+    """
+    # Which call failed decides which knobs to name. With chat and embeddings on
+    # separate hosts, pointing at AI_MODEL/AI_BASE_URL for an embeddings failure
+    # sends the operator to the wrong half of the config.
+    base = exc.host or effective_base_url()
+    host = urlparse(base).hostname or base
+    is_embed = base == effective_embed_base_url() and base != effective_base_url()
+    key_var = "AI_EMBED_API_KEY" if is_embed else "AI_API_KEY"
+
+    if isinstance(exc, QuotaError):
+        return f"AI provider ({host}) is out of credits — top up the account for {key_var}."
+    if isinstance(exc, RateLimitError):
+        return f"AI provider ({host}) rate limit hit — try again shortly."
+    if isinstance(exc, NoStructuredResponseError):
+        return f"AI model '{effective_model()}' did not return a structured answer."
+    if exc.status in (401, 403):
+        return f"AI provider ({host}) rejected the API key — check {key_var}."
+    if exc.status is not None and 400 <= exc.status < 500:
+        if is_embed:
+            return (
+                f"Embedding provider ({host}) rejected the request ({exc.status}) — check that"
+                f" AI_EMBED_MODEL ('{effective_embed_model()}') is served by AI_EMBED_BASE_URL."
+                " A 404 usually means the host has no /embeddings endpoint at all."
+            )
+        return (
+            f"AI provider ({host}) rejected the request ({exc.status}) — check that"
+            f" AI_MODEL ('{effective_model()}') and AI_EMBED_MODEL"
+            f" ('{effective_embed_model()}') are served by AI_BASE_URL."
+        )
+    if exc.status is None:
+        return f"AI provider ({host}) unreachable."
+    return f"AI provider ({host}) error {exc.status}."
+
+
+def _headers(api_key: str | None = None) -> dict[str, str]:
     h = {"Content-Type": "application/json"}
     # Local servers (Ollama/vLLM) usually need no key; only send one if configured.
-    if effective_api_key():
-        h["Authorization"] = f"Bearer {effective_api_key()}"
+    key = effective_api_key() if api_key is None else api_key
+    if key:
+        h["Authorization"] = f"Bearer {key}"
     return h
 
 
-def _map_http_error(status: int, detail: str) -> AIProviderError:
+def _map_http_error(status: int, detail: str, host: str | None = None) -> AIProviderError:
     if status == 429:
-        return RateLimitError("Rate limit exceeded. Please try again shortly.", status)
+        return RateLimitError("Rate limit exceeded. Please try again shortly.", status, host)
     if status == 402:
-        return QuotaError("Usage credits/quota required for the configured AI provider.", status)
-    return AIProviderError(f"AI provider error {status}: {detail[:200]}", status)
+        return QuotaError("Usage credits/quota required for the configured AI provider.", status, host)
+    return AIProviderError(f"AI provider error {status}: {detail[:200]}", status, host)
 
 
 _MAX_ATTEMPTS = 3
@@ -171,14 +242,24 @@ def _retry_delay(resp: httpx.Response | None, attempt: int) -> float:
     return 0.5 * (2**attempt)
 
 
-def _post_with_retry(path: str, body: dict[str, Any], timeout: float) -> httpx.Response:
+def _post_with_retry(
+    path: str,
+    body: dict[str, Any],
+    timeout: float,
+    *,
+    base_url: str | None = None,
+    api_key: str | None = None,
+) -> httpx.Response:
     """POST with a bounded retry (3 attempts, exponential backoff, honors
     Retry-After) on 429/5xx/network errors. Other 4xx stay fail-fast.
 
     The pipeline fires sequential burst batches, so a single throttle event is
     the most likely failure — without retry it silently drops a whole
     enrichment batch or cluster.
+
+    base_url/api_key default to the chat provider; /embeddings passes its own.
     """
+    host = base_url or effective_base_url()
     last_exc: httpx.RequestError | None = None
     resp: httpx.Response | None = None
     for attempt in range(_MAX_ATTEMPTS):
@@ -186,7 +267,7 @@ def _post_with_retry(path: str, body: dict[str, Any], timeout: float) -> httpx.R
             time.sleep(_retry_delay(resp, attempt - 1))
         try:
             with httpx.Client(timeout=timeout) as client:
-                resp = client.post(f"{effective_base_url()}{path}", headers=_headers(), json=body)
+                resp = client.post(f"{host}{path}", headers=_headers(api_key), json=body)
         except httpx.RequestError as exc:
             last_exc = exc
             resp = None
@@ -196,7 +277,7 @@ def _post_with_retry(path: str, body: dict[str, Any], timeout: float) -> httpx.R
         return resp
     if resp is not None:
         return resp  # retries exhausted — caller maps the HTTP error
-    raise AIProviderError(f"AI provider unreachable: {last_exc}") from last_exc
+    raise AIProviderError(f"AI provider unreachable: {last_exc}", None, host) from last_exc
 
 
 def call_tool(
@@ -325,8 +406,11 @@ def embed(
             input={"input_count": len(input_list)},
         )
 
+    embed_host = effective_embed_base_url()
     try:
-        resp = _post_with_retry("/embeddings", body, timeout)
+        resp = _post_with_retry(
+            "/embeddings", body, timeout, base_url=embed_host, api_key=effective_embed_api_key()
+        )
     except AIProviderError as err:
         if obs is not None:
             obs.end(level="ERROR", status_message=str(err), usage_details={})
@@ -334,7 +418,7 @@ def embed(
 
     if resp.status_code != 200:
         detail = resp.text
-        err = _map_http_error(resp.status_code, detail)
+        err = _map_http_error(resp.status_code, detail, embed_host)
         if obs is not None:
             obs.end(level="ERROR", status_message=str(err), usage_details={})
         raise err

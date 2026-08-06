@@ -73,6 +73,24 @@ def test_pgvector_taxonomy_migration_is_self_contained() -> None:
     assert migration.index("CREATE OR REPLACE FUNCTION public.update_updated_at_column") < taxonomy_table_index
 
 
+def test_embedding_dim_migration_is_guarded_and_clears_vectors() -> None:
+    migration = Path("migrations/012_embedding_dim_1024.sql").read_text()
+
+    # Idempotence guard: a second run must not wipe re-generated embeddings.
+    assert "IF current_type = 'vector(1024)'" in migration
+    # The clear rides the type change as DDL — a plain UPDATE would be filtered
+    # by the FORCEd RLS that 011 puts on taxonomy_nodes.
+    assert "ALTER COLUMN embedding TYPE vector(1024) USING NULL" in migration
+    assert "UPDATE public.taxonomy_nodes" not in migration
+    # The hnsw index is dimension-bound: dropped before the rewrite, rebuilt after.
+    assert migration.index("DROP INDEX IF EXISTS public.idx_taxonomy_nodes_embedding") < migration.index(
+        "ALTER COLUMN embedding TYPE vector(1024)"
+    )
+    assert "CREATE INDEX idx_taxonomy_nodes_embedding" in migration
+    # 003 must stay untouched — it is an applied production migration.
+    assert "vector(768)" in Path("migrations/003_pgvector_taxonomy.sql").read_text()
+
+
 def test_database_url_switches_default_stores_to_postgres(monkeypatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@host:5432/postgres")
     monkeypatch.setattr(main, "PostgresProblemStore", DummyPostgresStore)

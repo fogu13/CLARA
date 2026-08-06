@@ -275,6 +275,81 @@ class TestEmbed:
             ai.set_runtime_config()
 
 
+class TestSplitEmbedProvider:
+    """Chat-only gateways exist (OpenCode Zen 404s on /embeddings), so
+    embeddings must be able to point at their own host and key."""
+
+    def test_unset_keeps_embeddings_on_the_chat_host(
+        self, _clean_ai_env: None, httpx_mock: Any
+    ) -> None:
+        from app.services import ai
+
+        assert ai.effective_embed_base_url() == ai.effective_base_url()
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/embeddings", method="POST",
+            json=_embeddings_response([[0.1]]),
+        )
+        ai.embed("test")
+
+    def test_embeddings_go_to_their_own_host_with_their_own_key(
+        self, _clean_ai_env: None, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services import ai
+
+        monkeypatch.setenv("AI_EMBED_BASE_URL", "https://api.mistral.ai/v1")
+        monkeypatch.setenv("AI_EMBED_API_KEY", "embed-key")
+        monkeypatch.setenv("AI_API_KEY", "chat-key")
+
+        httpx_mock.add_response(
+            url="https://api.mistral.ai/v1/embeddings", method="POST",
+            json=_embeddings_response([[0.1]]),
+        )
+        ai.embed("test")
+
+        request = httpx_mock.get_requests()[-1]
+        assert request.headers["Authorization"] == "Bearer embed-key"
+
+    def test_chat_key_is_not_leaked_to_a_different_embed_provider(
+        self, _clean_ai_env: None, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A split host with no AI_EMBED_API_KEY must send NO key — forwarding the
+        # chat provider's credential to a third party would be a leak.
+        from app.services import ai
+
+        monkeypatch.setenv("AI_EMBED_BASE_URL", "https://api.mistral.ai/v1")
+        monkeypatch.setenv("AI_API_KEY", "chat-key")
+        monkeypatch.delenv("AI_EMBED_API_KEY", raising=False)
+
+        httpx_mock.add_response(
+            url="https://api.mistral.ai/v1/embeddings", method="POST",
+            json=_embeddings_response([[0.1]]),
+        )
+        ai.embed("test")
+
+        assert "Authorization" not in httpx_mock.get_requests()[-1].headers
+
+    def test_embed_failure_names_the_embed_knobs_not_the_chat_ones(
+        self, _clean_ai_env: None, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The exact case that cost a debugging session: a chat-only gateway
+        # 404s on /embeddings, and the message must say so.
+        from app.services import ai
+
+        monkeypatch.setenv("AI_EMBED_BASE_URL", "https://opencode.ai/zen/v1")
+        httpx_mock.add_response(
+            url="https://opencode.ai/zen/v1/embeddings", method="POST",
+            status_code=404, text="<!DOCTYPE html>",
+        )
+        with pytest.raises(ai.AIProviderError) as caught:
+            ai.embed("test")
+
+        detail = ai.provider_error_detail(caught.value)
+        assert "opencode.ai" in detail
+        assert "AI_EMBED_BASE_URL" in detail
+        assert "no /embeddings endpoint" in detail
+        assert "AI_MODEL" not in detail
+
+
 class TestLocalFirstKeyless:
     """Local-first is a hard requirement: Ollama/vLLM must work without an API key."""
 
