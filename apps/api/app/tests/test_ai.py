@@ -50,6 +50,11 @@ def _clean_ai_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AI_MODEL", "test-model")
     monkeypatch.setenv("AI_EMBED_MODEL", "test-embed")
     monkeypatch.setenv("AI_EMBED_DIM", "768")
+    # Must be set, not merely absent: the reload below re-runs load_dotenv, and
+    # anything missing from os.environ gets filled in from the developer's real
+    # apps/api/.env — which would silently point embed tests at a live provider.
+    monkeypatch.setenv("AI_EMBED_BASE_URL", "")
+    monkeypatch.setenv("AI_EMBED_API_KEY", "")
     monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
     import importlib
@@ -348,6 +353,98 @@ class TestSplitEmbedProvider:
         assert "AI_EMBED_BASE_URL" in detail
         assert "no /embeddings endpoint" in detail
         assert "AI_MODEL" not in detail
+
+
+class TestErrorAttribution:
+    """Which call failed comes from the error, not from comparing hosts."""
+
+    def test_chat_401_names_chat_key_even_when_both_hosts_match(
+        self, _clean_ai_env: None, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The production incident: a Settings override moved chat onto the embed
+        # host, so host-equality inference could not tell the calls apart.
+        from app.services import ai
+
+        monkeypatch.setenv("AI_EMBED_BASE_URL", "http://test-ai.local/v1")
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions", method="POST",
+            status_code=401, json={"detail": "Invalid API Key"},
+        )
+        with pytest.raises(ai.AIProviderError) as caught:
+            ai.call_tool(system="s", user="u", tool={"name": "t"}, tool_name="t")
+
+        assert caught.value.endpoint == "chat"
+        assert "AI_API_KEY" in ai.provider_error_detail(caught.value)
+
+    def test_embed_401_names_the_embed_key_only_when_split(
+        self, _clean_ai_env: None, httpx_mock: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services import ai
+
+        monkeypatch.setenv("AI_EMBED_BASE_URL", "https://api.mistral.ai/v1")
+        monkeypatch.setenv("AI_EMBED_API_KEY", "bad")
+        httpx_mock.add_response(
+            url="https://api.mistral.ai/v1/embeddings", method="POST",
+            status_code=401, json={"detail": "Invalid API Key"},
+        )
+        with pytest.raises(ai.AIProviderError) as caught:
+            ai.embed("x")
+
+        assert caught.value.endpoint == "embeddings"
+        assert "AI_EMBED_API_KEY" in ai.provider_error_detail(caught.value)
+
+    def test_embed_401_names_the_chat_key_when_not_split(
+        self, _clean_ai_env: None, httpx_mock: Any
+    ) -> None:
+        # No AI_EMBED_BASE_URL: embeddings authenticate with the chat key, so
+        # AI_EMBED_API_KEY would be the wrong thing to tell someone to check.
+        from app.services import ai
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/embeddings", method="POST",
+            status_code=401, json={"detail": "nope"},
+        )
+        with pytest.raises(ai.AIProviderError) as caught:
+            ai.embed("x")
+
+        detail = ai.provider_error_detail(caught.value)
+        assert "AI_API_KEY" in detail and "AI_EMBED_API_KEY" not in detail
+
+    def test_settings_override_is_called_out(
+        self, _clean_ai_env: None, httpx_mock: Any
+    ) -> None:
+        # Telling someone to check AI_BASE_URL is useless while a GUI override
+        # wins — the message has to say where the value actually comes from.
+        from app.services import ai
+
+        ai.set_runtime_config(base_url="http://gui.local/v1", model="gui-model")
+        try:
+            httpx_mock.add_response(
+                url="http://gui.local/v1/chat/completions", method="POST",
+                status_code=401, json={"detail": "nope"},
+            )
+            with pytest.raises(ai.AIProviderError) as caught:
+                ai.call_tool(system="s", user="u", tool={"name": "t"}, tool_name="t")
+
+            detail = ai.provider_error_detail(caught.value)
+            assert "Settings page" in detail
+            assert "base_url" in detail and "model" in detail
+        finally:
+            ai.set_runtime_config()
+
+    def test_no_override_note_when_env_is_authoritative(
+        self, _clean_ai_env: None, httpx_mock: Any
+    ) -> None:
+        from app.services import ai
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions", method="POST",
+            status_code=401, json={"detail": "nope"},
+        )
+        with pytest.raises(ai.AIProviderError) as caught:
+            ai.call_tool(system="s", user="u", tool={"name": "t"}, tool_name="t")
+
+        assert "Settings page" not in ai.provider_error_detail(caught.value)
 
 
 class TestLocalFirstKeyless:
