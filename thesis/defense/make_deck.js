@@ -252,8 +252,8 @@ s.addNotes("2 min. The three-rung story — and note what changed since you last
 s = pres.addSlide();
 title(s, "Result 2: whose problems reach a human at all", "RQ3b — equal opportunity: recall on the signals whose gold label warrants escalation");
 loopMotif(s, 11.4, 0.45, 3);
-stat(s, 0.8, 1.8, 3.6, "0 of 8", "critical German signals escalated by the keyword floor — none", WARN);
-stat(s, 4.85, 1.8, 3.6, "87.5 / 87.8", "German / English escalation recall on the LLM path — near-parity", GOOD);
+stat(s, 0.8, 1.8, 3.6, "0 of 8", "critical German signals escalated by the keyword floor — none of them", WARN);
+stat(s, 4.85, 1.8, 3.6, "7 of 8", "the same signals, escalated by the LLM path — 87.5%, against 87.8% for English", GOOD);
 card(s, 8.9, 1.8, 3.8, 3.3, "What bounds this", "The German gold-escalate stratum is EIGHT signals — a 95% interval on 7 of 8 spans roughly 47–100%. Language is also confounded with sector here. So the claim is that METHOD CHOICE GOVERNS ESCALATION EQUITY ON THIS CORPUS — not that parity is established in general.\n\nEqual opportunity is the right criterion precisely because it conditions on the gold label, so it is not distorted by very different base rates (DE 17.8%, EN 69.5%).");
 const eq = [
   [{ text: "Escalation recall (gold-escalate signals)", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "n", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "Keyword floor", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "LLM path", options: { bold: true, color: WHITE, fill: NAVY } }],
