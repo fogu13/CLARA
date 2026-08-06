@@ -147,14 +147,27 @@ def _get_langfuse() -> Any | None:
 
 
 class AIProviderError(RuntimeError):
-    """Raised on AI provider HTTP failure. Carries .status and the host it came
-    from — chat and embeddings can now be different providers, so the error has
-    to say which one failed."""
+    """Raised on AI provider HTTP failure.
 
-    def __init__(self, message: str, status: int | None = None, host: str | None = None) -> None:
+    Carries .status, the .host it came from, and which .endpoint was called —
+    "chat" or "embeddings". The endpoint is recorded at the raise site rather
+    than inferred later from host equality: when both providers point at the
+    same host, inference cannot tell the two calls apart and names the wrong
+    env var, which is exactly how a chat misconfiguration once got reported as
+    an embeddings key problem.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        status: int | None = None,
+        host: str | None = None,
+        endpoint: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.status = status
         self.host = host
+        self.endpoint = endpoint
 
 
 class RateLimitError(AIProviderError):
@@ -178,37 +191,65 @@ def provider_error_detail(exc: AIProviderError) -> str:
     AI_BASE_URL) is a config error that read as "provider unavailable" and sent
     people looking at the provider's status page instead of their own env.
     """
-    # Which call failed decides which knobs to name. With chat and embeddings on
-    # separate hosts, pointing at AI_MODEL/AI_BASE_URL for an embeddings failure
-    # sends the operator to the wrong half of the config.
+    # Which call failed decides which knobs to name, and it is read from the
+    # error, not inferred from host equality — with both providers on one host
+    # the two calls are indistinguishable and inference names the wrong var.
     base = exc.host or effective_base_url()
     host = urlparse(base).hostname or base
-    is_embed = base == effective_embed_base_url() and base != effective_base_url()
-    key_var = "AI_EMBED_API_KEY" if is_embed else "AI_API_KEY"
+    is_embed = exc.endpoint == "embeddings"
+    # AI_EMBED_API_KEY only exists as a distinct knob when a split is configured;
+    # otherwise embeddings authenticate with the chat key and that is the one to fix.
+    split = effective_embed_base_url() != effective_base_url()
+    key_var = "AI_EMBED_API_KEY" if (is_embed and split) else "AI_API_KEY"
 
     if isinstance(exc, QuotaError):
-        return f"AI provider ({host}) is out of credits — top up the account for {key_var}."
-    if isinstance(exc, RateLimitError):
-        return f"AI provider ({host}) rate limit hit — try again shortly."
-    if isinstance(exc, NoStructuredResponseError):
-        return f"AI model '{effective_model()}' did not return a structured answer."
-    if exc.status in (401, 403):
-        return f"AI provider ({host}) rejected the API key — check {key_var}."
-    if exc.status is not None and 400 <= exc.status < 500:
+        message = f"AI provider ({host}) is out of credits — top up the account for {key_var}."
+    elif isinstance(exc, RateLimitError):
+        message = f"AI provider ({host}) rate limit hit — try again shortly."
+    elif isinstance(exc, NoStructuredResponseError):
+        message = f"AI model '{effective_model()}' did not return a structured answer."
+    elif exc.status in (401, 403):
+        message = f"AI provider ({host}) rejected the API key — check {key_var}."
+    elif exc.status is not None and 400 <= exc.status < 500:
         if is_embed:
-            return (
+            message = (
                 f"Embedding provider ({host}) rejected the request ({exc.status}) — check that"
                 f" AI_EMBED_MODEL ('{effective_embed_model()}') is served by AI_EMBED_BASE_URL."
                 " A 404 usually means the host has no /embeddings endpoint at all."
             )
-        return (
-            f"AI provider ({host}) rejected the request ({exc.status}) — check that"
-            f" AI_MODEL ('{effective_model()}') and AI_EMBED_MODEL"
-            f" ('{effective_embed_model()}') are served by AI_BASE_URL."
-        )
-    if exc.status is None:
-        return f"AI provider ({host}) unreachable."
-    return f"AI provider ({host}) error {exc.status}."
+        else:
+            message = (
+                f"AI provider ({host}) rejected the request ({exc.status}) — check that"
+                f" AI_MODEL ('{effective_model()}') and AI_EMBED_MODEL"
+                f" ('{effective_embed_model()}') are served by AI_BASE_URL."
+            )
+    elif exc.status is None:
+        message = f"AI provider ({host}) unreachable."
+    else:
+        message = f"AI provider ({host}) error {exc.status}."
+
+    return message + _settings_override_note(is_embed)
+
+
+def _settings_override_note(is_embed: bool) -> str:
+    """Say so when the Settings GUI, not the env, is in control.
+
+    A base URL saved in Settings is persisted as an "ai" connector config and
+    re-applied on every boot, so it silently beats .env and survives a restart.
+    Telling someone to "check AI_BASE_URL" while that override is active sends
+    them to edit a file that has no effect — which is exactly how a demo-eve
+    debugging session went. Embedding config is env-only, so a pure embeddings
+    failure gets no note.
+    """
+    if is_embed:
+        return ""
+    active = sorted(k for k in ("base_url", "model", "api_key") if k in _RUNTIME_OVERRIDE)
+    if not active:
+        return ""
+    return (
+        f" Note: {', '.join(active)} currently come from the Settings page,"
+        " which overrides the server env — change it there, not in .env."
+    )
 
 
 def _headers(api_key: str | None = None) -> dict[str, str]:
@@ -220,12 +261,16 @@ def _headers(api_key: str | None = None) -> dict[str, str]:
     return h
 
 
-def _map_http_error(status: int, detail: str, host: str | None = None) -> AIProviderError:
+def _map_http_error(
+    status: int, detail: str, host: str | None = None, endpoint: str | None = None
+) -> AIProviderError:
     if status == 429:
-        return RateLimitError("Rate limit exceeded. Please try again shortly.", status, host)
+        return RateLimitError("Rate limit exceeded. Please try again shortly.", status, host, endpoint)
     if status == 402:
-        return QuotaError("Usage credits/quota required for the configured AI provider.", status, host)
-    return AIProviderError(f"AI provider error {status}: {detail[:200]}", status, host)
+        return QuotaError(
+            "Usage credits/quota required for the configured AI provider.", status, host, endpoint
+        )
+    return AIProviderError(f"AI provider error {status}: {detail[:200]}", status, host, endpoint)
 
 
 _MAX_ATTEMPTS = 3
@@ -249,6 +294,7 @@ def _post_with_retry(
     *,
     base_url: str | None = None,
     api_key: str | None = None,
+    endpoint: str = "chat",
 ) -> httpx.Response:
     """POST with a bounded retry (3 attempts, exponential backoff, honors
     Retry-After) on 429/5xx/network errors. Other 4xx stay fail-fast.
@@ -277,7 +323,9 @@ def _post_with_retry(
         return resp
     if resp is not None:
         return resp  # retries exhausted — caller maps the HTTP error
-    raise AIProviderError(f"AI provider unreachable: {last_exc}", None, host) from last_exc
+    raise AIProviderError(
+        f"AI provider unreachable: {last_exc}", None, host, endpoint
+    ) from last_exc
 
 
 def call_tool(
@@ -327,7 +375,7 @@ def call_tool(
         )
 
     try:
-        resp = _post_with_retry("/chat/completions", body, timeout)
+        resp = _post_with_retry("/chat/completions", body, timeout, endpoint="chat")
     except AIProviderError as err:
         if obs is not None:
             obs.end(level="ERROR", status_message=str(err), usage_details={})
@@ -337,7 +385,7 @@ def call_tool(
         detail = resp.text
         if resp.status_code not in (429, 402):
             logger.error("AI provider error: %s %s", resp.status_code, detail[:500])
-        err = _map_http_error(resp.status_code, detail)
+        err = _map_http_error(resp.status_code, detail, effective_base_url(), "chat")
         if obs is not None:
             obs.end(level="ERROR", status_message=str(err), usage_details={})
         raise err
@@ -409,7 +457,12 @@ def embed(
     embed_host = effective_embed_base_url()
     try:
         resp = _post_with_retry(
-            "/embeddings", body, timeout, base_url=embed_host, api_key=effective_embed_api_key()
+            "/embeddings",
+            body,
+            timeout,
+            base_url=embed_host,
+            api_key=effective_embed_api_key(),
+            endpoint="embeddings",
         )
     except AIProviderError as err:
         if obs is not None:
@@ -418,7 +471,7 @@ def embed(
 
     if resp.status_code != 200:
         detail = resp.text
-        err = _map_http_error(resp.status_code, detail, embed_host)
+        err = _map_http_error(resp.status_code, detail, embed_host, "embeddings")
         if obs is not None:
             obs.end(level="ERROR", status_message=str(err), usage_details={})
         raise err
