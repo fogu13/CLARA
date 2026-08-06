@@ -91,6 +91,13 @@ git push -u origin main
      for pg_cron WARNINGs. Ad-hoc SQL-editor DML now needs
      `SELECT set_config('app.tenant_id','1',false), set_config('app.workspace_id','1',false);`
      first (RLS is FORCEd for the owner role too).
+   - `apps/api/migrations/012_embedding_dim_1024.sql` — **only if `AI_EMBED_MODEL` is
+     1024-dim (e.g. `mistral-embed`)**. 003 pins `taxonomy_nodes.embedding` to
+     `vector(768)`; this retargets it. ⚠️ **It clears every stored embedding** — vectors
+     from two models don't share a similarity space — so run `POST /taxonomy/bootstrap`
+     afterwards to re-embed. Until you do, semantic mapping returns no matches (visible,
+     not silently wrong); `signal_node_map` history is left intact. Idempotent: re-running
+     once the column is `vector(1024)` is a no-op and won't wipe fresh vectors.
    _(For the existing **CLARA** project these are already applied via MCP — listed here for
    reproducibility.)_
 

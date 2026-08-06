@@ -43,7 +43,8 @@ AI_BASE_URL = (os.getenv("AI_BASE_URL") or "https://api.openai.com/v1").rstrip("
 AI_API_KEY = os.getenv("AI_API_KEY") or ""
 AI_MODEL = os.getenv("AI_MODEL") or "gpt-4o-mini"
 AI_EMBED_MODEL = os.getenv("AI_EMBED_MODEL") or "gemini-embedding-001"
-# Must match the pgvector column dimension (taxonomy_nodes.embedding vector(768)).
+# Must match the pgvector column dimension of taxonomy_nodes.embedding — vector(768)
+# from migration 003, or vector(1024) once 012 has been applied for mistral-embed.
 # gemini-embedding-001 defaults to 3072; request 768. Cosine distance is scale-invariant
 # so the reduced (un-normalised) vectors are fine for nearest-neighbour matching.
 AI_EMBED_DIM = int(os.getenv("AI_EMBED_DIM") or "768")
