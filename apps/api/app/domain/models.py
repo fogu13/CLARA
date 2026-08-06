@@ -176,6 +176,9 @@ class SystemConfig(BaseModel):
     ai_base_url: str
     ai_model: str
     ai_embed_model: str = ""
+    # Equal to ai_base_url unless AI_EMBED_BASE_URL splits embeddings onto their
+    # own provider. Exposed because a mismatch here is invisible otherwise.
+    ai_embed_base_url: str = ""
     auth_enabled: bool
 
 

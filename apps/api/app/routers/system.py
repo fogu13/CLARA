@@ -282,6 +282,7 @@ def build_router(
             ai_base_url=ai.effective_base_url(),
             ai_model=ai.effective_model(),
             ai_embed_model=ai.effective_embed_model(),
+            ai_embed_base_url=ai.effective_embed_base_url(),
             auth_enabled=AUTH_ENABLED,
         )
 
