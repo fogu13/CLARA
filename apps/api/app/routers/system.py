@@ -46,7 +46,12 @@ def build_router(
         try:
             result = ask_clara(question, signal_store.list_signals())
         except ai_module.AIProviderError as exc:
-            raise HTTPException(status_code=502, detail="AI provider unavailable") from exc
+            # "AI provider unavailable" was the same four words for a bad model
+            # name, an expired key and an exhausted quota — it sent people to
+            # the provider's status page when the fix was in their own env.
+            raise HTTPException(
+                status_code=502, detail=ai_module.provider_error_detail(exc)
+            ) from exc
 
         telemetry_store.record(
             "question_asked",

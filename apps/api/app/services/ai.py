@@ -25,6 +25,7 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from dotenv import load_dotenv
@@ -139,6 +140,35 @@ class QuotaError(AIProviderError):
 
 class NoStructuredResponseError(AIProviderError):
     pass
+
+
+def provider_error_detail(exc: AIProviderError) -> str:
+    """An actionable sentence for an AI failure, safe to show a signed-in user.
+
+    Names the knob to check rather than echoing the provider's raw body. The
+    4xx case matters most: a model name the configured provider doesn't serve
+    (e.g. the default embed model `gemini-embedding-001` against a Mistral
+    AI_BASE_URL) is a config error that read as "provider unavailable" and sent
+    people looking at the provider's status page instead of their own env.
+    """
+    host = urlparse(effective_base_url()).hostname or effective_base_url()
+    if isinstance(exc, QuotaError):
+        return f"AI provider ({host}) is out of credits — top up the account for AI_API_KEY."
+    if isinstance(exc, RateLimitError):
+        return f"AI provider ({host}) rate limit hit — try again shortly."
+    if isinstance(exc, NoStructuredResponseError):
+        return f"AI model '{effective_model()}' did not return a structured answer."
+    if exc.status in (401, 403):
+        return f"AI provider ({host}) rejected the API key — check AI_API_KEY."
+    if exc.status is not None and 400 <= exc.status < 500:
+        return (
+            f"AI provider ({host}) rejected the request ({exc.status}) — check that"
+            f" AI_MODEL ('{effective_model()}') and AI_EMBED_MODEL"
+            f" ('{effective_embed_model()}') are served by AI_BASE_URL."
+        )
+    if exc.status is None:
+        return f"AI provider ({host}) unreachable."
+    return f"AI provider ({host}) error {exc.status}."
 
 
 def _headers() -> dict[str, str]:

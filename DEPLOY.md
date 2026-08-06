@@ -7,7 +7,7 @@
 - DB: Supabase Postgres via the session pooler; Supabase Auth Site URL = the frontend URL
 - Server layout: `/opt/stacks/caddy/` (Caddyfile: `api.clara.odradekai.com { reverse_proxy clara-api:8000 }`) and `/opt/stacks/clara/` (compose + `.env` + repo clone at `./repo`)
 - Compose: builds `./repo/apps/api`, joins the shared external `proxy` network (`external: true` is required — omitting it silently aborts the stack), publishes no ports (Caddy is the only public entry), sets `CLARA_REPO_ROOT=/app` via `environment:`, mounts `./repo/data` read-only at `/app/data`
-- `.env` on the server (chmod 600): `DATABASE_URL` (pooler string), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CLARA_REQUIRE_AUTH=true`, `AI_*` vars, and `APP_CORS_ORIGINS=https://clara.odradekai.com,https://clara-theta-nine.vercel.app,http://localhost:3000`
+- `.env` on the server (chmod 600): `DATABASE_URL` (pooler string), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CLARA_REQUIRE_AUTH=true`, `AI_*` vars (**including `AI_EMBED_MODEL`** — the default is a Google model and 4xxs against Mistral), and `APP_CORS_ORIGINS=https://clara.odradekai.com,https://clara-theta-nine.vercel.app,http://localhost:3000`
 - Also in `.env` (Jul 2026 additions): `CLARA_CONFIG_SECRET_KEY` (Fernet key — connector secrets encrypted at rest; **back the key up**: losing it means re-entering connector credentials), optional `CLARA_SMTP_*` (weekly digest email; recipient = workspace notification email), and later `CLARA_REQUIRE_AAL2=true` once every user has enrolled MFA
 - Vercel production env (not previews): `NEXT_PUBLIC_COOKIE_AUTH=1` + `AUTH_COOKIE_DOMAIN=clara.odradekai.com` (HttpOnly cookie sessions); `NEXT_PUBLIC_LEGAL_PAGES=1` publishes `/legal/*` + the launch surface AFTER legal review (fail-closed: DRAFT-marked docs never publish)
 
@@ -111,9 +111,11 @@ git push -u origin main
 | `SUPABASE_URL` | `https://XXXXX.supabase.co` (drives JWKS verification of ES256 tokens) |
 | `SUPABASE_SERVICE_ROLE_KEY` | `<service role key>` |
 | `CLARA_REQUIRE_AUTH` | `true` (fail closed — refuse to boot if auth is unconfigured) |
-| `AI_BASE_URL` | `https://api.mistral.ai/v1` |
+| `AI_BASE_URL` | `https://api.mistral.ai/v1` (serves **both** chat and embeddings — providers can't be split) |
 | `AI_API_KEY` | `<your Mistral API key>` |
 | `AI_MODEL` | `mistral-small-latest` |
+| `AI_EMBED_MODEL` | `mistral-embed` — **required with a non-Google `AI_BASE_URL`**; the default is `gemini-embedding-001` |
+| `AI_EMBED_DIM` | `0` for Mistral (it 422s on the `dimensions` param); `768` for `gemini-embedding-001` |
 | `APP_CORS_ORIGINS` | `https://clara-theta-nine.vercel.app` (your Vercel URL, set after Step 4) |
 
 > `SUPABASE_JWT_SECRET` is **not** required — this project signs tokens with ES256
@@ -210,6 +212,8 @@ docker compose -f docker-compose.langfuse.yml up -d
 | pgvector not found | Enable `vector` extension in Supabase dashboard |
 | API cold start (Render free) | First request takes ~30s; upgrade to paid for always-on |
 | LLM calls fail | Check `AI_BASE_URL` + `AI_API_KEY` + `AI_MODEL` are set |
+| Insights search / taxonomy bootstrap 502s | An embeddings problem, not a chat one: `AI_EMBED_MODEL` defaults to `gemini-embedding-001` and must be a model `AI_BASE_URL` actually serves. The `/ask` error names the knob; `docker compose logs api \| grep "AI provider error"` has the provider's raw status |
+| Switching embed model | `taxonomy_nodes.embedding` is `vector(768)` (migration 003). A model with different dims needs a migration before taxonomy bootstrap; `/ask` is unaffected (it embeds in memory) |
 
 ## Post-merge notes (18 Jul 2026)
 

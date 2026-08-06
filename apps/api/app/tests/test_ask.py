@@ -162,3 +162,30 @@ class TestAskEndpoint:
         monkeypatch.setattr("app.services.ai.embed", down)
         response = client.post("/ask", json={"question": "Anything about refunds?"})
         assert response.status_code == 502
+
+    @pytest.mark.parametrize(
+        ("exc", "expected"),
+        [
+            (lambda m: m.QuotaError("q", 402), "out of credits"),
+            (lambda m: m.RateLimitError("r", 429), "rate limit"),
+            (lambda m: m.AIProviderError("k", 401), "AI_API_KEY"),
+            # The one that cost a debugging session: an embed model the
+            # configured provider doesn't serve must name AI_EMBED_MODEL.
+            (lambda m: m.AIProviderError("bad model", 422), "AI_EMBED_MODEL"),
+            (lambda m: m.AIProviderError("no route", None), "unreachable"),
+        ],
+    )
+    def test_provider_failure_names_the_knob_to_check(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exc: Any, expected: str
+    ) -> None:
+        import app.services.ai as ai_module
+
+        client, _ = self._client(tmp_path)
+
+        def down(*_: Any, **__: Any) -> None:
+            raise exc(ai_module)
+
+        monkeypatch.setattr("app.services.ai.embed", down)
+        response = client.post("/ask", json={"question": "Anything about refunds?"})
+        assert response.status_code == 502
+        assert expected in response.json()["detail"]
