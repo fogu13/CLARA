@@ -22,14 +22,19 @@ dependencies = [
 
 [project.optional-dependencies]
 # Opt-in MCP server (python -m app.mcp_server); not a core runtime dependency.
+# Ceiling at <2: mcp 2.0.0 removed mcp.server.fastmcp, which app/mcp_server.py
+# imports. Verified against the real packages — 1.29.0 still exports FastMCP,
+# 2.0.0 raises ModuleNotFoundError. Without the ceiling a clean install (CI)
+# resolves to 2.x and fails at collection while local pinned installs pass.
+# Lifting it means porting mcp_server.py to the 2.x server API.
 mcp = [
-  "mcp>=1.2.0",
+  "mcp>=1.2.0,<2",
 ]
 dev = [
   "pytest>=8.2.0",
   "ruff>=0.5.0",
   "pytest-httpx>=0.30.0",
-  "mcp>=1.2.0",  # so CI installs and actually tests the MCP server
+  "mcp>=1.2.0,<2",  # so CI installs and actually tests the MCP server
 ]
 
 [tool.ruff]
