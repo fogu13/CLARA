@@ -223,7 +223,35 @@ docker compose -f docker-compose.langfuse.yml up -d
 | LLM calls fail | Check `AI_BASE_URL` + `AI_API_KEY` + `AI_MODEL` are set |
 | Insights search / taxonomy bootstrap 502s | An embeddings problem, not a chat one: `AI_EMBED_MODEL` defaults to `gemini-embedding-001` and must be a model the embed host actually serves. The `/ask` error names the knob; `docker compose logs api \| grep "AI provider error"` has the provider's raw status. Check the split with `GET /system-config` → `ai_embed_base_url` |
 | Embeddings 404 while chat works | The host is chat-only. Point `AI_EMBED_BASE_URL` + `AI_EMBED_API_KEY` at a provider that serves `/embeddings`; no `AI_EMBED_MODEL` value fixes a missing endpoint |
+| **`.env` says one thing, `/system-config` says another** | A **Settings-page** AI config beats `.env` and survives restarts — see "Settings overrides env" below. Editing `.env` has no effect until it's cleared |
 | Switching embed model | `taxonomy_nodes.embedding` is `vector(768)` (migration 003). A model with different dims needs a migration before taxonomy bootstrap; `/ask` is unaffected (it embeds in memory) |
+
+## Settings overrides env (AI config) — check this first
+
+**A base URL, model, embed model or API key saved on the Settings page wins over
+`.env`, and keeps winning after a restart.** It is persisted as an `"ai"` entry in
+the connector config store and re-applied on every boot (`app/main.py`, "AI runtime
+config"). `docker compose up -d --force-recreate` does **not** clear it — it reloads
+`.env`, then the override re-applies on top.
+
+Ground truth is `GET /system-config`, not the file:
+
+```
+ai_base_url · ai_model · ai_embed_model · ai_embed_base_url
+```
+
+If those disagree with `.env`, the Settings entry is in control. To hand control back
+to env, blank the Endpoint / Model / Embedding-model fields on the Settings page and
+save. **Also set the API key field** — the route keeps the previously stored key when
+that field is left empty (by design: edit forms would otherwise wipe it), so clearing
+only the URL sends the *old* key to the *new* host.
+
+Beware the preset buttons: "OpenCode Zen" also sets `gemini-embedding-001` as the
+embed model, which then overrides `AI_EMBED_MODEL` from env. On a split setup that
+posts a Google model name to your embed provider.
+
+Since Aug 2026 the `/ask` and Test-connection errors say when an override is active,
+so you are not sent to edit a file that has no effect.
 
 ## Post-merge notes (18 Jul 2026)
 
