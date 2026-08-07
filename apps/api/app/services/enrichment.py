@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from copy import deepcopy
 from typing import Any
 
 from app.services.ai import AIProviderError, call_tool
@@ -68,6 +69,87 @@ ENRICHMENT_TOOL = {
 }
 
 
+# --- Optional enrichment fields, off by default -----------------------------
+#
+# published_metrics.json (n=100, 18 Jul) is served at GET /model-card/metrics and
+# is cited in the thesis as measured under *the production configuration*. Any
+# change to the prompt or the tool schema changes the artifact those numbers
+# describe. So both additions below are opt-in, and with the flags unset the
+# functions return the module constants unchanged — same objects, not merely
+# equal ones. Turning a flag on is then a deliberate eval-improve iteration
+# (gap -> intervention -> in-run paired A/B), not silent drift.
+#
+# Separate flags because the in-run paired McNemar design isolates one
+# intervention at a time; a single combined flag could not be A/B-tested.
+
+_BASIS_PROMPT = """
+- evidence_basis: one of reported_event | mixed | opinion. Judge what the text is
+  grounded in, NOT whether you agree with it:
+  - reported_event: describes something that happened and could be checked
+    ("the payment failed three times", "support never replied")
+  - opinion: expresses a preference or judgement with no checkable event
+    ("the app feels clunky", "pricing is unfair")
+  - mixed: contains both"""
+
+_TYPE_PROMPT = """
+- signal_type: one of bug | feature_request | complaint | praise | question |
+  churn_risk | compliance_concern. Pick the single best fit; prefer churn_risk
+  over complaint when the customer signals leaving, and compliance_concern over
+  bug when the issue is regulatory, legal, or a data-protection matter."""
+
+_BASIS_SCHEMA = {"type": "string", "enum": ["reported_event", "mixed", "opinion"]}
+_TYPE_SCHEMA = {
+    "type": "string",
+    "enum": [
+        "bug",
+        "feature_request",
+        "complaint",
+        "praise",
+        "question",
+        "churn_risk",
+        "compliance_concern",
+    ],
+}
+
+
+def _flag_on(name: str) -> bool:
+    return os.getenv(name, "0").lower() not in ("0", "false", "no", "")
+
+
+def _optional_fields() -> list[tuple[str, str, dict[str, Any]]]:
+    """(field, prompt fragment, schema) for each enabled optional field."""
+    enabled = []
+    if _flag_on("ENRICH_SIGNAL_BASIS"):
+        enabled.append(("evidence_basis", _BASIS_PROMPT, _BASIS_SCHEMA))
+    if _flag_on("ENRICH_SIGNAL_TYPE"):
+        enabled.append(("signal_type", _TYPE_PROMPT, _TYPE_SCHEMA))
+    return enabled
+
+
+def build_system_prompt() -> str:
+    """SYSTEM_PROMPT verbatim when no optional field is enabled."""
+    extras = _optional_fields()
+    if not extras:
+        return SYSTEM_PROMPT
+    closing = "\nReturn one enrichment per input item"
+    head, _, tail = SYSTEM_PROMPT.rpartition(closing)
+    return head + "".join(fragment for _, fragment, _ in extras) + closing + tail
+
+
+def build_enrichment_tool() -> dict[str, Any]:
+    """ENRICHMENT_TOOL verbatim when no optional field is enabled."""
+    extras = _optional_fields()
+    if not extras:
+        return ENRICHMENT_TOOL
+
+    tool = deepcopy(ENRICHMENT_TOOL)
+    item = tool["function"]["parameters"]["properties"]["enrichments"]["items"]
+    for field, _, schema in extras:
+        item["properties"][field] = schema
+        item["required"].append(field)
+    return tool
+
+
 def enrich_signals(
     signals: list[dict[str, Any]],
     *,
@@ -109,9 +191,9 @@ def enrich_signals(
 
         try:
             result = call_tool(
-                system=SYSTEM_PROMPT,
+                system=build_system_prompt(),
                 user=fewshot + "Enrich these feedback items:\n\n" + json.dumps(items, indent=2),
-                tool=ENRICHMENT_TOOL,
+                tool=build_enrichment_tool(),
                 tool_name="submit_enrichments",
                 trace_name="enrich_signals",
             )

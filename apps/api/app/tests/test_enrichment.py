@@ -189,3 +189,78 @@ class TestMergeEnrichment:
         assert "audit" in merged
         assert merged["audit"]["source"] == "llm_enrichment"
         assert merged["audit"]["model"] == "test-model"
+
+
+class TestOptionalFieldsAreOptIn:
+    """The guard on published_metrics.json.
+
+    published_metrics.json (n=100, 18 Jul) is served at GET /model-card/metrics
+    and cited in the thesis as measured under the production configuration. If a
+    new enrichment field ever ships enabled by default, those numbers silently
+    stop describing the artifact. These tests make "off by default" a fact.
+    """
+
+    BASELINE_REQUIRED = ["id", "sentiment", "sentiment_score", "urgency", "tags"]
+
+    def test_defaults_return_the_unmodified_prompt_and_tool(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services import enrichment as enr
+
+        monkeypatch.delenv("ENRICH_SIGNAL_BASIS", raising=False)
+        monkeypatch.delenv("ENRICH_SIGNAL_TYPE", raising=False)
+
+        # `is` not `==`: with no flag set nothing may be rebuilt or copied.
+        assert enr.build_system_prompt() is enr.SYSTEM_PROMPT
+        assert enr.build_enrichment_tool() is enr.ENRICHMENT_TOOL
+
+        item = enr.ENRICHMENT_TOOL["function"]["parameters"]["properties"]["enrichments"]["items"]
+        assert item["required"] == self.BASELINE_REQUIRED
+        assert sorted(item["properties"]) == sorted(self.BASELINE_REQUIRED)
+
+    @pytest.mark.parametrize(
+        ("flag", "field", "sample"),
+        [
+            ("ENRICH_SIGNAL_BASIS", "evidence_basis", "reported_event"),
+            ("ENRICH_SIGNAL_TYPE", "signal_type", "churn_risk"),
+        ],
+    )
+    def test_flag_adds_its_field_as_required(
+        self, monkeypatch: pytest.MonkeyPatch, flag: str, field: str, sample: str
+    ) -> None:
+        from app.services import enrichment as enr
+
+        monkeypatch.delenv("ENRICH_SIGNAL_BASIS", raising=False)
+        monkeypatch.delenv("ENRICH_SIGNAL_TYPE", raising=False)
+        monkeypatch.setenv(flag, "1")
+
+        tool = enr.build_enrichment_tool()
+        item = tool["function"]["parameters"]["properties"]["enrichments"]["items"]
+
+        assert field in item["properties"]
+        assert field in item["required"]
+        assert sample in item["properties"][field]["enum"]
+        assert field in enr.build_system_prompt()
+
+    def test_enabling_one_flag_never_mutates_the_module_constant(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """deepcopy, not aliasing — otherwise the first enabled run poisons the baseline."""
+        from app.services import enrichment as enr
+
+        monkeypatch.setenv("ENRICH_SIGNAL_TYPE", "1")
+        enr.build_enrichment_tool()
+
+        baseline = enr.ENRICHMENT_TOOL["function"]["parameters"]["properties"]["enrichments"]["items"]
+        assert baseline["required"] == self.BASELINE_REQUIRED
+
+    def test_prompt_keeps_its_closing_instruction_when_extended(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services import enrichment as enr
+
+        monkeypatch.setenv("ENRICH_SIGNAL_BASIS", "1")
+        prompt = enr.build_system_prompt()
+
+        assert prompt.rstrip().endswith("preserving its id.")
+        assert prompt.count("Return one enrichment per input item") == 1
