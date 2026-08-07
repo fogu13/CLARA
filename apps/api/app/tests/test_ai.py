@@ -210,6 +210,80 @@ class TestCallTool:
         assert not isinstance(exc_info.value, (ai.RateLimitError, ai.QuotaError))
 
 
+class TestEmbedBatching:
+    """Mistral rejects >256 inputs and ~40k+ tokens per request (measured Aug
+    2026) — big batches must be split client-side, order preserved."""
+
+    def test_chunker_respects_count_cap(self) -> None:
+        from app.services import ai
+
+        chunks = ai._embed_chunks([f"t{i}" for i in range(300)])
+        assert [len(c) for c in chunks] == [128, 128, 44]
+
+    def test_chunker_respects_char_budget(self) -> None:
+        from app.services import ai
+
+        big = "x" * 60_000
+        chunks = ai._embed_chunks([big, big, big])  # 180k chars total
+        assert [len(c) for c in chunks] == [1, 1, 1]
+
+    def test_chunker_sends_a_single_oversize_text_alone(self) -> None:
+        from app.services import ai
+
+        huge = "x" * 150_000  # over the whole budget by itself
+        chunks = ai._embed_chunks(["small", huge, "small2"])
+        assert chunks == [["small"], [huge], ["small2"]]
+
+    def test_large_batch_is_split_and_order_preserved(
+        self, _clean_ai_env: None, httpx_mock: Any
+    ) -> None:
+        # 300 texts -> 3 requests (128/128/44); vectors come back in input order
+        # even though each response arrives with indices shuffled.
+        from app.services import ai
+
+        texts = [f"text-{i}" for i in range(300)]
+
+        def respond(request: Any) -> Any:
+            import httpx as _httpx
+
+            batch = json.loads(request.read())["input"]
+            data = [
+                {"embedding": [float(int(t.split("-")[1]))], "index": i}
+                for i, t in enumerate(batch)
+            ]
+            data.reverse()  # shuffled on purpose: the client must sort by index
+            return _httpx.Response(200, json={"data": data, "usage": {"prompt_tokens": 1, "total_tokens": 1}})
+
+        httpx_mock.add_callback(respond, url="http://test-ai.local/v1/embeddings", is_reusable=True)
+
+        result = ai.embed(texts)
+
+        assert len(result) == 300
+        assert [v[0] for v in result] == [float(i) for i in range(300)]
+        assert len(httpx_mock.get_requests()) == 3
+        assert [len(json.loads(r.read())["input"]) for r in httpx_mock.get_requests()] == [128, 128, 44]
+
+    def test_failure_mid_batch_raises_not_truncates(
+        self, _clean_ai_env: None, httpx_mock: Any
+    ) -> None:
+        # A 400 on chunk 2 must surface, not return chunk 1's vectors as if
+        # they were the full result — misaligned vectors corrupt retrieval.
+        from app.services import ai
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/embeddings", method="POST",
+            json=_embeddings_response([[0.1]] * 128),
+        )
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/embeddings", method="POST",
+            status_code=400, json={"message": "Too many tokens overall"},
+        )
+
+        with pytest.raises(ai.AIProviderError) as caught:
+            ai.embed([f"t{i}" for i in range(200)])
+        assert caught.value.status == 400
+
+
 class TestEmbed:
     def test_returns_embeddings_for_single_string(self, _clean_ai_env: None, httpx_mock: Any) -> None:
         from app.services import ai
