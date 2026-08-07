@@ -71,6 +71,7 @@ def to_summary(problem: ProblemRecord) -> ProblemSummary:
         status=problem.status,
         impact_score=problem.impact_score or 0.0,
         impact_band=problem.impact_band or "low",
+        impact_drivers=problem.impact_drivers,
         evidence_confidence=problem.evidence_confidence,
         affected_customers=problem.affected_cohort.customers,
         affected_accounts=problem.affected_cohort.accounts,

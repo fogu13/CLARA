@@ -355,9 +355,16 @@ export type ProblemRecord = {
   outcome_contract: OutcomeContract;
   impact_score?: number;
   impact_band?: string;
+  impact_drivers?: ImpactDriver[];
   approval_pressure?: string;
   context_impact?: ContextImpactSummary | null;
   journey_impact?: JourneyImpactSummary | null;
+};
+
+/** One factor's share of the impact score. Shares across all factors sum to 1. */
+export type ImpactDriver = {
+  factor: string;
+  share: number;
 };
 
 export type ProblemSummary = {

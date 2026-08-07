@@ -456,6 +456,19 @@ export default function InsightDetailPage() {
           <CardContent>
             <div className="text-2xl font-bold">{problem.impact_band ?? t.common.unknown}</div>
             <p className="mt-1 text-xs text-muted-foreground">{problem.approval_pressure ?? t.common.ready}</p>
+            {problem.impact_drivers && problem.impact_drivers.length > 0 && (
+              /* Why this ranked here, not just how high. The approver can only
+                 question a priority they can see the reasons for (Art 14). */
+              <p className="mt-2 text-xs text-muted-foreground">
+                {t.detail.impactDrivers}:{" "}
+                {problem.impact_drivers
+                  .map(
+                    (d) =>
+                      `${t.detail.impactFactors[d.factor] ?? d.factor} ${Math.round(d.share * 100)}%`,
+                  )
+                  .join(" · ")}
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>

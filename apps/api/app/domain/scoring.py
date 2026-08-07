@@ -79,6 +79,46 @@ def normalized_impact_score(
     return round(weighted_score / total_weight, 3)
 
 
+def impact_drivers(
+    factors: Mapping[str, float],
+    *,
+    weights: Mapping[str, float] | None = None,
+    top_n: int = 3,
+) -> list[tuple[str, float]]:
+    """Return the factors that produced the impact score, ranked by contribution.
+
+    This is an exact decomposition of ``normalized_impact_score``, not a second
+    heuristic: each factor's share is its own weighted term over the total
+    weighted score, so the shares of all eight factors sum to 1.0 and the same
+    ``weights`` argument yields a decomposition of the same number.
+
+    Why this exists: the approver sees a single score, and a single score cannot
+    be argued with. Naming the two or three factors that drove it is what makes
+    the priority contestable — and it matters more than it looks, because
+    industry profiles re-weight the factors, so an identical score means
+    different things in fintech and in manufacturing.
+
+    Returns ``[]`` when every factor is zero — there is nothing to attribute,
+    and inventing a ranking from zeros would be a lie with a decimal point.
+    """
+    weights = weights if weights is not None else get_impact_weights()
+
+    contributions = {
+        factor: clamp(float(factors.get(factor, 0.0))) * weight
+        for factor, weight in weights.items()
+    }
+    total = sum(contributions.values())
+    if total <= 0.0:
+        return []
+
+    ranked = sorted(contributions.items(), key=lambda item: item[1], reverse=True)
+    return [
+        (factor, round(contribution / total, 3))
+        for factor, contribution in ranked[:top_n]
+        if contribution > 0.0
+    ]
+
+
 def impact_band(score: float) -> str:
     normalized = clamp(score)
 

@@ -5,7 +5,14 @@ from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 
 class ProblemStatus(str, Enum):
@@ -239,6 +246,18 @@ class ImpactFactors(BaseModel):
     evidence_confidence: float = Field(ge=0.0, le=1.0)
 
 
+class ImpactDriver(BaseModel):
+    """One factor's share of the impact score, for display beside it.
+
+    ``share`` is the factor's weighted term over the total weighted score, so
+    the full set sums to 1.0. Presented to the approver so the priority can be
+    questioned rather than merely read (Art 14 oversight, §4.4).
+    """
+
+    factor: str
+    share: float = Field(ge=0.0, le=1.0)
+
+
 class Evidence(BaseModel):
     signal_id: str
     source: str
@@ -448,6 +467,23 @@ class ProblemRecord(BaseModel):
     context_impact: ContextImpactSummary | None = None
     journey_impact: JourneyImpactSummary | None = None
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def impact_drivers(self) -> list[ImpactDriver]:
+        """Which factors produced ``impact_score`` — derived, never stored.
+
+        Deliberately computed rather than persisted: industry profiles re-weight
+        the factors, so a stored ranking would silently go stale the moment a
+        workspace switched profile, and would then explain the score with the
+        wrong reasons. Deriving it keeps one source of truth (``impact_factors``).
+        """
+        from app.domain.scoring import impact_drivers as _drivers
+
+        return [
+            ImpactDriver(factor=factor, share=share)
+            for factor, share in _drivers(self.impact_factors.model_dump())
+        ]
+
 
 class ProblemSummary(BaseModel):
     problem_id: str
@@ -458,6 +494,7 @@ class ProblemSummary(BaseModel):
     status: ProblemStatus
     impact_score: float
     impact_band: str
+    impact_drivers: list[ImpactDriver] = Field(default_factory=list)
     evidence_confidence: float
     affected_customers: int
     affected_accounts: int
