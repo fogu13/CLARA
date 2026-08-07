@@ -45,9 +45,9 @@ s.addText("A design-science study of a governed platform for turning customer fe
 });
 s.addText("Elvis Shehi  ·  MSc Responsible Artificial Intelligence  ·  OPIT  ·  Supervisor: Prof. Zorina Alliata  ·  September 2026",
   { fontFace: "Calibri", color: ICE, x: 0.9, y: 6.55, w: 11.5, h: 0.4, fontSize: 13 });
-s.addText("Progress review · 1 August 2026 — updated architecture + the July engineering log",
+s.addText("Progress review · 8 August 2026 — the evaluation is complete: all three predictors, one gold standard",
   { fontFace: "Calibri", color: "02C39A", x: 0.9, y: 6.95, w: 11.5, h: 0.35, fontSize: 12, italic: true });
-s.addNotes("60–90s. Frame in one breath: organisations collect more feedback than ever, yet fewer than a third systematically close the loop. This thesis designs, builds and evaluates a platform where the loop is not just closed but GOVERNED and MEASURED — and where what worked becomes organisational memory. One system, studied through Design Science Research. TODAY: progress review, not the defense — lead with the architecture slides and the progress-since-mid-July section.");
+s.addNotes("60–90s. Frame in one breath: organisations collect more feedback than ever, yet fewer than a third systematically close the loop. This thesis designs, builds and evaluates a platform where the loop is not just closed but GOVERNED and MEASURED — and where what worked becomes organisational memory. One system, studied through Design Science Research. TODAY: progress review, not the defense. The headline is that the LLM row of the results table is no longer pending — it ran on 4 August, and it changed two things: RQ3 split into accuracy (RQ3a) and equity (RQ3b), and one fairness claim had to be retracted. Lead with the 'since your last look' section, then the three results slides.");
 
 // ---------- 2 · The problem ----------
 s = pres.addSlide();
@@ -76,14 +76,20 @@ loopMotif(s, 11.4, 0.45, 1);
 const rqs = [
   ["RQ1 · Core", "How can an artifact make actions governed, executed and VERIFIED to have closed — with reusable learning?"],
   ["RQ2 · Governance", "What design lets autonomous action align with EU AI Act & GDPR without unduly slowing practitioners?"],
-  ["RQ3 · Quantitative", "How accurately does AI enrichment/routing reproduce human labels on real feedback, across sectors & languages?"],
-  ["RQ4 · Qualitative", "How do practitioners judge usefulness, usability, trustworthiness? (interviews + SUS/TAM — in progress)"],
+  ["RQ3a · Accuracy", "How accurately does AI enrichment/routing reproduce human labels on real feedback, across sectors? (answered — three predictors, one gold standard)"],
+  ["RQ3b · Equity", "Is triage reliability EQUAL across languages — whose problems reach a human? (split out from RQ3 after the August run made it answerable)"],
+  ["RQ4 · Qualitative", "How do practitioners judge usefulness, usability, trustworthiness? (interviews + SUS/TAM — not yet started; the critical path)"],
 ];
-rqs.forEach((r, i) => card(s, 0.6 + (i % 2) * 6.15, 1.75 + Math.floor(i / 2) * 1.85, 5.95, 1.65, r[0], r[1]));
-s.addShape("roundRect", { x: 0.6, y: 5.6, w: 12.1, h: 1.25, rectRadius: 0.06, fill: { color: "F4F7FC" }, line: { color: ICE, width: 1 } });
+// Five RQs since the August split of RQ3 — 2 columns x 3 rows, the last card spanning.
+rqs.forEach((r, i) => {
+  const last = i === rqs.length - 1;
+  card(s, 0.6 + (last ? 0 : (i % 2) * 6.15), 1.7 + Math.floor(i / 2) * 1.3,
+       last ? 12.1 : 5.95, 1.18, r[0], r[1]);
+});
+s.addShape("roundRect", { x: 0.6, y: 5.72, w: 12.1, h: 1.2, rectRadius: 0.06, fill: { color: "F4F7FC" }, line: { color: ICE, width: 1 } });
 s.addText("Method: problem-centred DSRM — problem → objectives → design & build → demonstrate → evaluate → communicate. Mixed-methods evaluation: a quantitative gold-set on 188 real, multilingual signals + a practitioner study (12–15 interviews, task sessions, SUS/TAM). Design-validity claims, not statistical effects.",
-  { ...BODY, x: 0.85, y: 5.75, w: 11.6, h: 1.0, fontSize: 13.5, margin: 0 });
-s.addNotes("90s. Say why DSR: the question is 'what works by design', not 'what is'. Note H1–H8 map under these four RQs. Flag honestly that RQ4 data collection is in progress — protocol and instruments are complete and in the appendix.");
+  { ...BODY, x: 0.85, y: 5.85, w: 11.6, h: 0.95, fontSize: 13, margin: 0 });
+s.addNotes("90s. Say why DSR: the question is 'what works by design', not 'what is'. The change since you last saw this: RQ3 has become RQ3a (accuracy) and RQ3b (equity). That is not cosmetic — the August run showed the equity result is the substantive one for a Responsible-AI thesis, and it needed its own question rather than living as a sub-clause. H1–H8 map under these five. Flag honestly that RQ4 has not started: it is the critical path and it is ask #2 today.");
 
 // ---------- 4 · The artifact ----------
 s = pres.addSlide();
@@ -162,7 +168,7 @@ s.addNotes("2 min. This is the RAI thesis heart. Two lines matter most: (1) the 
 
 // ---------- 6b · Progress since mid-July (1/2) ----------
 s = pres.addSlide();
-title(s, "Progress since mid-July (1/2): security, sessions, governance", "The 17–19 Jul hardening sprint — all merged to main; commit hashes in the notes");
+title(s, "Since your last look (1/2): platform, security, governance", "17 Jul → 7 Aug — none of this has been in front of you; all merged to main, commit hashes in the notes");
 loopMotif(s, 11.4, 0.45, 2);
 s.addText("Security & sessions", { ...HEAD, x: 0.6, y: 1.55, w: 6.0, h: 0.38, fontSize: 16, bold: true, color: NAVY });
 s.addText([
@@ -170,25 +176,26 @@ s.addText([
   { text: "Opt-in per-client rate limiting, hardened after two adversarial audits — keyed on network address behind the trusted proxy (client headers can't mint fresh buckets); memory-bounded; auth dependency now fails closed by default", options: { bullet: true, breakLine: true } },
   { text: "Connector secrets encrypted at rest — Fernet envelope (enc:v1), loud failure if the key is absent", options: { bullet: true, breakLine: true } },
   { text: "Founder-owner bootstrap fix — the operator can no longer be locked out of their own workspace", options: { bullet: true, breakLine: true } },
-  { text: "Scheduled uptime monitor — GitHub Actions re-runs the 17-check live smoke every 30 min; two consecutive failures open an issue, auto-closed on recovery", options: { bullet: true } },
-], { ...BODY, x: 0.8, y: 1.98, w: 5.8, h: 3.9, fontSize: 11.5, paraSpaceAfter: 6 });
+  { text: "Scheduled uptime monitor — GitHub Actions re-runs the 17-check live smoke on a schedule; two consecutive failures open an issue, auto-closed on recovery", options: { bullet: true } },
+], { ...BODY, x: 0.8, y: 1.98, w: 5.8, h: 3.5, fontSize: 11.5, paraSpaceAfter: 6 });
 s.addText("Governance & audit", { ...HEAD, x: 7.0, y: 1.55, w: 5.7, h: 0.38, fontSize: 16, bold: true, color: NAVY });
 s.addText([
   { text: "Four-eyes approvals (opt-in) — two distinct approvers, self-confirmation rejected; reviewer identity JWT-bound, never client-supplied", options: { bullet: true, breakLine: true } },
   { text: "Evidence-pack tamper evidence — canonical sha256 stamped onto the ApprovalRecord at decision time; changed evidence is provable", options: { bullet: true, breakLine: true } },
   { text: "Guardrail measurement — declared guardrails are now measured at every checkpoint; unmeasurable ones surface an explicit 'no data source' marker", options: { bullet: true, breakLine: true } },
   { text: "Public trust surface — Security & Trust page live; /pricing + legal pages staged behind fail-closed launch flags", options: { bullet: true } },
-], { ...BODY, x: 7.2, y: 1.98, w: 5.5, h: 3.9, fontSize: 11.5, paraSpaceAfter: 6 });
-s.addShape("roundRect", { x: 0.6, y: 6.05, w: 12.1, h: 0.95, rectRadius: 0.06, fill: { color: NAVY } });
-s.addText("Pattern: review-then-harden. Two independent adversarial audits of the July merges produced the rate-limiter and fail-closed fixes — declared controls ≠ enforced controls until verified.",
-  { fontFace: "Calibri", x: 0.85, y: 6.17, w: 11.6, h: 0.75, fontSize: 12.5, color: WHITE, margin: 0 });
-s.addNotes("90s. One line per item, do not read the slide. Hashes for the advisor: MFA 4200672 · cookie sessions a012298 · rate limiting 9b75195, hardened + auth fail-closed 350dc37 · secrets-at-rest & four-eyes eb15bcc · JWT-bound reviewer 967c7d1 · founder-owner bootstrap 1b0ab07 · uptime monitor 49013f8 · tamper evidence b065e4a · guardrail measurement e13105d · trust page 405a630 · pricing ec6bba6.");
+], { ...BODY, x: 7.2, y: 1.98, w: 5.5, h: 3.5, fontSize: 11.5, paraSpaceAfter: 6 });
+s.addShape("roundRect", { x: 0.6, y: 5.55, w: 12.1, h: 1.45, rectRadius: 0.06, fill: { color: NAVY } });
+s.addText("August: making model sovereignty real, not just declared", { fontFace: "Calibri", x: 0.85, y: 5.65, w: 11.6, h: 0.3, fontSize: 12.5, bold: true, color: "02C39A", margin: 0 });
+s.addText("Embeddings can now point at a different provider than chat (migration 012 retargets taxonomy embeddings to vector(1024)) — so an EU embedding provider is a config change, not a rewrite. Provider errors now name the knob that actually failed instead of guessing from host equality. App Store connector reports an empty feed instead of a contented zero.  ·  Pattern throughout: review-then-harden — declared controls are not enforced controls until verified.",
+  { fontFace: "Calibri", x: 0.85, y: 5.95, w: 11.6, h: 1.0, fontSize: 11.5, color: WHITE, margin: 0 });
+s.addNotes("90s. One line per item, do not read the slide. July hashes: MFA 4200672 · cookie sessions a012298 · rate limiting 9b75195, hardened + auth fail-closed 350dc37 · secrets-at-rest & four-eyes eb15bcc · JWT-bound reviewer 967c7d1 · founder-owner bootstrap 1b0ab07 · uptime monitor 49013f8 · tamper evidence b065e4a · guardrail measurement e13105d · trust page 405a630 · pricing ec6bba6. August hashes: App Store empty-feed 9c87bd9 · AI failure names the knob 9f35374 · migration 012 embeddings vector(1024) 03f9120 · split embed provider f73f5ad · dashboard stale-bearer 401 bb6ce59/353c519. If she asks about uptime: production was verified 17/17 green by hand on 7 Aug; GitHub's scheduler dropped the cron for about a day on 6-7 Aug, which is a monitoring gap, not an outage — and worth saying plainly rather than letting the slide imply unbroken coverage.");
 
 // ---------- 6c · Progress since mid-July (2/2) ----------
 s = pres.addSlide();
-title(s, "Progress since mid-July (2/2): evaluation & platform", "Eval-improve iterations measured on the committed golden set; platform work aimed at pilots");
+title(s, "Since your last look (2/2): the evaluation finally completed", "The LLM row of the results table stopped saying \"pending\" on 4 August — and changed three things");
 loopMotif(s, 11.4, 0.45, 3);
-s.addText("Evaluation", { ...HEAD, x: 0.6, y: 1.55, w: 6.0, h: 0.38, fontSize: 16, bold: true, color: NAVY });
+s.addText("The in-repo golden set", { ...HEAD, x: 0.6, y: 1.55, w: 6.0, h: 0.38, fontSize: 16, bold: true, color: NAVY });
 s.addText([
   { text: "Golden set 80 → 100 bilingual (72 EN / 28 DE); DE gold completed to the two-tag rubric; the n=100 run published to the model card", options: { bullet: true, breakLine: true } },
   { text: "Published: sentiment 97% (CI 93–100) · urgency 90% (CI 84–95) · tag F1 by meaning 82.7%; DE within ~1pp of EN on urgency (89.3 vs 90.3)", options: { bullet: true, breakLine: true } },
@@ -196,27 +203,27 @@ s.addText([
   { text: "German few-shot exemplars (leakage-free) + lexical tag canonicalization at enrichment — measured: 2/80 items touched, both toward gold, zero regressions", options: { bullet: true, breakLine: true } },
   { text: "Per-item eval persistence — full per-item predictions kept per run, so future model-score calibration can pool dated runs", options: { bullet: true } },
 ], { ...BODY, x: 0.8, y: 1.98, w: 5.8, h: 3.9, fontSize: 11.5, paraSpaceAfter: 6 });
-s.addText("Platform & connectors", { ...HEAD, x: 7.0, y: 1.55, w: 5.7, h: 0.38, fontSize: 16, bold: true, color: NAVY });
+s.addText("The 188-signal run — completed 4 Aug", { ...HEAD, x: 7.0, y: 1.55, w: 5.7, h: 0.38, fontSize: 16, bold: true, color: WARN });
 s.addText([
-  { text: "Enrichment tags persisted on signal records + per-entity top_tags and rollup — supplier/product scorecards without a CDP", options: { bullet: true, breakLine: true } },
-  { text: "Deterministic churn save-desk routing — leaving-intent tags at high/critical urgency always carry a customer_recovery proposal, inserted by code (auditable), still through the approval gate", options: { bullet: true, breakLine: true } },
-  { text: "App Store connector hardened against live-feed quirks — per-page retries with backoff, empty-first-page retry, 404-as-end-of-feed, de/at/ch storefront defaults", options: { bullet: true, breakLine: true } },
-  { text: "MCP server productized — 8 read-only tools under API-key auth, + model card & evidence pack; write actions deliberately excluded", options: { bullet: true, breakLine: true } },
-  { text: "Feature catalog — 35 features + 12 prioritized improvements with design rationale vs alternatives (docs/features.md); six improvements already landed", options: { bullet: true } },
-], { ...BODY, x: 7.2, y: 1.98, w: 5.5, h: 3.9, fontSize: 11.5, paraSpaceAfter: 6 });
-s.addShape("roundRect", { x: 0.6, y: 6.05, w: 12.1, h: 0.95, rectRadius: 0.06, fill: { color: "F4F7FC" }, line: { color: ICE, width: 1 } });
-s.addText("Method note: every evaluation change above shipped as one measured iteration — gap → root cause → intervention → in-run paired A/B — with the negative result (p=0.219 at n=80) reported, not re-rolled.",
-  { ...BODY, x: 0.85, y: 6.17, w: 11.6, h: 0.75, fontSize: 12.5, margin: 0 });
-s.addNotes("90s. Hashes for the advisor: golden set 80→100 + churn-musing exemplar 58504f3 · two-tag DE rubric + published n=100 run 5d250fb · per-language metrics + model card 8a258f8 · German exemplars e454898 · tag canonicalization e8af0e5 (claim revised to measured reality in c43062e) · per-item persistence + entity rollup 6412810 · tags persisted on signals 9dcc282 · churn routing df8d042 · App Store hardening 816f0f2 · MCP productization 1eb6c91 · feature catalog ab14a58. Landed improvements from the catalog: #2 #3 #6 #7 #8 #11.");
+  { text: "It had never been un-run — it had been SILENTLY BROKEN. The gateway 403s Python-urllib's default User-Agent, and the script exited 0 after writing an empty file. A green exit code on an empty result, for weeks", options: { bullet: true, breakLine: true } },
+  { text: "Now: 188/188 signals enriched — the pending cells in §5A.3–5A.5 are closed and all three predictors sit on ONE gold standard", options: { bullet: true, breakLine: true } },
+  { text: "Changed #1 — RQ3 split into RQ3a (accuracy) and RQ3b (equity): the equity result turned out to be the substantive one", options: { bullet: true, breakLine: true } },
+  { text: "Changed #2 — journey stage + owner now scored under a supplied inventory (§5A.4.1); they were \"labelled but not scored\" in every prior draft", options: { bullet: true, breakLine: true } },
+  { text: "Changed #3 — a cross-language fairness claim was RETRACTED: language is confounded with sector here, so the aggregate DE-vs-EN comparison would restate sector composition", options: { bullet: true } },
+], { ...BODY, x: 7.2, y: 1.98, w: 5.5, h: 4.0, fontSize: 11, paraSpaceAfter: 5 });
+s.addShape("roundRect", { x: 0.6, y: 6.15, w: 6.4, h: 0.85, rectRadius: 0.06, fill: { color: "F4F7FC" }, line: { color: ICE, width: 1 } });
+s.addText("Method note: each evaluation change ships as one measured iteration — gap → root cause → intervention → in-run paired A/B — with the negative result (p=0.219 at n=80) reported, not re-rolled.",
+  { ...BODY, x: 0.8, y: 6.24, w: 6.0, h: 0.7, fontSize: 10.5, margin: 0 });
+s.addNotes("2 min — this is the slide that earns the meeting. Do not soften the right-hand failure story: a script that exits 0 on an empty output is exactly the failure mode this thesis warns about elsewhere (declared controls are not enforced controls), and it happened in my own harness. The fix was a User-Agent header plus a loud failure on an empty result set. Then land the three consequences in order — the third matters most methodologically, because retracting a claim I had already written is the same discipline as withholding the urgency claim at n=80. Hashes: golden set 80→100 + churn-musing exemplar 58504f3 · two-tag DE rubric + published n=100 run 5d250fb · per-language metrics + model card 8a258f8 · German exemplars e454898 · tag canonicalization e8af0e5 (claim revised to measured reality in c43062e) · per-item persistence + entity rollup 6412810. August: unblock the LLM path 26bf75d · first completed run e032d16 · results into Ch5 eeebbad · retract the confounded fairness claim d3059c9 · RQ3a/RQ3b restatement 79b80ab · journey+owner scoring b75ed6b.");
 
 // ---------- 7 · Evaluation design ----------
 s = pres.addSlide();
 title(s, "Evaluation: two independent streams", "Objective accuracy × practitioner judgement — neither alone suffices");
 loopMotif(s, 11.4, 0.45, 3);
 s.addImage({ path: `${T}/diagrams/rendered/07_evaluation_pipeline.png`, x: 0.6, y: 1.75, w: 10.4, h: 4.05 });
-s.addText("188 real, public, paraphrased signals · 3 sectors (fintech / food delivery / B2B industrial) · EN+DE · human seed labels, authored independently of the artifact. Plus: the artifact's own committed in-repo evaluation (100-case bilingual golden set — 72 EN / 28 DE, live LLM, published metrics) as convergent evidence.",
-  { ...BODY, x: 0.6, y: 6.0, w: 12.1, h: 0.85, fontSize: 13.5, color: MUTE });
-s.addNotes("90s. Stress the honesty features: real data only (synthetic excluded), star ratings as a NON-CIRCULAR sentiment gold, seed labels external to the artifact, every number written by a reproducible harness — no hand-typed metrics.");
+s.addText("188 real, public, paraphrased signals · 3 sectors (fintech / food delivery / B2B industrial) · EN+DE · human seed labels, authored independently of the artifact. All three predictors — lexicon floor, classical ML, LLM path — have now been scored against this gold (the LLM row completed 4 Aug). Separately: the artifact's own committed in-repo evaluation (100-case bilingual golden set — 72 EN / 28 DE, live LLM, published metrics) as convergent evidence on a different gold.",
+  { ...BODY, x: 0.6, y: 5.95, w: 12.1, h: 0.95, fontSize: 13, color: MUTE });
+s.addNotes("90s. Stress the honesty features: real data only (synthetic excluded), star ratings as a NON-CIRCULAR sentiment gold, seed labels external to the artifact, every number written by a reproducible harness — no hand-typed metrics. New since you last saw this: the third predictor row is filled in, so the next three slides compare like with like.");
 
 // ---------- 8 · Quantitative results ----------
 s = pres.addSlide();
@@ -226,24 +233,66 @@ const rows = [
   [{ text: "Predictor", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "Sentiment acc (n=153)", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "Risk macro-F1 (n=106)", options: { bold: true, color: WHITE, fill: NAVY } }],
   ["Lexicon / keyword floor", "0.37", "0.26"],
   ["TF-IDF + LogReg (5-fold CV)", "0.78", "0.65"],
-  ["LLM path (in-repo, 100-case bilingual golden set)", "0.97 (sentiment)", "0.90 (urgency)"],
+  [{ text: "LLM enrichment path", options: { bold: true } }, { text: "0.86", options: { bold: true } }, { text: "0.68", options: { bold: true } }],
 ];
 s.addTable(rows, { x: 0.6, y: 1.8, w: 7.3, colW: [3.4, 1.95, 1.95], fontFace: "Calibri", fontSize: 13, border: { color: ICE, pt: 1 }, rowH: 0.5, valign: "middle" });
-s.addText("Why the floor fails: paraphrased operational complaints (\"transaction history cannot be exported…\") carry no sentiment words — 58 of 94 negatives misread as neutral. Substantive finding, not a strawman.",
-  { ...BODY, x: 0.6, y: 4.15, w: 7.3, h: 1.1, fontSize: 13 });
-s.addText("Published in-repo run (CLARA, GLM-5.2, 18 Jul 2026, n=100 incl. 28 DE): sentiment 97.0% (CI 93–100) · urgency 90.0% (CI 84–95) · tag F1 82.7% by meaning vs 21–28% exact-set — semantic scoring vindicated; DE within ~1pp of EN on urgency. Real-data star-proxy: ≈90% across all three sectors, zero fine-tuning.",
-  { ...BODY, x: 0.6, y: 5.3, w: 7.3, h: 1.35, fontSize: 13, color: NAVY });
+s.addText("One gold standard, all three rows — the 188 externally seed-labelled signals. Sentiment is scored against the 1–5 star rating, which is independent of the text the classifier reads.",
+  { ...BODY, x: 0.6, y: 3.85, w: 7.3, h: 0.5, fontSize: 11.5, italic: true, color: MUTE });
+s.addText("The gain is NOT uniform — and the shape is the finding. Contextual reasoning buys a lot on sentiment (macro-F1 0.52 → 0.67) and little on severity (0.65 → 0.68): severity is carried by lexical markers that n-grams already learn. So the loop's precondition is satisfiable by more than one method, and a deployer weighing cost, latency and sovereignty gets a real decision rather than an instruction.",
+  { ...BODY, x: 0.6, y: 4.4, w: 7.3, h: 1.3, fontSize: 12.5 });
+s.addShape("roundRect", { x: 0.6, y: 5.72, w: 7.3, h: 1.2, rectRadius: 0.06, fill: { color: "F4F7FC" }, line: { color: ICE, width: 1 } });
+s.addText("Convergent — a DIFFERENT gold standard, never merged into the table: on the artifact's own curated 100-case set (18 Jul, 72 EN / 28 DE) the same path scores 0.97 sentiment / 0.90 urgency. The divergence from 0.86 is expected — curated sets select for label clarity — and 0.86 is the figure the thesis quotes.",
+  { ...BODY, x: 0.8, y: 5.82, w: 6.9, h: 1.05, fontSize: 11.5, color: NAVY, margin: 0 });
 s.addImage({ path: `${T}/evaluation/results/risk_confusion.png`, x: 8.35, y: 1.8, w: 4.3, h: 3.82 });
-s.addText("Keyword floor collapses risk to \"low\" — 19 of 27 critical signals missed.", { ...BODY, x: 8.35, y: 5.75, w: 4.3, h: 0.8, fontSize: 11.5, color: MUTE, italic: true });
-s.addNotes("2 min. The three-rung story. Be precise about gold standards: the 0.37/0.78 rows are the thesis harness (188 seed-labelled signals); the LLM numbers are the artifact's committed in-repo eval on a DIFFERENT 100-case bilingual golden set (28 authored German cases — disclosed) — convergent evidence, not the same table. If probed on exemplars: at n=60 the A/B was not significant (p≈1.0); at n=80, after adding German exemplars, the exact-tag-set lift became significant (8.75%→28.75% per item, in-run paired McNemar p=0.001) while urgency stayed underpowered (81.25%→86.25%, p=0.219); at n=100, after the churn-musing calibration exemplar, the urgency lift is significant too (83%→90%, p=0.039, third consecutive significant run) — we report the whole trajectory ourselves. Tag metrics at n=100 are not comparable to the n=80 snapshot (new adversarial items + completed two-tag DE gold — disclosed). The in-run paired A/B is the designed inference; the model is non-deterministic even at temperature 0.");
+s.addText("Keyword floor collapses risk to \"low\" — 19 of 27 critical signals missed. On sentiment the floor fails the same way: paraphrased operational complaints (\"transaction history cannot be exported…\") carry no sentiment words, so 58 of 94 negatives are misread as neutral. A substantive finding, not a strawman.",
+  { ...BODY, x: 8.35, y: 5.72, w: 4.3, h: 1.2, fontSize: 11, color: MUTE, italic: true });
+s.addNotes("2 min. The three-rung story — and note what changed since you last saw this slide: the bottom row used to be borrowed from a different gold standard because the LLM had never run on this harness. It has now, so the table is finally like-for-like, and the borrowed numbers moved down into the grey box where they are labelled as a separate standard. If probed on exemplars: at n=60 the A/B was not significant (p≈1.0); at n=80, after adding German exemplars, the exact-tag-set lift became significant (8.75%→28.75%, in-run paired McNemar p=0.001) while urgency stayed underpowered (81.25%→86.25%, p=0.219); at n=100, after the churn-musing calibration exemplar, urgency is significant too (83%→90%, p=0.039, third consecutive run) — the whole trajectory is reported, including the stages where nothing could be claimed. Tag metrics at n=100 are not comparable to the n=80 snapshot (new adversarial items + completed two-tag DE gold — disclosed, and it improves DE tags partly by construction). The in-run paired A/B is the designed inference; the model is non-deterministic even at temperature 0.");
+
+// ---------- 8b · NEW: escalation equity (RQ3b) ----------
+s = pres.addSlide();
+title(s, "Result 2: whose problems reach a human at all", "RQ3b — equal opportunity: recall on the signals whose gold label warrants escalation");
+loopMotif(s, 11.4, 0.45, 3);
+stat(s, 0.8, 1.8, 3.6, "0 of 8", "critical German signals escalated by the keyword floor — none of them", WARN);
+stat(s, 4.85, 1.8, 3.6, "7 of 8", "the same signals, escalated by the LLM path — 87.5%, against 87.8% for English", GOOD);
+card(s, 8.9, 1.8, 3.8, 3.3, "What bounds this", "The German gold-escalate stratum is EIGHT signals — a 95% interval on 7 of 8 spans roughly 47–100%. Language is also confounded with sector here. So the claim is that METHOD CHOICE GOVERNS ESCALATION EQUITY ON THIS CORPUS — not that parity is established in general.\n\nEqual opportunity is the right criterion precisely because it conditions on the gold label, so it is not distorted by very different base rates (DE 17.8%, EN 69.5%).");
+const eq = [
+  [{ text: "Escalation recall (gold-escalate signals)", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "n", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "Keyword floor", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "LLM path", options: { bold: true, color: WHITE, fill: NAVY } }],
+  ["German", "8", { text: "0.0%", options: { bold: true, color: WARN } }, "87.5%"],
+  ["English", "41", "19.5%", "87.8%"],
+];
+s.addTable(eq, { x: 0.8, y: 3.55, w: 7.6, colW: [3.4, 0.7, 1.75, 1.75], fontFace: "Calibri", fontSize: 13, border: { color: ICE, pt: 1 }, rowH: 0.5, valign: "middle" });
+s.addShape("roundRect", { x: 0.8, y: 5.35, w: 11.9, h: 1.5, rectRadius: 0.06, fill: { color: NAVY } });
+s.addText("The substantive Responsible-AI finding", { fontFace: "Calibri", x: 1.05, y: 5.47, w: 11.4, h: 0.32, fontSize: 13, bold: true, color: ICE, margin: 0 });
+s.addText("An uneven triage layer does not merely score worse — it means some customers' problems are systematically less likely to reach a human at all. That is a fairness property of the LOOP, not of a classifier, and the choice of triage method largely determines it.",
+  { fontFace: "Calibri", x: 1.05, y: 5.82, w: 11.4, h: 0.95, fontSize: 14, color: WHITE, margin: 0 });
+s.addNotes("2 min — for an RAI thesis this is the most important results slide, and it did not exist before August. Say the 0-of-8 slowly and let it sit. The argument: everywhere else in this deck fairness is a design commitment; here it is a measured consequence of an engineering choice. Then volunteer the bounds before she asks — eight signals is a small stratum and language is confounded with sector, which is exactly why the aggregate 'German vs English accuracy' comparison was RETRACTED rather than defended (§5A.5). Equal opportunity survives that retraction because it conditions on the gold label. If she pushes on whether this generalises: it does not, and the thesis says so — it is a claim about this corpus and about method choice, which is still the actionable claim for a deployer.");
+
+// ---------- 8c · NEW: routing fields and the gate ----------
+s = pres.addSlide();
+title(s, "Result 3: the numbers that justify the approval gate", "Journey stage and owner, scored under a supplied inventory — clears the floor, nowhere near autonomous");
+loopMotif(s, 11.4, 0.45, 2);
+const rt = [
+  [{ text: "Routing field", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "Classes", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "Majority-class floor", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "LLM (inventory supplied)", options: { bold: true, color: WHITE, fill: NAVY } }],
+  ["Journey stage", "27", "0.20", { text: "0.59", options: { bold: true } }],
+  ["Recommended owner", "51", "0.15", { text: "0.40", options: { bold: true } }],
+];
+s.addTable(rt, { x: 0.6, y: 1.8, w: 7.5, colW: [2.5, 1.0, 2.0, 2.0], fontFace: "Calibri", fontSize: 13, border: { color: ICE, pt: 1 }, rowH: 0.5, valign: "middle" });
+s.addText("Both clear their floor by a wide margin — journey by ~3×, owner by ~2.5× — so the pipeline extracts real routing signal rather than guessing the modal class. And neither is remotely good enough to route unattended: an owner assignment correct two times in five would misroute the majority of problems.",
+  { ...BODY, x: 0.6, y: 3.5, w: 7.5, h: 1.4, fontSize: 12.5 });
+card(s, 8.4, 1.8, 4.3, 3.05, "What bounds this", "Supplied-inventory scoring is EASIER than production free-form generation, so 0.59 / 0.40 are an UPPER bound, not an estimate. n = 182 (six signals lost to endpoint errors). Macro-F1 across all classes is inflated by rare labels predicted correctly; restricted to classes with ≥5 gold examples it falls to 0.28 and 0.18 — the more conservative figures.");
+s.addShape("roundRect", { x: 0.6, y: 5.05, w: 12.1, h: 1.8, rectRadius: 0.06, fill: { color: NAVY } });
+s.addText("Why this strengthens the design rather than weakening it", { fontFace: "Calibri", x: 0.85, y: 5.18, w: 11.6, h: 0.32, fontSize: 13, bold: true, color: ICE, margin: 0 });
+s.addText("The mandatory approval gate (DP4) is not friction added to an otherwise-reliable pipeline — it is the control that makes a pipeline of THIS accuracy safe to deploy at all. A system that routed on these numbers unattended would fail quietly and often. The honest reading: these fields are useful as a draft a human accepts or corrects, and useless as an unattended decision. The numbers force that reading; they were not chosen to support it.",
+  { fontFace: "Calibri", x: 0.85, y: 5.52, w: 11.6, h: 1.25, fontSize: 13.5, color: WHITE, margin: 0 });
+s.addNotes("90s. This slide is deliberately unflattering to the pipeline and that is the point — it is the strongest available answer to 'why not just let the agent route it?'. Expect the examiner question 'so your routing is only 40% accurate?' and answer it here rather than in the defense: yes, over 51 classes against a 15% floor, under a supplied inventory, and that is precisely the argument for human approval. Note this configuration mirrors deployment — a real workspace configures its owner list rather than inventing labels per signal — but it is still reported separately from the production-config numbers on the previous slides, never merged.");
 
 // ---------- 9 · Learning loop measured ----------
 s = pres.addSlide();
-title(s, "Result 2: the memory steers, honestly bounded", "The perishable-learning mechanism, instrumented");
+title(s, "Result 4: the memory steers, honestly bounded", "The perishable-learning mechanism, instrumented");
 loopMotif(s, 11.4, 0.45, 3);
 stat(s, 0.8, 2.2, 3.6, "21% → 71%", "share of a past remedy appearing in the new recommendation when retrieval is ON (66.7% adoption)");
 stat(s, 4.85, 2.2, 3.6, "0.503", "alignment lift vs a same-run noise floor that absorbs model jitter", GOOD);
-stat(s, 8.9, 2.2, 3.6, "0 / 2.5%", "PII leaks across ledger / hallucination rate, 17-Jul published snapshot (hallucination check EN-scope by construction)");
+stat(s, 8.9, 2.2, 3.6, "0 / 2.5%", "PII leaks across the whole ledger / hallucination rate at the 17-Jul run (EN-scope check by construction)");
 s.addShape("roundRect", { x: 0.8, y: 4.6, w: 11.7, h: 2.0, rectRadius: 0.06, fill: { color: "FDF3F3" }, line: { color: WARN, width: 1 } });
 s.addText("The honest boundary", { ...BODY, x: 1.05, y: 4.75, w: 11.2, h: 0.35, fontSize: 14, bold: true, color: WARN, margin: 0 });
 s.addText("Outcome data behind these learnings is still SIMULATED. Adoption shows the loop steers recommendations; whether the steered remedy is BETTER requires a live outcome contract on real data — the single most important open step. We claim mechanism, not benefit.",
@@ -256,20 +305,21 @@ title(s, "What is proven, demonstrated, and pending", "The traceability matrix �
 loopMotif(s, 11.4, 0.45, 3);
 const tm = [
   [{ text: "Claim", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "Status", options: { bold: true, color: WHITE, fill: NAVY } }, { text: "Evidence", options: { bold: true, color: WHITE, fill: NAVY } }],
-  ["Triage quality (H3, RQ3)", "MEASURED", "two independent gold standards (§5A + in-repo)"],
+  ["Triage accuracy (H3, RQ3a)", "MEASURED", "three predictors, one gold standard (§5A.3–5A.4)"],
+  ["Escalation equity (RQ3b)", "MEASURED (bounded)", "equal-opportunity recall; DE stratum n=8 (§5A.5)"],
+  ["Routing fields (H4, H5)", "MEASURED (bounded)", "supplied inventory = upper bound (§5A.4.1)"],
   ["DP2 memory influence", "PARTIALLY MEASURED", "adoption 21→71%; outcomes simulated"],
   ["DP1 outcome contracts", "DEMONSTRATED", "designed + instrumented; live contract pending"],
-  ["Loop end-to-end in production", "DEMONSTRATED", "real Jira/Slack push; interrupt fix verified"],
-  ["Practitioner value (RQ4)", "PENDING", "instruments ready; interviews in progress"],
+  ["Practitioner value (RQ4)", "PENDING", "instruments ready; interviews NOT started"],
 ];
-s.addTable(tm, { x: 0.6, y: 1.8, w: 12.1, colW: [4.4, 2.8, 4.9], fontFace: "Calibri", fontSize: 13.5, border: { color: ICE, pt: 1 }, rowH: 0.55, valign: "middle" });
-s.addText("A claim's status is stated once, in one place, and the chapters must agree with it. This is the discipline that keeps a design-science thesis honest when the artifact is also a company.",
-  { ...BODY, x: 0.6, y: 5.5, w: 12.1, h: 0.8, fontSize: 14, italic: true, color: MUTE });
+s.addTable(tm, { x: 0.6, y: 1.8, w: 12.1, colW: [4.4, 2.8, 4.9], fontFace: "Calibri", fontSize: 13, border: { color: ICE, pt: 1 }, rowH: 0.5, valign: "middle" });
+s.addText("A claim's status is stated once, in one place, and the chapters must agree with it. This is the discipline that keeps a design-science thesis honest when the artifact is also a company — and it is exactly what the August run broke and I had to repair: three rows above changed status, so six locations in the manuscript disagreed with this matrix until this week.",
+  { ...BODY, x: 0.6, y: 5.45, w: 12.1, h: 1.1, fontSize: 13, italic: true, color: MUTE });
 s.addNotes("90s. Pre-empt the researcher-as-founder question here: externally-labelled gold sets, standardised instruments, reproducible harness, and this matrix. Conflict of interest is declared in the front matter and managed by method, not denial. If asked about the July external reviews (§5A.8): two independent LLM strategic reviews, 45 claims adversarially verified (27 confirmed / 13 partial / 2 refuted), 20 hardening PRs, 17/17 live production checks — and the refuted claims are themselves a finding: unsurfaced capability reads as absent.");
 
 // ---------- 11 · Positioning ----------
 s = pres.addSlide();
-title(s, "Where this sits (July 2026)", "No single differentiator survives — the contribution is the combination");
+title(s, "Where this sits (August 2026)", "No single differentiator survives — the contribution is the combination");
 loopMotif(s, 11.4, 0.45, 2);
 const comp = [
   ["Amplitude", "ties feedback to behavioural/revenue data it owns — recommends, doesn't contract closure"],
@@ -295,6 +345,7 @@ loopMotif(s, 11.4, 0.45, 3);
 s.addText("Limitations (stated, not buried)", { ...HEAD, x: 0.6, y: 1.7, w: 6.0, h: 0.4, fontSize: 17, bold: true, color: NAVY });
 s.addText([
   { text: "Modest, balanced corpus — characterises the pipeline, not a population", options: { bullet: true, breakLine: true } },
+  { text: "New in August, from the completed run: language confounded with sector (one fairness claim retracted); DE escalate stratum n=8; routing scored only under a supplied inventory = upper bound; theme + action still unscored", options: { bullet: true, breakLine: true } },
   { text: "Qualitative study small-N, design-validity — no causal effect claims", options: { bullet: true, breakLine: true } },
   { text: "Researcher-as-designer-and-founder — managed by external labels, standard instruments, reproducibility", options: { bullet: true, breakLine: true } },
   { text: "Security review found 10 HIGH findings → hardened; not warranted multi-tenant", options: { bullet: true, breakLine: true } },
@@ -303,7 +354,7 @@ s.addText([
 s.addText("Future work", { ...HEAD, x: 7.0, y: 1.7, w: 5.7, h: 0.4, fontSize: 17, bold: true, color: NAVY });
 s.addText([
   { text: "① One LIVE outcome contract on real data — scored by interrupted time series; then synthetic difference-in-differences as panels accumulate (Arkhangelsky et al., 2021)", options: { bullet: true, breakLine: true } },
-  { text: "② Unify the two LLM evidence streams on one gold standard; golden set grown 60→100 bilingual — exemplar lift now significant on exact-tags (p=0.001, n=80) AND urgency (83%→90%, p=0.039, n=100); next: model-score calibration + FR/ES/IT strata", options: { bullet: true, breakLine: true } },
+  { text: "② Complete the evaluation's COVERAGE — unifying the two streams is DONE (4 Aug). What remains: theme + recommended action are still unscored (2 of 6 gold fields), routing needs scoring in the free-form production condition, and natural German data would break the language/sector confound", options: { bullet: true, breakLine: true } },
   { text: "③ Connector parity + broader pulls", options: { bullet: true, breakLine: true } },
   { text: "④ Standing fairness monitoring of routing across segments and languages", options: { bullet: true } },
 ], { ...BODY, x: 7.2, y: 2.2, w: 5.5, h: 3.4, fontSize: 13, paraSpaceAfter: 8 });
@@ -315,7 +366,7 @@ s.addText("Contributions", { fontFace: "Cambria", color: WHITE, x: 0.9, y: 0.55,
 const contribs = [
   ["A working artifact", "the full governed loop — signal to measured outcome to reusable learning — running end to end, in production, with real external writes"],
   ["Six design principles", "each with its cost: closure as contract, perishable memory, set-based severity, graduated authority, bounded model, adaptation by configuration"],
-  ["A real-data evaluation", "188 multilingual signals, two independent gold standards; triage is method-dependent and the loop's precondition is satisfiable"],
+  ["A real-data evaluation", "188 multilingual signals, two independent gold standards; triage is method-dependent — and the choice of method is an EQUITY decision, not only an accuracy one"],
   ["Integral Responsible AI", "oversight designed beyond Art 14, transparency via Art 50(4), auditability that found its own gaps — governance as durable design commitment"],
 ];
 contribs.forEach((c, i) => {

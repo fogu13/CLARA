@@ -35,20 +35,22 @@ The manuscript previously described **one system with two implementations** (Odr
 
 APA 7, author–date in text, consolidated in `manuscript/references.md`. Compile with the `docx` skill (chapters concatenated in numeric order → `build/thesis.docx`, with heading hierarchy, ToC, and figures).
 
-⚠️ **`build/thesis.docx` and `build/thesis_combined.md` are stale** (built 13 Jul, before the streamline). Rebuild before circulating. Note §3.5.5 now contains display math (`$$…$$`) — confirm the docx pipeline renders TeX.
+`build/thesis.docx` and `build/thesis_combined.md` were rebuilt **7 Aug 2026** via `bash build_docx.sh` (pandoc). The §3.5.5 display math (`$$…$$`) is confirmed rendering as native Word equations — 15 `<m:oMath>` elements, no raw TeX leaking as literal text. Rebuild again after any manuscript edit before circulating.
 
 ## Evaluation data
 
 The quantitative evaluation uses **only the real, publicly-sourced** brand datasets in `~/Documents/Thesis_ChatGPT/` (not in this repo). The harness resolves them via the `THESIS_DATA_DIR` env var, defaulting to `../../../Thesis_ChatGPT` relative to `evaluation/` (path updated for this folder's location). The synthetic sets are **excluded by design** and must not enter the evaluation corpus.
 
-Related but separate: `apps/api/app/evals/` is the platform's own committed LLM evaluation (60-case golden set + `history.jsonl` ledger) — reported in the manuscript as convergent evidence (§5A.7), never merged into the §5A tables (different gold standards).
+Related but separate: `apps/api/app/evals/` is the platform's own committed LLM evaluation (100-case bilingual golden set + `history.jsonl` ledger + `published_metrics.json`) — reported in the manuscript as convergent evidence (§5A.7), never merged into the §5A tables (different gold standards).
 
 ## Author TODOs (pre-submission)
 
-- [ ] Rebuild `build/thesis.docx` (+ regenerate stale diagram renders: `03_architecture_clara`, `08_dsr_method` — their `.mmd` sources changed; `python3 diagrams/render.py`)
-- [ ] Rebuild `defense/defense_deck.pptx` (the "(parallel build: Odradek)" subtitle was removed from `make_deck.js`; the built pptx still carries it)
-- [ ] §5B: collect interview + survey data, fill placeholders (`‹…›`)
-- [ ] Run the LLM path against the 188-signal harness (`evaluation/predict_llm.py`, needs API key) — closes the "pending" cells in §5A.3–5A.4
+- [x] ~~Rebuild `build/thesis.docx`~~ — done 7 Aug 2026; all diagram renders verified current against their `.mmd` sources
+- [x] ~~Rebuild `defense/defense_deck.pptx`~~ — rebuilt 7 Aug 2026, 20 slides (`node defense/make_deck.js`)
+- [x] ~~Run the LLM path against the 188-signal harness~~ — completed 4 Aug 2026, 188/188 enriched; it had been failing silently (gateway 403 on urllib's default User-Agent, script exited 0 on an empty file)
+- [ ] §5B: collect interview + survey data, fill placeholders (`‹…›`) — **the critical path; not started**
+- [ ] Score `theme_seed` and `recommended_action_seed` via the §3.5.2 semantic-agreement procedure — the last 2 of 6 gold fields with no metric
+- [ ] Score journey stage / owner in the **free-form production condition** — §5A.4.1 currently reports only the supplied-inventory upper bound
 - [ ] Citation verification pass (front-matter declaration promises it; Wagner 2002 / Bernal 2017 added for §3.5.5 — verify page ranges)
 - [ ] Repository URL / DOI in front matter; sign declaration
 - [ ] Fachanwalt legal-doc review ~1 Aug (see business-ops); thesis-IP letter due 31 Aug

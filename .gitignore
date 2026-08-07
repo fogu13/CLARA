@@ -45,5 +45,7 @@ pnpm-debug.log*
 *.tsbuildinfo
 
 # Derived thesis exports (rebuild: thesis/build_docx.sh, pandoc)
+thesis/**/short-draft-*.docx
+thesis/**/short-draft-*.epub
 thesis/short-draft-*.docx
 thesis/short-draft-*.epub
