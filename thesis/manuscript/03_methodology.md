@@ -127,7 +127,7 @@ Transcripts are analysed by **reflexive thematic analysis** (Braun & Clarke, 200
 
 The evaluation uses **only real, publicly-sourced** customer-feedback datasets; synthetic datasets available in the project were deliberately excluded so that accuracy claims rest on genuine customer language. Three datasets are used, chosen for sector and language diversity:
 
-| Dataset | Sector | Qual. signals | Languages | Gold labels |
+| Dataset | Sector | Qual. signals | Dominant language | Gold labels |
 |---|---|---|---|---|
 | Trade Republic | Fintech / digital brokerage | 67 | EN | theme, journey stage, owner, action, risk |
 | Henkel (adhesives) | B2B industrial / consumer goods | 39 | DE | theme, journey stage, owner, action, risk |
