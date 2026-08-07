@@ -422,6 +422,39 @@ def call_tool(
     return parsed
 
 
+# Providers cap embedding requests on two axes: input count and total tokens.
+# Measured against Mistral (Aug 2026): 256 inputs is the hard count cap (257
+# rejects), and ~64 max-length (2000-char) signals pass while 96 fail on
+# tokens. Both limits halved for margin; the chunker respects whichever bites
+# first. /ask embeds up to 501 texts in one call, so without this any
+# workspace beyond ~256 signals lost search outright with a 400.
+EMBED_MAX_INPUTS = 128
+EMBED_MAX_CHARS = 100_000
+
+
+def _embed_chunks(input_list: list[str]) -> list[list[str]]:
+    """Split inputs greedily under both request caps, preserving order.
+
+    A single text longer than EMBED_MAX_CHARS still goes out (alone) — the
+    provider's per-input limit is its own to enforce, and dropping the text
+    would silently skew retrieval.
+    """
+    chunks: list[list[str]] = []
+    current: list[str] = []
+    current_chars = 0
+    for text in input_list:
+        if current and (
+            len(current) >= EMBED_MAX_INPUTS or current_chars + len(text) > EMBED_MAX_CHARS
+        ):
+            chunks.append(current)
+            current, current_chars = [], 0
+        current.append(text)
+        current_chars += len(text)
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 def embed(
     input: str | Sequence[str],
     timeout: float = 60.0,
@@ -430,19 +463,18 @@ def embed(
     """Embed one or more strings via the OpenAI-compatible /embeddings endpoint.
 
     Returns a list of embedding vectors (one per input string). For a single string,
-    returns a list with one vector.
+    returns a list with one vector. Large batches are transparently split into
+    multiple requests (see EMBED_MAX_INPUTS/EMBED_MAX_CHARS); order is preserved.
     """
     if isinstance(input, str):
         input_list = [input]
     else:
         input_list = list(input)
 
-    body: dict[str, Any] = {"model": effective_embed_model(), "input": input_list}
     # Some providers don't support the `dimensions` param (Mistral 422s on it);
     # send it only for the env-configured model, where the operator controls
     # both knobs. A GUI-selected embed model gets the provider's default dims.
-    if AI_EMBED_DIM and "embed_model" not in _RUNTIME_OVERRIDE:
-        body["dimensions"] = AI_EMBED_DIM
+    send_dimensions = bool(AI_EMBED_DIM) and "embed_model" not in _RUNTIME_OVERRIDE
 
     lf = _get_langfuse()
     obs = None
@@ -455,38 +487,47 @@ def embed(
         )
 
     embed_host = effective_embed_base_url()
-    try:
-        resp = _post_with_retry(
-            "/embeddings",
-            body,
-            timeout,
-            base_url=embed_host,
-            api_key=effective_embed_api_key(),
-            endpoint="embeddings",
-        )
-    except AIProviderError as err:
-        if obs is not None:
-            obs.end(level="ERROR", status_message=str(err), usage_details={})
-        raise
+    embeddings: list[list[float]] = []
+    usage_input = 0
+    usage_total = 0
+    for chunk in _embed_chunks(input_list):
+        body: dict[str, Any] = {"model": effective_embed_model(), "input": chunk}
+        if send_dimensions:
+            body["dimensions"] = AI_EMBED_DIM
+        try:
+            resp = _post_with_retry(
+                "/embeddings",
+                body,
+                timeout,
+                base_url=embed_host,
+                api_key=effective_embed_api_key(),
+                endpoint="embeddings",
+            )
+        except AIProviderError as err:
+            if obs is not None:
+                obs.end(level="ERROR", status_message=str(err), usage_details={})
+            raise
 
-    if resp.status_code != 200:
-        detail = resp.text
-        err = _map_http_error(resp.status_code, detail, embed_host, "embeddings")
-        if obs is not None:
-            obs.end(level="ERROR", status_message=str(err), usage_details={})
-        raise err
+        if resp.status_code != 200:
+            detail = resp.text
+            err = _map_http_error(resp.status_code, detail, embed_host, "embeddings")
+            if obs is not None:
+                obs.end(level="ERROR", status_message=str(err), usage_details={})
+            raise err
 
-    data = resp.json()
-    embeddings = [item["embedding"] for item in data.get("data", [])]
+        data = resp.json()
+        # Sort by index within the chunk: the spec orders the array, but a
+        # misordered response would silently pair vectors with wrong texts.
+        items = sorted(data.get("data", []), key=lambda item: item.get("index", 0))
+        embeddings.extend(item["embedding"] for item in items)
+        usage = data.get("usage", {})
+        usage_input += usage.get("prompt_tokens", 0)
+        usage_total += usage.get("total_tokens", 0)
 
     if obs is not None:
-        usage = data.get("usage", {})
         obs.end(
             output={"embedding_count": len(embeddings)},
-            usage_details={
-                "input": usage.get("prompt_tokens", 0),
-                "total": usage.get("total_tokens", 0),
-            },
+            usage_details={"input": usage_input, "total": usage_total},
         )
 
     return embeddings
