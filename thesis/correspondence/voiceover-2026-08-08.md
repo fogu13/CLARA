@@ -41,7 +41,11 @@ Timings assume you talk at a normal pace and don't read the bullets aloud.
 
 > "This is the whole loop in one picture. Signal comes in, gets enriched, gets grouped into insights, rules propose an action, a human approves, we execute, we measure whether it worked, and we write down what we learned so it can be retrieved next time.
 >
-> The line I'd draw your attention to is the split between the blue and the white. **Deterministic code owns validation, conflict resolution, execution and audit. The language model only runs at named stages.**
+> There's a key along the bottom, and the colours are the argument rather than decoration.
+>
+> **Blue is where the language model runs. It appears exactly twice** — enrichment, and synthesis. **Everything downstream of it is white, which is ordinary deterministic code** — the rules engine, execution, measurement, the learning store. **Red is a governance control point** — that diamond in the middle is the human approval gate, and the four boxes on the left are the cross-cutting controls. **Grey is systems I integrate with rather than rebuild** — the feedback sources on the left, Jira and the CRM on the right.
+>
+> So the sentence I'd like you to be able to check against the picture is: **the model advises, it never acts.** Every point where it can influence an outcome is one of those two blue boxes, and everything that actually does something to the outside world is white or red.
 >
 > That's the central architectural commitment, and it's worth saying why."
 

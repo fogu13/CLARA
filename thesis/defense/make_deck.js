@@ -27,6 +27,19 @@ function card(s, x, y, w, h, head, body, opts = {}) {
   s.addText(head, { ...BODY, x: x + 0.15, y: y + 0.1, w: w - 0.3, h: 0.32, fontSize: 13.5, bold: true, color: opts.headColor || NAVY, margin: 0 });
   s.addText(body, { ...BODY, x: x + 0.15, y: y + 0.42, w: w - 0.3, h: h - 0.52, fontSize: 11.5, color: opts.bodyColor || INK, margin: 0 });
 }
+// Horizontal colour key: [fill, stroke, label] per entry. Swatch + text laid out
+// left to right; entries are spaced by their own label length so long and short
+// labels don't collide.
+function legend(s, x, y, entries) {
+  let cx = x;
+  entries.forEach(([fill, stroke, label]) => {
+    s.addShape("roundRect", { x: cx, y: y + 0.045, w: 0.22, h: 0.22, rectRadius: 0.03,
+      fill: { color: fill }, line: { color: stroke, width: 1.25 } });
+    s.addText(label, { ...BODY, x: cx + 0.3, y, w: label.length * 0.083 + 0.2, h: 0.3,
+      fontSize: 11.5, color: INK, margin: 0, valign: "middle" });
+    cx += label.length * 0.083 + 0.62;
+  });
+}
 function stat(s, x, y, w, big, label, color) {
   s.addText(big, { ...HEAD, x, y, w, h: 0.9, fontSize: 54, bold: true, color: color || NAVY, align: "center", margin: 0 });
   s.addText(label, { ...BODY, x, y: y + 0.92, w, h: 0.65, fontSize: 12.5, color: MUTE, align: "center", margin: 0 });
@@ -95,10 +108,18 @@ s.addNotes("90s. Say why DSR: the question is 'what works by design', not 'what 
 s = pres.addSlide();
 title(s, "The artifact: a governed loop, end to end", "CLARA — Capture, Listen, Analyze, Respond, Adapt");
 loopMotif(s, 11.4, 0.45, 2);
-s.addImage({ path: `${T}/diagrams/rendered/01_architecture_logical.png`, x: 0.6, y: 1.7, w: 12.1, h: 4.25 });
-s.addText("Deterministic code owns validation, conflict resolution, execution, audit. Language-model reasoning is confined to named, bounded stages. The points where the system can act are finite, named, individually auditable — that is what makes it governable.",
-  { ...BODY, x: 0.6, y: 6.15, w: 12.1, h: 0.85, fontSize: 14, color: MUTE, italic: true });
-s.addNotes("2 min. Walk the diagram left to right: sources → ingestion → enrich → synthesize → rules → the approval diamond → execute → measure → learn, with governance cross-cutting. Emphasise the architectural principle: bounded model, deterministic loop. Single build: CLARA (FastAPI + LangGraph), in production — the earlier prototype is acknowledged once as the first design cycle and archived.");
+s.addImage({ path: `${T}/diagrams/rendered/01_architecture_logical.png`, x: 0.6, y: 1.62, w: 12.1, h: 4.25 });
+// Legend — the colour convention IS the architectural argument, so it gets a key
+// rather than a sentence. Swatch fills match the classDefs in 01_architecture_logical.mmd.
+legend(s, 0.75, 5.98, [
+  ["e2ecfd", "3b6ea5", "LLM reasoning — only here"],
+  ["ffffff", "5a6478", "Deterministic code"],
+  ["fde2e2", "c0392b", "Governance control point"],
+  ["eef0f4", "98a0ae", "External system (integrated)"],
+]);
+s.addText("Only two stages are model-driven. Everything that validates, resolves conflicts, executes and audits is ordinary testable code — so every point where the system can act is finite, named and individually auditable. That is what makes it governable.",
+  { ...BODY, x: 0.6, y: 6.44, w: 12.1, h: 0.6, fontSize: 13.5, color: MUTE, italic: true });
+s.addNotes("2 min. Walk it left to right: sources → ingestion → enrich → synthesize → rules → the approval diamond → execute → measure → learn, governance cross-cutting. Use the legend deliberately — the colours ARE the argument: blue appears exactly twice, and everything downstream of it is white. If she asks why that matters: a model that can act anywhere cannot be reasoned about in advance; confined to named stages, every point it can influence an outcome is one you can name, test and audit, and the cost is a lower ceiling. The red diamond is a LangGraph interrupt node, not a UI confirmation — there is no code path to an external effect that bypasses it. Single build: CLARA (FastAPI + LangGraph), in production.");
 
 // ---------- 4b · System architecture (the CLARA build) ----------
 s = pres.addSlide();

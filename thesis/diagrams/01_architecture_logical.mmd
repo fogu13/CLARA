@@ -47,3 +47,15 @@ flowchart LR
     G2 -.-> E
     G3 -.-> R
     G4 -.-> E
+
+    %% Colour convention shared with 04_pipeline_flow.mmd:
+    %% blue = bounded LLM reasoning, red = governance control point,
+    %% white = deterministic code. The whole architectural claim is visible here.
+    classDef llm fill:#e2ecfd,stroke:#3b6ea5,color:#1f3b5b;
+    classDef gov fill:#fde2e2,stroke:#c0392b,color:#7b1f1f;
+    classDef det fill:#ffffff,stroke:#5a6478,color:#1a1a2e;
+    classDef ext fill:#eef0f4,stroke:#98a0ae,color:#3d4453;
+    class E,SY llm;
+    class AP,G1,G2,G3,G4 gov;
+    class I1,R,EX,M,L det;
+    class S1,S2,S3,S4,O1 ext;
