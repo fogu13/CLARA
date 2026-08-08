@@ -203,6 +203,7 @@ def build_router(
     require_candidate,
     triage_graph,
     learning_store_factory,
+    taxonomy_store=None,
 ) -> APIRouter:
     router = APIRouter()
     read_dep = Depends(require_role(Role.viewer))
@@ -770,12 +771,23 @@ def build_router(
         thread_id = f"triage-{uuid4().hex}"
         config = {"configurable": {"thread_id": thread_id}}
 
+        # Closed-set routing inventory (R3): only when the flag is on and the
+        # workspace has an accepted journey taxonomy to route against.
+        stage_inventory: list[str] = []
+        if taxonomy_store is not None:
+            from app.services.enrichment import routing_closed_set_enabled
+            from app.services.taxonomies import journey_stage_inventory
+
+            if routing_closed_set_enabled():
+                stage_inventory = journey_stage_inventory(taxonomy_store)
+
         result = triage_graph.invoke(
             {
                 "signals": raw_signals,
                 "connector_configs": conn_configs,
                 "context_data": context_data,
                 "learnings": learnings,
+                "journey_stage_inventory": stage_inventory,
             },
             config=config,
         )

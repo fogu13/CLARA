@@ -504,6 +504,23 @@ def classify_signals(
     return classifications
 
 
+def journey_stage_inventory(taxonomy_store: "TaxonomyStore") -> list[str]:
+    """Active journey-catalog category ids — the closed-set routing inventory (R3).
+
+    Proposed/rejected/merged categories are excluded for the same reason they
+    do not classify: the model must not route to a stage no human accepted.
+    """
+    stages: list[str] = []
+    for catalog in taxonomy_store.list_catalogs():
+        if catalog.taxonomy_type.value != "journey":
+            continue
+        for category in catalog.categories:
+            if category.status in ("merged", "split", "proposed", "rejected"):
+                continue
+            stages.append(category.category_id)
+    return sorted(set(stages))
+
+
 def searchable_text(signal: SignalRecord) -> str:
     parts = [
         signal.journey,

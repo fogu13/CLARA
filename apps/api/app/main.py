@@ -735,6 +735,7 @@ def create_app(
     )
     api.include_router(
         problems_routes.build_router(
+            taxonomy_store=taxonomy_store,
             active_problem_store=active_problem_store,
             workflow_store=workflow_store,
             signal_store=signal_store,

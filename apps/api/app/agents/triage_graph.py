@@ -85,7 +85,11 @@ def enrich_node(state: TriageState) -> dict[str, Any]:
     from app.services.exemplar_store import fewshot_enabled, load_exemplars
 
     exemplars = load_exemplars() if fewshot_enabled() else None
-    enrichments = enrich_signals(items, exemplars=exemplars)
+    enrichments = enrich_signals(
+        items,
+        exemplars=exemplars,
+        journey_stage_inventory=state.get("journey_stage_inventory"),
+    )
 
     # Merge enrichments back into signals. Guard e.get("id") — a record missing its
     # id would otherwise KeyError and crash the whole pipeline.

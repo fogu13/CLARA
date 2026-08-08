@@ -23,6 +23,7 @@ class TriageState(TypedDict, total=False):
     db_connection: Any  # optional psycopg connection for taxonomy mapping
     context_data: dict[str, Any]  # optional B2B context for 8-factor severity
     learnings: list[dict[str, Any]]  # past learnings to inform synthesis (outcome loop)
+    journey_stage_inventory: list[str]  # closed-set routing inventory (R3; optional)
 
     # --- After enrich ---
     enriched_signals: list[dict[str, Any]]  # signals with sentiment/urgency/tags

@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from copy import deepcopy
 from typing import Any
 
 from app.services.ai import AIProviderError, call_tool
@@ -68,11 +69,49 @@ ENRICHMENT_TOOL = {
 }
 
 
+# --- Closed-set routing (science review R3/F9) ------------------------------
+#
+# The thesis eval measured free-form journey/owner generation intersecting the
+# gold vocabulary at ~15%/~1%, while the closed-inventory condition reached
+# 0.59/0.40 — yet production kept running the free-form condition. When a
+# journey-stage inventory is passed (and ENRICH_ROUTING_CLOSED_SET is on),
+# enrichment offers the workspace's own stages as an enum and the model must
+# choose from them or abstain; abstention routes to human review and the model
+# never invents a stage. Off by default: enabling it is an eval-improve
+# iteration, and published_metrics.json describes the flag-off configuration.
+# Owner routing joins when an owner registry exists — an enum of invented
+# owners would be theater, not routing.
+
+ROUTING_ABSTAIN = "abstain"
+
+
+def routing_closed_set_enabled() -> bool:
+    return os.getenv("ENRICH_ROUTING_CLOSED_SET", "0").lower() not in ("0", "false", "no", "")
+
+
+def _with_routing(stages: list[str]) -> tuple[str, dict[str, Any]]:
+    """(system prompt, tool schema) extended with the closed-set stage field."""
+    prompt = SYSTEM_PROMPT + (
+        "\n- journey_stage: the ONE stage from this workspace inventory that the"
+        ' feedback belongs to, or exactly "abstain" when none fits or you are'
+        " unsure. Never invent a stage. Inventory: " + " | ".join(stages)
+    )
+    tool = deepcopy(ENRICHMENT_TOOL)
+    item = tool["function"]["parameters"]["properties"]["enrichments"]["items"]
+    item["properties"]["journey_stage"] = {
+        "type": "string",
+        "enum": [*stages, ROUTING_ABSTAIN],
+    }
+    item["required"].append("journey_stage")
+    return prompt, tool
+
+
 def enrich_signals(
     signals: list[dict[str, Any]],
     *,
     batch_size: int = 25,
     exemplars: list[dict[str, Any]] | None = None,
+    journey_stage_inventory: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Enrich a list of qualitative signal dicts with LLM-extracted metadata.
 
@@ -84,11 +123,19 @@ def enrich_signals(
     to the prompt to pin the model to the project's tag vocabulary and urgency
     calibration. Exemplars are plain text, so this stays model-agnostic.
 
+    When ``journey_stage_inventory`` is passed and ENRICH_ROUTING_CLOSED_SET is
+    on, each enrichment also carries journey_stage — chosen from the inventory
+    or "abstain", never invented (closed-set routing, science review R3).
+
     Signals are batched to stay within context windows. Errors on individual
     batches are logged and skipped (partial enrichment is better than none).
     """
     if not signals:
         return []
+
+    system_prompt, tool = SYSTEM_PROMPT, ENRICHMENT_TOOL
+    if journey_stage_inventory and routing_closed_set_enabled():
+        system_prompt, tool = _with_routing(sorted(set(journey_stage_inventory)))
 
     fewshot = format_fewshot(exemplars) + "\n\n" if exemplars else ""
     all_enrichments: list[dict[str, Any]] = []
@@ -109,9 +156,9 @@ def enrich_signals(
 
         try:
             result = call_tool(
-                system=SYSTEM_PROMPT,
+                system=system_prompt,
                 user=fewshot + "Enrich these feedback items:\n\n" + json.dumps(items, indent=2),
-                tool=ENRICHMENT_TOOL,
+                tool=tool,
                 tool_name="submit_enrichments",
                 trace_name="enrich_signals",
             )
@@ -145,7 +192,7 @@ def merge_enrichment_into_signal(
     """
     from app.services.ai import AI_MODEL
 
-    return {
+    merged = {
         **signal,
         "sentiment": enrichment.get("sentiment"),
         "sentiment_score": enrichment.get("sentiment_score"),
@@ -159,3 +206,19 @@ def merge_enrichment_into_signal(
             "limitations": ["LLM-extracted; not human-validated"],
         },
     }
+
+    # Closed-set routing (R3): the suggestion fills journey_stage only when the
+    # source did not provide one — connector/CSV-provided stages are ground
+    # truth the model must not overwrite. Abstention is recorded for the human
+    # review queue instead of being silently dropped.
+    suggested_stage = enrichment.get("journey_stage")
+    if suggested_stage:
+        current = str(signal.get("journey_stage") or "").strip()
+        stage_unknown = current in ("", "unknown_stage")
+        if suggested_stage == "abstain":
+            if stage_unknown:
+                merged["routing_review"] = "stage_abstained"
+        elif stage_unknown:
+            merged["journey_stage"] = suggested_stage
+            merged["routing_source"] = "closed_set_llm"
+    return merged
