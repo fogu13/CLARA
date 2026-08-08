@@ -255,3 +255,23 @@ class TestBuildLearningFromConclusion:
         )
 
         assert learning["half_life_days"] == 180
+
+
+class TestRetrievalGate:
+    def test_system_derived_learnings_never_steer_synthesis(self) -> None:
+        # Science review F7: learn_node auto-derives "worked" with
+        # reviewer="system" from peak-selected outcomes; those must stay out of
+        # prompt retrieval until a human validates them.
+        from app.services.learning_engine import rank_learnings
+
+        learnings = [
+            {"topic": "checkout_failure", "summary": "retry worked",
+             "base_confidence": 0.9, "reviewer": "system"},
+            {"topic": "checkout_failure", "summary": "retry worked",
+             "base_confidence": 0.4, "reviewer": "jane"},
+            {"topic": "checkout_failure", "summary": "legacy record, no field",
+             "base_confidence": 0.4},
+        ]
+        ranked = rank_learnings(learnings, "checkout failure", k=3)
+        assert all(learning.get("reviewer") != "system" for learning in ranked)
+        assert len(ranked) == 2

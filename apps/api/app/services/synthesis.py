@@ -45,7 +45,6 @@ SYSTEM_PROMPT = (
     "- category: one of content_clarity | product_issue | churn_risk | "
     "campaign_performance | ux_friction | sentiment_shift | engagement_drop "
     "| positive_trend | compliance_concern\n"
-    "- impact_score: 0-10\n"
     "- confidence: 0-1\n"
     "- target_team: one of marketing | product | cx | sales | engineering\n"
     "- suggested_actions: up to 2 items, each with type, title, description, "
@@ -63,7 +62,6 @@ SYNTHESIS_TOOL = {
                 "title": {"type": "string"},
                 "summary": {"type": "string"},
                 "category": {"type": "string"},
-                "impact_score": {"type": "number"},
                 "confidence": {"type": "number"},
                 "target_team": {"type": "string"},
                 "suggested_actions": {
@@ -84,7 +82,6 @@ SYNTHESIS_TOOL = {
                 "title",
                 "summary",
                 "category",
-                "impact_score",
                 "confidence",
                 "target_team",
                 "suggested_actions",
@@ -503,7 +500,9 @@ def synthesize_insights(
             "title": generated.get("title", ""),
             "summary": generated.get("summary", ""),
             "category": generated.get("category", ""),
-            "impact_score": generated.get("impact_score", 0),
+            # Deterministic: the LLM no longer emits an impact opinion — one governed
+            # impact number exists (science review F11, "two impact numbers coexist").
+            "impact_score": sev["score"],
             "confidence": generated.get("confidence", 0),
             "target_team": generated.get("target_team", ""),
             "suggested_actions": generated.get("suggested_actions", []),

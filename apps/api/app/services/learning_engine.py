@@ -124,6 +124,13 @@ def rank_learnings(
     Ranks learnings by token overlap with the query, weighted by decayed
     confidence so fresher/stronger learnings surface first.
 
+    Only HUMAN-validated conclusions are retrieval-eligible (science review F7):
+    learn_node auto-derives "worked" from the outcome status with
+    reviewer="system", and those outcomes are peak-selected and
+    volume-confounded — feeding them back into synthesis prompts would launder
+    an unvalidated causal claim into future recommendations. Auto-derived
+    learnings stay visible as pending; they just never steer the model.
+
     A pgvector semantic ranking can replace this scorer without changing callers.
     """
     q_tokens = list(set(_tokenize(query)))
@@ -132,6 +139,10 @@ def rank_learnings(
 
     scored: list[tuple[float, dict[str, Any]]] = []
     for learning in learnings:
+        # Records without the field (legacy stores, probe fixtures) pass — only
+        # the auto-derived path labels itself, and it is the one being gated.
+        if learning.get("reviewer") == "system":
+            continue
         hay = " ".join([
             learning.get("topic", ""),
             learning.get("pattern", ""),

@@ -827,7 +827,11 @@ class SignalRecord(BaseModel):
     campaign_exposure: list[str] = Field(default_factory=list)
     product_events: list[str] = Field(default_factory=list)
     language: str = "unknown"
-    timestamp: str = "1970-01-01T00:00:00Z"
+    # Ingestion time, not epoch: a 1970 default silently drops the signal out of
+    # every trend window and outcome bucket (see services/common.normalize_timestamp).
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    )
     metadata: dict[str, str] = Field(default_factory=dict)
     # Enrichment written back by the triage pipeline. Without persistence the
     # feed's "Enriched" tile was permanently 0 and sentiment/urgency badges

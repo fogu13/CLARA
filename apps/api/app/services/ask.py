@@ -83,7 +83,7 @@ def _recency_key(signal) -> str:
     except ValueError:
         return ""
 
-def _refusal(reason: str, matches: int) -> dict[str, Any]:
+def _refusal(reason: str, matches: int, window: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "refused": True,
         "reason": reason,
@@ -91,6 +91,19 @@ def _refusal(reason: str, matches: int) -> dict[str, Any]:
         "answer": None,
         "confidence": 0.0,
         "citations": [],
+        "evidence_window": window or {"signals_considered": 0, "oldest": None, "newest": None},
+    }
+
+
+def _evidence_window(pairs: list) -> dict[str, Any]:
+    """What the answer could actually see (science review F10c): answers draw on
+    the MAX_SIGNALS most recent signals, so on a busy workspace "no complaints
+    about X" silently means "none recently" unless the window is disclosed."""
+    stamps = sorted(_recency_key(s) for s, _ in pairs)
+    return {
+        "signals_considered": len(pairs),
+        "oldest": (stamps[0][:10] or None) if stamps else None,
+        "newest": (stamps[-1][:10] or None) if stamps else None,
     }
 
 
@@ -112,6 +125,7 @@ def ask_clara(
     pairs = [(s, text) for s, text in pairs if text.strip()]
     if not pairs:
         return _refusal("No signals in the workspace yet.", 0)
+    window = _evidence_window(pairs)
 
     vectors = ai.embed([question, *[text for _, text in pairs]])
     question_vec, signal_vecs = vectors[0], vectors[1:]
@@ -131,6 +145,7 @@ def ask_clara(
             "Not enough matching feedback to answer this reliably "
             f"({len(matches)} excerpt(s) above the similarity threshold).",
             len(matches),
+            window,
         )
 
     excerpts = "\n".join(
@@ -147,7 +162,11 @@ def ask_clara(
     )
 
     if result.get("insufficient_evidence"):
-        return _refusal("The matching feedback does not contain enough information to answer.", len(matches))
+        return _refusal(
+            "The matching feedback does not contain enough information to answer.",
+            len(matches),
+            window,
+        )
 
     retrieval_strength = sum(score for score, _ in matches) / len(matches)
     model_confidence = max(0.0, min(float(result.get("confidence", 0.0)), 1.0))
@@ -161,6 +180,7 @@ def ask_clara(
         "model_confidence": round(model_confidence, 3),
         "retrieval_strength": round(retrieval_strength, 3),
         "matches": len(matches),
+        "evidence_window": window,
         "citations": [
             {
                 "signal_id": signal.signal_id,

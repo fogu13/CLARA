@@ -31,6 +31,7 @@ import httpx
 import jwt
 
 from app.connectors.base import ConnectorError, validate_external_url
+from app.services.common import normalize_timestamp
 from app.services.language import detect_language
 
 logger = logging.getLogger(__name__)
@@ -205,7 +206,7 @@ class GooglePlaySourceConnector:
                 .replace("+00:00", "Z")
             )
         except (TypeError, ValueError):
-            timestamp = "1970-01-01T00:00:00Z"
+            timestamp, _ = normalize_timestamp(None)  # ingestion time, never epoch
 
         reviewer_language = str(user_comment.get("reviewerLanguage") or "")[:2].lower()
         language = reviewer_language if reviewer_language in ("de", "en") else detect_language(text)

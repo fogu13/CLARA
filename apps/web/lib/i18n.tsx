@@ -141,6 +141,7 @@ const en = {
     citations: "Citations",
     match: "match",
     failed: "Question failed.",
+    evidenceWindow: "Based on the {n} most recent signals ({from} to {to}) — older feedback is not considered.",
   },
   taxonomy: {
     title: "Taxonomy",
@@ -741,6 +742,7 @@ const de: Dict = {
     citations: "Quellen",
     match: "Übereinstimmung",
     failed: "Anfrage fehlgeschlagen.",
+    evidenceWindow: "Basierend auf den {n} neuesten Signalen ({from} bis {to}) — ältere Rückmeldungen werden nicht berücksichtigt.",
   },
   taxonomy: {
     title: "Taxonomie",

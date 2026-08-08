@@ -28,6 +28,7 @@ from typing import Any
 import httpx
 
 from app.connectors.base import ConnectorError
+from app.services.common import normalize_timestamp
 from app.services.language import detect_language
 
 logger = logging.getLogger(__name__)
@@ -161,7 +162,7 @@ class GoogleBusinessSourceConnector:
         reviewer = review.get("reviewer") or {}
         author = "" if reviewer.get("isAnonymous") else str(reviewer.get("displayName") or "")
         rating = STAR_VALUES.get(str(review.get("starRating") or ""), "")
-        timestamp = str(review.get("updateTime") or review.get("createTime") or "1970-01-01T00:00:00Z")
+        timestamp, _ts_defaulted = normalize_timestamp(review.get("updateTime") or review.get("createTime"))
         return {
             "signal_id": f"gbp-{review_id[:64]}",
             # Pseudonymized at ingestion — the reviewer's name is never stored.
