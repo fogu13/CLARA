@@ -15,6 +15,7 @@ changing the contract.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 # Live module reference (see taxonomy_bootstrap): test reloads of app.services.ai
@@ -29,7 +30,10 @@ logger = logging.getLogger(__name__)
 MAX_SIGNALS = 500  # most recent; one embed batch
 TOP_K = 8
 MIN_MATCHES = 3  # fewer matching excerpts than this -> refuse
-MIN_SIMILARITY = 0.30
+# Cosine floors are EMBEDDER-SPECIFIC: similarity distributions differ across
+# embedding models, so this value does not survive an AI_EMBED_MODEL swap.
+# Recalibrate with scripts/calibrate_embed_thresholds.py and set via env.
+MIN_SIMILARITY = float(os.getenv("ASK_MIN_SIMILARITY", "0.30"))
 
 ANSWER_TOOL = {
     "type": "function",

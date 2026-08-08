@@ -16,14 +16,20 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from typing import Any
 
 from app.services.ai import AIProviderError, call_tool, embed, to_vector_literal
 
 logger = logging.getLogger(__name__)
 
-MAP_THRESHOLD = 0.55  # cosine floor; tunable (Elvis default)
-CLUSTER_EPS = 0.70  # cosine threshold for clustering (Elvis default)
+# Cosine thresholds are EMBEDDER-SPECIFIC (the Elvis defaults were tuned under
+# text-embedding-004): similarity distributions shift across models, so these
+# do not survive an AI_EMBED_MODEL swap. Recalibrate with
+# scripts/calibrate_embed_thresholds.py and override via env.
+MAP_THRESHOLD = float(os.getenv("TAXONOMY_MAP_THRESHOLD", "0.55"))  # mapping floor
+CLUSTER_EPS = float(os.getenv("TAXONOMY_CLUSTER_EPS", "0.70"))  # discovery clustering
+MERGE_EPS = float(os.getenv("TAXONOMY_MERGE_EPS", "0.95"))  # governance auto-merge
 MIN_CLUSTER = 3  # minimum cluster size for discovery (Elvis default)
 
 NAME_TOOL = {
@@ -295,7 +301,7 @@ def apply_governance(
     *,
     auto_promote: float = 0.80,
     min_size: int = 5,
-    merge_eps: float = 0.95,
+    merge_eps: float | None = None,
     stale_days: int = 90,
 ) -> dict[str, int]:
     """Apply taxonomy governance — calls the SQL function apply_taxonomy_governance.
@@ -304,6 +310,8 @@ def apply_governance(
     near-duplicate discovered nodes, and archives stale discovered nodes.
     Never touches uploaded taxonomy.
     """
+    if merge_eps is None:
+        merge_eps = MERGE_EPS
     with conn.cursor() as cur:
         cur.execute(
             "SELECT apply_taxonomy_governance(%s, %s, %s, %s, %s)",

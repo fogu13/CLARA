@@ -224,7 +224,7 @@ docker compose -f docker-compose.langfuse.yml up -d
 | Insights search / taxonomy bootstrap 502s | An embeddings problem, not a chat one: `AI_EMBED_MODEL` defaults to `gemini-embedding-001` and must be a model the embed host actually serves. The `/ask` error names the knob; `docker compose logs api \| grep "AI provider error"` has the provider's raw status. Check the split with `GET /system-config` → `ai_embed_base_url` |
 | Embeddings 404 while chat works | The host is chat-only. Point `AI_EMBED_BASE_URL` + `AI_EMBED_API_KEY` at a provider that serves `/embeddings`; no `AI_EMBED_MODEL` value fixes a missing endpoint |
 | **`.env` says one thing, `/system-config` says another** | A **Settings-page** AI config beats `.env` and survives restarts — see "Settings overrides env" below. Editing `.env` has no effect until it's cleared |
-| Switching embed model | `taxonomy_nodes.embedding` is `vector(768)` (migration 003). A model with different dims needs a migration before taxonomy bootstrap; `/ask` is unaffected (it embeds in memory) |
+| Switching embed model | `taxonomy_nodes.embedding` is `vector(768)` (migration 003). A model with different dims needs a migration before taxonomy bootstrap; `/ask` is unaffected (it embeds in memory). **Also recalibrate every cosine threshold** — similarity distributions differ per embedder; run `python3 -m scripts.calibrate_embed_thresholds` and set the printed `ASK_MIN_SIMILARITY` / `TAXONOMY_*` / `CLUSTER_SEMANTIC_THRESHOLD` values in `.env` (for `mistral-embed`, measured 2026-08-08: 0.79 / 0.85 / 0.85 / 0.91 / 0.75 — the legacy defaults admit everything under it) |
 
 ## Settings overrides env (AI config) — check this first
 
