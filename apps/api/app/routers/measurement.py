@@ -12,6 +12,7 @@ from app.services.emerging import build_emerging_problem_report
 def build_router(
     *,
     measurement_plan_store,
+    signal_store,
     telemetry_store,
     connector_config_store,
     active_problem_store,
@@ -61,7 +62,7 @@ def build_router(
         from app.services.digest import build_digest
 
         digest_text = build_digest(
-            emerging=build_emerging_problem_report(current_candidates()),
+            emerging=build_emerging_problem_report(current_candidates(), signal_store.list_signals()),
             outcome_board=build_outcome_board(active_problem_store.list_problems(), workflow_store),
             measurement_plans=measurement_plan_store.list_plans(),
         )

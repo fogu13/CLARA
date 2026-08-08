@@ -666,14 +666,14 @@ def create_app(
         ) or None
 
         return run_alert_sweep(
-            emerging_report=build_emerging_problem_report(current_candidates()),
+            emerging_report=build_emerging_problem_report(current_candidates(), signal_store.list_signals()),
             connector_config_store=connector_config_store,
             telemetry=telemetry_store,
             push_slack=push_slack,
             send_email=send_email,
             digest_email=digest_email,
             build_digest_text=lambda: build_digest(
-                emerging=build_emerging_problem_report(current_candidates()),
+                emerging=build_emerging_problem_report(current_candidates(), signal_store.list_signals()),
                 outcome_board=build_outcome_board(
                     active_problem_store.list_problems(), workflow_store
                 ),
@@ -762,6 +762,7 @@ def create_app(
     api.include_router(
         measurement_routes.build_router(
             measurement_plan_store=measurement_plan_store,
+            signal_store=signal_store,
             telemetry_store=telemetry_store,
             connector_config_store=connector_config_store,
             active_problem_store=active_problem_store,

@@ -1079,6 +1079,12 @@ class EmergingProblemSignal(BaseModel):
     taxonomy_labels: list[str] = Field(default_factory=list)
     drivers: list[str] = Field(default_factory=list)
     recommended_next_step: str
+    # Burst statistic (science review R5): recent vs baseline daily rate with a
+    # BH-adjusted q-value across all candidates in the report. None when the
+    # candidate's evidence carries no usable timestamps.
+    recent_rate: float | None = None
+    baseline_rate: float | None = None
+    burst_q: float | None = None
 
 
 class EmergingProblemReport(BaseModel):

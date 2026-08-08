@@ -374,7 +374,7 @@ def build_router(
 
     @router.get("/emerging-problems", response_model=EmergingProblemReport, dependencies=[read_dep])
     def list_emerging_problems() -> EmergingProblemReport:
-        return build_emerging_problem_report(current_candidates())
+        return build_emerging_problem_report(current_candidates(), signal_store.list_signals())
 
     @router.post("/problem-candidates/{candidate_id}/promote", response_model=ProblemRecord, dependencies=[Depends(require_role(Role.editor))])
     def promote_problem_candidate(candidate_id: str) -> ProblemRecord:
