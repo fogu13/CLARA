@@ -1,0 +1,149 @@
+{
+  "generated_at": "2026-08-08T15:38:15.988082+00:00",
+  "model": "glm-5.2",
+  "embed_model": "mistral-embed",
+  "n_questions": 9,
+  "overall_correct": 7,
+  "refusal_correct": 4,
+  "refusal_total": 4,
+  "citation_entailment": {
+    "supported": 19,
+    "cited": 19,
+    "rate": 1.0,
+    "caveat": "LLM-judge verdicts \u2014 a smoke alarm, not a proof of faithfulness"
+  },
+  "selective_prediction_curve": [
+    {
+      "threshold": 0.0,
+      "coverage": 0.333,
+      "accuracy_on_answered": 1.0
+    },
+    {
+      "threshold": 0.2,
+      "coverage": 0.333,
+      "accuracy_on_answered": 1.0
+    },
+    {
+      "threshold": 0.3,
+      "coverage": 0.333,
+      "accuracy_on_answered": 1.0
+    },
+    {
+      "threshold": 0.4,
+      "coverage": 0.333,
+      "accuracy_on_answered": 1.0
+    },
+    {
+      "threshold": 0.5,
+      "coverage": 0.333,
+      "accuracy_on_answered": 1.0
+    },
+    {
+      "threshold": 0.6,
+      "coverage": 0.333,
+      "accuracy_on_answered": 1.0
+    },
+    {
+      "threshold": 0.7,
+      "coverage": 0.333,
+      "accuracy_on_answered": 1.0
+    },
+    {
+      "threshold": 0.8,
+      "coverage": 0.222,
+      "accuracy_on_answered": 1.0
+    },
+    {
+      "threshold": 0.9,
+      "coverage": 0.0,
+      "accuracy_on_answered": null
+    }
+  ],
+  "rows": [
+    {
+      "question": "What is going wrong with identity verification?",
+      "expect": "answer",
+      "refused": false,
+      "confidence": 0.807,
+      "correct": true,
+      "entailment": {
+        "supported": 8,
+        "cited": 8
+      }
+    },
+    {
+      "question": "Was sagen Kund:innen \u00fcber die Identit\u00e4tspr\u00fcfung?",
+      "expect": "answer",
+      "refused": false,
+      "confidence": 0.762,
+      "correct": true,
+      "entailment": {
+        "supported": 3,
+        "cited": 3
+      }
+    },
+    {
+      "question": "Are customers complaining about card payments at checkout?",
+      "expect": "answer",
+      "refused": true,
+      "confidence": 0.0,
+      "correct": false,
+      "entailment": null
+    },
+    {
+      "question": "Why are cancelled customers still being contacted?",
+      "expect": "answer",
+      "refused": true,
+      "confidence": 0.0,
+      "correct": false,
+      "entailment": null
+    },
+    {
+      "question": "What problems do customers report during onboarding verification?",
+      "expect": "answer",
+      "refused": false,
+      "confidence": 0.816,
+      "correct": true,
+      "entailment": {
+        "supported": 8,
+        "cited": 8
+      }
+    },
+    {
+      "question": "What do customers think about our loyalty points program?",
+      "expect": "refuse",
+      "refused": true,
+      "confidence": 0.0,
+      "correct": true,
+      "entailment": null
+    },
+    {
+      "question": "Are there complaints about the mobile app crashing on Android 15?",
+      "expect": "refuse",
+      "refused": true,
+      "confidence": 0.0,
+      "correct": true,
+      "entailment": null
+    },
+    {
+      "question": "How do customers rate our phone support wait times in France?",
+      "expect": "refuse",
+      "refused": true,
+      "confidence": 0.0,
+      "correct": true,
+      "entailment": null
+    },
+    {
+      "question": "What feedback exists about the new dark-mode design?",
+      "expect": "refuse",
+      "refused": true,
+      "confidence": 0.0,
+      "correct": true,
+      "entailment": null
+    }
+  ],
+  "notes": [
+    "Grading is programmatic: answerable = answered + cites the evidence-holding dataset; unanswerable = refused. Validates the refusal system, not free-text answer quality.",
+    "QA set is authored against the demo datasets; rerun after changing them or any ask threshold (ASK_MIN_SIMILARITY)."
+  ]
+}
