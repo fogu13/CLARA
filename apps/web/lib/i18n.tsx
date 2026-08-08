@@ -58,7 +58,7 @@ const en = {
     overview: "Overview",
     subtitle:
       "The highest-impact customer problems, the actions proposed for them, and whether those actions worked.",
-    customersAffected: "Customers affected",
+    customersAffected: "Customers affected (signal-weighted)",
     outcomesMeasured: "Outcomes measured",
     highImpact: "High-impact problems",
     highImpactDetail: "total problems in queue",
@@ -659,7 +659,7 @@ const de: Dict = {
     overview: "Übersicht",
     subtitle:
       "Die Kundenprobleme mit dem größten Impact, die vorgeschlagenen Maßnahmen und ob sie gewirkt haben.",
-    customersAffected: "Betroffene Kund:innen",
+    customersAffected: "Betroffene Kund:innen (signalgewichtet)",
     outcomesMeasured: "Gemessene Ergebnisse",
     highImpact: "Probleme mit hohem Impact",
     highImpactDetail: "Probleme insgesamt in der Warteschlange",

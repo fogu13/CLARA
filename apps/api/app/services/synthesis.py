@@ -421,6 +421,28 @@ def synthesize_cluster(
         return None
 
 
+def _without_intra_cluster_near_dups(sigs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop signals whose annotated near-duplicate is in the SAME cluster.
+
+    Science review F4/R10: reach and severity counts double-count the same
+    complaint cross-posted to two sources (identities never resolve across
+    sources, so customer_id can't catch it). Ingest already annotates
+    near-duplicates (metadata.near_duplicate_of, Jaccard >= 0.85) without
+    dropping them — honoring that annotation at COUNTING time keeps the
+    annotate-don't-drop design while stopping the double count. Only intra-
+    cluster references collapse; a near-dup of a signal outside this cluster
+    still counts here.
+    """
+    ids = {str(s.get("id", s.get("signal_id", ""))) for s in sigs}
+    kept = []
+    for s in sigs:
+        dup_of = (s.get("metadata") or {}).get("near_duplicate_of")
+        if dup_of and str(dup_of) in ids:
+            continue
+        kept.append(s)
+    return kept
+
+
 def synthesize_insights(
     enriched_signals: list[dict[str, Any]],
     *,
@@ -472,8 +494,12 @@ def synthesize_insights(
         # Frequency analysis
         freq = frequency_factors(sigs)
 
+        # Counting basis: near-duplicates annotated at ingest collapse for
+        # reach/severity so a cross-posted complaint is one complaint (R10).
+        counting_sigs = _without_intra_cluster_near_dups(sigs)
+
         # Severity (8-factor if context available, simple otherwise)
-        sev = compute_severity(sigs, context_data=context_data, frequency_data=freq)
+        sev = compute_severity(counting_sigs, context_data=context_data, frequency_data=freq)
 
         # Retrieve relevant past learnings for this theme (outcome-grounded loop)
         relevant_learnings = rank_learnings(learnings, tag, k=3) if learnings else []
@@ -484,7 +510,8 @@ def synthesize_insights(
 
         qual_count = sum(1 for s in sigs if s.get("signal_type") == "qualitative")
         quant_count = len(sigs) - qual_count
-        affected = sum(s.get("contact_count", 1) for s in sigs)
+        affected = sum(s.get("contact_count", 1) for s in counting_sigs)
+        source_mix: Counter[str] = Counter(str(s.get("source", "unknown")) for s in sigs)
         # `or "medium"` in both key and read: a missing/None urgency must rank
         # and report identically, else the argmax winner is read as a value the
         # ranking never saw (reported low while ranked medium).
@@ -515,6 +542,11 @@ def synthesize_insights(
             "qual_signal_count": qual_count,
             "quant_signal_count": quant_count,
             "affected_contacts": affected,
+            # Honesty labels (R10): reach is signal-weighted after intra-cluster
+            # near-dup collapse — it is NOT unique customers (identities never
+            # resolve across sources); the mix shows one-channel evidence.
+            "reach_basis": "signal_weighted_deduped",
+            "source_mix": dict(source_mix),
             "max_urgency": max_urgency,
             "source_count": len(sources),
             "tag": tag,
