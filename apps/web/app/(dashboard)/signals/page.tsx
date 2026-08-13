@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MessageSquare, Upload, Sparkles, Trash2 } from "lucide-react";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from "recharts";
+import { signalTrendSeries, withRollingAverage } from "@/lib/signal-trend";
 import { cn } from "@/lib/utils";
 import { apiBaseUrl, apiHeaders, deleteSignals, getSignals, importSignalCsv, validateSignalCsv } from "@/lib/client-api";
 import {
@@ -67,6 +69,10 @@ export default function SignalsPage() {
       /* keep current list */
     }
   }
+
+  // Raw daily counts plus a 7-day trailing average: bulk-import days would
+  // otherwise set the y-axis and flatten the organic trend to the floor.
+  const trend = withRollingAverage(signalTrendSeries(signals, 30));
 
   const filteredSignals = signals.filter((s) => {
     if (sourceFilter !== "all" && s.source !== sourceFilter) return false;
@@ -287,6 +293,33 @@ export default function SignalsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-base">{t.dashboard.signalVolume}</CardTitle></CardHeader>
+        <CardContent>
+          {trend.every((point) => point.count === 0) ? (
+            <p className="text-sm text-muted-foreground">{t.dashboard.signalVolumeEmpty}</p>
+          ) : (
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trend} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="day" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={24} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <ChartTooltip
+                    formatter={(value, name) => [
+                      `${value} ${t.common.signals}`,
+                      name === "avg" ? t.dashboard.chartAvg : t.dashboard.chartRaw
+                    ]}
+                  />
+                  <Area type="monotone" dataKey="count" name="count" stroke="hsl(var(--primary) / 0.35)" fill="hsl(var(--primary) / 0.08)" strokeWidth={1} isAnimationActive={false} />
+                  <Area type="monotone" dataKey="avg" name="avg" stroke="hsl(var(--primary))" fill="transparent" strokeWidth={2} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {importBatches.length > 0 ? (
         <Card>

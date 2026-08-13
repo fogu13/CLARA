@@ -2,21 +2,21 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  AlertTriangle,
   ArrowRight,
-  CheckCircle,
-  ClipboardCheck,
-  Gauge,
-  Plug,
-  ShieldAlert,
+  ChevronRight,
+  Info,
+  RefreshCw,
+  ShieldCheck,
   Sparkles,
-  Target,
-  TrendingUp,
-  Users
+  Target
 } from "lucide-react";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, ResponsiveContainer } from "recharts";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   apiBaseUrl,
   apiHeaders,
@@ -26,25 +26,29 @@ import {
   getOutcomeBoard,
   getProblems,
   getSignals,
+  getWorkspace,
   wrongOriginHint
 } from "@/lib/client-api";
-import { AiLiteracyBanner } from "@/app/components/ai-literacy-banner";
-import { WorksCouncilBanner } from "@/app/components/works-council-banner";
-import { percent } from "@/lib/format";
+import { formatMetric, percent } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { fallbackProblems } from "@/lib/sample-data";
+import { countInWindow, signalTrendSeries, withRollingAverage } from "@/lib/signal-trend";
+import { cn } from "@/lib/utils";
 import type {
-  ActionClass,
   ApprovalRecord,
   EmergingProblemReport,
+  EmergingProblemSignal,
   ExecutionRecord,
   OutcomeBoard,
   OutcomeBoardItem,
   ProblemSummary,
-  SignalRecord
+  SignalRecord,
+  WorkspaceSettings
 } from "@/lib/types";
 
 type ConnectorSummary = { connector_type: string; is_active: boolean };
+
+type SecondarySource = "approvals" | "executions" | "connectors" | "signals" | "emerging";
 
 type DashboardData = {
   problems: ProblemSummary[];
@@ -54,55 +58,87 @@ type DashboardData = {
   connectors: ConnectorSummary[];
   signals: SignalRecord[];
   emerging: EmergingProblemReport | null;
-  usingFallback: boolean;
-  fallbackReason: string;
-  partialSources: string[];
+  workspace: WorkspaceSettings | null;
+  failedSources: SecondarySource[];
+  fetchedAt: number;
 };
 
-type AttentionItem = {
-  problem: ProblemSummary;
-  reason: string;
-  severity: "blocked" | "review" | "watch";
-};
+type QueueStatus = "blocked" | "review" | "watch";
 
-type OwnerLoad = {
-  owner: string;
-  problems: number;
-  affectedCustomers: number;
-  blocked: number;
-  topProblem: ProblemSummary;
-};
+type Band = "high" | "medium" | "low";
 
-function actionClassLabels(td: ReturnType<typeof useI18n>["t"]["dashboard"]): Record<ActionClass, string> {
-  return {
-    structural: td.classStructural,
-    customer_recovery: td.classRecovery,
-    journey_intervention: td.classIntervention,
-    research: td.classResearch,
-    governance: td.classGovernance
-  };
+// ---------------------------------------------------------------------------
+// One definition of "what state is this problem in", used by every module on
+// the page — the queue, the counts, and the headline all derive from it, so
+// the numbers reconcile by construction.
+// ---------------------------------------------------------------------------
+
+function statusOf(problem: ProblemSummary): QueueStatus {
+  if (problem.status === "blocked_by_policy" || problem.approval_pressure === "blocked") return "blocked";
+  if (
+    problem.status === "approval_needed" ||
+    problem.status === "validation_required" ||
+    problem.approval_pressure === "needs_review"
+  ) {
+    return "review";
+  }
+  return "watch";
 }
 
-function outcomeStatusLabel(status: string, t: ReturnType<typeof useI18n>["t"]): string {
-  const map: Record<string, string> = {
-    not_measured: t.outcomeBoard.notMeasured,
-    target_met: t.outcomeBoard.targetMet,
-    improving: t.outcomeBoard.improving,
-    not_improved: t.outcomeBoard.notImproved,
-  };
-  return map[status] ?? status.replaceAll("_", " ");
+function isOpen(problem: ProblemSummary): boolean {
+  return problem.status !== "resolved";
 }
 
-function label(value: string): string {
-  return value.replaceAll("_", " ");
+function impact(problem: ProblemSummary): number {
+  return problem.impact_score ?? 0;
 }
 
+function band(value: number): Band {
+  if (value >= 0.7) return "high";
+  if (value >= 0.4) return "medium";
+  return "low";
+}
+
+function impactBand(problem: ProblemSummary): Band {
+  const declared = problem.impact_band?.toLowerCase();
+  if (declared === "high" || declared === "medium" || declared === "low") return declared;
+  return band(impact(problem));
+}
+
+const ACRONYMS = new Set(["cx", "ai", "api", "csv", "id", "qa", "sla"]);
+
+// Owners and journeys arrive as machine identifiers ("cx_operations"); show
+// them as names, not internals.
+function humanize(value: string): string {
+  return value
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((word) => (ACRONYMS.has(word.toLowerCase()) ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1)))
+    .join(" ");
+}
 
 function compact(value: number): string {
   return new Intl.NumberFormat("en", { notation: "compact" }).format(value);
 }
 
-function fallbackSummaries(): ProblemSummary[] {
+function fill(template: string, vars: Record<string, string | number>): string {
+  return Object.entries(vars).reduce(
+    (result, [key, value]) => result.replaceAll(`{${key}}`, String(value)),
+    template
+  );
+}
+
+async function getConnectors(): Promise<ConnectorSummary[]> {
+  const response = await fetch(`${apiBaseUrl()}/connectors`, { credentials: "include", headers: apiHeaders() });
+  if (!response.ok) throw new Error(`connectors request failed (${response.status})`);
+  return response.json() as Promise<ConnectorSummary[]>;
+}
+
+// --- explicit sample mode ---------------------------------------------------
+// Sample data is entered deliberately from the error state, never substituted
+// silently: fabricated numbers wearing production clothes are a trust hazard.
+
+function sampleSummaries(): ProblemSummary[] {
   return fallbackProblems.map((problem) => ({
     problem_id: problem.problem_id,
     title: problem.title,
@@ -122,7 +158,7 @@ function fallbackSummaries(): ProblemSummary[] {
   }));
 }
 
-function fallbackOutcomeBoard(): OutcomeBoard {
+function sampleOutcomeBoard(): OutcomeBoard {
   const items: OutcomeBoardItem[] = fallbackProblems.map((problem) => ({
     problem_id: problem.problem_id,
     title: problem.title,
@@ -159,453 +195,680 @@ function fallbackOutcomeBoard(): OutcomeBoard {
   };
 }
 
-function impact(problem: ProblemSummary): number {
-  return problem.impact_score ?? 0;
-}
-
-function blockingChecks(problem: ProblemSummary): number {
-  return problem.status === "blocked_by_policy" || problem.approval_pressure === "blocked" ? 1 : 0;
-}
-
-function needsReview(problem: ProblemSummary): boolean {
-  return problem.status === "approval_needed" || problem.status === "validation_required" || problem.approval_pressure === "needs_review";
-}
-
-function isResolved(problem: ProblemSummary): boolean {
-  return problem.status === "resolved";
-}
-
-function leadershipHeadline(
-  problems: ProblemSummary[],
-  outcomeBoard: OutcomeBoard,
-  td: ReturnType<typeof useI18n>["t"]["dashboard"]
-): string {
-  const top = [...problems].sort((a, b) => impact(b) - impact(a))[0];
-  if (!top) return td.headlineNone;
-
-  const blocked = problems.filter((problem) => blockingChecks(problem) > 0).length;
-  const improving = outcomeBoard.improving + outcomeBoard.target_met;
-  if (blocked > 0) return `${blocked} ${blocked === 1 ? td.headlineBlockedOne : td.headlineBlockedMany}`;
-  if (improving > 0) return `${improving} ${improving === 1 ? td.headlineImprovingOne : td.headlineImprovingMany}`;
-  return `${top.title} ${td.headlineTop}`;
-}
-
-function attentionItems(problems: ProblemSummary[], td: ReturnType<typeof useI18n>["t"]["dashboard"]): AttentionItem[] {
-  return [...problems]
-    .filter((problem) => !isResolved(problem))
-    .map((problem) => {
-      const blocked = blockingChecks(problem);
-      if (blocked > 0) return { problem, reason: td.reasonBlocked, severity: "blocked" as const };
-      if (needsReview(problem)) return { problem, reason: td.reasonReview, severity: "review" as const };
-      return { problem, reason: `${compact(problem.affected_customers)} ${td.reasonWatch}`, severity: "watch" as const };
-    })
-    .sort((a, b) => {
-      const severity = { blocked: 3, review: 2, watch: 1 };
-      return severity[b.severity] - severity[a.severity] || impact(b.problem) - impact(a.problem);
-    })
-    .slice(0, 5);
-}
-
-function ownerLoads(problems: ProblemSummary[]): OwnerLoad[] {
-  const byOwner = new Map<string, ProblemSummary[]>();
-  for (const problem of problems.filter((item) => !isResolved(item))) {
-    byOwner.set(problem.owner, [...(byOwner.get(problem.owner) ?? []), problem]);
-  }
-
-  return [...byOwner.entries()]
-    .map(([owner, items]) => {
-      const sorted = [...items].sort((a, b) => impact(b) - impact(a));
-      return {
-        owner,
-        problems: items.length,
-        affectedCustomers: items.reduce((total, problem) => total + problem.affected_customers, 0),
-        blocked: items.filter((problem) => blockingChecks(problem) > 0).length,
-        topProblem: sorted[0]
-      };
-    })
-    .sort((a, b) => b.blocked - a.blocked || b.affectedCustomers - a.affectedCustomers)
-    .slice(0, 4);
-}
-
-function actionMix(problems: ProblemSummary[]): { actionClass: ActionClass; count: number }[] {
-  const counts = new Map<ActionClass, number>();
-  for (const actionClass of problems.flatMap((problem) => problem.top_action_classes)) {
-    counts.set(actionClass, (counts.get(actionClass) ?? 0) + 1);
-  }
-
-  return [...counts.entries()]
-    .map(([actionClass, count]) => ({ actionClass, count }))
-    .sort((a, b) => b.count - a.count);
-}
-
-function approvedActionIds(approvals: ApprovalRecord[]): Set<string> {
-  return new Set(approvals.filter((approval) => approval.decision === "approved").map((approval) => approval.action_id));
-}
-
-// Signals per day over the trailing window; the dashboard's time axis.
-function signalTrendSeries(signals: SignalRecord[], days = 30): { day: string; count: number }[] {
-  const now = Date.now();
-  const dayMs = 86_400_000;
-  const buckets = new Map<string, number>();
-  for (let offset = days - 1; offset >= 0; offset -= 1) {
-    buckets.set(new Date(now - offset * dayMs).toISOString().slice(0, 10), 0);
-  }
-  for (const signal of signals) {
-    const day = (signal.timestamp || "").slice(0, 10);
-    if (buckets.has(day)) buckets.set(day, (buckets.get(day) ?? 0) + 1);
-  }
-  return [...buckets.entries()].map(([day, count]) => ({ day: day.slice(5), count }));
-}
-
-async function getConnectors(): Promise<ConnectorSummary[]> {
-  const response = await fetch(`${apiBaseUrl()}/connectors`, { credentials: "include", headers: apiHeaders() });
-  // Throw on a non-ok status so the caller's .catch records it as a partial source;
-  // returning [] here silently hid connector HTTP errors from the "partial data" notice.
-  if (!response.ok) throw new Error(`connectors request failed (${response.status})`);
-  return response.json() as Promise<ConnectorSummary[]>;
-}
-
-function MetricCard({
-  title,
-  value,
-  detail,
-  tone = "neutral"
-}: {
-  title: string;
-  value: string | number;
-  detail: string;
-  tone?: "neutral" | "good" | "warn" | "bad";
-}) {
-  const toneClass = {
-    neutral: "text-foreground",
-    good: "text-emerald-600",
-    warn: "text-amber-600",
-    bad: "text-destructive"
-  }[tone];
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className={`text-3xl font-bold ${toneClass}`}>{value}</div>
-        <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-      </CardContent>
-    </Card>
-  );
+function sampleData(): DashboardData {
+  return {
+    problems: sampleSummaries(),
+    outcomeBoard: sampleOutcomeBoard(),
+    approvals: [],
+    executions: [],
+    connectors: [],
+    signals: [],
+    emerging: null,
+    workspace: null,
+    failedSources: [],
+    fetchedAt: Date.now()
+  };
 }
 
 export default function DashboardPage() {
   const { t } = useI18n();
+  const td = t.dashboard;
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [demo, setDemo] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
-      try {
-        const [problems, outcomeBoard] = await Promise.all([getProblems(), getOutcomeBoard()]);
-        const partialSources: string[] = [];
-        const [approvals, executions, connectors, signals, emerging] = await Promise.all([
-          getApprovals().catch(() => {
-            partialSources.push("approvals");
-            return [];
-          }),
-          getExecutions().catch(() => {
-            partialSources.push("executions");
-            return [];
-          }),
-          getConnectors().catch(() => {
-            partialSources.push("connectors");
-            return [];
-          }),
-          getSignals().catch(() => {
-            partialSources.push("signals");
-            return [] as SignalRecord[];
-          }),
-          getEmergingProblems().catch(() => {
-            partialSources.push("emerging problems");
-            return null;
-          })
+      setLoading(true);
+      // All eight requests fire in parallel; each module degrades on its own
+      // instead of one slow call gating the whole page.
+      const [problems, outcomeBoard, approvals, executions, connectors, signals, emerging, workspace] =
+        await Promise.allSettled([
+          getProblems(),
+          getOutcomeBoard(),
+          getApprovals(),
+          getExecutions(),
+          getConnectors(),
+          getSignals(),
+          getEmergingProblems(),
+          getWorkspace()
         ]);
-        setData({ problems, outcomeBoard, approvals, executions, connectors, signals, emerging, usingFallback: false, fallbackReason: "", partialSources });
-      } catch (error) {
-        // Say why. requestJson turns an HTTP status into a sentence ("your
-        // session is no longer valid — sign in again"); only a transport
-        // failure is actually an unreachable API, and that one gets the
-        // wrong-origin hint. Blaming reachability for a 401 sent people
-        // debugging the server when they just needed to sign in again.
-        const message = error instanceof Error ? error.message : "";
-        const reason = message.startsWith("Failed to fetch") || message.includes("NetworkError") || !message
-          ? `The API is unreachable.${wrongOriginHint()}`
-          : message;
-        setData({
-          problems: fallbackSummaries(),
-          outcomeBoard: fallbackOutcomeBoard(),
-          approvals: [],
-          executions: [],
-          connectors: [],
-          signals: [],
-          emerging: null,
-          usingFallback: true,
-          fallbackReason: reason,
-          partialSources: []
-        });
-      } finally {
+      if (cancelled) return;
+
+      if (problems.status === "rejected" || outcomeBoard.status === "rejected") {
+        const failure = problems.status === "rejected" ? problems.reason : (outcomeBoard as PromiseRejectedResult).reason;
+        const message = failure instanceof Error ? failure.message : "";
+        // Only a transport failure is actually an unreachable API; an HTTP
+        // status already arrives here as a human sentence (client-api.ts).
+        setLoadError(
+          message.startsWith("Failed to fetch") || message.includes("NetworkError") || !message
+            ? `${td.apiUnreachable}${wrongOriginHint()}`
+            : message
+        );
+        setData(null);
         setLoading(false);
+        return;
       }
+
+      const failedSources: SecondarySource[] = [];
+      if (approvals.status === "rejected") failedSources.push("approvals");
+      if (executions.status === "rejected") failedSources.push("executions");
+      if (connectors.status === "rejected") failedSources.push("connectors");
+      if (signals.status === "rejected") failedSources.push("signals");
+      if (emerging.status === "rejected") failedSources.push("emerging");
+
+      setLoadError(null);
+      setData({
+        problems: problems.value,
+        outcomeBoard: outcomeBoard.value,
+        approvals: approvals.status === "fulfilled" ? approvals.value : [],
+        executions: executions.status === "fulfilled" ? executions.value : [],
+        connectors: connectors.status === "fulfilled" ? connectors.value : [],
+        signals: signals.status === "fulfilled" ? signals.value : [],
+        emerging: emerging.status === "fulfilled" ? emerging.value : null,
+        workspace: workspace.status === "fulfilled" ? workspace.value : null,
+        failedSources,
+        fetchedAt: Date.now()
+      });
+      setLoading(false);
     }
 
     void load();
-  }, [reloadKey]);
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey, td.apiUnreachable]);
 
-  if (loading) return <div role="status" aria-live="polite" className="text-muted-foreground">Loading leadership dashboard...</div>;
+  if (loading && !demo) {
+    return (
+      <div role="status" aria-live="polite" className="space-y-6">
+        <span className="sr-only">{td.loading}</span>
+        <div className="h-5 w-64 animate-pulse rounded bg-muted" />
+        {[0, 1, 2].map((block) => (
+          <div key={block} className="rounded-lg border bg-card p-6">
+            <div className="h-5 w-48 animate-pulse rounded bg-muted" />
+            <div className="mt-5 space-y-3">
+              <div className="h-14 animate-pulse rounded-lg bg-muted" />
+              <div className="h-14 animate-pulse rounded-lg bg-muted" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (loadError && !demo) {
+    return (
+      <Card className="mx-auto max-w-xl">
+        <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+          <AlertTriangle className="h-8 w-8 text-destructive" aria-hidden="true" />
+          <div>
+            <h1 className="text-lg font-semibold">{td.errorTitle}</h1>
+            <p className="mt-2 text-sm text-muted-foreground">{loadError}</p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button size="sm" onClick={() => setReloadKey((key) => key + 1)}>
+              {t.common.retry}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setDemo(true);
+                setData(sampleData());
+              }}
+            >
+              {td.exploreSample}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const problems = data?.problems ?? [];
-  const outcomeBoard = data?.outcomeBoard ?? fallbackOutcomeBoard();
+  const board = data?.outcomeBoard ?? sampleOutcomeBoard();
   const approvals = data?.approvals ?? [];
   const executions = data?.executions ?? [];
   const connectors = data?.connectors ?? [];
   const signals = data?.signals ?? [];
   const emerging = data?.emerging ?? null;
-  const trendSeries = signalTrendSeries(signals);
-  const actionClassCount = new Set(problems.flatMap((problem) => problem.top_action_classes)).size;
-  const approvedActions = approvedActionIds(approvals);
-  const blockedProblems = problems.filter((problem) => blockingChecks(problem) > 0);
-  const highImpactProblems = problems.filter((problem) => impact(problem) >= 0.7 || problem.impact_band === "high");
-  const representedCustomers = problems.reduce((total, problem) => total + problem.affected_customers, 0);
-  const interventionReady = problems.filter((problem) => problem.top_action_classes.includes("journey_intervention"));
-  const measuredOutcomes = outcomeBoard.total - outcomeBoard.not_measured;
-  const improvingOutcomes = outcomeBoard.improving + outcomeBoard.target_met;
+  const workspace = data?.workspace ?? null;
+  const failedSources = data?.failedSources ?? [];
+
+  // --- the shared numbers ---------------------------------------------------
+  const open = problems.filter(isOpen);
+  const byImpact = (a: ProblemSummary, b: ProblemSummary) => impact(b) - impact(a);
+  const blocked = open.filter((problem) => statusOf(problem) === "blocked").sort(byImpact);
+  const review = open.filter((problem) => statusOf(problem) === "review").sort(byImpact);
+  const watch = open.filter((problem) => statusOf(problem) === "watch").sort(byImpact);
+  const highImpact = open.filter((problem) => impact(problem) >= 0.7 || problem.impact_band === "high");
+  const drafts = executions.filter((execution) => execution.status === "draft_created");
+  const approvedActions = new Set(
+    approvals.filter((approval) => approval.decision === "approved").map((approval) => approval.action_id)
+  ).size;
+  const measured = board.total - board.not_measured;
+  const improvingOutcomes = board.improving + board.target_met;
   const activeConnectors = connectors.filter((connector) => connector.is_active).length;
-  const pendingDecisionProblems = problems.filter((problem) => !isResolved(problem) && needsReview(problem));
-  const attention = attentionItems(problems, t.dashboard);
-  const loads = ownerLoads(problems);
-  const mix = actionMix(problems);
-  const maxMix = Math.max(...mix.map((item) => item.count), 1);
-  const measuredRate = outcomeBoard.total > 0 ? measuredOutcomes / outcomeBoard.total : 0;
+  const thisWeek = countInWindow(signals, 7);
+  const spark = withRollingAverage(signalTrendSeries(signals, 30)).map((point) => ({ value: point.avg }));
+
+  const headline = (() => {
+    if (open.length === 0) return td.headlineNone;
+    if (blocked.length > 0) {
+      return `${blocked.length} ${blocked.length === 1 ? td.headlineBlockedOne : td.headlineBlockedMany}`;
+    }
+    if (review.length > 0) {
+      return `${review.length} ${review.length === 1 ? td.headlineReviewOne : td.headlineReviewMany}`;
+    }
+    if (improvingOutcomes > 0) {
+      return `${improvingOutcomes} ${improvingOutcomes === 1 ? td.headlineImprovingOne : td.headlineImprovingMany}`;
+    }
+    const top = [...open].sort(byImpact)[0];
+    return `${top.title} ${td.headlineTop}`;
+  })();
+
+  // Fold "Unknown"-journey duplicates into their named sibling; the API emits
+  // both while clustering settles (flagged upstream as an API follow-up).
+  const emergingItems = (() => {
+    if (!emerging) return [] as EmergingProblemSignal[];
+    const byTitle = new Map<string, EmergingProblemSignal>();
+    for (const item of emerging.signals) {
+      const current = byTitle.get(item.title);
+      if (!current) {
+        byTitle.set(item.title, item);
+        continue;
+      }
+      const currentUnknown = current.journey.toLowerCase() === "unknown";
+      const itemUnknown = item.journey.toLowerCase() === "unknown";
+      if ((currentUnknown && !itemUnknown) || (currentUnknown === itemUnknown && item.emerging_score > current.emerging_score)) {
+        byTitle.set(item.title, item);
+      }
+    }
+    return [...byTitle.values()].sort((a, b) => b.emerging_score - a.emerging_score).slice(0, 4);
+  })();
+
+  const firstRun = !demo && open.length === 0 && problems.length === 0 && signals.length === 0 && board.total === 0;
+
+  const sourceLabels: Record<SecondarySource, string> = {
+    approvals: td.srcApprovals,
+    executions: td.srcExecutions,
+    connectors: td.srcConnectors,
+    signals: td.srcSignals,
+    emerging: td.srcEmerging
+  };
+
+  const queueGroups: { status: QueueStatus; label: string; items: ProblemSummary[] }[] = [
+    { status: "blocked", label: td.groupBlocked, items: blocked },
+    { status: "review", label: td.groupReview, items: review },
+    { status: "watch", label: td.groupWatch, items: watch.slice(0, 3) }
+  ];
+
+  const verbFor: Record<QueueStatus, string> = { blocked: td.decide, review: td.review, watch: td.open };
+
+  const bandLabel: Record<Band, string> = { high: td.bandHigh, medium: td.bandMedium, low: td.bandLow };
+
+  const updatedTime = data
+    ? new Date(data.fetchedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : "";
+
+  const loopStages: {
+    href: string;
+    label: string;
+    value: string;
+    sub: string;
+    subClass?: string;
+    sparkline?: boolean;
+  }[] = [
+    {
+      href: "/signals",
+      label: td.loopSignals,
+      value: String(thisWeek),
+      sub: thisWeek > 0 ? fill(td.weekDelta, { n: thisWeek }) : td.weekDeltaNone,
+      sparkline: signals.length > 0
+    },
+    {
+      href: "/insights",
+      label: td.loopProblems,
+      value: String(open.length),
+      sub: fill(td.highImpactCount, { n: highImpact.length })
+    },
+    {
+      href: "/actions",
+      label: td.loopDecisions,
+      value: String(blocked.length + review.length),
+      sub: blocked.length > 0 ? fill(td.blockedCount, { n: blocked.length }) : td.noneBlocked,
+      subClass: blocked.length > 0 ? "text-destructive" : undefined
+    },
+    {
+      href: "/actions",
+      label: td.loopActions,
+      value: String(drafts.length),
+      sub: fill(td.approvedCount, { n: approvedActions })
+    },
+    {
+      href: "/learnings",
+      label: td.loopOutcomes,
+      value: `${improvingOutcomes}/${board.total}`,
+      sub:
+        board.target_met > 0
+          ? fill(td.targetMetCount, { n: board.target_met })
+          : fill(td.measuredPending, { measured, pending: board.not_measured }),
+      subClass: board.target_met > 0 ? "text-emerald-600" : undefined
+    }
+  ];
 
   return (
-    <div className="space-y-6">
-      <AiLiteracyBanner />
-      <div className="rounded-2xl border bg-card p-8 shadow-sm">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">{t.dashboard.overview}</p>
-            <h1 className="mt-3 text-3xl font-bold tracking-tight text-foreground">
-              {leadershipHeadline(problems, outcomeBoard, t.dashboard)}
-            </h1>
-            <p className="mt-3 text-sm text-muted-foreground">
-              {t.dashboard.subtitle}
-            </p>
+    <TooltipProvider delayDuration={200}>
+      <div className="space-y-6">
+        {demo ? (
+          <div
+            role="status"
+            className="flex items-center justify-between gap-3 rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-800"
+          >
+            <span>{td.sampleNotice}</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0"
+              onClick={() => {
+                setDemo(false);
+                setReloadKey((key) => key + 1);
+              }}
+            >
+              {td.backToLive}
+            </Button>
           </div>
-          <div className="flex shrink-0 gap-8">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">{t.dashboard.customersAffected}</p>
-              <p className="mt-1 text-3xl font-semibold tabular-nums">{compact(representedCustomers)}</p>
-            </div>
-            <div className="border-l pl-8">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">{t.dashboard.outcomesMeasured}</p>
-              <p className="mt-1 text-3xl font-semibold tabular-nums">{percent(measuredRate)}</p>
-            </div>
+        ) : null}
+
+        {!demo && failedSources.length > 0 ? (
+          <div
+            role="status"
+            className="flex items-center justify-between gap-3 rounded-md border border-dashed border-amber-500/50 bg-amber-500/5 p-3 text-sm text-amber-700"
+          >
+            <span>
+              {td.partialBanner} ({failedSources.map((source) => sourceLabels[source]).join(", ")})
+            </span>
+            <button
+              type="button"
+              onClick={() => setReloadKey((key) => key + 1)}
+              className="shrink-0 rounded-md border px-2 py-1 text-xs font-medium hover:bg-amber-500/10"
+            >
+              {t.common.retry}
+            </button>
+          </div>
+        ) : null}
+
+        {/* Context line: whose data, how fresh, is it flowing. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-3">
+            {workspace?.name ? <span className="font-medium text-foreground">{workspace.name}</span> : null}
+            {updatedTime ? <span>{fill(td.updatedAt, { time: updatedTime })}</span> : null}
+            <button
+              type="button"
+              aria-label={td.refresh}
+              title={td.refresh}
+              onClick={() => setReloadKey((key) => key + 1)}
+              className="rounded-md p-1 hover:bg-accent hover:text-foreground"
+            >
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+          <div className="flex items-center gap-3">
+            {demo ? <Badge variant="warning">{td.sampleChip}</Badge> : null}
+            <Link href="/integrations" className="inline-flex items-center gap-2 hover:text-foreground">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "h-2 w-2 rounded-full",
+                  connectors.length > 0 && activeConnectors === connectors.length ? "bg-emerald-500" : "bg-amber-500"
+                )}
+              />
+              {connectors.length > 0
+                ? fill(td.connectorsActive, { active: activeConnectors, total: connectors.length })
+                : td.connectorsNone}
+            </Link>
           </div>
         </div>
-      </div>
 
-      {data?.usingFallback ? (
-        <div role="alert" className="flex items-center justify-between gap-3 rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
-          <span>{data.fallbackReason ? `${data.fallbackReason} ${t.dashboard.sampleBanner}` : t.dashboard.sampleBanner}</span>
-          <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="shrink-0 rounded-md border px-2 py-1 text-xs font-medium hover:bg-yellow-500/10">
-            {t.common.retry}
-          </button>
-        </div>
-      ) : null}
-
-      {!data?.usingFallback && data?.partialSources.length ? (
-        <div role="alert" className="flex items-center justify-between gap-3 rounded-md border border-dashed border-amber-500/50 bg-amber-500/5 p-3 text-sm text-amber-700 dark:text-amber-400">
-          <span>{t.dashboard.partialBanner} ({data.partialSources.join(", ")})</span>
-          <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="shrink-0 rounded-md border px-2 py-1 text-xs font-medium hover:bg-amber-500/10">
-            {t.common.retry}
-          </button>
-        </div>
-      ) : null}
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <MetricCard title={t.dashboard.highImpact} value={highImpactProblems.length} detail={`${problems.length} ${t.dashboard.highImpactDetail}`} tone={highImpactProblems.length > 0 ? "warn" : "good"} />
-        <MetricCard title={t.dashboard.governanceBlockers} value={blockedProblems.length} detail={t.dashboard.governanceBlockersDetail} tone={blockedProblems.length > 0 ? "bad" : "good"} />
-        <MetricCard title={t.dashboard.pendingDecisions} value={pendingDecisionProblems.length} detail={`${approvals.length} ${t.dashboard.pendingDecisionsDetail}`} tone={pendingDecisionProblems.length > 0 ? "warn" : "good"} />
-        <MetricCard title={t.dashboard.outcomesImproving} value={`${improvingOutcomes}/${outcomeBoard.total}`} detail={`${measuredOutcomes} ${t.dashboard.measuredPending.replace("{pending}", String(outcomeBoard.not_measured))}`} tone={improvingOutcomes > 0 ? "good" : "neutral"} />
-        <MetricCard title={t.dashboard.connectors} value={`${activeConnectors}/${connectors.length}`} detail={t.dashboard.connectorsDetail} tone={activeConnectors > 0 ? "good" : "neutral"} />
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.4fr_0.8fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <TrendingUp className="h-5 w-5 text-primary" /> {t.dashboard.signalVolume}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {signals.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t.dashboard.signalVolumeEmpty}</p>
-            ) : (
-              <div className="h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={trendSeries} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="day" tick={{ fontSize: 11 }} interval="preserveStartEnd" minTickGap={24} />
-                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <Tooltip formatter={(value) => [`${value} signals`, "Volume"]} labelFormatter={(day) => `Day ${day}`} />
-                    <Area type="monotone" dataKey="count" stroke="hsl(173 58% 39%)" fill="hsl(173 58% 39% / 0.15)" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Sparkles className="h-5 w-5 text-amber-500" /> {t.dashboard.emergingProblems}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {!emerging || emerging.signals.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t.dashboard.emergingEmpty}</p>
-            ) : (
-              emerging.signals.slice(0, 5).map((item) => (
-                <div key={item.candidate_id} className="rounded-md border p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-medium leading-tight">{item.title}</p>
-                    <Badge variant={item.trend_label === "action" ? "destructive" : "warning"}>
-                      {item.trend_label === "action" ? t.dashboard.trendAction : t.dashboard.severityWatch}
-                    </Badge>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {label(item.journey)} / {label(item.journey_stage)} · {t.dashboard.score} {Math.round(item.emerging_score * 100)}%
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t.common.signals}: {item.signal_count} · {t.common.customers}: {item.customer_count} · {t.common.sources}: {item.source_count}
-                  </p>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.4fr_0.8fr]">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-lg"><ShieldAlert className="h-5 w-5 text-amber-500" /> {t.dashboard.needsAttention}</CardTitle>
-            <Link className="text-sm text-primary hover:underline" href="/insights">{t.dashboard.openInsights}</Link>
-          </CardHeader>
-          <CardContent>
-            {attention.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No leadership attention needed right now.</p>
-            ) : (
-              <div className="space-y-3">
-                {attention.map(({ problem, reason, severity }, index) => (
-                  <Link key={problem.problem_id} className="block rounded-xl border p-4 transition-colors hover:bg-muted/50" href={`/insights/${problem.problem_id}`}>
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs font-semibold">{index + 1}</span>
-                          <h2 className="font-semibold">{problem.title}</h2>
-                        </div>
-                        <p className="mt-2 text-sm text-muted-foreground">{problem.journey} / {problem.journey_stage}</p>
-                        <p className="mt-1 text-sm">{reason}</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2 md:justify-end">
-                        <Badge variant={severity === "blocked" ? "destructive" : severity === "review" ? "warning" : "secondary"}>{severity === "blocked" ? t.dashboard.severityBlocked : severity === "review" ? t.dashboard.severityReview : t.dashboard.severityWatch}</Badge>
-                        <Badge variant="outline">{t.insights.impact} {percent(impact(problem))}</Badge>
-                        <Badge variant="outline">{compact(problem.affected_customers)} {t.common.customers}</Badge>
-                      </div>
-                    </div>
+        <div className={cn("space-y-6", demo && "opacity-90 saturate-[0.7]")}>
+          {firstRun ? (
+            <Card>
+              <CardContent className="py-10">
+                <div className="mx-auto max-w-xl text-center">
+                  <h1 className="text-2xl font-semibold tracking-tight">{td.firstRunTitle}</h1>
+                  <p className="mt-3 text-sm text-muted-foreground">{td.firstRunBody}</p>
+                  <ol className="mx-auto mt-6 max-w-md space-y-2 text-left text-sm text-muted-foreground">
+                    {[
+                      t.onboarding.step1Title,
+                      t.onboarding.step2Title,
+                      t.onboarding.step3Title,
+                      t.onboarding.step4Title,
+                      t.onboarding.step5Title
+                    ].map((step, index) => (
+                      <li key={step} className="flex items-start gap-3">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                          {index + 1}
+                        </span>
+                        {step}
+                      </li>
+                    ))}
+                  </ol>
+                  <Link href="/onboarding" className={cn(buttonVariants({ size: "sm" }), "mt-6 gap-2")}>
+                    {td.firstRunCta}
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
                   </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg"><Gauge className="h-5 w-5 text-primary" /> {t.nav.actions}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg border p-3"><p className="text-muted-foreground">{t.dashboard.actionTypes}</p><p className="mt-1 text-2xl font-bold">{actionClassCount}</p></div>
-              <div className="rounded-lg border p-3"><p className="text-muted-foreground">{t.dashboard.approved}</p><p className="mt-1 text-2xl font-bold">{approvedActions.size}</p></div>
-              <div className="rounded-lg border p-3"><p className="text-muted-foreground">{t.dashboard.draftExecutions}</p><p className="mt-1 text-2xl font-bold">{executions.filter((e) => e.status === "draft_created").length}</p></div>
-              <div className="rounded-lg border p-3"><p className="text-muted-foreground">{t.dashboard.interventionsReady}</p><p className="mt-1 text-2xl font-bold">{interventionReady.length}</p></div>
-            </div>
-            <div className="space-y-3">
-              {mix.map((item) => (
-                <div key={item.actionClass}>
-                  <div className="mb-1 flex items-center justify-between text-sm"><span>{actionClassLabels(t.dashboard)[item.actionClass]}</span><span className="text-muted-foreground">{item.count}</span></div>
-                  <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${(item.count / maxMix) * 100}%` }} /></div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Target className="h-5 w-5 text-emerald-500" /> {t.dashboard.outcomes}</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg border p-3"><p className="text-muted-foreground">{t.dashboard.targetMet}</p><p className="mt-1 text-2xl font-bold text-emerald-600">{outcomeBoard.target_met}</p></div>
-              <div className="rounded-lg border p-3"><p className="text-muted-foreground">{t.dashboard.improving}</p><p className="mt-1 text-2xl font-bold text-emerald-600">{outcomeBoard.improving}</p></div>
-              <div className="rounded-lg border p-3"><p className="text-muted-foreground">{t.dashboard.notImproved}</p><p className="mt-1 text-2xl font-bold text-amber-600">{outcomeBoard.not_improved}</p></div>
-              <div className="rounded-lg border p-3"><p className="text-muted-foreground">{t.dashboard.notMeasured}</p><p className="mt-1 text-2xl font-bold">{outcomeBoard.not_measured}</p></div>
-            </div>
-            <div className="space-y-2">
-              {outcomeBoard.items.slice(0, 3).map((item) => (
-                <Link key={item.problem_id} className="flex items-center justify-between rounded-lg border p-3 text-sm hover:bg-muted/50" href={`/insights/${item.problem_id}`}>
-                  <span className="truncate pr-3">{item.title}</span>
-                  <Badge variant={item.outcome_status === "target_met" || item.outcome_status === "improving" ? "success" : "outline"}>{outcomeStatusLabel(item.outcome_status, t)}</Badge>
-                </Link>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Users className="h-5 w-5 text-primary" /> {t.dashboard.workload}</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <WorksCouncilBanner />
-            {loads.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No active owner load.</p>
-            ) : (
-              loads.map((load) => (
-                <div key={load.owner} className="rounded-lg border p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div><p className="font-medium">{label(load.owner)}</p><p className="mt-1 text-xs text-muted-foreground">{t.dashboard.topIssue}: {load.topProblem.title}</p></div>
-                    <Badge variant={load.blocked > 0 ? "destructive" : "secondary"}>{t.dashboard.issues}: {load.problems}</Badge>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* 1 · Decide: what is waiting on a human. */}
+              <Card>
+                <CardHeader className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="max-w-2xl">
+                    <h1 className="text-xl font-semibold tracking-tight md:text-2xl">{headline}</h1>
+                    {open.length > 0 ? (
+                      <CardDescription className="mt-1.5 flex items-center gap-2">
+                        {fill(td.queueCounts, { blocked: blocked.length, review: review.length, watch: watch.length })}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label={td.chipHelpLabel}
+                              className="rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>
+                              <span className="font-semibold">{td.impact}:</span> {td.impactHelp}
+                            </p>
+                            <p className="mt-1.5">
+                              <span className="font-semibold">{td.confidence}:</span> {td.confidenceHelp}
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </CardDescription>
+                    ) : null}
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">{compact(load.affectedCustomers)} affected customers / {load.blocked} blocked</p>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+                  <Link href="/actions" className={cn(buttonVariants({ size: "sm" }), "shrink-0 gap-2")}>
+                    {td.openQueue}
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  </Link>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {workspace?.works_council_mode ? (
+                    <p
+                      role="status"
+                      className="flex items-center gap-2 rounded-md border border-sky-500/40 bg-sky-500/5 px-3 py-2 text-xs text-sky-700"
+                    >
+                      <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      {t.worksCouncil.banner}
+                    </p>
+                  ) : null}
 
-        <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Sparkles className="h-5 w-5 text-amber-500" /> {t.dashboard.readiness}</CardTitle></CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><ClipboardCheck className="h-4 w-4" /> Interventions</span><Badge variant={interventionReady.length > 0 ? "success" : "secondary"}>{interventionReady.length}</Badge></div>
-            <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><TrendingUp className="h-4 w-4" /> {t.dashboard.learningRecords}</span><Badge variant="outline">{outcomeBoard.learning_worked + outcomeBoard.learning_partially_worked + outcomeBoard.learning_did_not_work}</Badge></div>
-            <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><Plug className="h-4 w-4" /> {t.dashboard.activeConnectors}</span><Badge variant={activeConnectors > 0 ? "success" : "secondary"}>{activeConnectors}</Badge></div>
-            <div className="flex items-center justify-between rounded-lg border p-3"><span className="flex items-center gap-2"><CheckCircle className="h-4 w-4" /> {t.dashboard.humanApprovals}</span><Badge variant={approvals.length > 0 ? "success" : "outline"}>{approvals.length}</Badge></div>
-            <Link className="inline-flex items-center gap-2 text-primary hover:underline" href="/actions">{t.dashboard.reviewPortfolio} <ArrowRight className="h-3 w-3" /></Link>
-          </CardContent>
-        </Card>
+                  {open.length === 0 ? (
+                    <div className="py-6 text-center">
+                      <p className="font-medium">{td.queueEmpty}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{td.queueEmptyDetail}</p>
+                    </div>
+                  ) : (
+                    queueGroups
+                      .filter((group) => group.items.length > 0)
+                      .map((group) => (
+                        <section key={group.status} aria-label={group.label}>
+                          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            {group.label} · {group.status === "watch" ? watch.length : group.items.length}
+                          </h2>
+                          <div className="mt-2 space-y-2">
+                            {group.items.map((problem) => (
+                              <Link
+                                key={problem.problem_id}
+                                href={`/insights/${problem.problem_id}`}
+                                className="block rounded-lg border p-4 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              >
+                                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                  <div className="min-w-0">
+                                    <p className="font-semibold leading-snug">{problem.title}</p>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                      {humanize(problem.journey)} / {humanize(problem.journey_stage)} · {t.common.owner}:{" "}
+                                      {humanize(problem.owner)}
+                                    </p>
+                                  </div>
+                                  <div className="flex shrink-0 flex-wrap items-center gap-2 md:justify-end">
+                                    <Badge
+                                      variant={
+                                        group.status === "blocked"
+                                          ? "destructive"
+                                          : group.status === "review"
+                                            ? "warning"
+                                            : "secondary"
+                                      }
+                                    >
+                                      {group.status === "blocked"
+                                        ? td.chipBlocked
+                                        : group.status === "review"
+                                          ? td.groupReview
+                                          : td.watching}
+                                    </Badge>
+                                    <Badge
+                                      variant="outline"
+                                      title={`${td.impact} ${percent(impact(problem))} — ${td.impactHelp}`}
+                                    >
+                                      {td.impact} {bandLabel[impactBand(problem)]}
+                                    </Badge>
+                                    <Badge
+                                      variant="outline"
+                                      title={`${td.confidence} ${percent(problem.evidence_confidence)} — ${td.confidenceHelp}`}
+                                    >
+                                      {td.confidence} {bandLabel[band(problem.evidence_confidence ?? 0)]}
+                                    </Badge>
+                                    <Badge variant="outline">
+                                      {compact(problem.affected_customers)} {t.common.customers}
+                                    </Badge>
+                                    <span className="inline-flex items-center gap-1 text-sm font-medium text-primary">
+                                      {verbFor[group.status]}
+                                      <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                                    </span>
+                                  </div>
+                                </div>
+                              </Link>
+                            ))}
+                          </div>
+                        </section>
+                      ))
+                  )}
+
+                  <Link
+                    href="/insights"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                  >
+                    {td.viewAllProblems}
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Link>
+                </CardContent>
+              </Card>
+
+              {/* 2 · The loop: feedback → problems → decisions → actions → outcomes. */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>{td.loopTitle}</CardTitle>
+                  <CardDescription>{td.loopSubtitle}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ol className="flex flex-col gap-2 xl:flex-row xl:items-stretch">
+                    {loopStages.map((stage, index) => (
+                      <li key={stage.label} className="flex flex-1 items-stretch gap-2">
+                        <Link
+                          href={stage.href}
+                          aria-label={`${stage.label}: ${stage.value} — ${stage.sub}`}
+                          className="flex-1 rounded-lg border p-3 transition-colors hover:border-primary/60 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <p className="text-xs text-muted-foreground">{stage.label}</p>
+                          {stage.sparkline ? (
+                            <div className="mt-1 h-8" aria-hidden="true">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={spark} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                                  <Area
+                                    type="monotone"
+                                    dataKey="value"
+                                    stroke="hsl(var(--primary))"
+                                    strokeWidth={2}
+                                    fill="hsl(var(--primary) / 0.12)"
+                                    isAnimationActive={false}
+                                    dot={false}
+                                  />
+                                </AreaChart>
+                              </ResponsiveContainer>
+                            </div>
+                          ) : (
+                            <p className="mt-1 text-2xl font-semibold tabular-nums">{stage.value}</p>
+                          )}
+                          <p className={cn("mt-1 text-xs text-muted-foreground", stage.subClass)}>{stage.sub}</p>
+                        </Link>
+                        {index < loopStages.length - 1 ? (
+                          <ChevronRight
+                            className="hidden shrink-0 self-center text-muted-foreground/40 xl:block"
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                      </li>
+                    ))}
+                  </ol>
+                </CardContent>
+              </Card>
+
+              {/* 3 · Watch: what is new or moving, and whether actions worked. */}
+              <div className="grid items-start gap-4 xl:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Sparkles className="h-5 w-5 text-amber-500" aria-hidden="true" /> {td.emergingProblems}
+                    </CardTitle>
+                    <CardDescription>{td.emergingSubtitle}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {emergingItems.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">{td.emergingEmpty}</p>
+                    ) : (
+                      emergingItems.map((item) => (
+                        <Link
+                          key={item.candidate_id}
+                          href="/sources"
+                          className="block rounded-lg border p-3 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium leading-snug">{item.title}</p>
+                            <Badge variant={item.trend_label === "action" ? "warning" : "secondary"}>
+                              {item.trend_label === "action" ? td.rising : td.watching}
+                            </Badge>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {humanize(item.journey)} / {humanize(item.journey_stage)} · {item.signal_count}{" "}
+                            {t.common.signals} · {item.customer_count} {t.common.customers} · {item.source_count}{" "}
+                            {t.common.sources}
+                          </p>
+                          {item.drivers[0] || item.recommended_next_step ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              <span className="font-medium text-foreground">{td.whyFlagged}:</span>{" "}
+                              {item.drivers[0] ?? item.recommended_next_step}
+                            </p>
+                          ) : null}
+                        </Link>
+                      ))
+                    )}
+                    <Link
+                      href="/sources"
+                      className="inline-flex items-center gap-1.5 pt-1 text-sm font-medium text-primary hover:underline"
+                    >
+                      {td.reviewCandidates}
+                      <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                    </Link>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Target className="h-5 w-5 text-emerald-500" aria-hidden="true" /> {td.outcomes}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+                      {[
+                        { label: t.outcomeBoard.targetMet, value: board.target_met, className: "text-emerald-600" },
+                        { label: t.outcomeBoard.improving, value: board.improving, className: "text-emerald-600" },
+                        { label: t.outcomeBoard.notImproved, value: board.not_improved, className: "text-amber-600" },
+                        { label: t.outcomeBoard.notMeasured, value: board.not_measured, className: "" }
+                      ].map((tile) => (
+                        <div key={tile.label} className="rounded-lg border p-2.5">
+                          <p className="text-xs text-muted-foreground">{tile.label}</p>
+                          <p className={cn("mt-0.5 text-lg font-semibold tabular-nums", tile.className)}>{tile.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {board.items.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">{td.outcomesEmpty}</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {board.items.slice(0, 4).map((item) => (
+                          <Link
+                            key={item.problem_id}
+                            href={`/insights/${item.problem_id}`}
+                            className="block rounded-lg border p-3 text-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="truncate font-medium" title={item.title}>
+                                {item.title}
+                              </span>
+                              <Badge
+                                variant={
+                                  item.outcome_status === "target_met" || item.outcome_status === "improving"
+                                    ? "success"
+                                    : item.outcome_status === "not_improved"
+                                      ? "warning"
+                                      : "outline"
+                                }
+                              >
+                                {item.outcome_status === "not_measured"
+                                  ? t.outcomeBoard.notMeasured
+                                  : item.outcome_status === "target_met"
+                                    ? t.outcomeBoard.targetMet
+                                    : item.outcome_status === "improving"
+                                      ? t.outcomeBoard.improving
+                                      : t.outcomeBoard.notImproved}
+                              </Badge>
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {humanize(item.metric)}: {formatMetric(item.baseline)} →{" "}
+                              {item.latest_value === null || item.latest_value === undefined
+                                ? "—"
+                                : formatMetric(item.latest_value)}{" "}
+                              · {td.target} {formatMetric(item.success_threshold)}
+                            </p>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                    <Link
+                      href="/learnings"
+                      className="inline-flex items-center gap-1.5 pt-1 text-sm font-medium text-primary hover:underline"
+                    >
+                      {td.openLearnings}
+                      <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                    </Link>
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }

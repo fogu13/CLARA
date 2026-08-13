@@ -83,13 +83,13 @@ export function AppSidebar({ open = false, onClose }: { open?: boolean; onClose?
           open ? "flex" : "hidden md:flex"
         )}
       >
-      <div className="flex h-14 items-center gap-2 border-b px-6">
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b px-6">
         <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
           <span className="text-sm font-bold text-primary-foreground">C</span>
         </div>
         <span className="font-semibold text-foreground">CLARA</span>
       </div>
-      <nav className="flex-1 space-y-4 p-3">
+      <nav className="flex-1 space-y-4 overflow-y-auto p-3">
         {NAV_GROUPS.map((group, groupIndex) => (
           <div key={group.label ?? `group-${groupIndex}`} className="space-y-1">
             {group.label ? (
@@ -121,7 +121,7 @@ export function AppSidebar({ open = false, onClose }: { open?: boolean; onClose?
           </div>
         ))}
       </nav>
-      <div className="border-t p-4">
+      <div className="shrink-0 border-t p-4">
         <p className="text-xs text-muted-foreground">{t.nav.tagline}</p>
       </div>
       </aside>
