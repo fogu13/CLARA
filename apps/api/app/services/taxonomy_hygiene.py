@@ -18,6 +18,7 @@ check degrades to reporting that it was skipped (never a silent gap).
 from __future__ import annotations
 
 import logging
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -29,7 +30,10 @@ from app.services.taxonomies import searchable_text
 
 logger = logging.getLogger(__name__)
 
-DUPLICATE_SIMILARITY = 0.86
+# Embedder-specific (see scripts/calibrate_embed_thresholds.py); flags earlier
+# than governance auto-merges (TAXONOMY_MERGE_EPS) by design — report-only
+# checks may be more sensitive than irreversible ones.
+DUPLICATE_SIMILARITY = float(os.getenv("TAXONOMY_DUPLICATE_SIMILARITY", "0.86"))
 STALE_PROPOSAL_DAYS = 14
 DRIFT_WINDOW_DAYS = 30
 

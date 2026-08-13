@@ -53,6 +53,16 @@ report — setup is incomplete.
      `{"kind":"accept", ...}` row to `history.jsonl`.
    - On REVERT: `git checkout -- <changed files>` and append a `{"kind":"reject",
      "hypothesis":...}` row so the same idea isn't retried.
+   - **The ledger and reports are versioned evidence**: `git add` the new
+     `history.jsonl` row AND the run's `reports/report_*.json` in the same commit
+     (accepted or rejected). An uncommitted ledger is how the 17–18 Jul 2026 runs
+     became unreproducible — the thesis cites runs the repo cannot show.
+   - **Frozen n for confirmatory claims:** growing the golden set is a coverage
+     decision, but any claim carried outside the loop (thesis, model card, sales)
+     must be made at a sample size fixed BEFORE the run that produces it — testing
+     at every size and claiming at the first p < 0.05 crossing is sequential
+     testing without alpha control. Replication (consecutive significant runs at
+     the frozen n) is the accepted substitute.
 7. **Stop conditions:** stop the loop when ALL targets below are met, OR when 3
    consecutive iterations produced no accepted change. Print the metric trajectory from
    `history.jsonl`.

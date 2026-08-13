@@ -424,6 +424,11 @@ def main() -> int:
         groups = _enrich_demo_groups()
         flat = [s for _, sigs in groups for s in sigs]
         synthesis = _synth_metrics(synthesize_insights(flat, min_cluster_size=2, min_sources=1))
+        # Bootstrap cluster stability (R8): low ARI means which problems exist
+        # is sampling noise — reported next to accuracy, same report.
+        from app.evals.harness import cluster_stability_ari
+
+        synthesis["cluster_stability"] = cluster_stability_ari(flat)
         influence = _learning_influence_probe(groups)
     except Exception as exc:  # noqa: BLE001
         synthesis = {"total_insights": 0, "error": f"{type(exc).__name__}: {exc}"}

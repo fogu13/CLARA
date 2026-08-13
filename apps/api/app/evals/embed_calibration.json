@@ -1,0 +1,90 @@
+{
+  "calibrated_at": "2026-08-08T14:56:19.205203+00:00",
+  "embed_model": "mistral-embed",
+  "embed_host": "https://api.mistral.ai/v1",
+  "pair_counts": {
+    "related": 400,
+    "unrelated": 400,
+    "near_verbatim_duplicates": 100,
+    "mapping_pos": 98,
+    "mapping_neg": 502
+  },
+  "distributions": {
+    "related_same_category": {
+      "n": 400,
+      "mean": 0.7098,
+      "p05": 0.6354,
+      "p50": 0.7028,
+      "p95": 0.8169,
+      "p99": 0.8516,
+      "min": 0.5902,
+      "max": 0.8773
+    },
+    "unrelated_cross_category": {
+      "n": 400,
+      "mean": 0.6887,
+      "p05": 0.6165,
+      "p50": 0.6819,
+      "p95": 0.7914,
+      "p99": 0.8347,
+      "min": 0.577,
+      "max": 0.8642
+    },
+    "near_verbatim_duplicates": {
+      "n": 100,
+      "mean": 0.9671,
+      "p05": 0.9348,
+      "p50": 0.9702,
+      "p95": 0.9856,
+      "p99": 0.9867,
+      "min": 0.9227,
+      "max": 0.9896
+    },
+    "own_category_centroid": {
+      "n": 98,
+      "mean": 0.8549,
+      "p05": 0.8142,
+      "p50": 0.855,
+      "p95": 0.8898,
+      "p99": 0.9013,
+      "min": 0.8097,
+      "max": 0.9087
+    },
+    "other_category_centroid": {
+      "n": 502,
+      "mean": 0.8014,
+      "p05": 0.7561,
+      "p50": 0.8034,
+      "p95": 0.8466,
+      "p99": 0.8684,
+      "min": 0.7346,
+      "max": 0.8752
+    }
+  },
+  "derived_thresholds": {
+    "ASK_MIN_SIMILARITY": {
+      "rule": "p95 of unrelated-pair sims (5% false-admit)",
+      "value": 0.79
+    },
+    "TAXONOMY_MAP_THRESHOLD": {
+      "rule": "p95 of wrong-category centroid sims",
+      "value": 0.85
+    },
+    "CLUSTER_SEMANTIC_THRESHOLD": {
+      "rule": "midpoint of p95(unrelated) and p50(related)",
+      "value": 0.75
+    },
+    "TAXONOMY_DUPLICATE_SIMILARITY": {
+      "rule": "p99 of related-pair sims (distinct items must not flag)",
+      "value": 0.85
+    },
+    "TAXONOMY_MERGE_EPS": {
+      "rule": "midpoint of max(related) and p05(near-verbatim duplicates)",
+      "value": 0.91
+    }
+  },
+  "notes": [
+    "Pairs come from golden_set.json category labels; distributions are workspace-shaped, not universal. Re-run after changing the embed model \u2014 thresholds do not transfer across embedders.",
+    "Values are recommendations; the code reads them from env so an operator can override any single one."
+  ]
+}

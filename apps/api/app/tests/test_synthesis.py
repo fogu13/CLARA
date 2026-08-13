@@ -599,3 +599,52 @@ class TestChurnSaveDeskRouting:
         actions = insights[0]["suggested_actions"]
         assert insights[0]["churn_save_desk"] is True
         assert sum(1 for a in actions if a["type"] == "customer_recovery") == 1
+
+
+class TestReachHonesty:
+    """R10: cross-source near-dup collapse + source mix (science review F4)."""
+
+    def _cluster(self):
+        base = {
+            "tags": ["checkout_failure"], "sentiment": "negative",
+            "urgency": "high", "signal_type": "qualitative",
+            "timestamp": "2026-08-01T09:00:00Z",
+        }
+        return [
+            {**base, "id": "s1", "source": "trustpilot", "contact_count": 1},
+            {**base, "id": "s2", "source": "app_store", "contact_count": 1,
+             "metadata": {"near_duplicate_of": "s1"}},  # cross-posted copy
+            {**base, "id": "s3", "source": "zendesk", "contact_count": 1},
+        ]
+
+    def test_intra_cluster_near_dup_counts_once(self, monkeypatch) -> None:
+        from app.services import synthesis
+
+        monkeypatch.setattr(
+            synthesis, "synthesize_cluster",
+            lambda tag, sigs, learnings=None: {"title": "t", "summary": "s",
+                                               "category": "product_issue",
+                                               "confidence": 0.8, "target_team": "cx",
+                                               "suggested_actions": []},
+        )
+        insights = synthesis.synthesize_insights(self._cluster(), min_cluster_size=2)
+        assert len(insights) == 1
+        insight = insights[0]
+        assert insight["affected_contacts"] == 2  # s2 collapsed onto s1
+        assert insight["source_mix"] == {"trustpilot": 1, "app_store": 1, "zendesk": 1}
+        assert insight["reach_basis"] == "signal_weighted_deduped"
+
+    def test_near_dup_of_outside_signal_still_counts(self, monkeypatch) -> None:
+        from app.services import synthesis
+
+        monkeypatch.setattr(
+            synthesis, "synthesize_cluster",
+            lambda tag, sigs, learnings=None: {"title": "t", "summary": "s",
+                                               "category": "product_issue",
+                                               "confidence": 0.8, "target_team": "cx",
+                                               "suggested_actions": []},
+        )
+        cluster = self._cluster()
+        cluster[1]["metadata"] = {"near_duplicate_of": "not-in-this-cluster"}
+        insights = synthesis.synthesize_insights(cluster, min_cluster_size=2)
+        assert insights[0]["affected_contacts"] == 3

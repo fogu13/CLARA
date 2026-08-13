@@ -25,6 +25,7 @@ from typing import Any
 import httpx
 
 from app.connectors.base import ConnectorError
+from app.services.common import normalize_timestamp
 from app.services.language import detect_language
 
 logger = logging.getLogger(__name__)
@@ -136,6 +137,7 @@ class TrustpilotSourceConnector:
         consumer = review.get("consumer") or {}
         author = str(consumer.get("displayName") or "")
         stars = review.get("stars")
+        _ts, _ts_defaulted = normalize_timestamp(review.get("createdAt"))
         return {
             "signal_id": f"tp-{review_id}",
             # Pseudonymized at ingestion — the reviewer's name is never stored.
@@ -148,8 +150,9 @@ class TrustpilotSourceConnector:
             "product_events": [],
             "feedback_text": text[:2000],
             "language": detect_language(text),
-            "timestamp": str(review.get("createdAt") or "1970-01-01T00:00:00Z"),
+            "timestamp": _ts,
             "metadata": {
+                **({"timestamp_defaulted": "true"} if _ts_defaulted else {}),
                 "rating": str(stars) if stars is not None else "",
                 "location": str((consumer.get("displayLocation") or "")),
                 "imported": "true",

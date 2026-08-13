@@ -9,6 +9,7 @@ from app.services.common import SerializedConnection
 from collections import Counter
 from pathlib import Path
 
+from app.services.common import normalize_timestamp
 from app.domain.models import (
     JourneyEventImportResult,
     JourneyEventRecord,
@@ -63,7 +64,7 @@ def parse_journey_event_csv(csv_text: str) -> list[JourneyEventRecord]:
                 journey_stage=row.get("journey_stage") or "unknown_stage",
                 event_name=row.get("event_name") or "unknown_event",
                 event_type=row.get("event_type") or "behavior",
-                timestamp=row.get("timestamp") or "1970-01-01T00:00:00Z",
+                timestamp=normalize_timestamp(row.get("timestamp"))[0],
                 success=parse_bool(row.get("success")),
                 duration_seconds=_parse_duration(row.get("duration_seconds")),
                 metadata=parse_metadata(row.get("metadata")),

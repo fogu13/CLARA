@@ -306,6 +306,11 @@ export type AskAnswer = {
   model_confidence?: number;
   retrieval_strength?: number;
   matches?: number;
+  evidence_window?: {
+    signals_considered: number;
+    oldest: string | null;
+    newest: string | null;
+  };
   citations: {
     signal_id: string;
     source: string;

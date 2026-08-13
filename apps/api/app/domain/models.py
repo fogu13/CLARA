@@ -827,7 +827,11 @@ class SignalRecord(BaseModel):
     campaign_exposure: list[str] = Field(default_factory=list)
     product_events: list[str] = Field(default_factory=list)
     language: str = "unknown"
-    timestamp: str = "1970-01-01T00:00:00Z"
+    # Ingestion time, not epoch: a 1970 default silently drops the signal out of
+    # every trend window and outcome bucket (see services/common.normalize_timestamp).
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    )
     metadata: dict[str, str] = Field(default_factory=dict)
     # Enrichment written back by the triage pipeline. Without persistence the
     # feed's "Enriched" tile was permanently 0 and sentiment/urgency badges
@@ -1075,6 +1079,12 @@ class EmergingProblemSignal(BaseModel):
     taxonomy_labels: list[str] = Field(default_factory=list)
     drivers: list[str] = Field(default_factory=list)
     recommended_next_step: str
+    # Burst statistic (science review R5): recent vs baseline daily rate with a
+    # BH-adjusted q-value across all candidates in the report. None when the
+    # candidate's evidence carries no usable timestamps.
+    recent_rate: float | None = None
+    baseline_rate: float | None = None
+    burst_q: float | None = None
 
 
 class EmergingProblemReport(BaseModel):

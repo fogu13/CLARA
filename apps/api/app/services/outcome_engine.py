@@ -624,4 +624,50 @@ def its_outcome_for_problem(
         return _insufficient_delta(delta=0.0, n_pre=0, n_post=0)
 
     action_index = max((exec_day - start_date).days + 1, 0)
-    return its_effect(counts, action_index, times=times)
+    result = its_effect(counts, action_index, times=times)
+
+    # --- Volume-adjusted readout (science review R6/F6) -------------------
+    # The raw metric is a COUNT: if total feedback inflow drops platform-wide
+    # (seasonality, a connector outage, a feed going dark), every open
+    # contract "improves". The share series — matched signals over ALL
+    # signals that day — is immune to that confound; when the two readouts
+    # disagree, the share is the one to believe.
+    total_raw = [0.0] * total_days
+    for signal in signals:
+        try:
+            ts = _parse_ts(signal.timestamp)
+        except ValueError:
+            continue
+        index = (_utc_date(ts) - start_date).days
+        if 0 <= index < total_days:
+            total_raw[index] += 1.0
+    shares: list[float] = []
+    for offset_f, matched in zip(times, counts):
+        total = total_raw[int(offset_f)]
+        shares.append(matched / total if total > 0 else 0.0)
+    result["volume_adjusted"] = its_effect(shares, action_index, times=times)
+
+    # --- Placebo check (science review R6/F6) -----------------------------
+    # Refit with a pseudo-intervention inside the pre-window. A "significant"
+    # effect at a date where nothing happened means the series is too noisy or
+    # trended to attribute anything to the real action — regression to the
+    # mean's calling card, since actions trigger on peaks.
+    pre_times = [t for t in times if t < action_index]
+    if len(pre_times) >= MIN_PRE_DAYS + MIN_POST_DAYS:
+        placebo_index = pre_times[-MIN_POST_DAYS]
+        pre_counts = [y for t, y in zip(times, counts) if t < action_index]
+        placebo = its_effect(pre_counts, placebo_index, times=pre_times)
+        if placebo.get("method") == "its":
+            placebo["excludes_zero"] = not (
+                placebo["ci_low"] <= 0.0 <= placebo["ci_high"]
+            )
+            if placebo["excludes_zero"]:
+                placebo["warning"] = (
+                    "A pseudo-intervention inside the pre-window shows a"
+                    " 'significant' effect where nothing happened — this series"
+                    " is too noisy or trended to attribute the real change to"
+                    " the action."
+                )
+        result["placebo"] = placebo
+
+    return result

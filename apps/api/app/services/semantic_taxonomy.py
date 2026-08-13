@@ -16,14 +16,20 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from typing import Any
 
 from app.services.ai import AIProviderError, call_tool, embed, to_vector_literal
 
 logger = logging.getLogger(__name__)
 
-MAP_THRESHOLD = 0.55  # cosine floor; tunable (Elvis default)
-CLUSTER_EPS = 0.70  # cosine threshold for clustering (Elvis default)
+# Cosine thresholds are EMBEDDER-SPECIFIC (the Elvis defaults were tuned under
+# text-embedding-004): similarity distributions shift across models, so these
+# do not survive an AI_EMBED_MODEL swap. Recalibrate with
+# scripts/calibrate_embed_thresholds.py and override via env.
+MAP_THRESHOLD = float(os.getenv("TAXONOMY_MAP_THRESHOLD", "0.55"))  # mapping floor
+CLUSTER_EPS = float(os.getenv("TAXONOMY_CLUSTER_EPS", "0.70"))  # discovery clustering
+MERGE_EPS = float(os.getenv("TAXONOMY_MERGE_EPS", "0.95"))  # governance auto-merge
 MIN_CLUSTER = 3  # minimum cluster size for discovery (Elvis default)
 
 NAME_TOOL = {
@@ -64,26 +70,64 @@ def cluster_by_threshold(
     threshold: float,
     min_size: int,
 ) -> list[list[int]]:
-    """Greedy cosine-threshold clustering — port of evolve-taxonomy:19-31.
+    """Average-linkage agglomerative clustering with a cosine stop threshold.
 
-    Returns a list of clusters, each being a list of vector indices.
-    """  # noqa: E501
-    used = [False] * len(vectors)
-    clusters: list[list[int]] = []
+    Replaces the original greedy single-pass star clustering (science review
+    F8): that variant anchored clusters on the first unused vector, so results
+    depended on input order and could attach an item to a mediocre first anchor
+    while a better cluster existed later. Average linkage is deterministic
+    given the inputs, order-independent, and — unlike single linkage — does not
+    chain A-B-C together when A and C are unrelated.
 
-    for i in range(len(vectors)):
-        if used[i]:
-            continue
-        group = [i]
-        used[i] = True
-        for j in range(i + 1, len(vectors)):
-            if not used[j] and cosine_sim(vectors[i], vectors[j]) >= threshold:
-                group.append(j)
-                used[j] = True
-        if len(group) >= min_size:
-            clusters.append(group)
+    Merging stops when no two clusters have average pairwise cosine >=
+    threshold, so the threshold keeps its original meaning. Ties break on the
+    lowest index pair for reproducibility. O(n^2) memory on a precomputed
+    similarity matrix; the discovery path caps n at its query limit (200).
 
-    return clusters
+    Returns clusters of vector indices with at least min_size members.
+    """
+    n = len(vectors)
+    if n == 0:
+        return []
+
+    sim = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1, n):
+            s = cosine_sim(vectors[i], vectors[j])
+            sim[i][j] = s
+            sim[j][i] = s
+
+    # Active clusters keyed by their smallest member index; average-link
+    # similarity maintained with the Lance-Williams update.
+    members: dict[int, list[int]] = {i: [i] for i in range(n)}
+    link: dict[int, dict[int, float]] = {
+        i: {j: sim[i][j] for j in range(n) if j != i} for i in range(n)
+    }
+
+    while True:
+        best: tuple[float, int, int] | None = None
+        for a in members:
+            for b, s in link[a].items():
+                if a < b and s >= threshold:
+                    if best is None or s > best[0] or (s == best[0] and (a, b) < best[1:]):
+                        best = (s, a, b)
+        if best is None:
+            break
+        _, a, b = best
+        size_a, size_b = len(members[a]), len(members[b])
+        members[a].extend(members[b])
+        del members[b]
+        for c in list(link):
+            if c in (a, b):
+                continue
+            link[c][a] = link[a][c] = (
+                size_a * link[a][c] + size_b * link[b][c]
+            ) / (size_a + size_b)
+            del link[c][b]
+        del link[b]
+        link[a].pop(b, None)
+
+    return [sorted(group) for key, group in sorted(members.items()) if len(group) >= min_size]
 
 
 def centroid(vectors: list[list[float]]) -> list[float]:
@@ -228,13 +272,29 @@ def discover_themes(
         vec_literal = to_vector_literal(c)
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, level FROM match_taxonomy_nodes(%s, %s::vector, 1)",
+                "SELECT id, level, similarity FROM match_taxonomy_nodes(%s, %s::vector, 1)",
                 (workspace_id, vec_literal),
             )
             near = cur.fetchone()
         parent_id = str(near[0]) if near else None
         parent_level = near[1] if near else 0
+        nearest_sim = float(near[2]) if near else 0.0
         level = min(parent_level + 1, 3)
+
+        # Separation criterion (science review F8): cohesion measures tightness,
+        # not novelty — a burst of near-duplicate complaints is maximally
+        # cohesive yet is an EVENT under an existing theme, not a new theme.
+        # A centroid this close to an active node belongs to that node; the
+        # member signals will map there on the next pass instead.
+        from app.services.taxonomy_hygiene import DUPLICATE_SIMILARITY
+
+        if nearest_sim >= DUPLICATE_SIMILARITY:
+            logger.info(
+                "discover_themes: cluster of %d skipped — centroid within %.2f of an"
+                " existing active node (duplicate, not a new theme)",
+                len(idxs), nearest_sim,
+            )
+            continue
 
         # Name the cluster via LLM (best-effort fallback)
         try:
@@ -295,7 +355,7 @@ def apply_governance(
     *,
     auto_promote: float = 0.80,
     min_size: int = 5,
-    merge_eps: float = 0.95,
+    merge_eps: float | None = None,
     stale_days: int = 90,
 ) -> dict[str, int]:
     """Apply taxonomy governance — calls the SQL function apply_taxonomy_governance.
@@ -304,6 +364,8 @@ def apply_governance(
     near-duplicate discovered nodes, and archives stale discovered nodes.
     Never touches uploaded taxonomy.
     """
+    if merge_eps is None:
+        merge_eps = MERGE_EPS
     with conn.cursor() as cur:
         cur.execute(
             "SELECT apply_taxonomy_governance(%s, %s, %s, %s, %s)",

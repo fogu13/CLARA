@@ -265,6 +265,75 @@ def bootstrap_ci(
     return (means[lo_i], means[hi_i])
 
 
+def adjusted_rand_index(labels_a: list[int], labels_b: list[int]) -> float:
+    """ARI between two clusterings of the same items (chance-corrected).
+
+    1.0 = identical partitions, ~0 = what random labelling achieves. Stdlib
+    only: contingency-table form with pair counts.
+    """
+    assert len(labels_a) == len(labels_b)
+    n = len(labels_a)
+    if n < 2:
+        return 1.0
+    from collections import Counter
+
+    contingency: Counter[tuple[int, int]] = Counter(zip(labels_a, labels_b))
+    a_sizes = Counter(labels_a)
+    b_sizes = Counter(labels_b)
+    sum_comb = sum(comb(c, 2) for c in contingency.values())
+    sum_a = sum(comb(c, 2) for c in a_sizes.values())
+    sum_b = sum(comb(c, 2) for c in b_sizes.values())
+    total = comb(n, 2)
+    expected = sum_a * sum_b / total if total else 0.0
+    max_index = (sum_a + sum_b) / 2
+    if max_index == expected:
+        return 1.0
+    return (sum_comb - expected) / (max_index - expected)
+
+
+def cluster_stability_ari(
+    signals: list[dict[str, Any]],
+    *,
+    n_resamples: int = 20,
+    seed: int = 12345,
+) -> dict[str, Any]:
+    """Bootstrap stability of the synthesis clustering (science review F8/R8).
+
+    Re-clusters bootstrap resamples of the signals and reports the mean ARI
+    between the full clustering and each resample's clustering, restricted to
+    the items they share. Low stability means cluster membership — and thus
+    which problems exist — is an artefact of sampling noise, which belongs in
+    the model card next to the accuracy numbers.
+    """
+    from app.services.synthesis import cluster_signals
+
+    if len(signals) < 4:
+        return {"mean_ari": 1.0, "n_resamples": 0, "n_signals": len(signals)}
+
+    def labels_for(subset: list[dict[str, Any]]) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for cluster_id, (_tag, members) in enumerate(cluster_signals(subset)):
+            for member in members:
+                out[str(member.get("id", member.get("signal_id", "")))] = cluster_id
+        return out
+
+    full = labels_for(signals)
+    rng = random.Random(seed)
+    scores: list[float] = []
+    for _ in range(n_resamples):
+        resample = [signals[rng.randrange(len(signals))] for _ in range(len(signals))]
+        unique = {str(s.get("id", s.get("signal_id", ""))): s for s in resample}
+        boot = labels_for(list(unique.values()))
+        shared = sorted(set(full) & set(boot))
+        if len(shared) < 2:
+            continue
+        scores.append(
+            adjusted_rand_index([full[k] for k in shared], [boot[k] for k in shared])
+        )
+    mean = sum(scores) / len(scores) if scores else 1.0
+    return {"mean_ari": round(mean, 4), "n_resamples": len(scores), "n_signals": len(signals)}
+
+
 def mcnemar_exact(
     a_correct: list[bool],
     b_correct: list[bool],
