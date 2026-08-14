@@ -133,6 +133,7 @@ export function SiteHeader() {
       <Link href="/#use-cases" onClick={close}>{s.navUseCases}</Link>
       {PRICING_ENABLED ? <Link href="/pricing" onClick={close}>{s.navPricing}</Link> : null}
       <Link href="/security" onClick={close}>{s.navSecurity}</Link>
+      <Link href="/about" onClick={close}>{s.navAbout}</Link>
     </>
   );
 
@@ -204,6 +205,7 @@ export function SiteFooter() {
           </div>
           <div className="foot-col">
             <h5>{s.footCompany}</h5>
+            <Link href="/about">{s.navAbout}</Link>
             <Link href="/security">{s.navSecurity}</Link>
             <Link href="/research">{s.navResearch}</Link>
             <a href={`mailto:${CONTACT_EMAIL}`}>{s.footContact}</a>

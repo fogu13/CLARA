@@ -327,6 +327,31 @@ const en = {
     ctaAltPre: "or write to",
     ctaResearch: "Practitioner rather than buyer?",
     ctaResearchLink: "Join the research study",
+    navAbout: "About",
+    aEyebrow: "About",
+    aH1: "You'd be trusting one person. Here's who.",
+    aLede:
+      "CLARA is built by Elvis Shehi in Berlin. In this market a one-person company is something to weigh openly, so this page gives you the whole picture, checkable claims included.",
+    aC1T: "The problem was my day job",
+    aC1B:
+      "15+ years in global B2B marketing in the adhesive technologies industry, including building a global Voice-of-Customer capability inside a large industrial company. I know the distance between a feedback dashboard and a real decision because I worked in it. CLARA is the tool I needed and could not buy.",
+    aC2T: "Governance is a qualification here, not a slogan",
+    aC2B:
+      "Certified AI Governance Professional (AIGP), finishing an MSc in Responsible AI. CLARA is the thesis subject ('Closing the Loop, Building the Memory'), which is why the product measures itself honestly: accuracy with denominators, stated limitations, refusals instead of guesses.",
+    aC3T: "EU-first by habit, not by press release",
+    aC3B:
+      "I run my own local AI infrastructure, privacy-first, and CLARA is built the same way: EU-resident, self-hostable, no US clouds required. The architecture is how I already work, applied to your data.",
+    aC4T: "Small is the feature",
+    aC4B:
+      "You talk to the person who built the system. Pilots are scoped in days, questions are answered by the engineer, nothing is lost in a handoff. The honest trade: I run only a few pilots at a time, first committed, first served.",
+    aCheck:
+      "And you don't have to take my word for any of it. An automated check runs against the live site and product every 30 minutes. If a claim stops being true, an alarm fires.",
+    aWorkT: "What working together looks like",
+    aWorkB:
+      "A six-week pilot on your own feedback: one success metric, weekly syncs with me, EU-resident processing, and a clear decision at the end. If it didn't work, you'll hear it from me first.",
+    aAltPre: "Not ready to buy? Start with",
+    aAltLink: "the research track",
+    aMore: "More background:",
     rEyebrow: "Research & pilots",
     rH1: "Help map how teams really close the feedback loop.",
     rLede:
@@ -1201,6 +1226,31 @@ const de: Dict = {
     ctaAltPre: "oder schreiben Sie an",
     ctaResearch: "Praktiker:in statt Käufer:in?",
     ctaResearchLink: "An der Forschungsstudie teilnehmen",
+    navAbout: "Über",
+    aEyebrow: "Über CLARA",
+    aH1: "Sie würden einer einzelnen Person vertrauen. Hier ist, wem.",
+    aLede:
+      "CLARA baut Elvis Shehi in Berlin. In diesem Markt ist ein Ein-Personen-Unternehmen etwas, das man offen abwägen sollte. Diese Seite liefert das ganze Bild, inklusive überprüfbarer Aussagen.",
+    aC1T: "Das Problem war mein Berufsalltag",
+    aC1B:
+      "Über 15 Jahre globales B2B-Marketing in der Klebstoffindustrie, darunter der Aufbau einer globalen Voice-of-Customer-Funktion in einem großen Industrieunternehmen. Ich kenne die Distanz zwischen Feedback-Dashboard und echter Entscheidung, weil ich darin gearbeitet habe. CLARA ist das Werkzeug, das ich gebraucht und nicht kaufen konnte.",
+    aC2T: "Governance ist hier Qualifikation, kein Slogan",
+    aC2B:
+      "Certified AI Governance Professional (AIGP), MSc in Responsible AI im Abschluss. CLARA ist das Thesis-Thema („Closing the Loop, Building the Memory“). Deshalb misst sich das Produkt ehrlich: Genauigkeit mit Nennern, benannte Limitationen, Ablehnung statt Vermutung.",
+    aC3T: "EU-first aus Gewohnheit, nicht per Pressemitteilung",
+    aC3B:
+      "Ich betreibe meine eigene lokale KI-Infrastruktur, privacy-first. CLARA ist genauso gebaut: EU-resident, self-hostbar, keine US-Clouds nötig. Die Architektur ist meine Arbeitsweise, angewandt auf Ihre Daten.",
+    aC4T: "Klein ist das Feature",
+    aC4B:
+      "Sie sprechen mit der Person, die das System gebaut hat. Pilots sind in Tagen aufgesetzt, Fragen beantwortet der Engineer, nichts geht in Übergaben verloren. Der ehrliche Preis: Ich fahre nur wenige Pilots gleichzeitig, nach Reihenfolge der Zusage.",
+    aCheck:
+      "Und nichts davon müssen Sie mir glauben. Ein automatischer Check läuft alle 30 Minuten gegen Live-Site und Produkt. Stimmt eine Aussage nicht mehr, schlägt ein Alarm an.",
+    aWorkT: "So sieht Zusammenarbeit aus",
+    aWorkB:
+      "Ein sechswöchiger Pilot auf Ihrem eigenen Feedback: eine Erfolgskennzahl, wöchentliche Syncs mit mir, EU-residente Verarbeitung und am Ende eine klare Entscheidung. Wenn es nicht gewirkt hat, hören Sie es zuerst von mir.",
+    aAltPre: "Noch nicht in Kauflaune? Starten Sie mit",
+    aAltLink: "dem Forschungs-Track",
+    aMore: "Mehr Hintergrund:",
     rEyebrow: "Forschung & Pilotprojekte",
     rH1: "Helfen Sie zu kartieren, wie Teams den Feedback-Loop wirklich schließen.",
     rLede:
