@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -66,6 +67,19 @@ def main() -> int:
         '"measure", not "prove"',
         "measure whether it worked" in body,
         "claims-discipline hero line missing",
+    )
+    # Absence, not just presence: two "prove"-family strings survived the
+    # original sweep because only the hero line was asserted. \b keeps
+    # "approve"/"approvals" legal.
+    check(
+        'no "prove"-family claims',
+        re.search(r"\bprov(?:e[sdn]?|ing)\b", body, re.IGNORECASE) is None,
+        'a "prove/proving/proven" claim is live on the landing',
+    )
+    check(
+        "no CRM-as-shipped claim",
+        "and your CRM" not in body,
+        'landing claims CRM execution ("and your CRM") while the connector is roadmap',
     )
     for header in ("content-security-policy", "x-content-type-options", "x-frame-options"):
         check(f"web header {header}", header in headers, "missing")

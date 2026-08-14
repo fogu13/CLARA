@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
@@ -63,44 +62,40 @@ const screens: Array<{ title: string; bullets: string[] }> = [
 export default function AiLiteracyBasicsPage() {
   if (!ENABLED) notFound();
   return (
-    <main style={{ maxWidth: 760, margin: "0 auto", padding: "48px 20px", lineHeight: 1.65 }}>
-      <p style={{ fontSize: 13, letterSpacing: 1, textTransform: "uppercase", opacity: 0.6 }}>
-        CLARA · Free primer
-      </p>
-      <h1 style={{ fontSize: 30, margin: "8px 0 12px" }}>
-        AI literacy for customer-feedback triage
-      </h1>
-      <p style={{ opacity: 0.8 }}>
-        Since 2 February 2025, Art. 4 of the EU AI Act obliges every deployer to ensure a
-        sufficient level of AI literacy in the staff who operate AI systems. This five-part primer
-        supports that duty for teams running AI-assisted feedback triage — any vendor&apos;s, not
-        just ours. It is education, not legal advice, and reading it alone does not discharge the
-        Art. 4 duty: pair it with role-specific training on your actual system.
-      </p>
-      {screens.map((screen) => (
-        <section key={screen.title} style={{ marginTop: 28 }}>
-          <h2 style={{ fontSize: 20, marginBottom: 8 }}>{screen.title}</h2>
-          <ul style={{ paddingLeft: 20 }}>
-            {screen.bullets.map((bullet) => (
-              <li key={bullet} style={{ marginBottom: 6 }}>
-                {bullet}
-              </li>
+    <main className="page-main">
+      <section>
+        <div className="wrap">
+          <div className="prose" style={{ maxWidth: 760 }}>
+            <p className="eyebrow"><span className="dot" />CLARA · Free primer</p>
+            <h1 style={{ fontSize: 32, margin: "14px 0 12px" }}>
+              AI literacy for customer-feedback triage
+            </h1>
+            <p>
+              Since 2 February 2025, Art. 4 of the EU AI Act obliges every deployer to ensure a
+              sufficient level of AI literacy in the staff who operate AI systems. This five-part primer
+              supports that duty for teams running AI-assisted feedback triage — any vendor&apos;s, not
+              just ours. It is education, not legal advice, and reading it alone does not discharge the
+              Art. 4 duty: pair it with role-specific training on your actual system.
+            </p>
+            {screens.map((screen) => (
+              <section key={screen.title} style={{ padding: 0, marginTop: 28 }}>
+                <h2>{screen.title}</h2>
+                <ul>
+                  {screen.bullets.map((bullet) => (
+                    <li key={bullet}>{bullet}</li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
-        </section>
-      ))}
-      <p style={{ marginTop: 32, fontSize: 14, opacity: 0.85 }}>
-        CLARA ships this module in-product with a workspace-level delivery attestation — and
-        deliberately no per-user completion tracking (that would itself be an employee-monitoring
-        feature). Questions:{" "}
-        <a href="mailto:hello@odradekai.com?subject=AI%20literacy" style={{ textDecoration: "underline" }}>
-          hello@odradekai.com
-        </a>
-      </p>
-      <p style={{ marginTop: 40, fontSize: 13, opacity: 0.6 }}>
-        <Link href="/" style={{ textDecoration: "underline" }}>clara.odradekai.com</Link> ·{" "}
-        <Link href="/security" style={{ textDecoration: "underline" }}>Security &amp; Trust</Link>
-      </p>
+            <p style={{ marginTop: 32 }}>
+              CLARA ships this module in-product with a workspace-level delivery attestation — and
+              deliberately no per-user completion tracking (that would itself be an employee-monitoring
+              feature). Questions:{" "}
+              <a href="mailto:hello@odradekai.com?subject=AI%20literacy">hello@odradekai.com</a>
+            </p>
+          </div>
+        </div>
+      </section>
     </main>
   );
 }

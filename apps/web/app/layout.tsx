@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import localFont from "next/font/local";
+import { Analytics } from "@vercel/analytics/react";
 import { I18nProvider } from "@/lib/i18n";
 import "./globals.css";
 
@@ -18,9 +19,15 @@ const inter = localFont({
   display: "swap",
 });
 
+// One tagline canon everywhere: "the European feedback-to-outcome platform"
+// (the app pages that don't set their own metadata inherit this).
 export const metadata: Metadata = {
-  title: "CLARA | Feedback-to-Action Platform",
-  description: "Governed AI triage with real connectors: Zendesk in, Jira + Slack out"
+  metadataBase: new URL("https://clara.odradekai.com"),
+  title: "CLARA | The European feedback-to-outcome platform",
+  description:
+    "Turn customer signals into governed action, then measure whether it worked. Evidence-backed problems, policy-gated decisions, measured outcomes — EU-resident by design.",
+  icons: { icon: "/icon.svg" },
+  other: { "theme-color": "#08171a" },
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
@@ -33,6 +40,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
     <html lang={locale}>
       <body className={inter.variable}>
         <I18nProvider initialLocale={locale}>{children}</I18nProvider>
+        <Analytics />
       </body>
     </html>
   );
