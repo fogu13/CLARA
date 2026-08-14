@@ -215,3 +215,57 @@ Carina Kozole (ex-N26 CRO).
   reflect the index date, not a live profile view. **Re-verify each name the day you reach out.**
 - Most of the July-list mid/lower tiers (Postbank, Getsafe, Clark, Raisin, telco/energy B-tier…) received
   no fresh evidence this pass — absence of new data, not a downgrade.
+
+---
+
+## Addendum — gap-fill pass (2026-08-13)
+
+Bridge work filling the four items flagged above as unresolved, done via direct LinkedIn search/profile
+verification plus the Schlichtungsstelle Energie's own 2025 Tätigkeitsbericht (primary source, not a press
+summary). Same evidence rules as the rest of this doc apply — re-verify before outreach.
+
+### Trade Republic — gap confirmed, not filled
+Three independent LinkedIn angles ("Kundenservice" / "Head of Customer" / "Customer Experience" against
+"Trade Republic") surfaced no current German CX/service owner — only Product, Analytics, People-Ops roles
+and ex-employees. This independently corroborates the July sweep's structural finding rather than
+contradicting it: nobody public currently holds this title. Treat "no named German CX owner" as
+strengthened, not just unresolved.
+
+### ING Deutschland — both titles confirmed
+- **Maren Glismann** — **Head of Customer Service, ING Deutschland** — CONFIRMED, straight from her own
+  "starting a new position" LinkedIn post (~Oct 2025): *"Ich habe einen neuen Job und arbeite jetzt als
+  Head of Customer Service bei ING Deutschland."* [LinkedIn](https://www.linkedin.com/in/maren-glismann-31470899/).
+  Bonus: she co-founded **Maverixxs**, a CX/customer-service consulting boutique — worth a look as a
+  referral-hub candidate in her own right (cross-reference once the connections export is in).
+- **Lilli Lotte Uhlig** — **Expertise Lead Run Excellence Voice of Customers, ING** — CONFIRMED, current
+  LinkedIn profile (company field: "ING"). [LinkedIn](https://www.linkedin.com/in/lilli-lotte-uhlig/).
+  About as on-the-nose a VoC-title match as this research turns up.
+
+### O2 Telefónica / 1&1 / Telekom — sweep done, five names found
+- **Marion Wasser** — Head of Customer Experience, Telefónica — CONFIRMED (profile "Current:" line).
+  [LinkedIn](https://www.linkedin.com/in/marion-wasser-50a310144/)
+- **Anja Lammering** — Head of Customer Interaction & Engagement, Telefónica Deutschland — CONFIRMED.
+  [LinkedIn](https://www.linkedin.com/in/anja-lammering-025a9339/)
+- **Daryl Ward** — Head of Customer Service – Technology, Telefónica Germany — CONFIRMED.
+  [LinkedIn](https://www.linkedin.com/in/warddaryl/)
+- **Cecile Euchenhofer** — Bereichsleiterin/Head of Operations Analytics & Quality, 1&1 Telecommunication SE
+  — CONFIRMED. [LinkedIn](https://www.linkedin.com/in/cecileeuchenhofer/)
+- **Steffen Schlaberg** — Managing Director Sales & Service, Telekom Deutschland — CONFIRMED, MD-level.
+  [LinkedIn](https://www.linkedin.com/in/steffen-schlaberg/) (backup: **Ralf Langnickel**, VP, Leiter
+  Operating Office Technischer Kundenservice, Deutsche Telekom Service GmbH —
+  [LinkedIn](https://www.linkedin.com/in/ralf-langnickel-1a1042172/) — more technical-service-ops than
+  CX-strategy)
+
+### E.ON / Vattenfall — the ombudsman source itself confirms the names aren't public
+Read the Schlichtungsstelle Energie's full 2025 Tätigkeitsbericht (PDF, published ~Feb 2026) cover to
+cover, not just press summaries. It states ~6,200 of 19,074 applications concentrated on just **four**
+supplier groups, and ~6,600 of 18,153 concluded proceedings on just **five** — but genuinely never names
+them anywhere in the document. This isn't under-research on our end; the primary source itself withholds
+the names. Don't spend more time trying to extract this from the ombudsman report — if E.ON/Vattenfall
+stays a priority, identify the pain a different way (Trustpilot volume/themes, press, BNetzA filings), the
+same method already used for the rest of target-accounts.md.
+One incidental find: **Dirk Heimink**, listed as **e.on Energie Deutschland GmbH's representative on the
+Schlichtungsstelle Energie's own advisory board (Beirat)** as of 31.12.2025 — sourced directly from the
+official Tätigkeitsbericht Anhang. No public LinkedIn profile found under this name, so his actual function
+(could be regulatory/legal/public-affairs rather than CX) is unverified — LIKELY at best, worth an
+Impressum/company-site check before treating as a CX contact.
