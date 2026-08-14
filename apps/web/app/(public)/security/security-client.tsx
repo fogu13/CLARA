@@ -21,7 +21,7 @@ const EN: SecurityContent = {
   eyebrow: "CLARA · Security & Trust",
   h1: "Evidence-scoped, EU-resident by design.",
   intro:
-    "This page states what is implemented today — verifiable in the product — not aspirations. Legal pages (Impressum, Datenschutzerklärung, AGB) ship after legal review; until then, request our DPA or ask anything at " +
+    "What is implemented today, verifiable in the product. No aspirations. Legal pages (Impressum, Datenschutzerklärung, AGB) follow the legal review; until then, request our DPA at " +
     CONTACT_EMAIL +
     ".",
   sections: [
@@ -36,34 +36,34 @@ const EN: SecurityContent = {
     {
       title: "Security measures",
       items: [
-        "TLS everywhere with HSTS; security headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy) on web and API responses.",
-        "Row-level multi-tenancy (Postgres RLS keyed to the verified JWT), role-based access control enforced server-side.",
+        "TLS everywhere with HSTS, plus strict security headers on every web and API response.",
+        "Tenant data is isolated at the database row level. Access control is enforced on the server, by role.",
         "Webhook ingestion requires HMAC-SHA256 signatures; API keys are stored as hashes and shown exactly once.",
-        "Approval decisions record the verified signer from the JWT — reviewer identity cannot be asserted by the request.",
-        "Audit records are append-only; evidence packs carry a content hash so what an approver signed off on is verifiable later.",
+        "Approvals record the verified signer from the login token. A request cannot claim someone else's identity.",
+        "Audit records are append-only. Evidence packs carry a content hash, so what was approved stays verifiable.",
       ],
     },
     {
       title: "Data subject rights & governance",
       items: [
         "GDPR Art. 17 (erasure) and Art. 20 (export) are product endpoints, not ticket queues.",
-        "Works-council mode (§87 BetrVG): below-admin responses replace person-capable fields with role labels — no per-employee performance metric can be derived.",
+        "Works-council mode (§87 BetrVG): person-level fields become role labels below admin. No per-employee metric can be derived.",
         "EU AI Act Art. 50: non-human-reviewed outbound text carries an automatic AI disclosure; human-approved content records its reviewer.",
-        "A live model card in-product shows the configured model, endpoint and measured evaluation quality (per-language accuracy with denominators and dataset date).",
+        "A live model card shows the configured model and its measured accuracy per language, with denominators and dataset date.",
       ],
     },
     {
       title: "AI transparency",
       items: [
         "Provider-agnostic: any OpenAI-compatible endpoint, including EU-hosted and self-hosted local models. No fine-tuning on customer data.",
-        "Model outputs carry a model score (an uncalibrated heuristic — labeled as such), evidence links and stated limitations; thin evidence produces a refusal, not a guess.",
-        "Outcome readouts are graded A–E by measurement design; manual entries are labeled 'unverified manual observation' and never conflated with instrumented measurements.",
+        "Every output carries a model score (labeled as the heuristic it is), evidence links and stated limitations. Thin evidence produces a refusal, not a guess.",
+        "Outcome readouts are graded A–E by measurement design. Manual entries are labeled as such and never mixed with instrumented measurements.",
       ],
     },
     {
       title: "Certifications & roadmap",
       items: [
-        "ISO 27001: roadmapped — DACH shortlists filter on it; pursued as revenue and PII volume grow.",
+        "ISO 27001: roadmapped. DACH shortlists filter on it; pursued as revenue and PII volume grow.",
         "BSI C5 (Type 1 → Type 2): sequenced after ISO 27001; doubles as NIS2/DORA supply-chain evidence.",
         "DORA ICT-annex and NIS2 supply-chain documentation are prepared for regulated pilots; a signed DPA (AVV) is available on request.",
       ],
@@ -76,7 +76,7 @@ const DE: SecurityContent = {
   eyebrow: "CLARA · Sicherheit & Vertrauen",
   h1: "Evidenzbasiert, EU-resident by design.",
   intro:
-    "Diese Seite beschreibt, was heute implementiert ist — im Produkt überprüfbar — keine Absichtserklärungen. Die Rechtsseiten (Impressum, Datenschutzerklärung, AGB) erscheinen nach juristischer Prüfung; bis dahin: AVV anfordern oder alles fragen unter " +
+    "Was heute implementiert ist, im Produkt überprüfbar. Keine Absichtserklärungen. Die Rechtsseiten (Impressum, Datenschutzerklärung, AGB) folgen nach der juristischen Prüfung; bis dahin: AVV anfordern unter " +
     CONTACT_EMAIL +
     ".",
   sections: [
@@ -91,34 +91,34 @@ const DE: SecurityContent = {
     {
       title: "Sicherheitsmaßnahmen",
       items: [
-        "Durchgehend TLS mit HSTS; Security-Header (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy) auf Web- und API-Antworten.",
-        "Zeilenbasierte Mandantentrennung (Postgres RLS, gebunden an das verifizierte JWT), rollenbasierte Zugriffskontrolle serverseitig durchgesetzt.",
+        "Durchgehend TLS mit HSTS, plus strikte Security-Header auf jeder Web- und API-Antwort.",
+        "Mandantendaten sind auf Datenbank-Zeilenebene isoliert. Zugriffskontrolle wird serverseitig erzwungen, nach Rolle.",
         "Webhook-Ingestion erfordert HMAC-SHA256-Signaturen; API-Schlüssel werden als Hashes gespeichert und genau einmal angezeigt.",
-        "Freigabeentscheidungen protokollieren die verifizierte Identität aus dem JWT — die Prüferidentität kann nicht vom Request behauptet werden.",
-        "Audit-Einträge sind append-only; Evidenzpakete tragen einen Content-Hash, sodass später überprüfbar ist, was freigegeben wurde.",
+        "Freigaben protokollieren die verifizierte Identität aus dem Login-Token. Ein Request kann keine fremde Identität behaupten.",
+        "Audit-Einträge sind append-only. Evidenzpakete tragen einen Content-Hash, damit überprüfbar bleibt, was freigegeben wurde.",
       ],
     },
     {
       title: "Betroffenenrechte & Governance",
       items: [
         "DSGVO Art. 17 (Löschung) und Art. 20 (Export) sind Produkt-Endpunkte, keine Ticket-Warteschlangen.",
-        "Betriebsrats-Modus (§87 BetrVG): unterhalb der Admin-Rolle ersetzen Rollenbezeichnungen alle personenbeziehbaren Felder — keine Leistungskennzahl pro Mitarbeiter:in ableitbar.",
+        "Betriebsrats-Modus (§87 BetrVG): unterhalb der Admin-Rolle werden personenbezogene Felder zu Rollenbezeichnungen. Keine Kennzahl pro Mitarbeiter:in ableitbar.",
         "EU-KI-Verordnung Art. 50: nicht menschlich geprüfte ausgehende Texte tragen eine automatische KI-Kennzeichnung; menschlich freigegebene Inhalte protokollieren die prüfende Person.",
-        "Eine Live-Model-Card im Produkt zeigt Modell, Endpunkt und gemessene Evaluationsqualität (Genauigkeit pro Sprache mit Nennern und Datensatz-Datum).",
+        "Eine Live-Model-Card zeigt das konfigurierte Modell und seine gemessene Genauigkeit pro Sprache, mit Nennern und Datensatz-Datum.",
       ],
     },
     {
       title: "KI-Transparenz",
       items: [
         "Provider-agnostisch: jeder OpenAI-kompatible Endpunkt, einschließlich EU-gehosteter und selbst gehosteter lokaler Modelle. Kein Fine-Tuning auf Kundendaten.",
-        "Modell-Ausgaben tragen einen Modell-Score (eine unkalibrierte Heuristik — als solche gekennzeichnet), Evidenz-Links und benannte Limitationen; dünne Evidenz führt zu einer Ablehnung, nicht zu einer Vermutung.",
+        "Jede Ausgabe trägt einen Modell-Score (als Heuristik gekennzeichnet), Evidenz-Links und benannte Limitationen. Dünne Evidenz führt zur Ablehnung, nicht zur Vermutung.",
         "Outcome-Auswertungen werden nach Messdesign mit A–E bewertet; manuelle Einträge sind als „unverifizierte manuelle Beobachtung“ gekennzeichnet und werden nie mit instrumentierten Messungen vermischt.",
       ],
     },
     {
       title: "Zertifizierungen & Roadmap",
       items: [
-        "ISO 27001: auf der Roadmap — DACH-Shortlists filtern danach; wird mit wachsendem Umsatz und PII-Volumen verfolgt.",
+        "ISO 27001: auf der Roadmap. DACH-Shortlists filtern danach; wird mit wachsendem Umsatz und PII-Volumen verfolgt.",
         "BSI C5 (Typ 1 → Typ 2): nach ISO 27001 sequenziert; dient zugleich als NIS2-/DORA-Lieferketten-Nachweis.",
         "DORA-ICT-Annex und NIS2-Lieferketten-Dokumentation liegen für regulierte Pilotprojekte bereit; eine unterschriebene AVV ist auf Anfrage verfügbar.",
       ],

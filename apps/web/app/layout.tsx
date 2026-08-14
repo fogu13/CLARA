@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://clara.odradekai.com"),
   title: "CLARA | The European feedback-to-outcome platform",
   description:
-    "Turn customer signals into governed action, then measure whether it worked. Evidence-backed problems, policy-gated decisions, measured outcomes — EU-resident by design.",
+    "Turn customer signals into governed action, then measure whether it worked. Evidence-backed problems, policy-gated decisions, measured outcomes. EU-resident by design.",
   icons: { icon: "/icon.svg" },
   other: { "theme-color": "#08171a" },
 };

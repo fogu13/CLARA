@@ -856,7 +856,7 @@ export default function DashboardPage() {
                             <p className="mt-1 text-xs text-muted-foreground">
                               {metricLabel(item.metric)}: {formatMetric(item.baseline)} →{" "}
                               {item.latest_value === null || item.latest_value === undefined
-                                ? "—"
+                                ? ""
                                 : formatMetric(item.latest_value)}{" "}
                               · {td.target} {formatMetric(item.success_threshold)}
                             </p>
