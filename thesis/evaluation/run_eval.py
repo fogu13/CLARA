@@ -7,6 +7,8 @@ Outputs (in evaluation/results/):
   risk_*.csv                  keyword risk vs risk_seed gold (TR + Henkel)
   risk_confusion.csv          + .png heatmap
   f1_breakdown.png            F1 by slice
+  predictions_ml.json         per-item TF-IDF+LR out-of-fold predictions (paired-test input)
+  escalation_recall_by_language.csv   equal-opportunity table, all three predictors
   summary.json                headline numbers Chapter 5 §5A reads back
 
 If evaluation/results/predictions_llm.json exists (written by predict_llm.py with an
@@ -191,8 +193,12 @@ def score_taxonomy(sigs, summary):
     summary["taxonomy_path"] = "scored from the constrained run (inventory supplied)"
 
 
-def equity_slices(sigs, summary, preds=None):
+def equity_slices(sigs, summary, preds=None, ml_risk=None):
     """Per-language escalation recall, and the language x sector composition.
+
+    NB: `language` records the SOURCE review's language; the paraphrased texts
+    themselves are English (§3.5.1), so these are source-language strata, not
+    text-language strata — any claim built on them must say so.
 
     Escalation recall (TPR on gold-escalate) is the equal-opportunity metric:
     it conditions on the gold label, so the very different base rates across
@@ -217,6 +223,12 @@ def equity_slices(sigs, summary, preds=None):
             "recall_floor": round(
                 sum(1 for s in gold if esc(bl.predict_risk(s.text))) / len(gold), 4),
         }
+        if ml_risk:
+            scored_ml = [s for s in gold if s.id in ml_risk]
+            if scored_ml:
+                row["recall_ml"] = round(
+                    sum(1 for s in scored_ml if esc(ml_risk[s.id])) / len(scored_ml), 4)
+                row["n_gold_escalate_ml"] = len(scored_ml)
         if preds:
             scored = [s for s in gold if s.id in preds]
             if scored:
@@ -226,6 +238,12 @@ def equity_slices(sigs, summary, preds=None):
                 row["n_gold_escalate_llm"] = len(scored)
         rows[lang] = row
     summary["escalation_recall_by_language"] = rows
+    if rows:
+        _w("escalation_recall_by_language.csv",
+           [{"language": lang, **r} for lang, r in sorted(rows.items())],
+           ["language", "n_signals", "n_gold_escalate", "base_rate",
+            "recall_floor", "n_gold_escalate_ml", "recall_ml",
+            "n_gold_escalate_llm", "recall_llm"])
 
     comp = {}
     for s in sigs:
@@ -252,20 +270,33 @@ def f1_breakdown(by_sector):
 
 
 def eval_ml(sigs, summary):
+    """Score the TF-IDF + LR baseline and persist its per-item OOF predictions.
+
+    The per-item cache (results/predictions_ml.json) is what makes the paired
+    significance tests possible: McNemar needs both classifiers' calls on the
+    SAME items, not two accuracy totals — and it lets the ML predictor join
+    the per-language escalation-recall table alongside floor and LLM.
+    """
+    ml_preds = {"sentiment": {}, "risk": {}}
     # sentiment vs star gold
     rated = [s for s in sigs if s.star_rating is not None and s.text]
     texts = [s.text for s in rated]
     gold = [bl.gold_sentiment_from_stars(s.star_rating) for s in rated]
-    y_true, y_pred, k = ml.cv_predict(texts, gold)
+    y_true, y_pred, k, idx = ml.cv_predict(texts, gold)
+    ml_preds["sentiment"] = {rated[i].id: p for i, p in zip(idx, y_pred)}
     r = M.score(y_true, y_pred); r["cv_folds"] = k
     _w("sentiment_ml.csv", [r], list(r.keys()))
     summary["sentiment_ml_tfidf_lr"] = r
     # risk vs risk_seed gold (TR + Henkel)
     have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
-    yt, yp, k2 = ml.cv_predict([s.text for s in have], [s.risk for s in have])
+    yt, yp, k2, idx2 = ml.cv_predict([s.text for s in have], [s.risk for s in have])
+    ml_preds["risk"] = {have[i].id: p for i, p in zip(idx2, yp)}
     r2 = M.score(yt, yp); r2["cv_folds"] = k2
     _w("risk_ml.csv", [r2], list(r2.keys()))
     summary["risk_ml_tfidf_lr"] = r2
+    with open(os.path.join(RESULTS, "predictions_ml.json"), "w") as fh:
+        json.dump(ml_preds, fh, indent=2)
+    return ml_preds
 
 
 def score_llm(sigs, summary):
@@ -310,6 +341,60 @@ def score_llm(sigs, summary):
     summary["llm_path"] = f"scored {len(rated)} sentiment / {len(have)} risk predictions"
 
 
+def significance(sigs, summary, ml_preds, llm_preds):
+    """Paired exact McNemar tests between the three predictors (§3.5.3, §5A.6).
+
+    §5A reports the floor -> learned -> contextual ordering; this makes each
+    pairwise step carry its own test instead of an eyeballed gap. Convention
+    matches the platform's in-repo harness (metrics.mcnemar_exact): b = first
+    predictor right & second wrong, c = the reverse, p = exact two-sided
+    binomial(b + c, 0.5). Each entry is computed on the intersection of items
+    both predictors scored, and reports both accuracies on exactly that paired
+    subset, so the tested gap is visible next to its p-value.
+    """
+    rated = [s for s in sigs if s.star_rating is not None and s.text]
+    have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
+    tasks = {
+        "sentiment": (rated,
+                      lambda s: bl.gold_sentiment_from_stars(s.star_rating),
+                      lambda s: bl.predict_sentiment(s.text),
+                      (ml_preds or {}).get("sentiment", {}), "sentiment", "neutral"),
+        "risk": (have,
+                 lambda s: s.risk,
+                 lambda s: bl.predict_risk(s.text),
+                 (ml_preds or {}).get("risk", {}), "risk", "low"),
+    }
+    out = {}
+    for task, (items, gold_fn, floor_fn, ml_map, fld, default) in tasks.items():
+        correct = {"floor": {s.id: floor_fn(s) == gold_fn(s) for s in items}}
+        if ml_map:
+            correct["ml"] = {s.id: ml_map[s.id] == gold_fn(s)
+                             for s in items if s.id in ml_map}
+        if llm_preds:
+            correct["llm"] = {s.id: llm_preds[s.id].get(fld, default) == gold_fn(s)
+                              for s in items if s.id in llm_preds}
+        res = {}
+        for a, b_name in (("floor", "ml"), ("floor", "llm"), ("ml", "llm")):
+            if a not in correct or b_name not in correct:
+                continue
+            ids = sorted(set(correct[a]) & set(correct[b_name]))
+            if not ids:
+                continue
+            av = [correct[a][i] for i in ids]
+            bv = [correct[b_name][i] for i in ids]
+            b, c, p = M.mcnemar_exact(av, bv)
+            res[f"{a}_vs_{b_name}"] = {
+                "n_pairs": len(ids),
+                f"acc_{a}": round(sum(av) / len(ids), 4),
+                f"acc_{b_name}": round(sum(bv) / len(ids), 4),
+                "b_first_only_correct": b,
+                "c_second_only_correct": c,
+                "p_exact_two_sided": round(p, 6),
+            }
+        out[task] = res
+    summary["mcnemar_paired"] = out
+
+
 def main():
     sigs = load()
     summary = {"corpus_n": len(sigs),
@@ -317,14 +402,16 @@ def main():
     corpus_stats(sigs)
     by_sector = eval_sentiment(sigs, summary)
     eval_risk(sigs, summary)
-    eval_ml(sigs, summary)
+    ml_preds = eval_ml(sigs, summary)
     f1_breakdown(by_sector)
     score_llm(sigs, summary)
     score_taxonomy(sigs, summary)
     cache = os.path.join(RESULTS, "predictions_llm.json")
     llm_preds = ({p["id"]: p for p in json.load(open(cache))}
                  if os.path.exists(cache) else None)
-    equity_slices(sigs, summary, llm_preds)
+    equity_slices(sigs, summary, llm_preds,
+                  ml_preds.get("risk") if ml_preds else None)
+    significance(sigs, summary, ml_preds, llm_preds)
     with open(os.path.join(RESULTS, "summary.json"), "w") as fh:
         json.dump(summary, fh, indent=2)
     print(json.dumps(summary, indent=2))

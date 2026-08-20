@@ -22,9 +22,16 @@ def _pipe():
 
 
 def cv_predict(texts: list[str], labels: list[str], min_per_class: int = 5):
-    """Out-of-fold predictions via stratified CV. Folds capped by the smallest class."""
+    """Out-of-fold predictions via stratified CV. Folds capped by the smallest class.
+
+    Returns (labels, preds, k, kept_idx). kept_idx maps every returned position
+    back to the caller's input order (ultra-rare classes may be dropped), so a
+    caller can align per-item predictions by signal id — which is what makes
+    the paired McNemar tests in run_eval.significance possible.
+    """
     from collections import Counter
     counts = Counter(labels)
+    idx = list(range(len(labels)))
     if min(counts.values()) < min_per_class:
         # drop ultra-rare classes the CV can't support, so folds stay valid
         keep = {c for c, n in counts.items() if n >= min_per_class}
@@ -35,4 +42,4 @@ def cv_predict(texts: list[str], labels: list[str], min_per_class: int = 5):
     k = max(2, min(5, min(counts.values())))
     skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
     preds = cross_val_predict(_pipe(), texts, labels, cv=skf)
-    return labels, list(preds), k
+    return labels, list(preds), k, idx

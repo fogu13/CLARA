@@ -1,0 +1,3 @@
+language,n_signals,n_gold_escalate,base_rate,recall_floor,n_gold_escalate_ml,recall_ml,n_gold_escalate_llm,recall_llm
+de,45,8,0.1778,0.0,8,0.625,8,0.875
+en,59,41,0.6949,0.1951,41,0.9512,41,0.878

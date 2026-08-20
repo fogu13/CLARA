@@ -59,3 +59,25 @@ def write_confusion(y_true, y_pred, labels, path: str) -> None:
         w.writerow(["true\\pred"] + labels)
         for i, lab in enumerate(labels):
             w.writerow([lab] + list(cm[i]))
+
+
+def mcnemar_exact(a_correct: list[bool], b_correct: list[bool]) -> tuple[int, int, float]:
+    """Exact two-sided McNemar test on two classifiers' PAIRED per-item correctness.
+
+    Deliberately the same convention as the platform's in-repo harness
+    (apps/api/app/evals/harness.py::mcnemar_exact), so both evidence streams
+    report the same statistic: b = A right & B wrong, c = A wrong & B right,
+    p = two-sided exact binomial(n = b + c, 0.5). A small p with c > b means
+    B is significantly better on these paired items. The paired test is the
+    right instrument on a corpus this size — two accuracy totals cannot
+    separate the predictors, their per-item agreement can (§3.5.3).
+    """
+    from math import comb
+    b = sum(1 for x, y in zip(a_correct, b_correct) if x and not y)
+    c = sum(1 for x, y in zip(a_correct, b_correct) if y and not x)
+    n = b + c
+    if n == 0:
+        return b, c, 1.0
+    k = min(b, c)
+    tail = sum(comb(n, i) for i in range(k + 1)) / (2 ** n)
+    return b, c, min(1.0, 2 * tail)
