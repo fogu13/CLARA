@@ -41,7 +41,7 @@ APA 7, author–date in text, consolidated in `manuscript/references.md`. Compil
 
 The quantitative evaluation uses **only the real, publicly-sourced** brand datasets in `~/Documents/Thesis_ChatGPT/` (not in this repo). The harness resolves them via the `THESIS_DATA_DIR` env var, defaulting to `../../../Thesis_ChatGPT` relative to `evaluation/` (path updated for this folder's location). The synthetic sets are **excluded by design** and must not enter the evaluation corpus.
 
-Related but separate: `apps/api/app/evals/` is the platform's own committed LLM evaluation (100-case bilingual golden set + `history.jsonl` ledger + `published_metrics.json`) — reported in the manuscript as convergent evidence (§5A.7), never merged into the §5A tables (different gold standards).
+Related but separate: `apps/api/app/evals/` is the platform's own committed LLM evaluation (100-case bilingual golden set + `published_metrics.json`; the `history.jsonl` run ledger stays local, excluded by `evals/.gitignore`) — reported in the manuscript as convergent evidence (§5A.7), never merged into the §5A tables (different gold standards).
 
 ## Author TODOs (pre-submission)
 
