@@ -23,8 +23,9 @@ your own network + referrals from each interviewee.
 > teams remember what worked. You've clearly lived this at [Company].
 >
 > Could I borrow **~20–25 candid minutes**? It's research, not a sales call — I just want your real
-> experience, and I'll send you the anonymized findings. If a call's tricky, there's a **5-minute
-> survey** instead: [your form URL].
+> experience, and I'll send you the anonymized findings. Full disclosure: the prototype we'll look at
+> is one I built as part of this research, so critical reactions are exactly what I need. If a call's
+> tricky, there's a **5-minute survey** instead: [your form URL].
 >
 > Would early next week work? Here's my calendar: [scheduling link].
 
@@ -36,8 +37,9 @@ your own network + referrals from each interviewee.
 > where the loop breaks. Given your work at [Company], your perspective would be really valuable.
 >
 > Would you be open to a **20–25 minute** video chat in the next week or two? It's purely research
-> (no selling), it's anonymized, and I'll share the findings back. Prefer async? A **5-minute survey**:
-> [your form URL].
+> (no selling), it's anonymized, and I'll share the findings back. In fairness you should know the
+> prototype we'd look at is one I built for this research — honest criticism helps me most. Prefer
+> async? A **5-minute survey**: [your form URL].
 >
 > Grateful either way — thank you for considering it.
 > Elvis Shehi · [scheduling link]
@@ -50,6 +52,23 @@ your own network + referrals from each interviewee.
 ### A5. Gentle follow-up (after ~5 days, no reply)
 > No worries if now's hectic, [Name] — even the **5-minute survey** would genuinely help: [your form URL].
 > Thanks either way, and good luck with [something specific].
+
+### A6. Research ↔ sales separation (standing policy)
+
+Interview participants are research participants, not prospects. Concretely:
+
+- No pricing or sales content in any session; the session ends as research, full stop.
+- Participants are never added to commercial outreach lists, and receive no sales follow-up for at
+  least **6 months** after their session — earlier only if they explicitly request a commercial
+  conversation themselves.
+- Contacts already in an active commercial conversation are **excluded from researcher-led
+  interviews** (this rule has already been applied once); if such a session is still scientifically
+  valuable, an independent facilitator runs it instead.
+- The same person never appears in both the §5B sample and the sales pipeline during the study window.
+- The disclosure in Part B ("Researcher's interest") is read or shown **before** consent is taken.
+
+This is the operational counterpart of the thesis's conflict-of-interest statement (§3.12); cite it
+there and in §3.9.
 
 **Tips:** send in small batches and track replies; aim for a mix of roles (marketing/product/CX) and
 company sizes; ask every interviewee for 1–2 referrals at the end (your best channel); confirm whether
@@ -69,6 +88,14 @@ OPIT permits a small incentive (e.g., a coffee voucher) and the findings summary
 today and your reaction to a prototype. With your permission it is audio-recorded and transcribed
 (using an automated transcription tool); recordings are deleted after transcription.
 
+**Researcher's interest — please read.** I designed and built the prototype you will see, and I have a
+commercial interest in the venture developing it. This session is academic research, not a sales
+conversation: nothing is sold, you will not be added to any marketing or sales list, and there will be
+no commercial follow-up unless you explicitly ask for one. Because I built the system, your candid
+criticism is more valuable to the research than praise — please do not spare it. This dual role is
+declared as a conflict of interest in the thesis and is mitigated by standardized instruments (SUS/TAM),
+anonymized reporting, and independent checks on the analysis.
+
 **Voluntary & withdrawal.** Participation is entirely voluntary. You may skip any question or stop at
 any time, and may withdraw your data up to [e.g. 2 weeks] after the interview, no reason needed.
 
@@ -81,6 +108,7 @@ consent. You may request access to or deletion of your data at any time via the 
 - [ ] I have read and understood the information above.
 - [ ] I agree to take part voluntarily and understand I can withdraw.
 - [ ] I consent to the interview being audio-recorded and transcribed.
+- [ ] I understand the researcher built the prototype being evaluated and has a commercial interest in it.
 - [ ] (Optional) I consent to anonymized quotes from my responses being used in the thesis.
 
 Name: ______________________   Signature / digital confirmation: ______________   Date: __________
