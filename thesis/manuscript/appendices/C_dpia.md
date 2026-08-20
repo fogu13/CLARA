@@ -1,4 +1,4 @@
-# Data Protection Impact Assessment (completed) — the platform
+# Data Protection Impact Assessment (completed): the platform
 
 > File paths in §4 refer to the CLARA implementation. Completed for the thesis evaluation context (public, paraphrased, de-identified data); a deployment processing real customer data must re-run this DPIA against its actual configuration.
 
@@ -8,7 +8,7 @@ For the **thesis evaluation**, the data is public, paraphrased, and de-identifie
 
 ### 1. Description of the processing
 
-**System:** the platform — governed customer feedback-to-action platform
+**System:** the platform, a governed customer feedback-to-action platform
 
 **Processing:** Ingestion, AI-powered triage (sentiment/urgency/tag extraction,
 insight synthesis), governance-gated action routing, outcome measurement, and
@@ -19,7 +19,7 @@ surveys, reviews, app store comments).
 
 **Data categories:**
 - Customer feedback text (may contain PII: names, emails, phone numbers)
-- Customer identifiers (customer_id, account_id — pseudonymized)
+- Customer identifiers (customer_id, account_id; pseudonymized)
 - Metadata: source, timestamp, journey stage, tags
 - AI-generated metadata: sentiment, urgency, severity, category
 - Action records: connector push results (Jira issue keys, Slack message IDs)
@@ -46,26 +46,26 @@ surveys, reviews, app store comments).
 
 ### 4. Risk mitigation measures
 
-1. **Local-first LLM processing** — Ollama/vLLM support eliminates data
+1. **Local-first LLM processing.** Ollama/vLLM support eliminates data
    transfer to third-party LLM providers. This is the primary mitigation.
 
-2. **PII redaction** — `redact_common_pii()` in `apps/api/app/domain/models.py`
+2. **PII redaction.** `redact_common_pii()` in `apps/api/app/domain/models.py`
    redacts email, phone, IP, address patterns from learning conclusions.
 
-3. **Human-in-the-loop** — No consequential action (ticket, notification,
+3. **Human-in-the-loop.** No consequential action (ticket, notification,
    segment) is executed without explicit human approval via the LangGraph
    approval interrupt.
 
-4. **Data minimisation** — Feedback text is capped at 2000 characters for
+4. **Data minimisation.** Feedback text is capped at 2000 characters for
    LLM context. Only pseudonymized identifiers are stored.
 
-5. **Access control** — Row-Level Security on all database tables; workspace
+5. **Access control.** Row-Level Security on all database tables; workspace
    isolation; JWT-based auth with workspace_id scoping.
 
-6. **Audit trail** — Every AI output carries audit metadata (model, source,
+6. **Audit trail.** Every AI output carries audit metadata (model, source,
    limitations). Every action is logged with connector type and result.
 
-7. **Retention limits** — Learning conclusions have `retention_expires_at`.
+7. **Retention limits.** Learning conclusions have `retention_expires_at`.
    Configurable per workspace.
 
 ### 5. Data-subject rights (GDPR Chapter III)
@@ -81,7 +81,7 @@ surveys, reviews, app store comments).
 
 ### 6. Conclusion and residual risk
 
-With the mitigations in §4 applied — model sovereignty (self-hostable LLM), PII redaction, mandatory human approval for consequential actions, workspace-scoped RLS, retention limits, and a full audit trail — the residual risk to data subjects is assessed as **low and acceptable**, and the processing may proceed. Two residual risks are explicitly carried forward (Chapter 6): behavioural automation bias at the approval gate, and the attack surface of public ingestion endpoints. A production deployment must re-assess against its actual model provider, connectors, and retention configuration, and consult its DPO. No prior consultation with a supervisory authority (Article 36) is indicated for the assessed (non-high-risk) processing.
+With the mitigations in §4 applied (model sovereignty via a self-hostable LLM, PII redaction, mandatory human approval for consequential actions, workspace-scoped RLS, retention limits, and a full audit trail), the residual risk to data subjects is assessed as **low and acceptable**, and the processing may proceed. Two residual risks are explicitly carried forward (Chapter 6): behavioural automation bias at the approval gate, and the attack surface of public ingestion endpoints. A production deployment must re-assess against its actual model provider, connectors, and retention configuration, and consult its DPO. No prior consultation with a supervisory authority (Article 36) is indicated for the assessed (non-high-risk) processing.
 
 ### 7. Sign-off
 
