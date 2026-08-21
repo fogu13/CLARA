@@ -68,6 +68,11 @@ def main() -> int:
         "measure whether it worked" in body,
         "claims-discipline hero line missing",
     )
+    check(
+        "Zendesk claimed as listening only",
+        "Executes in Zendesk" not in body and "Zendesk · Jira · Slack" not in body,
+        "landing claims execution in Zendesk (it is ingest-only)",
+    )
     # Absence, not just presence: two "prove"-family strings survived the
     # original sweep because only the hero line was asserted. \b keeps
     # "approve"/"approvals" legal.
