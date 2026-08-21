@@ -81,6 +81,48 @@ export default function SignalsPage() {
     return true;
   });
 
+  // Ingestion authenticity review, summarised from what the API stamped on each
+  // signal. Computed here rather than fetched so the card reflects exactly what
+  // the feed below shows. Per-language flag rates are compared so the filter's
+  // own disparate impact is visible before anyone excludes anything: strata need
+  // 50+ signals and 5+ flags before a warning, matching services/authenticity.py.
+  const review = (() => {
+    const assessed = signals.filter((s) => s.metadata?.authenticity_state);
+    const flagged = assessed.filter((s) => s.metadata.authenticity_band === "review_suggested");
+    const abstained = assessed.filter((s) => s.metadata.authenticity_state === "insufficient_text");
+    const counts: Record<string, number> = {};
+    for (const s of assessed) {
+      for (const code of String(s.metadata.authenticity_reasons ?? "").split(",").filter(Boolean)) {
+        counts[code] = (counts[code] ?? 0) + 1;
+      }
+    }
+    const byLang: Record<string, { n: number; f: number }> = {};
+    for (const s of assessed) {
+      const lang = (s.language || "unknown").toLowerCase();
+      byLang[lang] ??= { n: 0, f: 0 };
+      byLang[lang].n += 1;
+      if (s.metadata.authenticity_band === "review_suggested") byLang[lang].f += 1;
+    }
+    const rates = Object.entries(byLang)
+      .filter(([, v]) => v.n >= 50)
+      .map(([lang, v]) => ({ lang, rate: v.f / v.n, f: v.f }));
+    let disparity: { hi: string; hiRate: number; lo: string; loRate: number } | null = null;
+    if (rates.length >= 2) {
+      const hi = rates.reduce((a, b) => (b.rate > a.rate ? b : a));
+      const lo = rates.reduce((a, b) => (b.rate < a.rate ? b : a));
+      if (hi.f >= 5 && hi.rate > 0 && (lo.rate === 0 || hi.rate / lo.rate >= 2)) {
+        disparity = { hi: hi.lang, hiRate: hi.rate, lo: lo.lang, loRate: lo.rate };
+      }
+    }
+    return {
+      total: assessed.length,
+      flagged: flagged.length,
+      abstained: abstained.length,
+      reasons: Object.entries(counts).sort((a, b) => b[1] - a[1]) as [string, number][],
+      disparity,
+    };
+  })();
+
   // CSV imports carry their batch in the signal id (csv-<batch>-<row>), so a
   // mis-mapped import can be undone as a unit.
   const importBatches = Object.entries(
@@ -294,6 +336,53 @@ export default function SignalsPage() {
         </Card>
       </div>
 
+      {review.total > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">{t.authenticity.cardTitle}</CardTitle>
+            <p className="text-xs text-muted-foreground">{t.authenticity.whatThisIs}</p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <div className="text-2xl font-bold tabular-nums">{review.flagged}</div>
+                <p className="text-xs text-muted-foreground">{t.authenticity.needsReview}</p>
+              </div>
+              <div>
+                <div className="text-2xl font-bold tabular-nums text-muted-foreground">{review.abstained}</div>
+                <p className="text-xs text-muted-foreground">{t.authenticity.tooShortToAssess}</p>
+              </div>
+              <div>
+                <div className="text-2xl font-bold tabular-nums">{review.total - review.flagged - review.abstained}</div>
+                <p className="text-xs text-muted-foreground">{t.authenticity.routine}</p>
+              </div>
+            </div>
+            {review.reasons.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {review.reasons.map(([code, n]) => (
+                  <Badge key={code} variant="outline" title={t.authenticity.reasonHints[code] ?? code}>
+                    {(t.authenticity.reasonLabels[code] ?? code)} · {n}
+                  </Badge>
+                ))}
+              </div>
+            )}
+            {/* The filter reports its own disparate impact before anyone acts on it.
+                A review queue that flags one language far more than another is a
+                finding about the filter, not about those customers. */}
+            {review.disparity && (
+              <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
+                <strong>{t.authenticity.disparityWarning}.</strong>{" "}
+                {t.authenticity.disparityBody
+                  .replace("{hi}", review.disparity.hi)
+                  .replace("{hiRate}", `${Math.round(review.disparity.hiRate * 100)}%`)
+                  .replace("{lo}", review.disparity.lo)
+                  .replace("{loRate}", `${Math.round(review.disparity.loRate * 100)}%`)}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">{t.dashboard.signalVolume}</CardTitle></CardHeader>
         <CardContent>
@@ -410,6 +499,19 @@ export default function SignalsPage() {
                       {s.metadata?.near_duplicate_of && (
                         <Badge variant="outline" title={`Similar to ${s.metadata.near_duplicate_of}`}>
                           possible duplicate
+                        </Badge>
+                      )}
+                      {/* Authenticity review. Deliberately never says "AI-written":
+                          the band reflects provenance and duplication evidence, and
+                          the tooltip carries the reason so nobody acts on a bare badge. */}
+                      {s.metadata?.authenticity_band === "review_suggested" && (
+                        <Badge variant="warning" title={s.metadata?.authenticity_note || t.authenticity.reviewSuggestedHint}>
+                          {t.authenticity.reviewSuggested}
+                        </Badge>
+                      )}
+                      {s.metadata?.authenticity_state === "insufficient_text" && (
+                        <Badge variant="outline" title={t.authenticity.tooShortHint}>
+                          {t.authenticity.tooShortToAssess}
                         </Badge>
                       )}
                     </div>
