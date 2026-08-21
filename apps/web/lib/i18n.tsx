@@ -443,6 +443,25 @@ const en = {
     whatThisIs:
       "CLARA flags signals whose provenance or structure is unusual, and says so when a comment is too short to assess. It does not claim to know whether a person or a language model wrote any individual comment, and it never removes anything on its own.",
     disparityWarning: "Uneven flagging detected",
+    cardTitle: "Ingestion review",
+    needsReview: "need a look before triage",
+    routine: "nothing unusual found",
+    disparityBody:
+      "This review flagged {hi} signals at {hiRate} and {lo} at {loRate}. Check the flagged {hi} signals before excluding anything: uneven filtering silences some customers more than others.",
+    reasonLabels: {
+      exact_duplicate: "duplicate text",
+      declared_ai_generated: "declares AI authorship",
+      low_information: "too short to carry a theme",
+      uniform_batch_structure: "uniform batch",
+      volume_burst: "unusual volume",
+    } as Record<string, string>,
+    reasonHints: {
+      exact_duplicate: "Identical wording already exists in this workspace.",
+      declared_ai_generated: "The comment itself says it was AI-generated. Complaints about a company's chatbot do not count.",
+      low_information: "A usefulness note, not a suspicion about who wrote it.",
+      uniform_batch_structure: "Signals in one upload vary unusually little in length and structure.",
+      volume_burst: "Far more signals than this source normally sends in a day. Launches and incidents do this too.",
+    } as Record<string, string>,
   },
   insights: {
     title: "Problems",
@@ -1368,6 +1387,25 @@ const de: Dict = {
     whatThisIs:
       "CLARA markiert Signale mit ungewöhnlicher Herkunft oder Struktur und sagt es, wenn ein Kommentar zu kurz für eine Bewertung ist. Ob ein Mensch oder ein Sprachmodell einen einzelnen Kommentar geschrieben hat, behauptet CLARA nicht zu wissen – und es wird nie etwas von selbst entfernt.",
     disparityWarning: "Ungleichmäßige Markierung erkannt",
+    cardTitle: "Eingangsprüfung",
+    needsReview: "vor der Triage prüfen",
+    routine: "nichts Ungewöhnliches gefunden",
+    disparityBody:
+      "Diese Prüfung hat {hi}-Signale zu {hiRate} markiert und {lo}-Signale zu {loRate}. Prüfen Sie die markierten {hi}-Signale, bevor Sie etwas ausschließen: ungleichmäßiges Filtern bringt manche Kund:innen stärker zum Schweigen als andere.",
+    reasonLabels: {
+      exact_duplicate: "doppelter Text",
+      declared_ai_generated: "erklärt KI-Urheberschaft",
+      low_information: "zu kurz für ein Thema",
+      uniform_batch_structure: "uniformer Stapel",
+      volume_burst: "ungewöhnliches Volumen",
+    } as Record<string, string>,
+    reasonHints: {
+      exact_duplicate: "Identischer Wortlaut ist in diesem Workspace bereits vorhanden.",
+      declared_ai_generated: "Der Kommentar selbst gibt an, KI-generiert zu sein. Beschwerden über den Chatbot eines Unternehmens zählen nicht.",
+      low_information: "Ein Hinweis auf den Nutzwert, kein Verdacht über die Urheberschaft.",
+      uniform_batch_structure: "Signale eines Uploads unterscheiden sich ungewöhnlich wenig in Länge und Struktur.",
+      volume_burst: "Deutlich mehr Signale, als diese Quelle üblicherweise pro Tag sendet. Produktstarts und Störungen verursachen das ebenfalls.",
+    } as Record<string, string>,
   },
   insights: {
     title: "Probleme",
