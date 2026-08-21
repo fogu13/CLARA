@@ -1,0 +1,2 @@
+slice,n,accuracy,precision_macro,recall_macro,f1_macro,precision_weighted,recall_weighted,f1_weighted
+de,96,0.4167,0.5382,0.4375,0.4258,0.676,0.4167,0.4929

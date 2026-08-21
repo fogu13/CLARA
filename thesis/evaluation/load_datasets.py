@@ -33,6 +33,7 @@ DATASETS = {
 EXTRA_DATASETS = {
     "vodafone_de": "vodafone_de_public_feedback_test_dataset/04_vodafone_de_detailed_research_table.csv",
     "delivery_hero_eu": "delivery_hero_eu_public_feedback_test_dataset/04_delivery_hero_eu_detailed_research_table.csv",
+    "german_consumer_banks": "german_consumer_banks_public_feedback_test_dataset/04_german_consumer_banks_detailed_research_table.csv",
 }
 
 SECTOR = {
@@ -41,6 +42,7 @@ SECTOR = {
     "lieferando": "food_delivery",
     "vodafone_de": "telecom",
     "delivery_hero_eu": "food_delivery",
+    "german_consumer_banks": "consumer_banking",
 }
 
 

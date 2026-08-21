@@ -1,0 +1,114 @@
+{
+  "corpus_n": 104,
+  "datasets": [
+    "german_consumer_banks"
+  ],
+  "sentiment_baseline": {
+    "n": 100,
+    "accuracy": 0.41,
+    "precision_macro": 0.5266,
+    "recall_macro": 0.4195,
+    "f1_macro": 0.4174,
+    "precision_weighted": 0.651,
+    "recall_weighted": 0.41,
+    "f1_weighted": 0.4835
+  },
+  "sentiment_by_language": {
+    "de": {
+      "n": 96,
+      "accuracy": 0.4167,
+      "f1_macro": 0.4258
+    }
+  },
+  "sentiment_by_sector": {
+    "consumer_banking": {
+      "n": 100,
+      "accuracy": 0.41,
+      "f1_macro": 0.4174
+    }
+  },
+  "risk_baseline": {
+    "n": 104,
+    "accuracy": 0.4327,
+    "precision_macro": 0.3822,
+    "recall_macro": 0.3933,
+    "f1_macro": 0.3551,
+    "precision_weighted": 0.3931,
+    "recall_weighted": 0.4327,
+    "f1_weighted": 0.369
+  },
+  "risk_binary_escalation": {
+    "n": 104,
+    "accuracy": 0.7115,
+    "precision_macro": 0.6083,
+    "recall_macro": 0.6026,
+    "f1_macro": 0.6051,
+    "precision_weighted": 0.7042,
+    "recall_weighted": 0.7115,
+    "f1_weighted": 0.7076
+  },
+  "risk_n_datasets": [
+    "german_consumer_banks"
+  ],
+  "sentiment_ml_tfidf_lr": {
+    "n": 100,
+    "accuracy": 0.62,
+    "precision_macro": 0.4,
+    "recall_macro": 0.3879,
+    "f1_macro": 0.3816,
+    "precision_weighted": 0.56,
+    "recall_weighted": 0.62,
+    "f1_weighted": 0.5767,
+    "cv_folds": 5
+  },
+  "risk_ml_tfidf_lr": {
+    "n": 104,
+    "accuracy": 0.5192,
+    "precision_macro": 0.3705,
+    "recall_macro": 0.381,
+    "f1_macro": 0.3734,
+    "precision_weighted": 0.4828,
+    "recall_weighted": 0.5192,
+    "f1_weighted": 0.4982,
+    "cv_folds": 5
+  },
+  "llm_path": "not run (no predictions_llm.json; set AI_API_KEY and run predict_llm.py)",
+  "taxonomy_path": "not run \u2014 `python3 predict_llm.py --constrained` writes predictions_llm_taxonomy.json",
+  "escalation_recall_by_language": {
+    "de": {
+      "n_signals": 100,
+      "n_gold_escalate": 25,
+      "base_rate": 0.25,
+      "recall_floor": 0.36,
+      "recall_ml": 0.36,
+      "n_gold_escalate_ml": 25
+    }
+  },
+  "language_sector_composition": {
+    "de|consumer_banking": 100,
+    "en|consumer_banking": 3,
+    "ru|consumer_banking": 1
+  },
+  "mcnemar_paired": {
+    "sentiment": {
+      "floor_vs_ml": {
+        "n_pairs": 100,
+        "acc_floor": 0.41,
+        "acc_ml": 0.62,
+        "b_first_only_correct": 18,
+        "c_second_only_correct": 39,
+        "p_exact_two_sided": 0.007508
+      }
+    },
+    "risk": {
+      "floor_vs_ml": {
+        "n_pairs": 104,
+        "acc_floor": 0.4327,
+        "acc_ml": 0.5192,
+        "b_first_only_correct": 16,
+        "c_second_only_correct": 25,
+        "p_exact_two_sided": 0.211024
+      }
+    }
+  }
+}
