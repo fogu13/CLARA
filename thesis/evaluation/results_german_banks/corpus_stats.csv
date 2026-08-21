@@ -1,13 +1,15 @@
 dimension,value,count
-sector,consumer_banking,104
-language,de,100
-language,en,3
+sector,consumer_banking,219
+language,de,204
+language,en,12
 language,ru,1
-source,apple_app_store,60
+language,es,1
+language,bg,1
+source,apple_app_store,175
 source,trustpilot,40
 source,reddit,4
 risk_label_present,yes,104
-star_rating_present,yes,100
+star_rating_present,yes,215
 theme_distinct_labels,(open vocab),104
 journey_stage_distinct_labels,(open vocab),11
 owner_distinct_labels,(open vocab),19
