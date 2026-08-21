@@ -32,6 +32,7 @@ DATASETS = {
 # (see its README) - not thesis gold until that pass is done.
 EXTRA_DATASETS = {
     "vodafone_de": "vodafone_de_public_feedback_test_dataset/04_vodafone_de_detailed_research_table.csv",
+    "delivery_hero_eu": "delivery_hero_eu_public_feedback_test_dataset/04_delivery_hero_eu_detailed_research_table.csv",
 }
 
 SECTOR = {
@@ -39,6 +40,7 @@ SECTOR = {
     "henkel": "b2b_industrial",
     "lieferando": "food_delivery",
     "vodafone_de": "telecom",
+    "delivery_hero_eu": "food_delivery",
 }
 
 
