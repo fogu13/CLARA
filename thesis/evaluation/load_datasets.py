@@ -25,10 +25,20 @@ DATASETS = {
     "lieferando": "lieferando_public_feedback_test_dataset/04_lieferando_detailed_research_table.csv",
 }
 
+# Datasets OUTSIDE the frozen thesis corpus. The thesis's 188-signal numbers
+# stay untouched unless a dataset is explicitly opted in via THESIS_DATASETS
+# (comma-separated keys drawn from DATASETS + EXTRA_DATASETS). The Vodafone
+# set's seed labels are draft, assistant-authored, pending author review
+# (see its README) - not thesis gold until that pass is done.
+EXTRA_DATASETS = {
+    "vodafone_de": "vodafone_de_public_feedback_test_dataset/04_vodafone_de_detailed_research_table.csv",
+}
+
 SECTOR = {
     "trade_republic": "fintech",
     "henkel": "b2b_industrial",
     "lieferando": "food_delivery",
+    "vodafone_de": "telecom",
 }
 
 
@@ -54,8 +64,19 @@ def _int_or_none(s: str) -> Optional[int]:
 
 
 def load() -> list[Signal]:
+    selected = os.environ.get("THESIS_DATASETS", "").strip()
+    if selected:
+        registry = {**DATASETS, **EXTRA_DATASETS}
+        chosen = {}
+        for key in selected.split(","):
+            key = key.strip()
+            if key not in registry:
+                raise SystemExit(f"unknown dataset key {key!r}; known: {sorted(registry)}")
+            chosen[key] = registry[key]
+    else:
+        chosen = DATASETS  # the frozen thesis corpus (188 signals)
     out: list[Signal] = []
-    for name, rel in DATASETS.items():
+    for name, rel in chosen.items():
         path = os.path.join(THESIS_CHATGPT, rel)
         with open(path, encoding="utf-8-sig", newline="") as fh:
             for r in csv.DictReader(fh):

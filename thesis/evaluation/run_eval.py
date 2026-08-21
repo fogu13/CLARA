@@ -29,7 +29,9 @@ import baseline as bl
 import metrics as M
 import ml_baseline as ml
 
-RESULTS = os.path.join(os.path.dirname(__file__), "results")
+# THESIS_RESULTS_DIR lets exploratory runs (e.g. THESIS_DATASETS=vodafone_de)
+# write elsewhere, so the committed thesis results/ are never overwritten.
+RESULTS = os.environ.get("THESIS_RESULTS_DIR") or os.path.join(os.path.dirname(__file__), "results")
 SENT_LABELS = ["negative", "neutral", "positive"]
 RISK_LABELS = ["low", "medium", "high", "critical"]
 

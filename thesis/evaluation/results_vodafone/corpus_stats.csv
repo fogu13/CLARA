@@ -1,0 +1,12 @@
+dimension,value,count
+sector,telecom,65
+language,de,46
+language,en,19
+source,trustpilot,31
+source,apple_app_store,21
+source,reddit,13
+risk_label_present,yes,65
+star_rating_present,yes,52
+theme_distinct_labels,(open vocab),65
+journey_stage_distinct_labels,(open vocab),10
+owner_distinct_labels,(open vocab),18
