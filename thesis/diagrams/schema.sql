@@ -1,4 +1,4 @@
--- Core data model — runnable, modifiable Postgres DDL (matches diagrams/06_data_model_er.mmd).
+-- Core data model: runnable, modifiable Postgres DDL (matches diagrams/06_data_model_er.mmd).
 -- CLARA data model (Postgres + pgvector).
 -- Multi-tenant by construction: every domain row carries workspace_id and is protected by RLS.
 -- pgvector columns power semantic retrieval; the token-overlap fallback works without them.

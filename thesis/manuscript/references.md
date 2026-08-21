@@ -108,7 +108,7 @@ Few, S. (2006). *Information Dashboard Design*. O'Reilly Media.
 
 Fielding, R. T. (2000). *Architectural Styles and the Design of Network-Based Software Architectures*. Doctoral dissertation, UC Irvine.
 
-Floridi, L., Cowls, J., Beltrametti, M., Chatila, R., Chazerand, P., Dignum, V., ... & Vayena, E. (2018). AI4People—An ethical framework for a good AI society: Opportunities, risks, principles, and recommendations. *Minds and Machines*, 28(4), 689–707.
+Floridi, L., Cowls, J., Beltrametti, M., Chatila, R., Chazerand, P., Dignum, V., ... & Vayena, E. (2018). AI4People–An ethical framework for a good AI society: Opportunities, risks, principles, and recommendations. *Minds and Machines*, 28(4), 689–707.
 
 Forgy, C. L. (1982). Rete: A fast algorithm for pattern matching. *Artificial Intelligence*, 19(1), 17–37.
 
@@ -348,7 +348,7 @@ Gartner. (2026). *Magic Quadrant for Voice of the Customer platforms*. Gartner, 
 
 Halperin, B., Ho, B., List, J. A., & Muir, I. (2022). Toward an understanding of the economics of apologies: Evidence from a large-scale natural field experiment. *The Economic Journal*, 132(641), 273–298.
 
-Gibson Dunn. (2026). *EU AI Act Omnibus agreement — Postponed high-risk deadlines and other key changes*. https://www.gibsondunn.com/eu-ai-act-omnibus-agreement-postponed-high-risk-deadlines-and-other-key-changes/
+Gibson Dunn. (2026). *EU AI Act Omnibus agreement – Postponed high-risk deadlines and other key changes*. https://www.gibsondunn.com/eu-ai-act-omnibus-agreement-postponed-high-risk-deadlines-and-other-key-changes/
 
 Gu, J., Jiang, X., Shi, Z., Tan, H., Zhai, X., Xu, C., ... & Wang, J. (2025). *A survey on LLM-as-a-judge*. arXiv:2411.15594.
 

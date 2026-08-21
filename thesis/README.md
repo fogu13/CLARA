@@ -35,13 +35,13 @@ The manuscript previously described **one system with two implementations** (Odr
 
 APA 7, author–date in text, consolidated in `manuscript/references.md`. Compile with the `docx` skill (chapters concatenated in numeric order → `build/thesis.docx`, with heading hierarchy, ToC, and figures).
 
-`build/thesis.docx` and `build/thesis_combined.md` were rebuilt **7 Aug 2026** via `bash build_docx.sh` (pandoc). The §3.5.5 display math (`$$…$$`) is confirmed rendering as native Word equations — 15 `<m:oMath>` elements, no raw TeX leaking as literal text. Rebuild again after any manuscript edit before circulating.
+`build/thesis.docx` and `build/thesis_combined.md` were rebuilt **20 Aug 2026** via `bash build_docx.sh` (pandoc 3.9 via pypandoc-binary). This build follows a full manuscript line edit (20 Aug 2026): plainer authorial voice, zero em dashes anywhere in the compiled document (manuscript, appendices, instruments, schema comment), with content, claims and numbers unchanged and verified per file against git HEAD (numbers, section refs, links, code spans and headings all preserved by an automated check). The §3.5.5 display math (`$$…$$`) renders as native Word equations (13 `<m:oMath>` elements, no raw TeX leaking as literal text). Rebuild again after any manuscript edit before circulating.
 
 ## Evaluation data
 
 The quantitative evaluation uses **only the real, publicly-sourced** brand datasets in `~/Documents/Thesis_ChatGPT/` (not in this repo). The harness resolves them via the `THESIS_DATA_DIR` env var, defaulting to `../../../Thesis_ChatGPT` relative to `evaluation/` (path updated for this folder's location). The synthetic sets are **excluded by design** and must not enter the evaluation corpus.
 
-Related but separate: `apps/api/app/evals/` is the platform's own committed LLM evaluation (100-case bilingual golden set + `history.jsonl` ledger + `published_metrics.json`) — reported in the manuscript as convergent evidence (§5A.7), never merged into the §5A tables (different gold standards).
+Related but separate: `apps/api/app/evals/` is the platform's own committed LLM evaluation (100-case bilingual golden set + `published_metrics.json`; the `history.jsonl` run ledger stays local, excluded by `evals/.gitignore`) — reported in the manuscript as convergent evidence (§5A.7), never merged into the §5A tables (different gold standards).
 
 ## Author TODOs (pre-submission)
 

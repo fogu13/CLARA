@@ -1,6 +1,6 @@
-# Supplementary Survey — "How feedback becomes action"
+# Supplementary Survey: "How feedback becomes action"
 
-A short, anonymous survey that confirms the **current-practice** and **attitude** hypotheses (H1, H2, H4, H5, H6, H7, H8) at breadth, complementing the 12–15 in-depth interviews. Target: **~3 minutes, 8 items**, most of the weight in one matrix. It does **not** replace the interviews/task sessions (those carry the prototype-reaction and task-metric evidence) or the gold set (H3). Self-report attitudinal data confirms *perceived* gaps — consistent with the design-validity stance (Ch 3, §3.10).
+A short, anonymous survey that confirms the **current-practice** and **attitude** hypotheses (H1, H2, H4, H5, H6, H7, H8) at breadth, complementing the 12–15 in-depth interviews. Target: **~3 minutes, 8 items**, most of the weight in one matrix. It does **not** replace the interviews/task sessions (those carry the prototype-reaction and task-metric evidence) or the gold set (H3). Self-report attitudinal data confirms *perceived* gaps, consistent with the design-validity stance (Ch 3, §3.10).
 
 > **Design rule applied:** one question = one (or more) hypotheses; no question that doesn't map to a hypothesis. Statements are kept behavioural/concrete to limit acquiescence bias; one frequency item and one count item give non-Likert corroboration; reverse-phrasing is avoided to keep it fast but the acquiescence limitation is reported.
 
@@ -17,7 +17,7 @@ A short, anonymous survey that confirms the **current-practice** and **attitude*
 - **S2. Company size?** ☐ 1–9 ☐ 10–50 ☐ 51–200 ☐ 201–500 ☐ 500+
 - **S3. Do you work with customer feedback (surveys, tickets, reviews, etc.)?** ☐ Yes, regularly ☐ Occasionally ☐ No *(if No → thank-you + end)*
 
-**Q1. How much do you agree? (Strongly disagree · Disagree · Neutral · Agree · Strongly agree)** *— single matrix*
+**Q1. How much do you agree? (Strongly disagree · Disagree · Neutral · Agree · Strongly agree)** *(single matrix)*
 
 | # | Statement | Hyp. |
 |---|-----------|------|
@@ -31,11 +31,11 @@ A short, anonymous survey that confirms the **current-practice** and **attitude*
 
 **Q2. Roughly how many separate tools/sources does your customer feedback live in?** ☐ 1 ☐ 2–3 ☐ 4–6 ☐ 7+ *(corroborates **H2**)*
 
-**Q3. After your team acts on customer feedback, how often do you measure whether it actually resolved the issue?** ☐ Never ☐ Rarely ☐ Sometimes ☐ Usually ☐ Always *(corroborates **H8** — "rarely practised")*
+**Q3. After your team acts on customer feedback, how often do you measure whether it actually resolved the issue?** ☐ Never ☐ Rarely ☐ Sometimes ☐ Usually ☐ Always *(corroborates **H8**, "rarely practised")*
 
 **Q4. (Optional, one line) Where does customer feedback most often get *stuck* on its way to action?** ____________________ *(rich qualitative; feeds §5B inductive themes)*
 
-**Q5. (Optional) Open to a 20-min follow-up chat? Leave an email — optional.** ____________________ *(the only field that can collect contact; on Reddit, tell people to skip it)*
+**Q5. (Optional) Open to a 20-min follow-up chat? Leave an email (optional).** ____________________ *(the only field that can collect contact; on Reddit, tell people to skip it)*
 
 That's **3 screeners + 1 matrix (7 rows) + 2 quick + 1 open + 1 opt-in**.
 
@@ -63,24 +63,24 @@ These results drop straight into **Ch 5 §5B** as a quantitative complement to t
 ## C. Distribution
 
 ### Tool
-Use **Tally.so** (free, clean on mobile, anonymous by default) or **Google Forms** (turn **Settings → "Collect email addresses" = OFF**). Both give a public link and a CSV export. Avoid a self-hosted form — Reddit users distrust unfamiliar data-collection links; a recognised form host raises completion.
+Use **Tally.so** (free, clean on mobile, anonymous by default) or **Google Forms** (turn **Settings → "Collect email addresses" = OFF**). Both give a public link and a CSV export. Avoid a self-hosted form; Reddit users distrust unfamiliar data-collection links; a recognised form host raises completion.
 
 ### Reddit (anonymous both ways)
-- **Where:** post in subreddits whose rules allow surveys — **r/SampleSize** (the dedicated survey sub; use its title format), and value-first in **r/CustomerSuccess, r/ProductManagement, r/marketing, r/analytics, r/SaaS, r/CustomerExperience**. **Read each sub's rules first** — many require survey flair, a specific weekly thread, or ban links; some require you to be an active contributor.
+- **Where:** post in subreddits whose rules allow surveys: **r/SampleSize** (the dedicated survey sub; use its title format), and value-first in **r/CustomerSuccess, r/ProductManagement, r/marketing, r/analytics, r/SaaS, r/CustomerExperience**. **Read each sub's rules first**; many require survey flair, a specific weekly thread, or ban links; some require you to be an active contributor.
 - **Anonymity:** collect **zero** PII; tell people to skip Q5. Don't ask for company name.
 - **Post (r/SampleSize title format):**
-  > **[Academic] Marketing/Product/CX professionals — how does your team turn customer feedback into action? (~3 min, anonymous)**
+  > **[Academic] Marketing/Product/CX professionals: how does your team turn customer feedback into action? (~3 min, anonymous)**
   >
   > MSc (Responsible AI) research on where customer feedback stalls before it becomes action. Anonymous, ~3 min, no email needed, no sales. I'll share the aggregate findings in this thread. [link]
 - **Etiquette:** reply to comments, post results back (Reddit rewards reciprocity), don't spam-crosspost the same day.
 
 ### LinkedIn (they know you; responders anonymous)
 - **Feed post (from your profile):**
-  > For my MSc thesis (Responsible AI), I'm researching a problem I keep seeing: teams *collect* tons of customer feedback but struggle to *act* on it — and rarely measure whether the action worked.
+  > For my MSc thesis (Responsible AI), I'm researching a problem I keep seeing: teams *collect* tons of customer feedback but struggle to *act* on it, and rarely measure whether the action worked.
   >
-  > If you work in marketing, product, or CX, I'd hugely value **3 anonymous minutes**: [link]. No names, no pitch — I'll share what I find. A repost would mean a lot. 🙏
+  > If you work in marketing, product, or CX, I'd hugely value **3 anonymous minutes**: [link]. No names, no pitch, and I'll share what I find. A repost would mean a lot. 🙏
 - **Targeted DM (warmer, higher response):**
-  > Hi [Name] — doing MSc research on how teams act on customer feedback (and where it stalls). Could I borrow **3 anonymous minutes**? [link]. It's anonymous and I'll send you the findings. No worries if not!
+  > Hi [Name], doing MSc research on how teams act on customer feedback (and where it stalls). Could I borrow **3 anonymous minutes**? [link]. It's anonymous and I'll send you the findings. No worries if not!
 - **Anonymity:** the form itself collects no identity, so even though *you* are known as the sender, *responses* are anonymous. Don't enable LinkedIn-poll or any feature that ties responses to profiles.
 
 > **Tip:** use the **same form** for both channels but **two different links** (Tally lets you duplicate, or append `?src=reddit` / `?src=linkedin`) so you can compare channels and report response source in the thesis.
@@ -95,4 +95,4 @@ Use **Tally.so** (free, clean on mobile, anonymous by default) or **Google Forms
 
 **Ethics fit:** anonymous, voluntary, consented, no special-category data, GDPR lawful basis = consent (matches Appendix C). Q5 (optional email) is the only identifier and is used solely to invite interviews; store it separately from survey answers and delete after recruitment.
 
-**Limitations to state in the thesis:** self-report and attitudinal (not observed behaviour); convenience sample skewed to Reddit/LinkedIn audiences; single-statement-per-construct and no reverse-coding, so acquiescence bias is possible; H6/H7 are *hypothetical* comfort, not observed trust — the interviews/task sessions remain the stronger test for those.
+**Limitations to state in the thesis:** self-report and attitudinal (not observed behaviour); convenience sample skewed to Reddit/LinkedIn audiences; single-statement-per-construct and no reverse-coding, so acquiescence bias is possible; H6/H7 are *hypothetical* comfort, not observed trust; the interviews/task sessions remain the stronger test for those.
