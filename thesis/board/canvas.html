@@ -1,0 +1,488 @@
+<title>The Governed Loop</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<style>
+:root {
+    --ground:#FAFBFE; --grid:#E2E9F7; --surface:#FFFFFF; --bar:#FFFFFFEE;
+    --ink:#171B2E; --mute:#5A6478; --brand:#1E2761; --rule:#DCE4F4;
+    --flow:#1E2761; --ret:#2C5F2D; --plain:#7A879F;
+    --shadow:0 1px 2px rgba(23,27,46,.06),0 10px 26px rgba(23,27,46,.08);
+    --k-llm-fill:#E4EDFD; --k-llm-line:#3B6EA5; --k-llm-ink:#1B3552;
+    --k-det-fill:#FFFFFF; --k-det-line:#6B7488; --k-det-ink:#1A1A2E;
+    --k-gov-fill:#FDE4E4; --k-gov-line:#C0392B; --k-gov-ink:#75201C;
+    --k-ext-fill:#EFF1F5; --k-ext-line:#98A0AE; --k-ext-ink:#3D4453;
+    --k-data-fill:#F3F6FD; --k-data-line:#2B3A78; --k-data-ink:#22306E;
+    --k-fact-fill:#FFFFFF; --k-fact-line:#B9CDF2; --k-fact-ink:#1A1A2E;
+    --k-good-fill:#E6F3E8; --k-good-line:#2C5F2D; --k-good-ink:#1C4520;
+    --k-warn-fill:#FDF2F2; --k-warn-line:#9E0715; --k-warn-ink:#75201C;
+    --k-navy-fill:#1E2761; --k-navy-line:#0E1440; --k-navy-ink:#FFFFFF;
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,"Segoe UI",sans-serif;
+  --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --ground:#0E1220; --grid:#1B2139; --surface:#161B2E; --bar:#111629EE;
+    --ink:#E4E8F5; --mute:#97A1BC; --brand:#A8BCF5; --rule:#262E4A;
+    --flow:#8FA3E8; --ret:#6FAE72; --plain:#5E6A85;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 30px rgba(0,0,0,.4);
+    --k-llm-fill:#17243F; --k-llm-line:#5285C0; --k-llm-ink:#C3D7F7;
+    --k-det-fill:#1B2138; --k-det-line:#778296; --k-det-ink:#DFE4F2;
+    --k-gov-fill:#331A1A; --k-gov-line:#C85C4E; --k-gov-ink:#F5CDC8;
+    --k-ext-fill:#1D2233; --k-ext-line:#727C90; --k-ext-ink:#C7CEDE;
+    --k-data-fill:#171D33; --k-data-line:#7889CC; --k-data-ink:#CAD3F2;
+    --k-fact-fill:#171C2F; --k-fact-line:#3A456A; --k-fact-ink:#DFE4F2;
+    --k-good-fill:#16281A; --k-good-line:#548E56; --k-good-ink:#C4E3C6;
+    --k-warn-fill:#2C1518; --k-warn-line:#B84A54; --k-warn-ink:#F2C8CC;
+    --k-navy-fill:#242E6B; --k-navy-line:#5765B8; --k-navy-ink:#EEF1FF; } }
+:root[data-theme="dark"] {
+    --ground:#0E1220; --grid:#1B2139; --surface:#161B2E; --bar:#111629EE;
+    --ink:#E4E8F5; --mute:#97A1BC; --brand:#A8BCF5; --rule:#262E4A;
+    --flow:#8FA3E8; --ret:#6FAE72; --plain:#5E6A85;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 30px rgba(0,0,0,.4);
+    --k-llm-fill:#17243F; --k-llm-line:#5285C0; --k-llm-ink:#C3D7F7;
+    --k-det-fill:#1B2138; --k-det-line:#778296; --k-det-ink:#DFE4F2;
+    --k-gov-fill:#331A1A; --k-gov-line:#C85C4E; --k-gov-ink:#F5CDC8;
+    --k-ext-fill:#1D2233; --k-ext-line:#727C90; --k-ext-ink:#C7CEDE;
+    --k-data-fill:#171D33; --k-data-line:#7889CC; --k-data-ink:#CAD3F2;
+    --k-fact-fill:#171C2F; --k-fact-line:#3A456A; --k-fact-ink:#DFE4F2;
+    --k-good-fill:#16281A; --k-good-line:#548E56; --k-good-ink:#C4E3C6;
+    --k-warn-fill:#2C1518; --k-warn-line:#B84A54; --k-warn-ink:#F2C8CC;
+    --k-navy-fill:#242E6B; --k-navy-line:#5765B8; --k-navy-ink:#EEF1FF; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--ground); color: var(--ink);
+  font-family: var(--sans); -webkit-font-smoothing: antialiased; overflow: hidden;
+}
+.sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+
+/* ---------- chrome ---------- */
+.bar {
+  position: fixed; inset: 0 0 auto 0; z-index: 40; height: 58px;
+  display: flex; align-items: center; gap: 14px; padding: 0 16px;
+  background: var(--bar); backdrop-filter: blur(10px); border-bottom: 1px solid var(--rule);
+}
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand h1 {
+  font-family: var(--serif); font-size: 17px; font-weight: 700; margin: 0;
+  color: var(--brand); letter-spacing: -.01em; white-space: nowrap;
+}
+.brand span { font-size: 12px; color: var(--mute); white-space: nowrap; }
+@media (max-width: 900px) { .brand span { display: none; } }
+.nav { display: flex; gap: 6px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
+.nav::-webkit-scrollbar { display: none; }
+button { font: inherit; color: inherit; }
+.nav-zone, .tool {
+  display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+  padding: 7px 11px; border-radius: 7px; border: 1px solid var(--rule);
+  background: var(--surface); font-size: 12.5px; cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.nav-zone:hover, .tool:hover { border-color: var(--brand); color: var(--brand); }
+.nav-zone[aria-current="true"] { border-color: var(--brand); color: var(--brand); font-weight: 600; }
+.nav-n {
+  font-family: var(--mono); font-size: 10.5px; width: 17px; height: 17px;
+  display: grid; place-items: center; border-radius: 4px;
+  background: var(--brand); color: var(--surface);
+}
+.tools { display: flex; gap: 6px; }
+.tool { padding: 7px 10px; font-family: var(--mono); }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+
+/* ---------- canvas ---------- */
+.stage {
+  position: fixed; inset: 58px 0 0 0; overflow: hidden; cursor: grab;
+  background-color: var(--ground);
+  background-image: radial-gradient(var(--grid) 1.5px, transparent 1.5px);
+  background-size: 34px 34px; touch-action: none;
+}
+.stage.dragging { cursor: grabbing; }
+.plane {
+  position: absolute; top: 0; left: 0; transform-origin: 0 0;
+  transition: transform .42s cubic-bezier(.4, 0, .2, 1);
+}
+.plane.instant { transition: none; }
+
+.zone {
+  position: absolute; border: 2px solid var(--rule); border-radius: 40px;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+.zone-head { padding: 90px 100px 0; }
+.zone-head h2 {
+  font-family: var(--serif); font-weight: 700; font-size: 150px; margin: 0 0 28px;
+  color: var(--brand); letter-spacing: -.02em; line-height: 1.02; text-wrap: balance;
+}
+.zone-head p { margin: 0; font-size: 62px; line-height: 1.35; color: var(--mute); max-width: 60ch; }
+
+.band {
+  position: absolute; border-radius: 30px;
+  background: color-mix(in srgb, var(--line) 9%, transparent);
+  border: 2px dashed color-mix(in srgb, var(--line) 34%, transparent);
+}
+.band span {
+  position: absolute; left: 34px; bottom: -62px; font-size: 34px; font-weight: 600;
+  letter-spacing: .05em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--line) 72%, transparent);
+}
+
+.wires { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; }
+.wire { fill: none; stroke-linejoin: round; stroke-linecap: round; transition: opacity .18s; }
+.wire--flow { stroke: var(--flow); stroke-width: 9; }
+.wire--plain { stroke: var(--plain); stroke-width: 6; }
+.wire--return { stroke: var(--ret); stroke-width: 7; stroke-dasharray: 26 20; }
+.tip-flow { fill: var(--flow); }
+.tip-plain { fill: var(--plain); }
+.tip-return { fill: var(--ret); }
+.wire-label {
+  font-family: var(--sans); font-size: 32px; font-weight: 500; fill: var(--mute);
+  stroke: var(--ground); stroke-width: 10; paint-order: stroke fill;
+  transition: fill .18s, opacity .18s;
+}
+
+.card {
+  position: absolute; border-radius: 26px; padding: 30px 34px 32px;
+  border: 3px solid var(--line); background: var(--fill); color: var(--fg);
+  box-shadow: var(--shadow); transition: transform .16s, box-shadow .16s, opacity .18s;
+}
+.card h3 { font-size: 44px; font-weight: 600; margin: 0 0 16px; letter-spacing: -.015em; line-height: 1.15; }
+.card .metric {
+  font-family: var(--mono); font-size: 92px; font-weight: 600; line-height: 1;
+  margin: 0 0 14px; letter-spacing: -.03em; font-variant-numeric: tabular-nums;
+}
+.card .lede { font-size: 30px; line-height: 1.42; margin: 0 0 16px; }
+.card .note {
+  font-size: 24px; line-height: 1.4; margin: 0; opacity: .74;
+  border-top: 2px solid color-mix(in srgb, currentColor 20%, transparent); padding-top: 14px;
+}
+.card > :last-child { margin-bottom: 0; }
+.card:hover, .card:focus-visible {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 12px rgba(23,27,46,.12), 0 28px 60px rgba(23,27,46,.16);
+}
+
+.step {
+  position: absolute; top: -34px; left: -34px; width: 96px; height: 96px;
+  border-radius: 50%; background: var(--line); color: var(--fill);
+  display: grid; place-items: center; font-family: var(--mono);
+  font-size: 46px; font-weight: 600; box-shadow: var(--shadow);
+}
+.k-navy .step { color: #FFFFFF; }
+
+.tw { overflow-x: auto; margin: 0 0 18px; }
+/* color and font are set explicitly rather than inherited: with no doctype in the
+   file, a browser opening canvas.html directly runs in quirks mode, where tables
+   do not inherit either, and the result tables render dark on the navy cards. */
+table {
+  border-collapse: collapse; width: 100%; color: inherit;
+  font-family: var(--sans); font-size: 28px; line-height: 1.35;
+}
+th, td {
+  color: inherit; text-align: left; padding: 12px 22px 12px 0;
+  border-bottom: 2px solid color-mix(in srgb, currentColor 22%, transparent);
+}
+thead th { font-weight: 600; font-size: 24px; text-transform: uppercase; letter-spacing: .06em; opacity: .72; }
+tbody tr:last-child td { border-bottom: 0; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+thead .num { font-family: var(--sans); }
+
+.k-llm  { --fill: var(--k-llm-fill);  --line: var(--k-llm-line);  --fg: var(--k-llm-ink); }
+.k-det  { --fill: var(--k-det-fill);  --line: var(--k-det-line);  --fg: var(--k-det-ink); }
+.k-gov  { --fill: var(--k-gov-fill);  --line: var(--k-gov-line);  --fg: var(--k-gov-ink); }
+.k-ext  { --fill: var(--k-ext-fill);  --line: var(--k-ext-line);  --fg: var(--k-ext-ink); }
+.k-data { --fill: var(--k-data-fill); --line: var(--k-data-line); --fg: var(--k-data-ink); }
+.k-fact { --fill: var(--k-fact-fill); --line: var(--k-fact-line); --fg: var(--k-fact-ink); }
+.k-good { --fill: var(--k-good-fill); --line: var(--k-good-line); --fg: var(--k-good-ink); }
+.k-warn { --fill: var(--k-warn-fill); --line: var(--k-warn-line); --fg: var(--k-warn-ink); }
+.k-navy { --fill: var(--k-navy-fill); --line: var(--k-navy-line); --fg: var(--k-navy-ink); }
+
+.plane.tracing .card:not(.lit) { opacity: .28; }
+.plane.tracing .band { opacity: .3; }
+.plane.tracing .wire:not(.lit), .plane.tracing .wire-label:not(.lit) { opacity: .1; }
+.plane.tracing .wire.lit { stroke: var(--brand); stroke-width: 13; }
+.plane.tracing .wire-label.lit { fill: var(--brand); }
+
+/* ---------- legend ---------- */
+.legend {
+  position: fixed; left: 14px; bottom: 14px; z-index: 30; max-width: 340px;
+  background: var(--bar); backdrop-filter: blur(10px);
+  border: 1px solid var(--rule); border-radius: 12px; padding: 12px 14px;
+  font-size: 12px; box-shadow: var(--shadow);
+}
+.legend summary { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); font-weight: 600; cursor: pointer; list-style: none; }
+.legend summary::-webkit-details-marker { display: none; }
+.legend summary::after { content: " +"; font-family: var(--mono); }
+.legend[open] summary::after { content: " \2212"; }
+.legend[open] summary { margin-bottom: 9px; }
+.legend ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.legend li { display: flex; gap: 9px; align-items: flex-start; line-height: 1.4; }
+.sw { flex: 0 0 auto; width: 15px; height: 15px; border-radius: 4px; margin-top: 1px; background: var(--fill); border: 2px solid var(--line); }
+.legend footer { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--rule); color: var(--mute); font-size: 11px; line-height: 1.45; }
+.legend kbd { font-family: var(--mono); font-size: 10.5px; border: 1px solid var(--rule); border-radius: 3px; padding: 0 4px; }
+@media (max-width: 720px) { .legend { display: none; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="bar">
+  <div class="brand"><h1>The Governed Loop</h1><span>Closing the Loop, Building the Memory</span></div>
+  <nav class="nav" aria-label="Zones"><button type="button" class="nav-zone" data-goto="z1"><span class="nav-n">1</span>The loop</button><button type="button" class="nav-zone" data-goto="z2"><span class="nav-n">2</span>Governance</button><button type="button" class="nav-zone" data-goto="z3"><span class="nav-n">3</span>Evidence</button><button type="button" class="nav-zone" data-goto="z4"><span class="nav-n">4</span>Schema</button></nav>
+  <div class="tools">
+    <button type="button" class="tool" id="fit" title="Fit the whole board (0)">Fit</button>
+    <button type="button" class="tool" id="zout" title="Zoom out (-)">&minus;</button>
+    <button type="button" class="tool" id="zin" title="Zoom in (+)">+</button>
+  </div>
+</header>
+
+<div class="sr">
+  <h2>What this board shows</h2>
+  <p>The thesis on one canvas. Four zones: how the loop runs, how it is governed, what the evidence says, and how the schema enforces it. Every number here is read from the repository. Sources are named on the cards that carry them.</p>
+  <ol><li><strong>1. The governed loop, as it runs.</strong> Signal in, approved action out, outcome measured against a contract, learning kept and retrieved on the next decision. Order: Feedback sources then Ingestion then Enrichment then Synthesis then Rule evaluation then Risk gate then Approval interrupt then Execute then External systems then Outcome contract then Measurement then Closure, three levels then Learning store.</li><li><strong>2. Governance, mapped onto the same loop.</strong> Responsible AI is a property of the loop rather than a module beside it. Each control names the stage it governs. Order: Article 14, human oversight then Article 12, logging then Article 50, transparency then Article 3(39), scope boundary then GDPR then Model sovereignty then The regulation moved under the build then Governance of the research itself then Ingestion authenticity review then The capability it refuses.</li><li><strong>3. The evidence map.</strong> Every claim, its status, and the file that produced it. This is the honesty device: a status is stated once and every chapter has to agree with it. Order: The thesis corpus then The second gold standard, kept apart then Held out on purpose then Result 1. Triage accuracy depends on the method then Result 2. Whose problems reach a human then Result 3. Routing then Result 4. The learning memory then What is still open then Result 5. A detector, measured and refused.</li><li><strong>4. The schema is the argument.</strong> The thesis&#x27;s two primitives are tables with foreign keys rather than prose. Closure is referential integrity, and memory is a column that decays. Order: signals then problems then rules then actions_log then approval_records then outcome_contracts then outcome_measurements then ab_learnings then taxonomy_nodes.</li></ol>
+</div>
+
+<main class="stage" id="stage" role="application" aria-label="Pan and zoom board of the thesis. Drag to pan, hold control and scroll to zoom, press 1 to 4 to jump between zones.">
+  <div class="plane" id="plane" style="width:20196px;height:9178px">
+    <section class="zone" id="z1" style="left:700px;top:700px;width:9054px;height:2982px"><header class="zone-head"><h2>1. The governed loop, as it runs</h2><p>Signal in, approved action out, outcome measured against a contract, learning kept and retrieved on the next decision.</p></header></section>
+<section class="zone" id="z2" style="left:700px;top:4944px;width:9188px;height:3534px"><header class="zone-head"><h2>2. Governance, mapped onto the same loop</h2><p>Responsible AI is a property of the loop rather than a module beside it. Each control names the stage it governs.</p></header></section>
+<section class="zone" id="z3" style="left:10308px;top:700px;width:9188px;height:3824px"><header class="zone-head"><h2>3. The evidence map</h2><p>Every claim, its status, and the file that produced it. This is the honesty device: a status is stated once and every chapter has to agree with it.</p></header></section>
+<section class="zone" id="z4" style="left:10308px;top:4944px;width:9188px;height:3212px"><header class="zone-head"><h2>4. The schema is the argument</h2><p>The thesis&#x27;s two primitives are tables with foreign keys rather than prose. Closure is referential integrity, and memory is a column that decays.</p></header></section>
+    <div class="band k-llm" style="left:732px;top:1140px;width:8912px;height:420px"><span>Signal to action</span></div>
+<div class="band k-good" style="left:4098px;top:2466px;width:4424px;height:530px"><span>Action to learning, and back into the next decision</span></div>
+    <svg class="wires" width="20196" height="9178" viewBox="0 0 20196 9178" aria-hidden="true">
+      <defs>
+        <marker id="tip-flow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path class="tip-flow" d="M 0 1 L 10 5 L 0 9 z" /></marker>
+        <marker id="tip-plain" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path class="tip-plain" d="M 0 1 L 10 5 L 0 9 z" /></marker>
+        <marker id="tip-return" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path class="tip-return" d="M 0 1 L 10 5 L 0 9 z" /></marker>
+      </defs>
+      <path class="wire wire--flow" d="M 1720 1350.0 L 1774.0 1350.0 Q 1790 1350.0 1806.0 1350.0 L 1806.0 1350.0 Q 1822.0 1350.0 1838.0 1350.0 L 1838.0 1350.0 Q 1854 1350.0 1870.0 1350.0 L 1924 1350.0" marker-end="url(#tip-flow)" data-from="src" data-to="ing" />
+<path class="wire wire--flow" d="M 2842 1350.0 L 2896.0 1350.0 Q 2912 1350.0 2928.0 1350.0 L 2928.0 1350.0 Q 2944.0 1350.0 2960.0 1350.0 L 2960.0 1350.0 Q 2976 1350.0 2992.0 1350.0 L 3046 1350.0" marker-end="url(#tip-flow)" data-from="ing" data-to="enr" />
+<path class="wire wire--flow" d="M 3964 1350.0 L 4018.0 1350.0 Q 4034 1350.0 4050.0 1350.0 L 4050.0 1350.0 Q 4066.0 1350.0 4082.0 1350.0 L 4082.0 1350.0 Q 4098 1350.0 4114.0 1350.0 L 4168 1350.0" marker-end="url(#tip-flow)" data-from="enr" data-to="syn" />
+<path class="wire wire--flow" d="M 5086 1350.0 L 5140.0 1350.0 Q 5156 1350.0 5172.0 1350.0 L 5172.0 1350.0 Q 5188.0 1350.0 5204.0 1350.0 L 5204.0 1350.0 Q 5220 1350.0 5236.0 1350.0 L 5290 1350.0" marker-end="url(#tip-flow)" data-from="syn" data-to="rul" />
+<path class="wire wire--flow" d="M 6208 1350.0 L 6262.0 1350.0 Q 6278 1350.0 6294.0 1350.0 L 6294.0 1350.0 Q 6310.0 1350.0 6326.0 1350.0 L 6326.0 1350.0 Q 6342 1350.0 6358.0 1350.0 L 6412 1350.0" marker-end="url(#tip-flow)" data-from="rul" data-to="gate" />
+<path class="wire wire--flow" d="M 7330 1350.0 L 7384.0 1350.0 Q 7400 1350.0 7416.0 1350.0 L 7416.0 1350.0 Q 7432.0 1350.0 7448.0 1350.0 L 7448.0 1350.0 Q 7464 1350.0 7480.0 1350.0 L 7534 1350.0" marker-end="url(#tip-flow)" data-from="gate" data-to="apr" />
+<path class="wire wire--flow" d="M 8452 1350.0 L 8506.0 1350.0 Q 8522 1350.0 8538.0 1350.0 L 8538.0 1350.0 Q 8554.0 1350.0 8570.0 1350.0 L 8570.0 1350.0 Q 8586 1350.0 8602.0 1350.0 L 8656 1350.0" marker-end="url(#tip-flow)" data-from="apr" data-to="exe" />
+<path class="wire wire--plain" d="M 9115.0 1490 L 9115.0 1538.0 Q 9115.0 1560 9115.0 1582.0 L 9115.0 1668.0 Q 9115.0 1690.0 9115.0 1712.0 L 9115.0 1798.0 Q 9115.0 1820 9115.0 1842.0 L 9115.0 1890" marker-end="url(#tip-plain)" data-from="exe" data-to="ext1" />
+<path class="wire wire--flow" d="M 7993.0 1490 L 7993.0 1538.0 Q 7993.0 1560 7993.0 1582.0 L 7993.0 1991.0 Q 7993.0 2013.0 7993.0 2035.0 L 7993.0 2444.0 Q 7993.0 2466 7993.0 2488.0 L 7993.0 2536" marker-end="url(#tip-flow)" data-from="apr" data-to="con" />
+<path class="wire wire--flow" d="M 7534 2731.0 L 7480.0 2731.0 Q 7464 2731.0 7448.0 2731.0 L 7448.0 2731.0 Q 7432.0 2731.0 7416.0 2731.0 L 7416.0 2731.0 Q 7400 2731.0 7384.0 2731.0 L 7330 2731.0" marker-end="url(#tip-flow)" data-from="con" data-to="mea" />
+<path class="wire wire--flow" d="M 6412 2731.0 L 6358.0 2731.0 Q 6342 2731.0 6326.0 2731.0 L 6326.0 2731.0 Q 6310.0 2731.0 6294.0 2731.0 L 6294.0 2731.0 Q 6278 2731.0 6262.0 2731.0 L 6208 2731.0" marker-end="url(#tip-flow)" data-from="mea" data-to="clo" />
+<path class="wire wire--flow" d="M 5290 2731.0 L 5236.0 2731.0 Q 5220 2731.0 5204.0 2731.0 L 5204.0 2731.0 Q 5188.0 2731.0 5172.0 2731.0 L 5172.0 2731.0 Q 5156 2731.0 5140.0 2731.0 L 5086 2731.0" marker-end="url(#tip-flow)" data-from="clo" data-to="lrn" />
+<path class="wire wire--return" d="M 4627.0 2536 L 4627.0 2488.0 Q 4627.0 2466 4627.0 2444.0 L 4627.0 2035.0 Q 4627.0 2013.0 4649.0 2013.0 L 5727.0 2013.0 Q 5749.0 2013.0 5749.0 1991.0 L 5749.0 1582.0 Q 5749.0 1560 5749.0 1538.0 L 5749.0 1490" marker-end="url(#tip-return)" data-from="lrn" data-to="rul" />
+<path class="wire wire--plain" d="M 11498 5549.0 L 11567.0 5549.0 Q 11568 5549.0 11567.0 5549.0 L 11567.0 5549.0 Q 11566.0 5549.0 11565.0 5549.0 L 11565.0 5549.0 Q 11564 5549.0 11565.0 5549.0 L 11634 5549.0" marker-end="url(#tip-plain)" data-from="t_sig" data-to="t_prob" />
+<path class="wire wire--plain" d="M 12722 5549.0 L 12791.0 5549.0 Q 12792 5549.0 12791.0 5549.0 L 12791.0 5549.0 Q 12790.0 5549.0 12789.0 5549.0 L 12789.0 5549.0 Q 12788 5549.0 12789.0 5549.0 L 12858 5549.0" marker-end="url(#tip-plain)" data-from="t_prob" data-to="t_rule" />
+<path class="wire wire--plain" d="M 13946 5549.0 L 14015.0 5549.0 Q 14016 5549.0 14015.0 5549.0 L 14015.0 5549.0 Q 14014.0 5549.0 14013.0 5549.0 L 14013.0 5549.0 Q 14012 5549.0 14013.0 5549.0 L 14082 5549.0" marker-end="url(#tip-plain)" data-from="t_rule" data-to="t_act" />
+<path class="wire wire--plain" d="M 14626.0 5644 L 14626.0 5692.0 Q 14626.0 5714 14626.0 5736.0 L 14626.0 5935.0 Q 14626.0 5957.0 14626.0 5979.0 L 14626.0 6178.0 Q 14626.0 6200 14626.0 6222.0 L 14626.0 6270" marker-end="url(#tip-plain)" data-from="t_act" data-to="t_apr" />
+<path class="wire wire--plain" d="M 15170 5549.0 L 15239.0 5549.0 Q 15240 5549.0 15239.0 5549.0 L 15239.0 5549.0 Q 15238.0 5549.0 15238.0 5550.0 L 15238.0 6384.0 Q 15238.0 6385.0 15237.0 6385.0 L 15237.0 6385.0 Q 15236 6385.0 15237.0 6385.0 L 15306 6385.0" marker-end="url(#tip-plain)" data-from="t_act" data-to="t_con" />
+<path class="wire wire--plain" d="M 16394 6385.0 L 16463.0 6385.0 Q 16464 6385.0 16463.0 6385.0 L 16463.0 6385.0 Q 16462.0 6385.0 16461.0 6385.0 L 16461.0 6385.0 Q 16460 6385.0 16461.0 6385.0 L 16530 6385.0" marker-end="url(#tip-plain)" data-from="t_con" data-to="t_mea" />
+<path class="wire wire--plain" d="M 16530 6385.0 L 16461.0 6385.0 Q 16460 6385.0 16461.0 6385.0 L 16461.0 6385.0 Q 16462.0 6385.0 16462.0 6386.0 L 16462.0 7180.0 Q 16462.0 7181.0 16463.0 7181.0 L 16463.0 7181.0 Q 16464 7181.0 16463.0 7181.0 L 16394 7181.0" marker-end="url(#tip-plain)" data-from="t_mea" data-to="t_lrn" />
+<path class="wire wire--return" d="M 15306 7181.0 L 15258.0 7181.0 Q 15236 7181.0 15214.0 7181.0 L 13424.0 7181.0 Q 13402.0 7181.0 13402.0 7159.0 L 13402.0 5736.0 Q 13402.0 5714 13402.0 5692.0 L 13402.0 5644" marker-end="url(#tip-return)" data-from="t_lrn" data-to="t_rule" />
+<path class="wire wire--return" d="M 12178.0 5644 L 12178.0 5692.0 Q 12178.0 5714 12178.0 5736.0 L 12178.0 5935.0 Q 12178.0 5957.0 12178.0 5979.0 L 12178.0 6178.0 Q 12178.0 6200 12178.0 6222.0 L 12178.0 6270" marker-end="url(#tip-return)" data-from="t_prob" data-to="t_tax" />
+      <text class="wire-label" x="7993.0" y="1797.5" text-anchor="middle" data-from="apr" data-to="con">contract bound at approval</text>
+<text class="wire-label" x="5188.0" y="1992.0" text-anchor="middle" data-from="lrn" data-to="rul">retrieval, decayed confidence</text>
+<text class="wire-label" x="15238.0" y="5978.0" text-anchor="middle" data-from="t_act" data-to="t_con">1:1 at creation</text>
+<text class="wire-label" x="16462.0" y="6794.0" text-anchor="middle" data-from="t_mea" data-to="t_lrn">human-validated only</text>
+<text class="wire-label" x="14319.0" y="7160.0" text-anchor="middle" data-from="t_lrn" data-to="t_rule">retrieval, decayed</text>
+    </svg>
+    <article class="card k-ext" id="n-src" data-node="src" tabindex="0" style="left:802px;top:1210px;width:918px;min-height:280px"><span class="step" aria-hidden="true">1</span><h3>Feedback sources</h3><p class="lede">Five official API pulls, plus CSV and webhook intake.</p><p class="note">Zendesk, Trustpilot, App Store, Google Play, Business Profile</p></article>
+<article class="card k-det" id="n-ing" data-node="ing" tabindex="0" style="left:1924px;top:1210px;width:918px;min-height:280px"><span class="step" aria-hidden="true">2</span><h3>Ingestion</h3><p class="lede">Normalise, de-identify, mask PII.</p><p class="note">Near-duplicates are flagged at counting, never dropped</p></article>
+<article class="card k-llm" id="n-enr" data-node="enr" tabindex="0" style="left:3046px;top:1210px;width:918px;min-height:280px"><span class="step" aria-hidden="true">3</span><h3>Enrichment</h3><p class="lede">Model stage one. Six fields per signal.</p><p class="note">Carries provenance and a model score, which is not a probability</p></article>
+<article class="card k-llm" id="n-syn" data-node="syn" tabindex="0" style="left:4168px;top:1210px;width:918px;min-height:280px"><span class="step" aria-hidden="true">4</span><h3>Synthesis</h3><p class="lede">Severity from the corroborating set, not the loudest voice.</p><p class="note">Urgency, volume, negative proportion</p></article>
+<article class="card k-det" id="n-rul" data-node="rul" tabindex="0" style="left:5290px;top:1210px;width:918px;min-height:280px"><span class="step" aria-hidden="true">5</span><h3>Rule evaluation</h3><p class="lede">Deterministic. Priority, then specificity, then dedupe.</p><p class="note">The rule that won is recorded</p></article>
+<article class="card k-gov" id="n-gate" data-node="gate" tabindex="0" style="left:6412px;top:1210px;width:918px;min-height:280px"><span class="step" aria-hidden="true">6</span><h3>Risk gate</h3><p class="lede">A rule with auto_execute false stops here.</p><p class="note">Where that line sits is a value judgement, and RQ4 tests it</p></article>
+<article class="card k-gov" id="n-apr" data-node="apr" tabindex="0" style="left:7534px;top:1210px;width:918px;min-height:280px"><span class="step" aria-hidden="true">7</span><h3>Approval interrupt</h3><p class="lede">A graph interrupt, not a UI confirmation.</p><p class="note">Evidence hashed at decision time. Four-eyes available.</p></article>
+<article class="card k-det" id="n-exe" data-node="exe" tabindex="0" style="left:8656px;top:1210px;width:918px;min-height:280px"><span class="step" aria-hidden="true">8</span><h3>Execute</h3><p class="lede">Two destinations ship: Jira and Slack.</p><p class="note">Zendesk is ingest only</p></article>
+<article class="card k-ext" id="n-ext1" data-node="ext1" tabindex="0" style="left:8656px;top:1890px;width:918px;min-height:190px"><h3>External systems</h3><p class="lede">Real Jira issues and Slack messages.</p></article>
+<article class="card k-det" id="n-con" data-node="con" tabindex="0" style="left:7534px;top:2536px;width:918px;min-height:390px"><span class="step" aria-hidden="true">9</span><h3>Outcome contract</h3><p class="lede">Metric and window, bound to the action at creation.</p><p class="note">Fixed before the action runs, so no metric shopping after</p></article>
+<article class="card k-det" id="n-mea" data-node="mea" tabindex="0" style="left:6412px;top:2536px;width:918px;min-height:390px"><span class="step" aria-hidden="true">10</span><h3>Measurement</h3><p class="lede">Interrupted time series at the action date.</p><p class="note">Volume-adjusted, with a placebo refit inside the pre-window</p></article>
+<article class="card k-det" id="n-clo" data-node="clo" tabindex="0" style="left:5290px;top:2536px;width:918px;min-height:390px"><span class="step" aria-hidden="true">11</span><h3>Closure, three levels</h3><p class="lede">Ticket done. Reporter told. Metric moved.</p><p class="note">Closed means the third</p></article>
+<article class="card k-det" id="n-lrn" data-node="lrn" tabindex="0" style="left:4168px;top:2536px;width:918px;min-height:390px"><span class="step" aria-hidden="true">12</span><h3>Learning store</h3><p class="lede">Confidence decays by half-life, auditable by query.</p><p class="note">Only human-validated conclusions are retrievable</p></article>
+<article class="card k-good" id="n-z1-note-0" data-node="z1-note-0" tabindex="0" style="left:802px;top:2536px;width:850px;min-height:390px"><h3>Measured</h3><p class="metric">21% to 71%</p><p class="lede">a past remedy reaching the new recommendation, once retrieval is on.</p><p class="note">66.7% adoption</p></article>
+<article class="card k-warn" id="n-z1-note-1" data-node="z1-note-1" tabindex="0" style="left:802px;top:3182px;width:850px;min-height:300px"><h3>Not measured</h3><p class="lede">The outcome data behind those learnings is simulated.</p><p class="note">Mechanism, not benefit.</p></article>
+<article class="card k-navy" id="n-z1-note-2" data-node="z1-note-2" tabindex="0" style="left:1822px;top:3182px;width:2652px;min-height:300px"><h3>The architectural commitment</h3><p class="lede">Model reasoning appears exactly twice. Everything downstream is testable code.</p></article>
+<article class="card k-warn" id="n-z1-note-3" data-node="z1-note-3" tabindex="0" style="left:5290px;top:3182px;width:2040px;min-height:300px"><h3>Honest bound on the gate</h3><p class="metric">0.59 / 0.40</p><p class="lede">routing accuracy. The gate is what makes a pipeline of that accuracy safe to deploy.</p></article>
+<article class="card k-fact" id="n-z1-note-4" data-node="z1-note-4" tabindex="0" style="left:7534px;top:3182px;width:1938px;min-height:300px"><h3>Where this runs</h3><p class="lede">FastAPI and LangGraph on a Hetzner EU VPS. Vercel. Supabase Postgres.</p><p class="note">About 84 REST endpoints across seven routers</p></article>
+<article class="card k-gov" id="n-a14" data-node="a14" tabindex="0" style="left:802px;top:5454px;width:2142px;min-height:240px"><h3>Article 14, human oversight</h3><p class="lede">Governs the approval interrupt.</p><p class="note">Past the article: friction by risk, evidence shown, per-decision attribution</p></article>
+<article class="card k-gov" id="n-a12" data-node="a12" tabindex="0" style="left:3046px;top:5454px;width:2142px;min-height:240px"><h3>Article 12, logging</h3><p class="lede">Governs execution and the audit write.</p><p class="note">Rule, parameters, executor, result. Evidence pack hashed.</p></article>
+<article class="card k-gov" id="n-a50" data-node="a50" tabindex="0" style="left:5290px;top:5454px;width:2142px;min-height:240px"><h3>Article 50, transparency</h3><p class="lede">Governs anything customer-facing.</p><p class="note">Human editorial review is the exemption mechanism</p></article>
+<article class="card k-fact" id="n-a39" data-node="a39" tabindex="0" style="left:7534px;top:5454px;width:2244px;min-height:240px"><h3>Article 3(39), scope boundary</h3><p class="lede">Sentiment on text is not emotion recognition.</p><p class="note">That definition is biometric. Worth stating before it is asked.</p></article>
+<article class="card k-gov" id="n-gdpr" data-node="gdpr" tabindex="0" style="left:802px;top:6304px;width:2142px;min-height:240px"><h3>GDPR</h3><p class="lede">Governs ingestion and storage.</p><p class="note">PII masking, retention limits, row-level security in Postgres</p></article>
+<article class="card k-llm" id="n-sov" data-node="sov" tabindex="0" style="left:3046px;top:6304px;width:2142px;min-height:240px"><h3>Model sovereignty</h3><p class="lede">Governs both model stages.</p><p class="note">Hosted, EU gateway, or self-hosted. A configuration change.</p></article>
+<article class="card k-fact" id="n-omni" data-node="omni" tabindex="0" style="left:5290px;top:6304px;width:2142px;min-height:240px"><h3>The regulation moved under the build</h3><p class="lede">Annex III duties moved to Dec 2027. Article 50 stayed on Aug 2026.</p><p class="note">The argument for durable commitments over date-triggered features</p></article>
+<article class="card k-good" id="n-coi" data-node="coi" tabindex="0" style="left:7534px;top:6304px;width:2244px;min-height:240px"><h3>Governance of the research itself</h3><p class="lede">Participants are told the interviewer built the prototype.</p><p class="note">Fourth consent checkbox. No commercial follow-up for six months.</p></article>
+<article class="card k-gov" id="n-authgate" data-node="authgate" tabindex="0" style="left:802px;top:7154px;width:4386px;min-height:240px"><h3>Ingestion authenticity review</h3><p class="lede">Governs what enters the loop: provenance, duplication, bursts, batch uniformity.</p><p class="note">Annotates, never drops. Abstains under ten words. Reports its own flag rate per language</p></article>
+<article class="card k-warn" id="n-authrefuse" data-node="authrefuse" tabindex="0" style="left:5290px;top:7154px;width:4488px;min-height:240px"><h3>The capability it refuses</h3><p class="lede">Per-comment AI authorship is not implemented, on measured grounds.</p><p class="note">The refusal is the control. Evidence in zone 3, method in docs/engineering/ai-verbatim-detection.md</p></article>
+<article class="card k-warn" id="n-z2-note-0" data-node="z2-note-0" tabindex="0" style="left:802px;top:8038px;width:2142px;min-height:240px"><h3>The checker is advisory</h3><p class="lede">An approval gate, an audit log, an advisory checker. Not a policy engine.</p></article>
+<article class="card k-warn" id="n-z2-note-1" data-node="z2-note-1" tabindex="0" style="left:3046px;top:8038px;width:2142px;min-height:240px"><h3>Row-level security has a limit</h3><p class="lede">Not warranted against adversarial co-tenants. Pilots run single-workspace.</p></article>
+<article class="card k-warn" id="n-z2-note-2" data-node="z2-note-2" tabindex="0" style="left:5290px;top:8038px;width:2142px;min-height:240px"><h3>Model score is a label, not a calibration</h3><p class="lede">Honest naming, not measurement. It orders cases without warranting a probability.</p></article>
+<article class="card k-navy" id="n-z2-note-3" data-node="z2-note-3" tabindex="0" style="left:7534px;top:8038px;width:2244px;min-height:240px"><h3>The lesson that keeps recurring</h3><p class="lede">A declared control is not an enforced control until somebody checks it.</p><p class="note">Platform in July, method in August, manuscript last week</p></article>
+<article class="card k-fact" id="n-corp" data-node="corp" tabindex="0" style="left:10410px;top:1210px;width:2856px;min-height:350px"><h3>The thesis corpus</h3><p class="metric">188</p><p class="lede">real public signals, paraphrased and de-identified.</p><p class="note">Fintech 67, food delivery 82, B2B 39. Source language EN 102, DE 84.</p></article>
+<article class="card k-fact" id="n-gold2" data-node="gold2" tabindex="0" style="left:13368px;top:1210px;width:2856px;min-height:350px"><h3>The second gold standard, kept apart</h3><p class="metric">100</p><p class="lede">curated bilingual cases, deliberately kept apart.</p><p class="note">97% sentiment, 90% urgency. A different gold, so never merged in.</p></article>
+<article class="card k-fact" id="n-held" data-node="held" tabindex="0" style="left:16326px;top:1210px;width:3060px;min-height:350px"><h3>Held out on purpose</h3><p class="metric">3 sets</p><p class="lede">held outside the corpus: Vodafone 65, Delivery Hero 86, banks 104.</p><p class="note">Draft labels. The corpus is still 188.</p></article>
+<article class="card k-navy" id="n-r1" data-node="r1" tabindex="0" style="left:10410px;top:2094px;width:4352px;min-height:450px"><h3>Result 1. Triage accuracy depends on the method</h3><p class="lede">Contextual beats learned on sentiment, p = 0.029. On severity it does not, p = 0.644.</p><div class="tw"><table><thead><tr><th>Predictor</th><th class="num">Sentiment accuracy (n = 153)</th><th class="num">Severity macro-F1 (n = 106)</th></tr></thead><tbody><tr><td>Keyword and lexicon floor</td><td class="num">0.37</td><td class="num">0.26</td></tr><tr><td>TF-IDF and logistic regression</td><td class="num">0.78</td><td class="num">0.65</td></tr><tr><td>Contextual model path</td><td class="num">0.86</td><td class="num">0.68</td></tr></tbody></table></div><p class="note">Status: measured</p></article>
+<article class="card k-navy" id="n-r2" data-node="r2" tabindex="0" style="left:14864px;top:2094px;width:4522px;min-height:450px"><h3>Result 2. Whose problems reach a human</h3><p class="lede">Indistinguishable on severity accuracy. Very distinguishable in whom it escalates.</p><div class="tw"><table><thead><tr><th>Escalation recall</th><th class="num">n</th><th class="num">Floor</th><th class="num">TF-IDF</th><th class="num">Contextual</th></tr></thead><tbody><tr><td>German-source</td><td class="num">8</td><td class="num">0.0%</td><td class="num">62.5%</td><td class="num">87.5%</td></tr><tr><td>English-source</td><td class="num">41</td><td class="num">19.5%</td><td class="num">95.1%</td><td class="num">87.8%</td></tr></tbody></table></div><p class="note">Status: measured, bounded. German-source stratum n = 8.</p></article>
+<article class="card k-fact" id="n-r3" data-node="r3" tabindex="0" style="left:10410px;top:3148px;width:2856px;min-height:350px"><h3>Result 3. Routing</h3><p class="metric">0.59 / 0.40</p><p class="lede">journey stage over 27 classes, owner over 51, against floors of 0.20 and 0.15.</p><p class="note">Inventory supplied, so an upper bound. Restricted, they fall to 0.28 and 0.18.</p></article>
+<article class="card k-fact" id="n-r4" data-node="r4" tabindex="0" style="left:13368px;top:3148px;width:2856px;min-height:350px"><h3>Result 4. The learning memory</h3><p class="metric">21% to 71%</p><p class="lede">a past remedy reaching the new recommendation, at 66.7% adoption.</p><p class="note">The outcomes behind it are simulated</p></article>
+<article class="card k-warn" id="n-ladder" data-node="ladder" tabindex="0" style="left:16326px;top:3148px;width:3060px;min-height:350px"><h3>What is still open</h3><p class="lede">DP1 demonstrated. Hardening partly measured. No kappa. Zero interviews.</p><p class="note">The two pending rows are what the asks are about</p></article>
+<article class="card k-navy" id="n-r5" data-node="r5" tabindex="0" style="left:10410px;top:3598px;width:8976px;min-height:420px"><h3>Result 5. A detector, measured and refused</h3><p class="lede">Asked to flag AI-written verbatims before triage. Both detectors were measured, then the capability was refused.</p><div class="tw"><table><thead><tr><th>What was measured</th><th class="num">Result</th><th class="num">Consequence</th></tr></thead><tbody><tr><td>Stylometric detector at 81% recall</td><td class="num">15.0% of genuine reviews flagged</td><td class="num">78 to 95 of every 100 flags is a real customer</td></tr><tr><td>Same detector, across languages</td><td class="num">Greek 44.4% against Polish 14.8%</td><td class="num">a 3.0x spread, from an EN and DE feature lexicon</td></tr><tr><td>Binoculars cross-perplexity, English</td><td class="num">AUROC 0.326, worse than chance</td><td class="num">complaint text is the more predictable text</td></tr><tr><td>The gate that shipped instead</td><td class="num">0.86% flagged, all true duplicates</td><td class="num">25.1% abstained as too short to assess</td></tr></tbody></table></div><p class="note">Status: measured, including the negative result. 6,740 texts; the machine class is paraphrase, not adversarial fabrication. Source: docs/engineering/ai-verbatim-detection.md</p></article>
+<article class="card k-good" id="n-z3-note-0" data-node="z3-note-0" tabindex="0" style="left:10410px;top:4134px;width:4352px;min-height:190px"><h3>The bound that travels with every number</h3><p class="lede">Texts are English paraphrases, so every per-language result is a source-language stratum.</p></article>
+<article class="card k-warn" id="n-z3-note-1" data-node="z3-note-1" tabindex="0" style="left:14864px;top:4134px;width:4522px;min-height:190px"><h3>Retracted rather than defended</h3><p class="lede">Language is confounded with sector, so the aggregate comparison was withdrawn.</p></article>
+<article class="card k-data" id="n-t_sig" data-node="t_sig" tabindex="0" style="left:10410px;top:5454px;width:1088px;min-height:190px"><h3>signals</h3><p class="lede">Raw feedback plus its enrichment.</p></article>
+<article class="card k-data" id="n-t_prob" data-node="t_prob" tabindex="0" style="left:11634px;top:5454px;width:1088px;min-height:190px"><h3>problems</h3><p class="lede">Signals grouped, with cross-signal severity and a reach basis.</p></article>
+<article class="card k-data" id="n-t_rule" data-node="t_rule" tabindex="0" style="left:12858px;top:5454px;width:1088px;min-height:190px"><h3>rules</h3><p class="lede">Priority, specificity, action type, auto_execute.</p></article>
+<article class="card k-data" id="n-t_act" data-node="t_act" tabindex="0" style="left:14082px;top:5454px;width:1088px;min-height:190px"><h3>actions_log</h3><p class="lede">One immutable row per action.</p></article>
+<article class="card k-gov" id="n-t_apr" data-node="t_apr" tabindex="0" style="left:14082px;top:6270px;width:1088px;min-height:230px"><h3>approval_records</h3><p class="lede">Reviewer from the verified login. Evidence sha256 at decision time.</p></article>
+<article class="card k-navy" id="n-t_con" data-node="t_con" tabindex="0" style="left:15306px;top:6270px;width:1088px;min-height:230px"><h3>outcome_contracts</h3><p class="lede">One to one with the action, created with it.</p></article>
+<article class="card k-data" id="n-t_mea" data-node="t_mea" tabindex="0" style="left:16530px;top:6270px;width:1088px;min-height:230px"><h3>outcome_measurements</h3><p class="lede">Grades closure. Evidence grade A to E, provenance stamped server-side.</p></article>
+<article class="card k-navy" id="n-t_lrn" data-node="t_lrn" tabindex="0" style="left:15306px;top:7086px;width:1088px;min-height:190px"><h3>ab_learnings</h3><p class="lede">base_confidence and half_life_days. Decay is a column.</p></article>
+<article class="card k-data" id="n-t_tax" data-node="t_tax" tabindex="0" style="left:11634px;top:6270px;width:1088px;min-height:230px"><h3>taxonomy_nodes</h3><p class="lede">Themes carrying the same decay fields.</p></article>
+<article class="card k-navy" id="n-z4-note-0" data-node="z4-note-0" tabindex="0" style="left:17754px;top:5454px;width:1632px;min-height:190px"><h3>Why this matters</h3><p class="lede">An action cannot exist without a contract. Closed is a row with evidence, not a flag.</p></article>
+<article class="card k-fact" id="n-z4-note-1" data-node="z4-note-1" tabindex="0" style="left:17754px;top:6134px;width:1632px;min-height:190px"><h3>Tenancy</h3><p class="lede">Workspace-scoped, enforced in Postgres below the application layer.</p></article>
+<article class="card k-fact" id="n-z4-note-2" data-node="z4-note-2" tabindex="0" style="left:17754px;top:6814px;width:1632px;min-height:190px"><h3>One store contract</h3><p class="lede">jsonb payloads with promoted columns. SQLite, in-memory, Postgres.</p></article>
+<article class="card k-good" id="n-z4-note-3" data-node="z4-note-3" tabindex="0" style="left:10410px;top:7766px;width:2176px;min-height:190px"><h3>The same discipline, one layer up</h3><p class="lede">One shared status function, so the dashboard numbers reconcile by construction.</p></article>
+<article class="card k-warn" id="n-z4-note-4" data-node="z4-note-4" tabindex="0" style="left:12722px;top:7766px;width:2448px;min-height:190px"><h3>What the schema does not yet carry</h3><p class="lede">Evidence grade B, the controlled quasi-experiment, has never been produced.</p></article>
+  </div>
+</main>
+
+<details class="legend" id="legend" open>
+  <summary>How to read it</summary>
+  <ul><li><span class="sw k-llm"></span>Model reasoning. It appears exactly twice.</li><li><span class="sw k-det"></span>Deterministic code. Everything that acts on the outside world.</li><li><span class="sw k-gov"></span>Governance control point.</li><li><span class="sw k-ext"></span>External system, integrated rather than rebuilt.</li><li><span class="sw k-warn"></span>A bound I state myself.</li></ul>
+  <footer><kbd>1</kbd>&ndash;<kbd>4</kbd> jump to a zone, <kbd>0</kbd> fit, <kbd>+</kbd> <kbd>&minus;</kbd> zoom, arrows pan. Hover a card to trace what feeds it.
+  <br><br>Elvis Shehi, MSc Responsible AI, OPIT &middot; 21 August 2026. Every number here is read from the repository. Sources are named on the cards that carry them.</footer>
+</details>
+
+<script>
+(function () {
+  var stage = document.getElementById('stage');
+  var plane = document.getElementById('plane');
+  var zones = Array.prototype.slice.call(document.querySelectorAll('.zone'));
+  var navBtns = Array.prototype.slice.call(document.querySelectorAll('.nav-zone'));
+  var MIN = 0.04, MAX = 1.6;
+  var view = { x: 0, y: 0, k: 1 }, current;
+
+  // The camera is a CSS transition on the plane. A requestAnimationFrame loop
+  // stalls half way when the tab loses focus; a transition always lands.
+  function apply(instant) {
+    plane.classList.toggle('instant', !!instant);
+    plane.style.transform = 'translate(' + view.x + 'px,' + view.y + 'px) scale(' + view.k + ')';
+  }
+  function clampK(k) { return Math.min(MAX, Math.max(MIN, k)); }
+  function moveTo(to, instant) { view = { x: to.x, y: to.y, k: to.k }; apply(instant); }
+
+  function frameOf(el, margin) {
+    var m = margin === undefined ? 140 : margin;
+    var vw = stage.clientWidth, vh = stage.clientHeight;
+    var k = clampK(Math.min(vw / (el.offsetWidth + m * 2), vh / (el.offsetHeight + m * 2)));
+    return {
+      k: k,
+      x: (vw - el.offsetWidth * k) / 2 - el.offsetLeft * k,
+      y: (vh - el.offsetHeight * k) / 2 - el.offsetTop * k
+    };
+  }
+  function goZone(el, now) {
+    moveTo(frameOf(el), now);
+    current = el;
+    navBtns.forEach(function (b) {
+      b.setAttribute('aria-current', b.dataset.goto === el.id ? 'true' : 'false');
+    });
+  }
+  function fitAll(now) {
+    moveTo(frameOf(plane, 60), now);
+    current = plane;
+    navBtns.forEach(function (b) { b.setAttribute('aria-current', 'false'); });
+  }
+  function zoomBy(f, cx, cy) {
+    var px = cx === undefined ? stage.clientWidth / 2 : cx;
+    var py = cy === undefined ? stage.clientHeight / 2 : cy;
+    var k = clampK(view.k * f);
+    view.x = px - (px - view.x) * (k / view.k);
+    view.y = py - (py - view.y) * (k / view.k);
+    view.k = k; apply(true);
+  }
+
+  navBtns.forEach(function (b) {
+    b.addEventListener('click', function () { goZone(document.getElementById(b.dataset.goto)); });
+  });
+  document.getElementById('fit').addEventListener('click', function () { fitAll(); });
+  document.getElementById('zin').addEventListener('click', function () { zoomBy(1.3); });
+  document.getElementById('zout').addEventListener('click', function () { zoomBy(0.77); });
+
+  var drag = null;
+  stage.addEventListener('pointerdown', function (ev) {
+    if (ev.target.closest('.card')) return;
+    drag = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, vx: view.x, vy: view.y };
+    stage.setPointerCapture(ev.pointerId);
+    stage.classList.add('dragging');
+  });
+  stage.addEventListener('pointermove', function (ev) {
+    if (!drag || ev.pointerId !== drag.id) return;
+    view.x = drag.vx + (ev.clientX - drag.x);
+    view.y = drag.vy + (ev.clientY - drag.y);
+    apply(true);
+  });
+  ['pointerup', 'pointercancel'].forEach(function (t) {
+    stage.addEventListener(t, function (ev) {
+      if (drag && ev.pointerId === drag.id) { drag = null; stage.classList.remove('dragging'); }
+    });
+  });
+
+  stage.addEventListener('wheel', function (ev) {
+    ev.preventDefault();
+    if (ev.ctrlKey || ev.metaKey) {
+      var r = stage.getBoundingClientRect();
+      zoomBy(Math.pow(0.995, ev.deltaY), ev.clientX - r.left, ev.clientY - r.top);
+    } else { view.x -= ev.deltaX; view.y -= ev.deltaY; apply(true); }
+  }, { passive: false });
+
+  var wires = Array.prototype.slice.call(document.querySelectorAll('.wire, .wire-label'));
+  function trace(id) {
+    if (!id) {
+      plane.classList.remove('tracing');
+      wires.forEach(function (w) { w.classList.remove('lit'); });
+      document.querySelectorAll('.card.lit').forEach(function (c) { c.classList.remove('lit'); });
+      return;
+    }
+    var touched = {}; touched[id] = true;
+    wires.forEach(function (w) {
+      var hit = w.dataset.from === id || w.dataset.to === id;
+      w.classList.toggle('lit', hit);
+      if (hit) { touched[w.dataset.from] = true; touched[w.dataset.to] = true; }
+    });
+    document.querySelectorAll('.card').forEach(function (c) {
+      c.classList.toggle('lit', !!touched[c.dataset.node]);
+    });
+    plane.classList.add('tracing');
+  }
+  document.querySelectorAll('.card').forEach(function (c) {
+    c.addEventListener('pointerenter', function () { trace(c.dataset.node); });
+    c.addEventListener('pointerleave', function () { trace(null); });
+    c.addEventListener('focus', function () { trace(c.dataset.node); });
+    c.addEventListener('blur', function () { trace(null); });
+  });
+
+  document.addEventListener('keydown', function (ev) {
+    var t = ev.target;
+    if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    if (t && t.closest && t.closest('input, textarea, [contenteditable]')) return;
+    var k = ev.key;
+    if (k >= '1' && k <= String(zones.length)) { goZone(zones[+k - 1]); ev.preventDefault(); }
+    else if (k === '0') { fitAll(); ev.preventDefault(); }
+    else if (k === '+' || k === '=') { zoomBy(1.3); ev.preventDefault(); }
+    else if (k === '-' || k === '_') { zoomBy(0.77); ev.preventDefault(); }
+    else if (k.indexOf('Arrow') === 0) {
+      var s = ev.shiftKey ? 700 : 240;
+      if (k === 'ArrowLeft') view.x += s; else if (k === 'ArrowRight') view.x -= s;
+      else if (k === 'ArrowUp') view.y += s; else view.y -= s;
+      apply(true); ev.preventDefault();
+    }
+  });
+
+  addEventListener('resize', function () {
+    if (!drag) goZone(current === plane ? zones[0] : current, true);
+  });
+  goZone(zones[0], true);
+  if (innerHeight < 700) document.getElementById('legend').removeAttribute('open');
+})();
+</script>

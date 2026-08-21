@@ -444,6 +444,12 @@ const en = {
       "CLARA flags signals whose provenance or structure is unusual, and says so when a comment is too short to assess. It does not claim to know whether a person or a language model wrote any individual comment, and it never removes anything on its own.",
     disparityWarning: "Uneven flagging detected",
     cardTitle: "Ingestion review",
+    assessExisting: "Assess existing signals",
+    assessing: "Assessing stored signals...",
+    notAssessedYet:
+      "These signals were imported before the ingestion review existed, so none of them carries a verdict yet.",
+    someUnassessed:
+      "{n} stored signals predate the ingestion review and carry no verdict. Assessing them looks at each signal on its own; it makes no claim about the batch they arrived in.",
     needsReview: "need a look before triage",
     routine: "nothing unusual found",
     disparityBody:
@@ -1388,6 +1394,12 @@ const de: Dict = {
       "CLARA markiert Signale mit ungewöhnlicher Herkunft oder Struktur und sagt es, wenn ein Kommentar zu kurz für eine Bewertung ist. Ob ein Mensch oder ein Sprachmodell einen einzelnen Kommentar geschrieben hat, behauptet CLARA nicht zu wissen – und es wird nie etwas von selbst entfernt.",
     disparityWarning: "Ungleichmäßige Markierung erkannt",
     cardTitle: "Eingangsprüfung",
+    assessExisting: "Vorhandene Signale prüfen",
+    assessing: "Gespeicherte Signale werden geprüft ...",
+    notAssessedYet:
+      "Diese Signale wurden importiert, bevor es die Eingangsprüfung gab, und tragen daher noch kein Ergebnis.",
+    someUnassessed:
+      "{n} gespeicherte Signale stammen aus der Zeit vor der Eingangsprüfung und tragen kein Ergebnis. Die Prüfung betrachtet jedes Signal für sich und trifft keine Aussage über den Stapel, in dem es ankam.",
     needsReview: "vor der Triage prüfen",
     routine: "nichts Ungewöhnliches gefunden",
     disparityBody:

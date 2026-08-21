@@ -644,6 +644,15 @@ class PostgresSignalStore(PostgresConnectionMixin):
                 (self._jsonb(patch), signal_id),
             )
 
+    def update_metadata(self, signal_id: str, metadata: dict[str, str]) -> None:
+        """Persist an annotation onto a stored signal. Used by the authenticity
+        backfill; the record itself is never otherwise altered."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE clara_signals SET payload = payload || %s WHERE signal_id = %s",
+                (self._jsonb({"metadata": dict(metadata)}), signal_id),
+            )
+
     def existing_signal_ids(self) -> set[str]:
         with self._connect() as conn:
             rows = conn.execute("SELECT signal_id FROM clara_signals").fetchall()

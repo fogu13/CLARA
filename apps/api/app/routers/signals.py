@@ -35,7 +35,7 @@ from app.services.contexts import (
 )
 from app.services.journeys import parse_journey_event_csv
 from app.services.seed import to_demo_dataset_summary
-from app.services.authenticity import assess_batch
+from app.services.authenticity import assess_batch, assess_existing
 from app.services.signals import (
     annotate_near_duplicates,
     parse_signal_csv,
@@ -190,6 +190,33 @@ def build_router(
             },
         )
         return result
+
+    @router.post(
+        "/signals/authenticity/backfill",
+        dependencies=[Depends(require_role(Role.editor))],
+    )
+    def backfill_authenticity() -> dict[str, object]:
+        """Assess signals stored before the ingestion review existed.
+
+        Annotation only: no signal is dropped, reordered or rewritten, and the
+        assessment is signal-level because the original ingestion batches cannot
+        be reconstructed (see services/authenticity.assess_existing). Safe to
+        re-run; it recomputes rather than accumulating."""
+        stored = signal_store.list_signals()
+        if not stored:
+            return {"assessed": 0, "updated": 0, "detail": "no signals stored"}
+        before = [dict(record.metadata) for record in stored]
+        review = assess_existing(stored)
+        updated = 0
+        for record, previous in zip(stored, before):
+            if record.metadata != previous:
+                signal_store.update_metadata(record.signal_id, record.metadata)
+                updated += 1
+        telemetry_store.record(
+            "signals_authenticity_backfilled",
+            metadata={"scanned": len(stored), "updated": updated, **review.summary()},
+        )
+        return {"scanned": len(stored), "updated": updated, **review.summary()}
 
     @router.post("/signals/delete", dependencies=[Depends(require_role(Role.editor))])
     def delete_signals(body: dict) -> dict:

@@ -8,7 +8,7 @@ import { MessageSquare, Upload, Sparkles, Trash2 } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip as ChartTooltip, XAxis, YAxis } from "recharts";
 import { signalTrendSeries, withRollingAverage } from "@/lib/signal-trend";
 import { cn } from "@/lib/utils";
-import { apiBaseUrl, apiHeaders, deleteSignals, getSignals, importSignalCsv, validateSignalCsv } from "@/lib/client-api";
+import { apiBaseUrl, apiHeaders, backfillAuthenticity, deleteSignals, getSignals, importSignalCsv, validateSignalCsv } from "@/lib/client-api";
 import {
   essentialSignalCsvField,
   inferColumnMapping,
@@ -200,6 +200,17 @@ export default function SignalsPage() {
     }
   }
 
+  async function assessExisting() {
+    setStatus({ tone: "busy", message: t.authenticity.assessing });
+    try {
+      const result = await backfillAuthenticity();
+      await refresh();
+      setStatus({ tone: "ok", message: `${result.updated} / ${result.scanned}` });
+    } catch (error) {
+      setStatus({ tone: "error", message: error instanceof Error ? error.message : t.common.error });
+    }
+  }
+
   async function runTriage() {
     setStatus({ tone: "busy", message: "Running triage… this can take a moment." });
     try {
@@ -336,13 +347,22 @@ export default function SignalsPage() {
         </Card>
       </div>
 
-      {review.total > 0 && (
+      {signals.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">{t.authenticity.cardTitle}</CardTitle>
             <p className="text-xs text-muted-foreground">{t.authenticity.whatThisIs}</p>
           </CardHeader>
           <CardContent className="space-y-3">
+            {review.total === 0 ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-muted-foreground">{t.authenticity.notAssessedYet}</p>
+                <Button variant="outline" size="sm" onClick={assessExisting} disabled={busy}>
+                  {t.authenticity.assessExisting}
+                </Button>
+              </div>
+            ) : (
+            <>
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
                 <div className="text-2xl font-bold tabular-nums">{review.flagged}</div>
@@ -378,6 +398,18 @@ export default function SignalsPage() {
                   .replace("{lo}", review.disparity.lo)
                   .replace("{loRate}", `${Math.round(review.disparity.loRate * 100)}%`)}
               </p>
+            )}
+            {review.total < signals.length && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+                <p className="text-xs text-muted-foreground">
+                  {t.authenticity.someUnassessed.replace("{n}", String(signals.length - review.total))}
+                </p>
+                <Button variant="outline" size="sm" onClick={assessExisting} disabled={busy}>
+                  {t.authenticity.assessExisting}
+                </Button>
+              </div>
+            )}
+            </>
             )}
           </CardContent>
         </Card>

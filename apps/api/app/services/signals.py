@@ -671,6 +671,13 @@ class SignalStore:
     def list_signals(self) -> list[SignalRecord]:
         return sorted(self._signals.values(), key=lambda signal: signal.timestamp)
 
+    def update_metadata(self, signal_id: str, metadata: dict[str, str]) -> None:
+        """Persist an annotation onto a stored signal. Used by the authenticity
+        backfill; the record itself is never otherwise altered."""
+        signal = self._signals.get(signal_id)
+        if signal is not None:
+            signal.metadata = dict(metadata)
+
     def delete_by_customer(self, customer_id: str) -> int:
         """GDPR Art. 17: remove every signal belonging to a customer."""
         doomed = [sid for sid, s in self._signals.items() if s.customer_id == customer_id]
@@ -823,6 +830,15 @@ class SQLiteSignalStore:
             "UPDATE signals SET sentiment = ?, urgency = ?, tags = ?, enriched = 1"
             " WHERE signal_id = ?",
             (sentiment, urgency, json.dumps(list(tags or [])), signal_id),
+        )
+        self._connection.commit()
+
+    def update_metadata(self, signal_id: str, metadata: dict[str, str]) -> None:
+        """Persist an annotation onto a stored signal. Used by the authenticity
+        backfill; the record itself is never otherwise altered."""
+        self._connection.execute(
+            "UPDATE signals SET metadata = ? WHERE signal_id = ?",
+            (json.dumps(dict(metadata)), signal_id),
         )
         self._connection.commit()
 

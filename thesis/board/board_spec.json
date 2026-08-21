@@ -1,0 +1,993 @@
+{
+  "meta": {
+    "title": "Closing the Loop, Building the Memory",
+    "subtitle": "The thesis on one canvas. Four zones: how the loop runs, how it is governed, what the evidence says, and how the schema enforces it.",
+    "author": "Elvis Shehi, MSc Responsible AI, OPIT",
+    "built": "21 August 2026",
+    "note": "Every number here is read from the repository. Sources are named on the cards that carry them."
+  },
+  "palette": {
+    "llm": {
+      "fill": "#E2ECFD",
+      "border": "#3B6EA5",
+      "text": "#1F3B5B",
+      "sticky": "light_blue"
+    },
+    "det": {
+      "fill": "#FFFFFF",
+      "border": "#5A6478",
+      "text": "#1A1A2E",
+      "sticky": "gray"
+    },
+    "gov": {
+      "fill": "#FDE2E2",
+      "border": "#C0392B",
+      "text": "#7B1F1F",
+      "sticky": "light_pink"
+    },
+    "ext": {
+      "fill": "#EEF0F4",
+      "border": "#98A0AE",
+      "text": "#3D4453",
+      "sticky": "gray"
+    },
+    "data": {
+      "fill": "#F4F7FC",
+      "border": "#1E2761",
+      "text": "#1E2761",
+      "sticky": "light_blue"
+    },
+    "fact": {
+      "fill": "#FFFFFF",
+      "border": "#CADCFC",
+      "text": "#1A1A2E",
+      "sticky": "gray"
+    },
+    "good": {
+      "fill": "#E7F3E7",
+      "border": "#2C5F2D",
+      "text": "#1F4520",
+      "sticky": "light_green"
+    },
+    "warn": {
+      "fill": "#FDF3F3",
+      "border": "#990011",
+      "text": "#7B1F1F",
+      "sticky": "light_pink"
+    },
+    "navy": {
+      "fill": "#1E2761",
+      "border": "#1E2761",
+      "text": "#FFFFFF",
+      "sticky": "dark_blue"
+    }
+  },
+  "legend": [
+    [
+      "llm",
+      "Model reasoning. It appears exactly twice."
+    ],
+    [
+      "det",
+      "Deterministic code. Everything that acts on the outside world."
+    ],
+    [
+      "gov",
+      "Governance control point."
+    ],
+    [
+      "ext",
+      "External system, integrated rather than rebuilt."
+    ],
+    [
+      "warn",
+      "A bound I state myself."
+    ]
+  ],
+  "zones": [
+    {
+      "id": "z1",
+      "short": "The loop",
+      "title": "1. The governed loop, as it runs",
+      "subtitle": "Signal in, approved action out, outcome measured against a contract, learning kept and retrieved on the next decision.",
+      "x": 0,
+      "y": 0,
+      "w": 9054,
+      "h": 2982,
+      "nodes": [
+        {
+          "id": "src",
+          "kind": "ext",
+          "x": 102,
+          "y": 510,
+          "w": 918,
+          "h": 280,
+          "title": "Feedback sources",
+          "step": 1,
+          "lede": "Five official API pulls, plus CSV and webhook intake.",
+          "note": "Zendesk, Trustpilot, App Store, Google Play, Business Profile"
+        },
+        {
+          "id": "ing",
+          "kind": "det",
+          "x": 1224,
+          "y": 510,
+          "w": 918,
+          "h": 280,
+          "title": "Ingestion",
+          "step": 2,
+          "lede": "Normalise, de-identify, mask PII.",
+          "note": "Near-duplicates are flagged at counting, never dropped"
+        },
+        {
+          "id": "enr",
+          "kind": "llm",
+          "x": 2346,
+          "y": 510,
+          "w": 918,
+          "h": 280,
+          "title": "Enrichment",
+          "step": 3,
+          "lede": "Model stage one. Six fields per signal.",
+          "note": "Carries provenance and a model score, which is not a probability"
+        },
+        {
+          "id": "syn",
+          "kind": "llm",
+          "x": 3468,
+          "y": 510,
+          "w": 918,
+          "h": 280,
+          "title": "Synthesis",
+          "step": 4,
+          "lede": "Severity from the corroborating set, not the loudest voice.",
+          "note": "Urgency, volume, negative proportion"
+        },
+        {
+          "id": "rul",
+          "kind": "det",
+          "x": 4590,
+          "y": 510,
+          "w": 918,
+          "h": 280,
+          "title": "Rule evaluation",
+          "step": 5,
+          "lede": "Deterministic. Priority, then specificity, then dedupe.",
+          "note": "The rule that won is recorded"
+        },
+        {
+          "id": "gate",
+          "kind": "gov",
+          "x": 5712,
+          "y": 510,
+          "w": 918,
+          "h": 280,
+          "title": "Risk gate",
+          "step": 6,
+          "lede": "A rule with auto_execute false stops here.",
+          "note": "Where that line sits is a value judgement, and RQ4 tests it"
+        },
+        {
+          "id": "apr",
+          "kind": "gov",
+          "x": 6834,
+          "y": 510,
+          "w": 918,
+          "h": 280,
+          "title": "Approval interrupt",
+          "step": 7,
+          "lede": "A graph interrupt, not a UI confirmation.",
+          "note": "Evidence hashed at decision time. Four-eyes available."
+        },
+        {
+          "id": "exe",
+          "kind": "det",
+          "x": 7956,
+          "y": 510,
+          "w": 918,
+          "h": 280,
+          "title": "Execute",
+          "step": 8,
+          "lede": "Two destinations ship: Jira and Slack.",
+          "note": "Zendesk is ingest only"
+        },
+        {
+          "id": "ext1",
+          "kind": "ext",
+          "x": 7956,
+          "y": 1190,
+          "w": 918,
+          "h": 190,
+          "title": "External systems",
+          "lede": "Real Jira issues and Slack messages."
+        },
+        {
+          "id": "con",
+          "kind": "det",
+          "x": 6834,
+          "y": 1836,
+          "w": 918,
+          "h": 390,
+          "title": "Outcome contract",
+          "step": 9,
+          "lede": "Metric and window, bound to the action at creation.",
+          "note": "Fixed before the action runs, so no metric shopping after"
+        },
+        {
+          "id": "mea",
+          "kind": "det",
+          "x": 5712,
+          "y": 1836,
+          "w": 918,
+          "h": 390,
+          "title": "Measurement",
+          "step": 10,
+          "lede": "Interrupted time series at the action date.",
+          "note": "Volume-adjusted, with a placebo refit inside the pre-window"
+        },
+        {
+          "id": "clo",
+          "kind": "det",
+          "x": 4590,
+          "y": 1836,
+          "w": 918,
+          "h": 390,
+          "title": "Closure, three levels",
+          "step": 11,
+          "lede": "Ticket done. Reporter told. Metric moved.",
+          "note": "Closed means the third"
+        },
+        {
+          "id": "lrn",
+          "kind": "det",
+          "x": 3468,
+          "y": 1836,
+          "w": 918,
+          "h": 390,
+          "title": "Learning store",
+          "step": 12,
+          "lede": "Confidence decays by half-life, auditable by query.",
+          "note": "Only human-validated conclusions are retrievable"
+        }
+      ],
+      "edges": [
+        {
+          "from": "src",
+          "to": "ing",
+          "tone": "flow"
+        },
+        {
+          "from": "ing",
+          "to": "enr",
+          "tone": "flow"
+        },
+        {
+          "from": "enr",
+          "to": "syn",
+          "tone": "flow"
+        },
+        {
+          "from": "syn",
+          "to": "rul",
+          "tone": "flow"
+        },
+        {
+          "from": "rul",
+          "to": "gate",
+          "tone": "flow"
+        },
+        {
+          "from": "gate",
+          "to": "apr",
+          "tone": "flow"
+        },
+        {
+          "from": "apr",
+          "to": "exe",
+          "tone": "flow"
+        },
+        {
+          "from": "exe",
+          "to": "ext1",
+          "tone": "plain"
+        },
+        {
+          "from": "apr",
+          "to": "con",
+          "label": "contract bound at approval",
+          "tone": "flow"
+        },
+        {
+          "from": "con",
+          "to": "mea",
+          "tone": "flow"
+        },
+        {
+          "from": "mea",
+          "to": "clo",
+          "tone": "flow"
+        },
+        {
+          "from": "clo",
+          "to": "lrn",
+          "tone": "flow"
+        },
+        {
+          "from": "lrn",
+          "to": "rul",
+          "label": "retrieval, decayed confidence",
+          "style": "dashed",
+          "exit": "top",
+          "enter": "bottom",
+          "tone": "return"
+        }
+      ],
+      "notes": [
+        {
+          "kind": "good",
+          "x": 102,
+          "y": 1836,
+          "w": 850,
+          "h": 390,
+          "title": "Measured",
+          "id": "z1-note-0",
+          "metric": "21% to 71%",
+          "lede": "a past remedy reaching the new recommendation, once retrieval is on.",
+          "note": "66.7% adoption"
+        },
+        {
+          "kind": "warn",
+          "x": 102,
+          "y": 2482,
+          "w": 850,
+          "h": 300,
+          "title": "Not measured",
+          "id": "z1-note-1",
+          "lede": "The outcome data behind those learnings is simulated.",
+          "note": "Mechanism, not benefit."
+        },
+        {
+          "kind": "navy",
+          "x": 1122,
+          "y": 2482,
+          "w": 2652,
+          "h": 300,
+          "title": "The architectural commitment",
+          "id": "z1-note-2",
+          "lede": "Model reasoning appears exactly twice. Everything downstream is testable code."
+        },
+        {
+          "kind": "warn",
+          "x": 4590,
+          "y": 2482,
+          "w": 2040,
+          "h": 300,
+          "title": "Honest bound on the gate",
+          "id": "z1-note-3",
+          "metric": "0.59 / 0.40",
+          "lede": "routing accuracy. The gate is what makes a pipeline of that accuracy safe to deploy."
+        },
+        {
+          "kind": "fact",
+          "x": 6834,
+          "y": 2482,
+          "w": 1938,
+          "h": 300,
+          "title": "Where this runs",
+          "id": "z1-note-4",
+          "lede": "FastAPI and LangGraph on a Hetzner EU VPS. Vercel. Supabase Postgres.",
+          "note": "About 84 REST endpoints across seven routers"
+        }
+      ],
+      "bands": [
+        {
+          "x": 32,
+          "y": 440,
+          "w": 8912,
+          "h": 420,
+          "label": "Signal to action",
+          "kind": "llm"
+        },
+        {
+          "x": 3398,
+          "y": 1766,
+          "w": 4424,
+          "h": 530,
+          "label": "Action to learning, and back into the next decision",
+          "kind": "good"
+        }
+      ]
+    },
+    {
+      "id": "z2",
+      "short": "Governance",
+      "title": "2. Governance, mapped onto the same loop",
+      "subtitle": "Responsible AI is a property of the loop rather than a module beside it. Each control names the stage it governs.",
+      "x": 0,
+      "y": 4244,
+      "w": 9188,
+      "h": 3534,
+      "nodes": [
+        {
+          "id": "a14",
+          "kind": "gov",
+          "x": 102,
+          "y": 510,
+          "w": 2142,
+          "h": 240,
+          "title": "Article 14, human oversight",
+          "lede": "Governs the approval interrupt.",
+          "note": "Past the article: friction by risk, evidence shown, per-decision attribution"
+        },
+        {
+          "id": "a12",
+          "kind": "gov",
+          "x": 2346,
+          "y": 510,
+          "w": 2142,
+          "h": 240,
+          "title": "Article 12, logging",
+          "lede": "Governs execution and the audit write.",
+          "note": "Rule, parameters, executor, result. Evidence pack hashed."
+        },
+        {
+          "id": "a50",
+          "kind": "gov",
+          "x": 4590,
+          "y": 510,
+          "w": 2142,
+          "h": 240,
+          "title": "Article 50, transparency",
+          "lede": "Governs anything customer-facing.",
+          "note": "Human editorial review is the exemption mechanism"
+        },
+        {
+          "id": "a39",
+          "kind": "fact",
+          "x": 6834,
+          "y": 510,
+          "w": 2244,
+          "h": 240,
+          "title": "Article 3(39), scope boundary",
+          "lede": "Sentiment on text is not emotion recognition.",
+          "note": "That definition is biometric. Worth stating before it is asked."
+        },
+        {
+          "id": "gdpr",
+          "kind": "gov",
+          "x": 102,
+          "y": 1360,
+          "w": 2142,
+          "h": 240,
+          "title": "GDPR",
+          "lede": "Governs ingestion and storage.",
+          "note": "PII masking, retention limits, row-level security in Postgres"
+        },
+        {
+          "id": "sov",
+          "kind": "llm",
+          "x": 2346,
+          "y": 1360,
+          "w": 2142,
+          "h": 240,
+          "title": "Model sovereignty",
+          "lede": "Governs both model stages.",
+          "note": "Hosted, EU gateway, or self-hosted. A configuration change."
+        },
+        {
+          "id": "omni",
+          "kind": "fact",
+          "x": 4590,
+          "y": 1360,
+          "w": 2142,
+          "h": 240,
+          "title": "The regulation moved under the build",
+          "lede": "Annex III duties moved to Dec 2027. Article 50 stayed on Aug 2026.",
+          "note": "The argument for durable commitments over date-triggered features"
+        },
+        {
+          "id": "coi",
+          "kind": "good",
+          "x": 6834,
+          "y": 1360,
+          "w": 2244,
+          "h": 240,
+          "title": "Governance of the research itself",
+          "lede": "Participants are told the interviewer built the prototype.",
+          "note": "Fourth consent checkbox. No commercial follow-up for six months."
+        },
+        {
+          "id": "authgate",
+          "kind": "gov",
+          "x": 102,
+          "y": 2210,
+          "w": 4386,
+          "h": 240,
+          "title": "Ingestion authenticity review",
+          "lede": "Governs what enters the loop: provenance, duplication, bursts, batch uniformity.",
+          "note": "Annotates, never drops. Abstains under ten words. Reports its own flag rate per language"
+        },
+        {
+          "id": "authrefuse",
+          "kind": "warn",
+          "x": 4590,
+          "y": 2210,
+          "w": 4488,
+          "h": 240,
+          "title": "The capability it refuses",
+          "lede": "Per-comment AI authorship is not implemented, on measured grounds.",
+          "note": "The refusal is the control. Evidence in zone 3, method in docs/engineering/ai-verbatim-detection.md"
+        }
+      ],
+      "edges": [],
+      "notes": [
+        {
+          "kind": "warn",
+          "x": 102,
+          "y": 3094,
+          "w": 2142,
+          "h": 240,
+          "title": "The checker is advisory",
+          "id": "z2-note-0",
+          "lede": "An approval gate, an audit log, an advisory checker. Not a policy engine."
+        },
+        {
+          "kind": "warn",
+          "x": 2346,
+          "y": 3094,
+          "w": 2142,
+          "h": 240,
+          "title": "Row-level security has a limit",
+          "id": "z2-note-1",
+          "lede": "Not warranted against adversarial co-tenants. Pilots run single-workspace."
+        },
+        {
+          "kind": "warn",
+          "x": 4590,
+          "y": 3094,
+          "w": 2142,
+          "h": 240,
+          "title": "Model score is a label, not a calibration",
+          "id": "z2-note-2",
+          "lede": "Honest naming, not measurement. It orders cases without warranting a probability."
+        },
+        {
+          "kind": "navy",
+          "x": 6834,
+          "y": 3094,
+          "w": 2244,
+          "h": 240,
+          "title": "The lesson that keeps recurring",
+          "id": "z2-note-3",
+          "lede": "A declared control is not an enforced control until somebody checks it.",
+          "note": "Platform in July, method in August, manuscript last week"
+        }
+      ]
+    },
+    {
+      "id": "z3",
+      "short": "Evidence",
+      "title": "3. The evidence map",
+      "subtitle": "Every claim, its status, and the file that produced it. This is the honesty device: a status is stated once and every chapter has to agree with it.",
+      "x": 9608,
+      "y": 0,
+      "w": 9188,
+      "h": 3824,
+      "nodes": [
+        {
+          "id": "corp",
+          "kind": "fact",
+          "x": 102,
+          "y": 510,
+          "w": 2856,
+          "h": 350,
+          "title": "The thesis corpus",
+          "metric": "188",
+          "lede": "real public signals, paraphrased and de-identified.",
+          "note": "Fintech 67, food delivery 82, B2B 39. Source language EN 102, DE 84."
+        },
+        {
+          "id": "gold2",
+          "kind": "fact",
+          "x": 3060,
+          "y": 510,
+          "w": 2856,
+          "h": 350,
+          "title": "The second gold standard, kept apart",
+          "metric": "100",
+          "lede": "curated bilingual cases, deliberately kept apart.",
+          "note": "97% sentiment, 90% urgency. A different gold, so never merged in."
+        },
+        {
+          "id": "held",
+          "kind": "fact",
+          "x": 6018,
+          "y": 510,
+          "w": 3060,
+          "h": 350,
+          "title": "Held out on purpose",
+          "metric": "3 sets",
+          "lede": "held outside the corpus: Vodafone 65, Delivery Hero 86, banks 104.",
+          "note": "Draft labels. The corpus is still 188."
+        },
+        {
+          "id": "r1",
+          "kind": "navy",
+          "x": 102,
+          "y": 1394,
+          "w": 4352,
+          "h": 450,
+          "title": "Result 1. Triage accuracy depends on the method",
+          "table": {
+            "head": [
+              "Predictor",
+              "Sentiment accuracy (n = 153)",
+              "Severity macro-F1 (n = 106)"
+            ],
+            "rows": [
+              [
+                "Keyword and lexicon floor",
+                "0.37",
+                "0.26"
+              ],
+              [
+                "TF-IDF and logistic regression",
+                "0.78",
+                "0.65"
+              ],
+              [
+                "Contextual model path",
+                "0.86",
+                "0.68"
+              ]
+            ]
+          },
+          "lede": "Contextual beats learned on sentiment, p = 0.029. On severity it does not, p = 0.644.",
+          "note": "Status: measured"
+        },
+        {
+          "id": "r2",
+          "kind": "navy",
+          "x": 4556,
+          "y": 1394,
+          "w": 4522,
+          "h": 450,
+          "title": "Result 2. Whose problems reach a human",
+          "table": {
+            "head": [
+              "Escalation recall",
+              "n",
+              "Floor",
+              "TF-IDF",
+              "Contextual"
+            ],
+            "rows": [
+              [
+                "German-source",
+                "8",
+                "0.0%",
+                "62.5%",
+                "87.5%"
+              ],
+              [
+                "English-source",
+                "41",
+                "19.5%",
+                "95.1%",
+                "87.8%"
+              ]
+            ]
+          },
+          "lede": "Indistinguishable on severity accuracy. Very distinguishable in whom it escalates.",
+          "note": "Status: measured, bounded. German-source stratum n = 8."
+        },
+        {
+          "id": "r3",
+          "kind": "fact",
+          "x": 102,
+          "y": 2448,
+          "w": 2856,
+          "h": 350,
+          "title": "Result 3. Routing",
+          "metric": "0.59 / 0.40",
+          "lede": "journey stage over 27 classes, owner over 51, against floors of 0.20 and 0.15.",
+          "note": "Inventory supplied, so an upper bound. Restricted, they fall to 0.28 and 0.18."
+        },
+        {
+          "id": "r4",
+          "kind": "fact",
+          "x": 3060,
+          "y": 2448,
+          "w": 2856,
+          "h": 350,
+          "title": "Result 4. The learning memory",
+          "metric": "21% to 71%",
+          "lede": "a past remedy reaching the new recommendation, at 66.7% adoption.",
+          "note": "The outcomes behind it are simulated"
+        },
+        {
+          "id": "ladder",
+          "kind": "warn",
+          "x": 6018,
+          "y": 2448,
+          "w": 3060,
+          "h": 350,
+          "title": "What is still open",
+          "lede": "DP1 demonstrated. Hardening partly measured. No kappa. Zero interviews.",
+          "note": "The two pending rows are what the asks are about"
+        },
+        {
+          "id": "r5",
+          "kind": "navy",
+          "x": 102,
+          "y": 2898,
+          "w": 8976,
+          "h": 420,
+          "title": "Result 5. A detector, measured and refused",
+          "table": {
+            "head": [
+              "What was measured",
+              "Result",
+              "Consequence"
+            ],
+            "rows": [
+              [
+                "Stylometric detector at 81% recall",
+                "15.0% of genuine reviews flagged",
+                "78 to 95 of every 100 flags is a real customer"
+              ],
+              [
+                "Same detector, across languages",
+                "Greek 44.4% against Polish 14.8%",
+                "a 3.0x spread, from an EN and DE feature lexicon"
+              ],
+              [
+                "Binoculars cross-perplexity, English",
+                "AUROC 0.326, worse than chance",
+                "complaint text is the more predictable text"
+              ],
+              [
+                "The gate that shipped instead",
+                "0.86% flagged, all true duplicates",
+                "25.1% abstained as too short to assess"
+              ]
+            ]
+          },
+          "lede": "Asked to flag AI-written verbatims before triage. Both detectors were measured, then the capability was refused.",
+          "note": "Status: measured, including the negative result. 6,740 texts; the machine class is paraphrase, not adversarial fabrication. Source: docs/engineering/ai-verbatim-detection.md"
+        }
+      ],
+      "edges": [],
+      "notes": [
+        {
+          "kind": "good",
+          "x": 102,
+          "y": 3434,
+          "w": 4352,
+          "h": 190,
+          "title": "The bound that travels with every number",
+          "id": "z3-note-0",
+          "lede": "Texts are English paraphrases, so every per-language result is a source-language stratum."
+        },
+        {
+          "kind": "warn",
+          "x": 4556,
+          "y": 3434,
+          "w": 4522,
+          "h": 190,
+          "title": "Retracted rather than defended",
+          "id": "z3-note-1",
+          "lede": "Language is confounded with sector, so the aggregate comparison was withdrawn."
+        }
+      ]
+    },
+    {
+      "id": "z4",
+      "short": "Schema",
+      "title": "4. The schema is the argument",
+      "subtitle": "The thesis's two primitives are tables with foreign keys rather than prose. Closure is referential integrity, and memory is a column that decays.",
+      "x": 9608,
+      "y": 4244,
+      "w": 9188,
+      "h": 3212,
+      "nodes": [
+        {
+          "id": "t_sig",
+          "kind": "data",
+          "x": 102,
+          "y": 510,
+          "w": 1088,
+          "h": 190,
+          "title": "signals",
+          "lede": "Raw feedback plus its enrichment."
+        },
+        {
+          "id": "t_prob",
+          "kind": "data",
+          "x": 1326,
+          "y": 510,
+          "w": 1088,
+          "h": 190,
+          "title": "problems",
+          "lede": "Signals grouped, with cross-signal severity and a reach basis."
+        },
+        {
+          "id": "t_rule",
+          "kind": "data",
+          "x": 2550,
+          "y": 510,
+          "w": 1088,
+          "h": 190,
+          "title": "rules",
+          "lede": "Priority, specificity, action type, auto_execute."
+        },
+        {
+          "id": "t_act",
+          "kind": "data",
+          "x": 3774,
+          "y": 510,
+          "w": 1088,
+          "h": 190,
+          "title": "actions_log",
+          "lede": "One immutable row per action."
+        },
+        {
+          "id": "t_apr",
+          "kind": "gov",
+          "x": 3774,
+          "y": 1326,
+          "w": 1088,
+          "h": 230,
+          "title": "approval_records",
+          "lede": "Reviewer from the verified login. Evidence sha256 at decision time."
+        },
+        {
+          "id": "t_con",
+          "kind": "navy",
+          "x": 4998,
+          "y": 1326,
+          "w": 1088,
+          "h": 230,
+          "title": "outcome_contracts",
+          "lede": "One to one with the action, created with it."
+        },
+        {
+          "id": "t_mea",
+          "kind": "data",
+          "x": 6222,
+          "y": 1326,
+          "w": 1088,
+          "h": 230,
+          "title": "outcome_measurements",
+          "lede": "Grades closure. Evidence grade A to E, provenance stamped server-side."
+        },
+        {
+          "id": "t_lrn",
+          "kind": "navy",
+          "x": 4998,
+          "y": 2142,
+          "w": 1088,
+          "h": 190,
+          "title": "ab_learnings",
+          "lede": "base_confidence and half_life_days. Decay is a column."
+        },
+        {
+          "id": "t_tax",
+          "kind": "data",
+          "x": 1326,
+          "y": 1326,
+          "w": 1088,
+          "h": 230,
+          "title": "taxonomy_nodes",
+          "lede": "Themes carrying the same decay fields."
+        }
+      ],
+      "edges": [
+        {
+          "from": "t_sig",
+          "to": "t_prob",
+          "tone": "plain"
+        },
+        {
+          "from": "t_prob",
+          "to": "t_rule",
+          "tone": "plain"
+        },
+        {
+          "from": "t_rule",
+          "to": "t_act",
+          "tone": "plain"
+        },
+        {
+          "from": "t_act",
+          "to": "t_apr",
+          "tone": "plain"
+        },
+        {
+          "from": "t_act",
+          "to": "t_con",
+          "label": "1:1 at creation",
+          "tone": "plain"
+        },
+        {
+          "from": "t_con",
+          "to": "t_mea",
+          "tone": "plain"
+        },
+        {
+          "from": "t_mea",
+          "to": "t_lrn",
+          "label": "human-validated only",
+          "tone": "plain"
+        },
+        {
+          "from": "t_lrn",
+          "to": "t_rule",
+          "label": "retrieval, decayed",
+          "style": "dashed",
+          "exit": "left",
+          "enter": "bottom",
+          "tone": "return"
+        },
+        {
+          "from": "t_prob",
+          "to": "t_tax",
+          "style": "dashed",
+          "tone": "return"
+        }
+      ],
+      "notes": [
+        {
+          "kind": "navy",
+          "x": 7446,
+          "y": 510,
+          "w": 1632,
+          "h": 190,
+          "title": "Why this matters",
+          "id": "z4-note-0",
+          "lede": "An action cannot exist without a contract. Closed is a row with evidence, not a flag."
+        },
+        {
+          "kind": "fact",
+          "x": 7446,
+          "y": 1190,
+          "w": 1632,
+          "h": 190,
+          "title": "Tenancy",
+          "id": "z4-note-1",
+          "lede": "Workspace-scoped, enforced in Postgres below the application layer."
+        },
+        {
+          "kind": "fact",
+          "x": 7446,
+          "y": 1870,
+          "w": 1632,
+          "h": 190,
+          "title": "One store contract",
+          "id": "z4-note-2",
+          "lede": "jsonb payloads with promoted columns. SQLite, in-memory, Postgres."
+        },
+        {
+          "kind": "good",
+          "x": 102,
+          "y": 2822,
+          "w": 2176,
+          "h": 190,
+          "title": "The same discipline, one layer up",
+          "id": "z4-note-3",
+          "lede": "One shared status function, so the dashboard numbers reconcile by construction."
+        },
+        {
+          "kind": "warn",
+          "x": 2414,
+          "y": 2822,
+          "w": 2448,
+          "h": 190,
+          "title": "What the schema does not yet carry",
+          "id": "z4-note-4",
+          "lede": "Evidence grade B, the controlled quasi-experiment, has never been produced."
+        }
+      ]
+    }
+  ]
+}

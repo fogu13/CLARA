@@ -575,6 +575,13 @@ export async function deleteSignals(signalIds: string[]): Promise<{ deleted: num
   });
 }
 
+export async function backfillAuthenticity(): Promise<{ scanned: number; updated: number }> {
+  return requestJson<{ scanned: number; updated: number }>(
+    `${apiBaseUrl()}/signals/authenticity/backfill`,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+}
+
 export async function validateSignalCsv(csvText: string): Promise<SignalValidationReport> {
   return requestJson<SignalValidationReport>(`${apiBaseUrl()}/signals/validate-csv`, {
     method: "POST",

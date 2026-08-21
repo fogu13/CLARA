@@ -255,3 +255,60 @@ class TestMetadataContract:
         assert summary["assessed"] == 1
         assert summary["channel_trust"] == "unverified"
         assert "flag_rate_by_language" in summary
+
+
+class TestBackfillOfExistingSignals:
+    """Signals stored before this review existed can be assessed after the fact,
+    but only for what is true of the signal itself."""
+
+    def test_backfill_makes_no_cohort_claim(self) -> None:
+        """Batch findings are statements about an ingestion batch. The batches
+        behind already-stored signals cannot be reconstructed, so inventing them
+        from source or date would be manufacturing evidence."""
+        from app.services.authenticity import assess_existing
+
+        # 30 uniform signals that WOULD trigger the batch uniformity finding at import
+        records = [
+            _sig(f"s-{i}", " ".join([f"topic{i}"] + ["reported issue"] * 10))
+            for i in range(30)
+        ]
+        result = assess_existing(records)
+        assert result.batch_reasons == []
+        assert result.channel == "backfill"
+
+    def test_backfill_still_finds_signal_level_facts(self) -> None:
+        from app.services.authenticity import assess_existing
+
+        dupe = "the payment failed twice and support closed my ticket without a word"
+        records = [
+            _sig("s-1", dupe),
+            _sig("s-2", dupe),
+            _sig("s-3", "As an AI language model I cannot complete that refund request"),
+            _sig("s-4", "hi"),
+        ]
+        result = assess_existing(records)
+        assert "exact_duplicate" in result.verdicts["s-2"].codes
+        assert "exact_duplicate" not in result.verdicts["s-1"].codes
+        assert "declared_ai_generated" in result.verdicts["s-3"].codes
+        assert result.verdicts["s-4"].state == "insufficient_text"
+
+    def test_backfill_marks_the_later_copy_not_the_first(self) -> None:
+        """Ordered by timestamp, so the original is left clean and later copies
+        are annotated, matching what import would have done."""
+        from app.services.authenticity import assess_existing
+
+        dupe = "the delivery never arrived and nobody answered the support line"
+        first = _sig("older", dupe, days_ago=5)
+        second = _sig("newer", dupe, days_ago=1)
+        result = assess_existing([second, first])  # deliberately out of order
+        assert "exact_duplicate" not in result.verdicts["older"].codes
+        assert "exact_duplicate" in result.verdicts["newer"].codes
+
+    def test_backfill_is_idempotent(self) -> None:
+        from app.services.authenticity import assess_existing
+
+        records = [_sig("s-1", "the checkout page failed three times in a row today")]
+        assess_existing(records)
+        first = dict(records[0].metadata)
+        assess_existing(records)
+        assert records[0].metadata == first

@@ -292,6 +292,7 @@ def assess_batch(
     existing: list[SignalRecord] | None = None,
     *,
     channel: str | None = None,
+    include_batch_findings: bool = True,
 ) -> BatchAssessment:
     """Review an incoming batch and stamp findings into each record's metadata.
 
@@ -306,9 +307,10 @@ def assess_batch(
     assessment = BatchAssessment(channel=source, channel_trust=trust)
 
     # ---- batch-level findings first: they attach to every signal in the batch
-    for reason in (_burst_reason(records, existing), _uniformity_reason(records, trust)):
-        if reason:
-            assessment.batch_reasons.append(reason)
+    if include_batch_findings:
+        for reason in (_burst_reason(records, existing), _uniformity_reason(records, trust)):
+            if reason:
+                assessment.batch_reasons.append(reason)
 
     seen_text: dict[str, str] = {}
     for r in existing:
@@ -401,6 +403,28 @@ def assess_batch(
                 f"than others."
             )
     return assessment
+
+
+def assess_existing(records: list[SignalRecord]) -> BatchAssessment:
+    """Assess signals that were stored before this review existed.
+
+    Signal-level findings only, and deliberately so. Volume bursts and batch
+    uniformity are statements about an INGESTION BATCH, and the batches that
+    produced already-stored signals cannot be reconstructed after the fact:
+    grouping by source or by day would invent boundaries that never existed and
+    then draw conclusions from them. A backfilled signal therefore carries the
+    findings that are true of the signal itself (declared authorship, exact
+    duplication, low information, and the length-based abstention) and no cohort
+    claim at all.
+
+    Duplicate detection runs across the whole set, so the FIRST occurrence of a
+    repeated text is left clean and later copies are marked, matching what would
+    have happened had they arrived in order.
+    """
+    ordered = sorted(records, key=lambda r: r.timestamp or "")
+    result = assess_batch(ordered, [], channel="backfill", include_batch_findings=False)
+    result.channel = "backfill"
+    return result
 
 
 def _stamp(
