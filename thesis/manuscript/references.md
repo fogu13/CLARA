@@ -132,6 +132,8 @@ Guo, C., Pleiss, G., Sun, Y., & Weinberger, K. Q. (2017). On calibration of mode
 
 Gupta, S., et al. (2006). Modeling customer lifetime value. *Journal of Service Research*, 9(2), 139–155.
 
+Hans, A., Schwarzschild, A., Cherepanova, V., Kazemi, H., Saha, A., Goldblum, M., Geiping, J., & Goldstein, T. (2024). Spotting LLMs with Binoculars: Zero-shot detection of machine-generated text. *Proceedings of the 41st International Conference on Machine Learning*. arXiv:2401.12070.
+
 Hardt, M., Price, E., & Srebro, N. (2016). Equality of opportunity in supervised learning. In *Advances in Neural Information Processing Systems 29 (NIPS 2016)* (pp. 3315–3323).
 
 Harel, D. (1987). Statecharts. *Science of Computer Programming*, 8(3), 231–274.
