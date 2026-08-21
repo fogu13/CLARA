@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     url: "https://clara.odradekai.com/about",
     title: "About · CLARA",
     description:
-      "Born from research, validated across three industries, built in Berlin. Every claim on this site is machine-checked against the live product.",
+      "Born from research, validated across three industries, built in Berlin. The site's product claims are machine-checked against the live product.",
     images: [{ url: "/og.jpg", width: 1424, height: 737 }],
   },
 };

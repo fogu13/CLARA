@@ -131,14 +131,14 @@ export default function CompliancePage() {
           <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">GDPR</CardTitle></CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-emerald-600">92</div>
-            <p className="text-xs text-muted-foreground mt-1">Lawful basis + data minimization</p>
+            <p className="text-xs text-muted-foreground mt-1">Lawful basis + data minimization · self-assessed</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">EU AI Act</CardTitle></CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-amber-600">82</div>
-            <p className="text-xs text-muted-foreground mt-1">Transparency + human oversight</p>
+            <p className="text-xs text-muted-foreground mt-1">Transparency + human oversight · self-assessed</p>
           </CardContent>
         </Card>
       </div>

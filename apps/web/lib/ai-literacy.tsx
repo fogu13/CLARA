@@ -2,9 +2,10 @@
 
 // W3 (EU AI Act Art. 4): shared content for the AI-literacy module and the
 // printable AI-Literacy Pack. The five screens are pure i18n copy; the eval
-// numbers are a CITED SNAPSHOT of the versioned eval report (apps/api/app/
-// evals/reports/report_20260703T110119Z.json) — deliberately not live values,
-// so the pack a customer files stays reproducible against that report.
+// numbers are a CITED SNAPSHOT of the committed published metrics (apps/api/
+// app/evals/published_metrics.json, run 2026-07-18; hallucination/PII from the
+// 2026-07-17 run) — deliberately not live values, so the pack a customer files
+// stays reproducible against that snapshot.
 
 import { useI18n } from "@/lib/i18n";
 
@@ -45,10 +46,10 @@ export function buildScreens(t: Dict): LiteracyScreen[] {
 export function EvalBlock({ t }: { t: Dict }) {
   const a = t.aiLiteracy;
   const rows: [string, string][] = [
-    [a.evalSentiment, "96.7%"],
-    [a.evalUrgency, "81.7%"],
-    [a.evalTagF1, "0.81"],
-    [a.evalHallucination, "6.7%"],
+    [a.evalSentiment, "97%"],
+    [a.evalUrgency, "90%"],
+    [a.evalTagF1, "0.83"],
+    [a.evalHallucination, "2.5%"],
     [a.evalPii, "0"],
   ];
   return (

@@ -99,7 +99,7 @@ export function LandingPage() {
         <div className="wrap row">
           <span className="pill"><i>●</i> <b>{s.pill1b}</b> {s.pill1r}</span>
           <span className="pill"><i>●</i> <b>{s.pill2b}</b> {s.pill2r}</span>
-          <span className="pill"><i>●</i> {s.pill3pre} <b>Zendesk · Jira · Slack</b></span>
+          <span className="pill"><i>●</i> {s.pill3pre} <b>Jira · Slack</b></span>
           <span className="pill"><i>●</i> <b>{s.pill4b}</b> {s.pill4r}</span>
           <span className="pill"><i>●</i> {s.pill5pre} <b>EU</b></span>
         </div>
