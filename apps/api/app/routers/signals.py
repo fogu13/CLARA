@@ -35,6 +35,7 @@ from app.services.contexts import (
 )
 from app.services.journeys import parse_journey_event_csv
 from app.services.seed import to_demo_dataset_summary
+from app.services.authenticity import assess_batch
 from app.services.signals import (
     annotate_near_duplicates,
     parse_signal_csv,
@@ -96,7 +97,11 @@ def build_router(
             raise HTTPException(status_code=422, detail=report.model_dump(mode="json"))
 
         records = parse_signal_csv(request.csv_text)
-        near_dups = annotate_near_duplicates(records, signal_store.list_signals())
+        existing = signal_store.list_signals()
+        near_dups = annotate_near_duplicates(records, existing)
+        # Authenticity review runs BEFORE triage so the human can exclude a cohort
+        # first. It annotates only: nothing is dropped, filtered or reordered here.
+        review = assess_batch(records, existing, channel="csv_upload")
         result = signal_store.import_signals(records)
         telemetry_store.record(
             "signals_imported",
@@ -105,6 +110,7 @@ def build_router(
                 "imported": result.imported,
                 "skipped": result.skipped_duplicates,
                 "near_duplicates": near_dups,
+                **{f"authenticity_{k}": v for k, v in review.summary().items()},
             },
         )
         return result
@@ -169,7 +175,9 @@ def build_router(
         if not records:
             raise HTTPException(status_code=422, detail="No rows with feedback_text")
 
-        near_dups = annotate_near_duplicates(records, signal_store.list_signals())
+        existing = signal_store.list_signals()
+        near_dups = annotate_near_duplicates(records, existing)
+        review = assess_batch(records, existing, channel="webhook")
         result = signal_store.import_signals(records)
         telemetry_store.record(
             "signals_imported",
@@ -178,6 +186,7 @@ def build_router(
                 "imported": result.imported,
                 "skipped": result.skipped_duplicates,
                 "near_duplicates": near_dups,
+                **{f"authenticity_{k}": v for k, v in review.summary().items()},
             },
         )
         return result

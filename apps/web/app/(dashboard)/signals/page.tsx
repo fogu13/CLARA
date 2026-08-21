@@ -412,6 +412,19 @@ export default function SignalsPage() {
                           possible duplicate
                         </Badge>
                       )}
+                      {/* Authenticity review. Deliberately never says "AI-written":
+                          the band reflects provenance and duplication evidence, and
+                          the tooltip carries the reason so nobody acts on a bare badge. */}
+                      {s.metadata?.authenticity_band === "review_suggested" && (
+                        <Badge variant="warning" title={s.metadata?.authenticity_note || t.authenticity.reviewSuggestedHint}>
+                          {t.authenticity.reviewSuggested}
+                        </Badge>
+                      )}
+                      {s.metadata?.authenticity_state === "insufficient_text" && (
+                        <Badge variant="outline" title={t.authenticity.tooShortHint}>
+                          {t.authenticity.tooShortToAssess}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -427,6 +427,23 @@ const en = {
     authBook: "Book a scoping call",
     authBack: "Back to clara.odradekai.com",
   },
+  authenticity: {
+    reviewSuggested: "review suggested",
+    reviewSuggestedHint:
+      "Flagged by the ingestion review because of its provenance or because identical text already exists — not because of how it is written.",
+    tooShortToAssess: "too short to assess",
+    tooShortHint:
+      "Under 10 words. CLARA does not guess at the origin of a comment this short.",
+    batchUniform: "batch looks uniform",
+    batchUniformHint:
+      "Signals in this upload vary unusually little in length and structure. Bulk-generated content looks like this; so does a fixed-format survey export.",
+    volumeBurst: "unusual volume",
+    volumeBurstHint:
+      "Far more signals than this source normally sends in a day. Launches and incidents do this too.",
+    whatThisIs:
+      "CLARA flags signals whose provenance or structure is unusual, and says so when a comment is too short to assess. It does not claim to know whether a person or a language model wrote any individual comment, and it never removes anything on its own.",
+    disparityWarning: "Uneven flagging detected",
+  },
   insights: {
     title: "Problems",
     subtitle: "AI-synthesized problems from customer signals",
@@ -1334,6 +1351,23 @@ const de: Dict = {
     authNoSignup: "Keine öffentliche Registrierung. CLARA läuft über bezahlte Design-Partner-Pilotprojekte.",
     authBook: "Erstgespräch buchen",
     authBack: "Zurück zu clara.odradekai.com",
+  },
+  authenticity: {
+    reviewSuggested: "Prüfung empfohlen",
+    reviewSuggestedHint:
+      "Von der Eingangsprüfung markiert wegen der Herkunft oder weil identischer Text bereits vorhanden ist – nicht wegen des Schreibstils.",
+    tooShortToAssess: "zu kurz für eine Bewertung",
+    tooShortHint:
+      "Unter 10 Wörtern. CLARA rät bei so kurzen Kommentaren nicht über die Herkunft.",
+    batchUniform: "Stapel wirkt uniform",
+    batchUniformHint:
+      "Die Signale dieses Uploads unterscheiden sich ungewöhnlich wenig in Länge und Struktur. Massenhaft erzeugte Inhalte sehen so aus – ein Umfrage-Export mit festem Format allerdings auch.",
+    volumeBurst: "ungewöhnliches Volumen",
+    volumeBurstHint:
+      "Deutlich mehr Signale, als diese Quelle üblicherweise pro Tag sendet. Produktstarts und Störungen verursachen das ebenfalls.",
+    whatThisIs:
+      "CLARA markiert Signale mit ungewöhnlicher Herkunft oder Struktur und sagt es, wenn ein Kommentar zu kurz für eine Bewertung ist. Ob ein Mensch oder ein Sprachmodell einen einzelnen Kommentar geschrieben hat, behauptet CLARA nicht zu wissen – und es wird nie etwas von selbst entfernt.",
+    disparityWarning: "Ungleichmäßige Markierung erkannt",
   },
   insights: {
     title: "Probleme",
