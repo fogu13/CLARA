@@ -30,7 +30,7 @@ export default function AiLiteracyPackPage() {
     setToday(todayIso());
   }, []);
 
-  const workspaceName = workspace?.name ?? "—";
+  const workspaceName = workspace?.name ?? "";
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">

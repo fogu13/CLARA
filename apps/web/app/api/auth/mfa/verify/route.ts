@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   }
   const pending = request.cookies.get(MFA_COOKIE)?.value;
   if (!pending) {
-    return NextResponse.json({ error: "No pending sign-in — start over" }, { status: 401 });
+    return NextResponse.json({ error: "No pending sign-in, start over" }, { status: 401 });
   }
   const { factorId, code } = (await request.json().catch(() => ({}))) ?? {};
   if (!factorId || !code) {

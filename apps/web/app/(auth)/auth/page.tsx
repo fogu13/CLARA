@@ -1,15 +1,18 @@
 "use client";
 
 import { Suspense, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authConfigured, signIn, verifyMfaLogin } from "@/lib/auth-client";
 import { wrongOriginHint } from "@/lib/client-api";
+import { useI18n } from "@/lib/i18n";
 
 function AuthForm() {
   const router = useRouter();
+  const { t } = useI18n();
   const reason = useSearchParams().get("reason");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -155,6 +158,22 @@ function AuthForm() {
             </a>
           </p>
         </form>
+
+        {/* Prospects land here from "Sign in" — tell them what this is and
+            route them to the pilot motion instead of a dead end. */}
+        <div className="space-y-1 border-t pt-4 text-center text-xs text-muted-foreground">
+          <p>{t.site.authNoSignup}</p>
+          <p>
+            <a href="/research#pilot" className="font-medium text-primary underline-offset-2 hover:underline">
+              {t.site.authBook} →
+            </a>
+          </p>
+          <p>
+            <Link href="/" className="underline-offset-2 hover:text-foreground hover:underline">
+              {t.site.authBack}
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

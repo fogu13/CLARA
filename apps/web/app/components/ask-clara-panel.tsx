@@ -100,8 +100,8 @@ export function AskClaraPanel() {
               <p className="text-xs text-muted-foreground">
                 {t.ask.evidenceWindow
                   .replace("{n}", String(result.evidence_window.signals_considered))
-                  .replace("{from}", result.evidence_window.oldest ?? "—")
-                  .replace("{to}", result.evidence_window.newest ?? "—")}
+                  .replace("{from}", result.evidence_window.oldest ?? "")
+                  .replace("{to}", result.evidence_window.newest ?? "")}
               </p>
             ) : null}
           </div>

@@ -127,13 +127,13 @@ export function apiFetch(url: string, init?: RequestInit): Promise<Response> {
 export function httpErrorMessage(action: string, status: number): string {
   const reason =
     status === 401
-      ? "your session is no longer valid — sign in again"
+      ? "your session is no longer valid, sign in again"
       : status === 403
         ? "you don't have permission (ask a workspace admin)"
         : status === 404
           ? "not found"
           : status >= 500
-            ? "the server hit an error — try again shortly"
+            ? "the server hit an error, try again shortly"
             : `request failed (HTTP ${status})`;
   return `${action}: ${reason}.`;
 }

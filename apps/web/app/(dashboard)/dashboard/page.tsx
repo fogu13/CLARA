@@ -117,6 +117,15 @@ function humanize(value: string): string {
     .join(" ");
 }
 
+// Metric ids can carry a scope suffix after a colon
+// ("signal_rate_per_day:purchase/checkout"); show the scope as a
+// parenthetical instead of gluing it to the humanized name.
+function metricLabel(metric: string): string {
+  const colon = metric.indexOf(":");
+  if (colon === -1) return humanize(metric);
+  return `${humanize(metric.slice(0, colon))} (${metric.slice(colon + 1)})`;
+}
+
 function compact(value: number): string {
   return new Intl.NumberFormat("en", { notation: "compact" }).format(value);
 }
@@ -845,9 +854,9 @@ export default function DashboardPage() {
                               </Badge>
                             </div>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              {humanize(item.metric)}: {formatMetric(item.baseline)} →{" "}
+                              {metricLabel(item.metric)}: {formatMetric(item.baseline)} →{" "}
                               {item.latest_value === null || item.latest_value === undefined
-                                ? "—"
+                                ? ""
                                 : formatMetric(item.latest_value)}{" "}
                               · {td.target} {formatMetric(item.success_threshold)}
                             </p>

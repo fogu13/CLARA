@@ -1,6 +1,5 @@
 import { promises as fs } from "fs";
 import path from "path";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { marked } from "marked";
 import type { Metadata } from "next";
@@ -72,18 +71,18 @@ export default async function LegalPage({
 
   const html = await marked.parse(content, { gfm: true });
   return (
-    <main style={{ maxWidth: 760, margin: "0 auto", padding: "48px 20px", lineHeight: 1.65 }}>
-      <article
-        // Content is our own repo-committed, lawyer-reviewed markdown — not
-        // user input; marked renders it to static HTML at build time.
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-      <p style={{ marginTop: 40, fontSize: 13, opacity: 0.6 }}>
-        <Link href="/" style={{ textDecoration: "underline" }}>
-          clara.odradekai.com
-        </Link>{" "}
-        · <Link href="/security" style={{ textDecoration: "underline" }}>Security &amp; Trust</Link>
-      </p>
+    <main className="page-main">
+      <section>
+        <div className="wrap">
+          <article
+            className="prose"
+            style={{ maxWidth: 760 }}
+            // Content is our own repo-committed, lawyer-reviewed markdown — not
+            // user input; marked renders it to static HTML at build time.
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        </div>
+      </section>
     </main>
   );
 }
