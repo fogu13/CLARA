@@ -36,50 +36,13 @@ from app.domain.models import (
 )
 from app.services.common import SerializedConnection, action_snapshot, utc_now  # re-exported for importers, SerializedConnection
 from app.services import outcome_engine
-
-
-UNRESOLVED_GOVERNANCE_STATUSES = {"fail", "review_required"}
-GOVERNED_ACTION_CLASSES = {"customer_recovery", "journey_intervention", "governance"}
-# ponytail: local policy map; pass PolicyRuleStore into workflow if this grows.
-GOVERNANCE_RULES_BY_DESTINATION = {
-    "zendesk": {
-        "customer_contact_requires_consent_review",
-        "customer_contact_requires_valid_consent",
-        "sensitive_attribute_inference_prohibited",
-    },
-    "hubspot": {
-        "customer_contact_requires_consent_review",
-        "customer_contact_requires_valid_consent",
-        "audience_activation_requires_privacy_review",
-        "sensitive_attribute_inference_prohibited",
-        "high_risk_marketing_change_requires_privacy_review",
-    },
-    "braze": {
-        "customer_contact_requires_consent_review",
-        "customer_contact_requires_valid_consent",
-        "audience_activation_requires_privacy_review",
-        "sensitive_attribute_inference_prohibited",
-        "high_risk_marketing_change_requires_privacy_review",
-    },
-    "salesforce": {
-        "customer_contact_requires_consent_review",
-        "customer_contact_requires_valid_consent",
-        "audience_activation_requires_privacy_review",
-        "sensitive_attribute_inference_prohibited",
-        "high_risk_marketing_change_requires_privacy_review",
-    },
-    "adobe_experience_platform": {
-        "audience_activation_requires_privacy_review",
-        "sensitive_attribute_inference_prohibited",
-        "high_risk_marketing_change_requires_privacy_review",
-    },
-    "policy_review": {
-        "customer_contact_requires_valid_consent",
-        "audience_activation_requires_privacy_review",
-        "sensitive_attribute_inference_prohibited",
-        "high_risk_marketing_change_requires_privacy_review",
-    },
-}
+from app.services.policy_engine import (
+    EvaluationSource,
+    GovernedCall,
+    PolicyDecisionStatus,
+    PolicyEngine,
+    default_policy_engine,
+)
 
 
 def find_action(problem: ProblemRecord, action_id: str):
@@ -140,40 +103,31 @@ def assert_dependencies_satisfied(
         )
 
 
+def governed_call_for_decision(problem: ProblemRecord, action) -> GovernedCall:
+    return GovernedCall(
+        source=EvaluationSource.workflow_approval,
+        action_class=action.class_,
+        destination=action.destination,
+        risk_level=action.risk_level,
+        governance_checks=problem.governance_checks,
+        reference=f"{problem.problem_id}/{action.action_id}",
+    )
+
+
 def assert_governance_allows_decision(
     *,
     problem: ProblemRecord,
     decision: ApprovalDecision,
     action,
     approved_action_ids: set[str] | None = None,
+    policy_engine: PolicyEngine | None = None,
 ) -> None:
     if decision.decision != ApprovalDecisionStatus.approved:
         return
 
-    destination = action.destination.strip().lower()
-    applicable_rule_ids = GOVERNANCE_RULES_BY_DESTINATION.get(destination)
-    if applicable_rule_ids is None and action.class_.value in GOVERNED_ACTION_CLASSES:
-        applicable_rule_ids = {
-            rule_id
-            for destination_rule_ids in GOVERNANCE_RULES_BY_DESTINATION.values()
-            for rule_id in destination_rule_ids
-        }
-
-    if applicable_rule_ids is not None:
-        checks_by_rule = {check.policy_rule_id or check.rule: check for check in problem.governance_checks}
-        blocking_failures = [
-            rule_id
-            for rule_id in applicable_rule_ids
-            if (check := checks_by_rule.get(rule_id)) is None
-            or check.status.value in UNRESOLVED_GOVERNANCE_STATUSES
-        ]
-    else:
-        blocking_failures = [
-            check
-            for check in problem.governance_checks
-            if check.blocking and check.status.value == "fail"
-        ]
-    if blocking_failures:
+    engine = policy_engine or default_policy_engine()
+    verdict = engine.evaluate(governed_call_for_decision(problem, action))
+    if verdict.decision == PolicyDecisionStatus.block:
         raise HTTPException(
             status_code=409,
             detail="Action cannot be approved while blocking governance checks are failing",
@@ -561,6 +515,7 @@ class WorkflowStore:
         decision: ApprovalDecision,
         evidence_pack_hash: str | None = None,
         four_eyes: bool = False,
+        policy_engine: PolicyEngine | None = None,
     ) -> ApprovalRecord:
         action = find_action(problem, decision.action_id)
         ordered = [
@@ -579,6 +534,7 @@ class WorkflowStore:
             decision=decision,
             action=action,
             approved_action_ids=approved_action_ids,
+            policy_engine=policy_engine,
         )
 
         record = ApprovalRecord(
@@ -1144,6 +1100,7 @@ class SQLiteWorkflowStore:
         decision: ApprovalDecision,
         evidence_pack_hash: str | None = None,
         four_eyes: bool = False,
+        policy_engine: PolicyEngine | None = None,
     ) -> ApprovalRecord:
         action = find_action(problem, decision.action_id)
         decision_rows = self._connection.execute(
@@ -1162,6 +1119,7 @@ class SQLiteWorkflowStore:
             decision=decision,
             action=action,
             approved_action_ids=approved_action_ids,
+            policy_engine=policy_engine,
         )
 
         created_at = utc_now()

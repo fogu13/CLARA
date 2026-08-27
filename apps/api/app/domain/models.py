@@ -408,6 +408,7 @@ class PolicyRule(BaseModel):
     severity: RiskLevel
     applies_to_action_classes: list[ActionClass] = Field(default_factory=list)
     applies_to_destinations: list[str] = Field(default_factory=list)
+    applies_to_categories: list[str] = Field(default_factory=list)
     required_evidence: list[str] = Field(default_factory=list)
     default_blocking: bool
     owner: str = Field(min_length=1)

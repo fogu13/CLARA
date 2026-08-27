@@ -26,6 +26,14 @@ from langgraph.types import interrupt
 
 from app.agents.state import TriageState
 from app.services.enrichment import enrich_signals, merge_enrichment_into_signal
+from app.services.policy_engine import (
+    ActorType,
+    EvaluationSource,
+    GovernedCall,
+    default_policy_engine,
+    engine_from_rule_dicts,
+    governance_checks_from_decision,
+)
 from app.services.synthesis import synthesize_insights
 
 logger = logging.getLogger(__name__)
@@ -193,12 +201,15 @@ def synthesize_node(state: TriageState) -> dict[str, Any]:
 
 
 def governance_node(state: TriageState) -> dict[str, Any]:
-    """Governance gate: check policy rules before action.
+    """Governance gate: evaluate policy rules before action.
 
-    Wraps CLARA_2's assert_governance_allows_decision pattern
-    (workflow.py:43-57). Blocking checks prevent action — the human can
-    still review but cannot approve.
-    """  # noqa: E501
+    Delegates to the policy evaluation engine (services/policy_engine), the
+    same evaluator behind assert_governance_allows_decision. Rules come from
+    the run's `policy_rules` state (PolicyRuleStore rows serialized by the
+    API) or fall back to the seed defaults, so the gate is rule-driven, not
+    hardcoded. Blocking findings prevent action — the human can still review
+    but cannot approve.
+    """
     insights = state.get("insights", [])
     if not insights:
         return {
@@ -207,20 +218,27 @@ def governance_node(state: TriageState) -> dict[str, Any]:
             "status": "governed",
         }
 
-    # Check each insight's suggested actions against policy rules.
-    # In the full implementation, this wraps PolicyRuleStore + governance checks.
-    # For now, we do a basic check: insights with compliance_concern category
-    # get a blocking flag requiring human review.
+    rule_dicts = state.get("policy_rules") or []
+    engine = engine_from_rule_dicts(rule_dicts) if rule_dicts else default_policy_engine()
+
     checks: list[dict[str, Any]] = []
     for insight in insights:
-        if insight.get("category") == "compliance_concern":
-            checks.append({
-                "insight_id": insight.get("title", ""),
-                "rule_id": "compliance_review_required",
-                "status": "fail",
-                "blocking": True,
-                "message": "Compliance concerns require manual review before action",
-            })
+        # Model-provided confidence is untrusted; out-of-range values must not
+        # crash the gate, so they are dropped rather than validated.
+        confidence = insight.get("confidence")
+        if not isinstance(confidence, (int, float)) or not 0.0 <= confidence <= 1.0:
+            confidence = None
+        call = GovernedCall(
+            source=EvaluationSource.triage_graph,
+            actor_type=ActorType.system,
+            data_categories=[c for c in [insight.get("category")] if isinstance(c, str) and c],
+            evidence_confidence=confidence,
+            reference=insight.get("title", ""),
+        )
+        decision = engine.before_call(call)
+        checks.extend(
+            governance_checks_from_decision(decision, insight_id=insight.get("title", ""))
+        )
 
     passed = not any(c["blocking"] and c["status"] == "fail" for c in checks)
 

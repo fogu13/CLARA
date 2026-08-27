@@ -135,6 +135,22 @@ def test_editor_can_import_signals(monkeypatch) -> None:
     assert response.status_code == 200
 
 
+def test_policy_evaluate_requires_editor(monkeypatch) -> None:
+    client = make_auth_client(monkeypatch)
+    body = {"source": "api", "destination": "zendesk", "governance_checks": []}
+
+    viewer_response = client.post(
+        "/policy/evaluate", headers=auth_header("viewer"), json=body
+    )
+    editor_response = client.post(
+        "/policy/evaluate", headers=auth_header("editor"), json=body
+    )
+
+    assert viewer_response.status_code == 403
+    assert editor_response.status_code == 200
+    assert editor_response.json()["decision"] == "block"
+
+
 def test_connector_configuration_requires_admin(monkeypatch) -> None:
     client = make_auth_client(monkeypatch)
 

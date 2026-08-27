@@ -82,5 +82,20 @@
     "owner": "privacy_ops",
     "version": "2026.06",
     "status": "active"
+  },
+  {
+    "rule_id": "compliance_concern_requires_review",
+    "title": "Compliance concerns require manual review",
+    "description": "Insights categorised as compliance concerns must be reviewed by a human before any action is taken.",
+    "category": "compliance",
+    "severity": "high",
+    "applies_to_action_classes": [],
+    "applies_to_destinations": [],
+    "applies_to_categories": ["compliance_concern"],
+    "required_evidence": ["compliance_review_note"],
+    "default_blocking": true,
+    "owner": "compliance",
+    "version": "2026.08",
+    "status": "active"
   }
 ]

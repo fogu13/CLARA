@@ -204,6 +204,7 @@ def build_router(
     triage_graph,
     learning_store_factory,
     taxonomy_store=None,
+    policy_store=None,
 ) -> APIRouter:
     router = APIRouter()
     read_dep = Depends(require_role(Role.viewer))
@@ -428,6 +429,33 @@ def build_router(
         )
         return require_candidate(candidate_id)
 
+    def _record_policy_decision(problem: ProblemRecord, decision: ApprovalDecision) -> None:
+        """Append-only audit of the approval policy gate. Best-effort: the
+        approval outcome stands whether or not the audit event lands, and the
+        metadata carries rule/entity ids only — never personal data."""
+        try:
+            from app.services.policy_engine import default_policy_engine
+            from app.services.workflow import find_action, governed_call_for_decision
+
+            call = governed_call_for_decision(problem, find_action(problem, decision.action_id))
+            verdict = default_policy_engine().evaluate(call)
+            telemetry_store.record(
+                "policy_decision",
+                entity_id=decision.action_id,
+                metadata={
+                    "source": verdict.source.value,
+                    "decision": verdict.decision.value,
+                    "applicable_rule_ids": verdict.applicable_rule_ids,
+                    "blocking_rule_ids": verdict.blocking_rule_ids,
+                    "reference": call.reference,
+                    "actor_type": "human",
+                },
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Policy-decision telemetry failed for %s", decision.action_id, exc_info=True
+            )
+
     @router.post("/problems/{problem_id}/approvals", response_model=ApprovalRecord, dependencies=[Depends(require_role(Role.editor))])
     def record_approval(
         problem_id: str,
@@ -456,12 +484,20 @@ def build_router(
             )["content_hash"]
         except Exception:  # noqa: BLE001
             logger.warning("Evidence-pack hashing failed for %s", problem_id, exc_info=True)
-        record = workflow_store.record_approval(
-            problem=problem,
-            decision=decision,
-            evidence_pack_hash=pack_hash,
-            four_eyes=workspace_store.get(user.workspace_id).four_eyes_approval,
-        )
+        try:
+            record = workflow_store.record_approval(
+                problem=problem,
+                decision=decision,
+                evidence_pack_hash=pack_hash,
+                four_eyes=workspace_store.get(user.workspace_id).four_eyes_approval,
+            )
+        except HTTPException as exc:
+            # A governance 409 is a policy decision too — audit the block.
+            if exc.status_code == 409 and "blocking governance checks" in str(exc.detail):
+                _record_policy_decision(problem, decision)
+            raise
+        if record.decision == ApprovalDecisionStatus.approved:
+            _record_policy_decision(problem, decision)
         # approval-cycle-time denominator + decision mix.
         telemetry_store.record(
             "approval_recorded",
@@ -781,16 +817,21 @@ def build_router(
             if routing_closed_set_enabled():
                 stage_inventory = journey_stage_inventory(taxonomy_store)
 
-        result = triage_graph.invoke(
-            {
-                "signals": raw_signals,
-                "connector_configs": conn_configs,
-                "context_data": context_data,
-                "learnings": learnings,
-                "journey_stage_inventory": stage_inventory,
-            },
-            config=config,
-        )
+        initial_state: dict = {
+            "signals": raw_signals,
+            "connector_configs": conn_configs,
+            "context_data": context_data,
+            "learnings": learnings,
+            "journey_stage_inventory": stage_inventory,
+        }
+        # Governance gate rules come from the workspace policy store; without a
+        # store the graph falls back to the seed defaults inside the node.
+        if policy_store is not None:
+            initial_state["policy_rules"] = [
+                rule.model_dump(mode="json") for rule in policy_store.list_rules()
+            ]
+
+        result = triage_graph.invoke(initial_state, config=config)
 
         # Persist enrichment back to the signal store — without this the feed's
         # "Enriched" tile stays 0 forever and sentiment/urgency badges never
@@ -810,6 +851,27 @@ def build_router(
                 )
             except Exception:  # noqa: BLE001 — best-effort; the triage result stands
                 logger.warning("Failed to persist enrichment for %s", sid, exc_info=True)
+
+        # Audit the governance gate's outcome for this run (rule/count metadata
+        # only). One summarizing event per run; resume re-reads the same state.
+        gov_checks = result.get("governance_checks") or []
+        if result.get("insights"):
+            telemetry_store.record(
+                "policy_decision",
+                metadata={
+                    "source": "triage_graph",
+                    "decision": "block" if result.get("governance_passed") is False else "allow",
+                    "blocking_rule_ids": sorted(
+                        {
+                            c.get("rule_id")
+                            for c in gov_checks
+                            if c.get("blocking") and c.get("rule_id")
+                        }
+                    ),
+                    "check_count": len(gov_checks),
+                    "actor_type": "system",
+                },
+            )
 
         # A non-empty `next` means the graph paused at the approval interrupt.
         if triage_graph.get_state(config).next:

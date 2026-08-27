@@ -216,7 +216,12 @@ Exit criteria:
 
 Status: planned. A thin slice is pulled forward into the current sequence: an in-product
 compliance/governance pack (audit-export UI, model card, data-residency statement) plus a
-GDPR Art. 17/20 per-customer deletion/export endpoint. The full policy engine remains post-funding.
+GDPR Art. 17/20 per-customer deletion/export endpoint. A second pulled-forward slice is the
+policy evaluation engine (`apps/api/app/services/policy_engine.py`): one rule evaluator now
+sits behind the approval gate and the triage governance gate, policy rules gained category
+applicability, the destination policy map moved from code into seed data, every gate decision
+lands in telemetry, and `POST /policy/evaluate` exposes a side-effect-free per-call decision
+seam (see `docs/engineering/policy-engine-design.md`). The full policy engine remains post-funding.
 
 Goal: make governance a product module, not documentation pasted on top.
 

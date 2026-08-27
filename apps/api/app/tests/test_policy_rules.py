@@ -3,7 +3,11 @@ from fastapi.testclient import TestClient
 from app.main import create_app
 from app.services.contexts import CustomerContextStore
 from app.services.problems import ProblemStore
-from app.services.seed import load_seed_policy_rules, load_seed_problems
+from app.services.seed import (
+    load_seed_destination_policies,
+    load_seed_policy_rules,
+    load_seed_problems,
+)
 from app.services.signals import SignalStore
 from app.services.workflow import WorkflowStore
 
@@ -53,6 +57,32 @@ def test_missing_policy_rule_returns_404() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Policy rule not found"
+
+
+def test_compliance_concern_rule_is_seeded() -> None:
+    rules = {rule.rule_id: rule for rule in load_seed_policy_rules()}
+
+    rule = rules["compliance_concern_requires_review"]
+
+    assert rule.default_blocking
+    assert rule.applies_to_categories == ["compliance_concern"]
+    assert rule.applies_to_destinations == []
+
+
+def test_destination_policies_reference_seeded_rules() -> None:
+    policies = load_seed_destination_policies()
+    rule_ids = {rule.rule_id for rule in load_seed_policy_rules()}
+
+    assert set(policies) >= {
+        "zendesk",
+        "hubspot",
+        "braze",
+        "salesforce",
+        "adobe_experience_platform",
+        "policy_review",
+    }
+    for required in policies.values():
+        assert required <= rule_ids
 
 
 def test_seed_problem_checks_reference_policy_rules() -> None:

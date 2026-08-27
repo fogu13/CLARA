@@ -24,6 +24,7 @@ class TriageState(TypedDict, total=False):
     context_data: dict[str, Any]  # optional B2B context for 8-factor severity
     learnings: list[dict[str, Any]]  # past learnings to inform synthesis (outcome loop)
     journey_stage_inventory: list[str]  # closed-set routing inventory (R3; optional)
+    policy_rules: list[dict[str, Any]]  # serialized PolicyRule rows for the governance gate
 
     # --- After enrich ---
     enriched_signals: list[dict[str, Any]]  # signals with sentiment/urgency/tags

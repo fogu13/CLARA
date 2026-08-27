@@ -751,6 +751,7 @@ def create_app(
             require_candidate=require_candidate,
             triage_graph=triage_graph,
             learning_store_factory=default_learning_store,
+            policy_store=policy_store,
         )
     )
     api.include_router(

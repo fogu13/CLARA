@@ -5,8 +5,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.domain.models import FeedbackRule, FeedbackRuleCreate, PolicyRule
+from app.rate_limit import rate_limiter
 from app.rbac import Role, require_role
 from app.services.common import utc_now
+from app.services.policy_engine import GovernedCall, PolicyDecision, PolicyEngine
+from app.services.seed import load_seed_destination_policies
 from app.services.workflow import (
     PUBLISHED_STATUSES,
     _status_value,
@@ -40,6 +43,43 @@ def build_router(
             raise HTTPException(status_code=404, detail="Policy rule not found")
 
         return policy_rule
+
+    # One engine per app over the workspace's policy rules; the destination map
+    # is seed data (see docs/engineering/policy-engine-design.md).
+    policy_engine = PolicyEngine(
+        rules=policy_store.list_rules(),
+        destination_policies=load_seed_destination_policies(),
+    )
+
+    @router.post(
+        "/policy/evaluate",
+        response_model=PolicyDecision,
+        dependencies=[Depends(require_role(Role.editor)), Depends(rate_limiter)],
+    )
+    def evaluate_policy(call: GovernedCall) -> PolicyDecision:
+        """Side-effect-free policy evaluation for one proposed consequential call.
+
+        The per-call decision seam: any surface preparing a consequential call
+        (a future agentic client, an MCP consumer, an integration) can ask
+        "would this be allowed?" before acting. Evaluates only the envelope the
+        caller supplies against workspace-global rules — it reads no signals,
+        problems, or customer data — and records an audit event with rule ids
+        only. It never executes or approves anything.
+        """
+        decision = policy_engine.evaluate(call)
+        telemetry_store.record(
+            "policy_decision",
+            entity_id=call.reference,
+            metadata={
+                "source": call.source.value,
+                "decision": decision.decision.value,
+                "applicable_rule_ids": decision.applicable_rule_ids,
+                "blocking_rule_ids": decision.blocking_rule_ids,
+                "reference": call.reference,
+                "actor_type": call.actor_type.value,
+            },
+        )
+        return decision
 
     @router.get("/customers/{customer_id}/data-export", dependencies=[Depends(require_role(Role.admin))])
     def export_customer_data(customer_id: str) -> dict:

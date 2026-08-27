@@ -300,6 +300,62 @@ class TestTriageGraphGovernance:
         # Should have reached approval (paused)
         assert result.get("approval_decision") is None
 
+    def test_blocking_check_carries_seeded_rule_id(self, _mock_ai_env: None) -> None:
+        """The gate consults seeded policy rules, not a hardcoded category check."""
+        from app.agents.triage_graph import build_triage_graph
+
+        graph = build_triage_graph(checkpointer=MemorySaver())
+        config = {"configurable": {"thread_id": "test-gov-rule-id"}}
+
+        def mock_synth_compliance(enriched: list[dict], **kw: Any) -> list[dict]:
+            insights = _mock_synthesize_insights(enriched, **kw)
+            insights[0]["category"] = "compliance_concern"
+            return insights
+
+        with (
+            patch("app.agents.triage_graph.enrich_signals", side_effect=_mock_enrich_signals),
+            patch("app.agents.triage_graph.synthesize_insights", side_effect=mock_synth_compliance),
+        ):
+            result = graph.invoke({"signals": _make_signals(3)}, config=config)
+
+        checks = result.get("governance_checks", [])
+        assert [c["rule_id"] for c in checks] == ["compliance_concern_requires_review"]
+        assert checks[0]["blocking"] is True
+        assert checks[0]["status"] == "fail"
+
+    def test_governance_gate_is_rule_driven(self, _mock_ai_env: None) -> None:
+        """Custom rules injected via state gate categories the seed rules do not."""
+        from app.agents.triage_graph import build_triage_graph
+
+        graph = build_triage_graph(checkpointer=MemorySaver())
+        config = {"configurable": {"thread_id": "test-gov-custom-rules"}}
+        custom_rule = {
+            "rule_id": "ux_friction_requires_review",
+            "title": "UX friction requires review",
+            "description": "UX friction insights need review before action.",
+            "category": "test_governance",
+            "severity": "high",
+            "applies_to_categories": ["ux_friction"],
+            "default_blocking": True,
+            "owner": "test",
+            "version": "test",
+        }
+
+        with (
+            patch("app.agents.triage_graph.enrich_signals", side_effect=_mock_enrich_signals),
+            patch("app.agents.triage_graph.synthesize_insights", side_effect=_mock_synthesize_insights),
+        ):
+            result = graph.invoke(
+                {"signals": _make_signals(3), "policy_rules": [custom_rule]},
+                config=config,
+            )
+
+        assert result.get("governance_passed") is False
+        assert result["status"] == "blocked"
+        assert [c["rule_id"] for c in result.get("governance_checks", [])] == [
+            "ux_friction_requires_review"
+        ]
+
 
 class TestTriageGraphAuditMetadata:
     """Test that every AI output carries evidence/confidence/limitations/audit."""

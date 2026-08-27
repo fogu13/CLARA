@@ -18,6 +18,7 @@ PROBLEMS_PATH = REPO_ROOT / "data" / "sample_problems.json"
 SIGNALS_PATH = REPO_ROOT / "data" / "sample_signals.json"
 CUSTOMER_CONTEXT_PATH = REPO_ROOT / "data" / "sample_customer_context.json"
 POLICY_RULES_PATH = REPO_ROOT / "data" / "sample_policy_rules.json"
+DESTINATION_POLICIES_PATH = REPO_ROOT / "data" / "sample_destination_policies.json"
 DEMO_DATASETS_PATH = REPO_ROOT / "data" / "demo_datasets"
 
 
@@ -58,6 +59,30 @@ def load_seed_customer_context(
 def load_seed_policy_rules(path: Path = POLICY_RULES_PATH) -> list[PolicyRule]:
     raw_records = json.loads(path.read_text(encoding="utf-8"))
     return [PolicyRule.model_validate(record) for record in raw_records]
+
+
+def load_seed_destination_policies(
+    path: Path = DESTINATION_POLICIES_PATH,
+    rules_path: Path = POLICY_RULES_PATH,
+) -> dict[str, set[str]]:
+    """Destination -> required-policy-rule-ids map for the policy engine.
+
+    Every referenced rule id must exist in the policy-rule seed: a dangling
+    reference would silently gate approvals on a rule nobody can inspect, so
+    boot fails loudly instead.
+    """
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    known_rule_ids = {rule.rule_id for rule in load_seed_policy_rules(rules_path)}
+    policies: dict[str, set[str]] = {}
+    for destination, rule_ids in raw.items():
+        unknown = sorted(set(rule_ids) - known_rule_ids)
+        if unknown:
+            raise ValueError(
+                f"Destination policy for {destination!r} references unknown policy rules: "
+                + ", ".join(unknown)
+            )
+        policies[destination] = set(rule_ids)
+    return policies
 
 
 def load_demo_datasets(path: Path = DEMO_DATASETS_PATH) -> list[DemoDataset]:

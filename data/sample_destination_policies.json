@@ -1,0 +1,39 @@
+{
+  "zendesk": [
+    "customer_contact_requires_consent_review",
+    "customer_contact_requires_valid_consent",
+    "sensitive_attribute_inference_prohibited"
+  ],
+  "hubspot": [
+    "customer_contact_requires_consent_review",
+    "customer_contact_requires_valid_consent",
+    "audience_activation_requires_privacy_review",
+    "sensitive_attribute_inference_prohibited",
+    "high_risk_marketing_change_requires_privacy_review"
+  ],
+  "braze": [
+    "customer_contact_requires_consent_review",
+    "customer_contact_requires_valid_consent",
+    "audience_activation_requires_privacy_review",
+    "sensitive_attribute_inference_prohibited",
+    "high_risk_marketing_change_requires_privacy_review"
+  ],
+  "salesforce": [
+    "customer_contact_requires_consent_review",
+    "customer_contact_requires_valid_consent",
+    "audience_activation_requires_privacy_review",
+    "sensitive_attribute_inference_prohibited",
+    "high_risk_marketing_change_requires_privacy_review"
+  ],
+  "adobe_experience_platform": [
+    "audience_activation_requires_privacy_review",
+    "sensitive_attribute_inference_prohibited",
+    "high_risk_marketing_change_requires_privacy_review"
+  ],
+  "policy_review": [
+    "customer_contact_requires_valid_consent",
+    "audience_activation_requires_privacy_review",
+    "sensitive_attribute_inference_prohibited",
+    "high_risk_marketing_change_requires_privacy_review"
+  ]
+}

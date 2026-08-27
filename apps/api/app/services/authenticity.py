@@ -52,9 +52,8 @@ from __future__ import annotations
 
 import re
 import statistics
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime
 
 from app.domain.models import SignalRecord
 from app.services.common import normalize_timestamp
