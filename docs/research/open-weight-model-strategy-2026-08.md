@@ -72,7 +72,7 @@ Also in this direction: retire the OpenCode Zen preset's `gemini-embedding-001` 
 - **Serving growth path** (same OpenAI-compatible endpoint at every step — a `.env` change, zero code):
   1. **Now, dev/demo/pilot:** Apple-Silicon Mac via Ollama — 9B at Q4 ≈ 6–7 GB RAM; Qwen3.8-27B (Apache-2.0, ~17 GB at Q4) as the untuned generalist on a 32 GB+ Mac.
   2. **First server step:** one ~24 GB GPU (Hetzner dedicated GPU line / Scaleway GPU instance) running **vLLM with guided decoding** (`tool_choice: required` works model-agnostically — this hardens the forced-tool-call contract on any model).
-  3. **Growth:** 48 GB-class GPU adds Qwen3.8-27B for local synthesis + ask → fully on-prem tenant deployments, the strongest form of the EU moat. Self-hosting GLM-class models is likely never needed.
+  3. **Growth:** 48 GB-class GPU adds a local generalist for synthesis + ask → fully on-prem tenant deployments, the strongest form of the EU moat. Two candidates for the qualification gate: **Qwen3.8-27B** (multimodal, 262K ctx; llama.cpp/Ollama quirks documented, clean on vLLM) and **Meta Muse Glimmer 30B** (Apache-2.0, tool-calling-native, day-0 Ollama/vLLM, but only weeks old). Self-hosting GLM-class models is likely never needed.
 - **CPU-VPS honesty:** on the current Hetzner box, a small fine-tune can chew through *batch* enrichment, but interactive /ask needs the GPU step or the EU API tier.
 - **German output requirement (new, from the challenge):** the external review's F15 finding (generated insights stay English) becomes a model requirement — synthesis and the fine-tune must produce workspace-language output (German titles/summaries/tags policy decision), and the eval harness gets DE-output test cases. This affects model choice weighting toward Mistral/Qwen multilingual strength.
 
@@ -85,7 +85,16 @@ Also in this direction: retire the OpenCode Zen preset's `gemini-embedding-001` 
 
 Two research passes (2026-08-29): a broad survey and a targeted verification pass. Key verified facts:
 
-> **Note:** the targeted verification pass (GLM-5.3 weight status as of today, Mistral's rumored frontier open model, releases in the Aug 15–29 window, embedder freshness, Scaleway/Mistral pricing and IDs) is in progress; its results land in this section in the next commit. Until then, treat §4 facts as first-pass research (2026-08-29 morning).
+Verification-pass results (all **[web, 2026-08-29]** unless noted):
+
+- **GLM-5.3 full weights landed on Hugging Face ~Aug 28/29 — hours before this document** — but under a custom "GLM-5.3 License", **not MIT**: companies above $10B revenue need a Z.ai security review before commercial hosting (Z.ai attributed the two-week delay to safety review of the model's cyber capability). GLM-5.2 remains MIT and freely downloadable; GLM-5.3-Flash (320B-A18B, multimodal, 1M ctx) shipped Aug 26 under MIT. **Decision unchanged: GLM-5.2 stays the opt-in preset** — it is MIT, EU-hosted on Scaleway today, and the model the published metrics were measured on. GLM-5.3 enters the qualification queue only if an EU-resident provider serves it.
+- **Mistral facts verified:** `mistral-small-2603` = Mistral Small 4 (119B MoE A6.5B, Apache-2.0, 256K ctx, Mar 16 2026); `mistral-large-2512` = Mistral Large 3 (675B A41B, Apache-2.0); alias `mistral-small-latest` → `mistral-small-2603` confirmed. La Plateforme pricing: Small 4 $0.15/$0.60, Large 3 $0.50/$1.50 per Mtok. Mistral's rumored frontier open-weight model (July early access) has **not** shipped publicly.
+- **Meta Muse Glimmer 30B verified** (multiple independent sources incl. Meta's research blog): Apache-2.0, 30B dense, agent-tuned with native tool-calling as its core pitch, 128K ctx, day-0 transformers/llama.cpp/vLLM/Ollama support with official GGUFs. **Added as a co-candidate for the local generalist tier** (see §3, Direction 2) — its reputation is ~3 weeks old, so the qualification gate decides.
+- **Fine-tune base confirmed:** no Qwen3.8-generation dense model under 15B exists; Qwen3.5-4B/9B (Apache-2.0) remain the newest small dense Qwen bases.
+- **Embedder confirmed:** Qwen3-Embedding-0.6B still ranks as the best permissive small multilingual embedder (~67.7 MMTEB, highest under 1B; Apache-2.0; TEI/Ollama/vLLM). 2026 challengers all fail a criterion (Jina v5: non-commercial; Qwen3-VL-Embedding-2B: multimodal-focused, TEI/llama.cpp support pending). **Granite Embedding Multilingual R2** (May 2026, Apache-2.0, strong German, sub-100M) is worth noting as a cheap/fast fallback tier.
+- **EU hosting verified:** GLM-5.2 on Scaleway's "sovereign European infrastructure" since Jun 26 2026 (~$1.80/$5.50 per Mtok via third-party trackers; the specific Paris-region label and EUR list price are inferred — Scaleway's site was unreachable through this session's proxy). Scaleway also serves DeepSeek-V4-Flash and Qwen3.5/3.6 chat models — an EU-resident Qwen option exists if wanted.
+- **Qwen3.8-27B local caveats:** Apache-2.0, multimodal, 262K ctx, ~17–18 GB at Q4 on a 24 GB GPU, official Ollama support — but llama.cpp currently has documented CUDA correctness bugs on its hybrid-attention layers, Ollama's default context setting silently truncates long inputs, and the Qwen 27B-class has a track record of Ollama tool-call parser issues. **vLLM had day-0 support and is the serving path this document already recommends for the GPU tier.**
+- Other in-window releases (Aug 15–29): DeepSeek-V4-Pro-0813 MIT weights (~893 GB — irrelevant size class), NVIDIA Nemotron teacher model. Nothing else material to CLARA.
 
 **Rejected options and why:**
 
@@ -108,6 +117,8 @@ Two research passes (2026-08-29): a broad survey and a targeted verification pas
 4. **`docs/eu-ai-act-mapping.md` needs updating**: its current framing is binary (API = transfer risk, local = safe). The real model is three data boundaries — customer infrastructure (local tier), CLARA-controlled EU infrastructure (managed tier, EU-resident processors under DPA), and customer-chosen provider (BYO tier, customer is the controller of that choice). Each is defensible; the doc should say so.
 5. **EU AI Act / GPAI note for the fine-tune:** fine-tuning a general-purpose model can, in principle, create provider obligations for the modifier. Commission GPAI guidance (2025) treats downstream fine-tunes as creating provider obligations **only for significant modifications** (indicative threshold: modification compute > ⅓ of original training compute — a LoRA is orders of magnitude below). The model-qualification pipeline (below) should still produce a fine-tune model card (data provenance, eval results, intended use) — cheap, aligned with the compliance hub, and robust to guidance changes. **Legal verification recommended; do not treat this paragraph as legal advice.**
 6. Confirmed alignments (no change needed): hybrid local+API matches the settled bet in `STRATEGY_SYNTHESIS.md` §2; the fine-tune strengthens the §5a Enterpret wedge; the qualification pipeline delivers the external review's P0 item "publish German/English model evaluation metrics."
+7. **(From the verification pass)** GLM-5.3 weights arrived Aug 28/29 under a custom non-MIT license — this *confirms* rather than changes the "stay on GLM-5.2 (MIT) until qualified" call, and is a live demonstration of why the qualification gate + pinned IDs exist: model facts changed inside a single working day.
+8. **(From the verification pass)** Meta Muse Glimmer 30B (Apache-2.0, tool-calling-native) added as a second candidate for the local generalist tier alongside Qwen3.8-27B; the qualification gate decides.
 
 ## 6. Build order
 
@@ -122,13 +133,14 @@ Steps 1–3 pay off regardless of which direction wins commercially. Step 5 is t
 
 ## 7. Cost shape (ballpark, verify at purchase time)
 
-- Managed EU APIs: small-model class ≈ $0.05–0.20 per Mtok; synthesis class ≈ $0.50–2 in / $1.50–4.50 out **[web, Aug 2026]**.
+- Managed EU APIs (verified 2026-08-29): Mistral Small 4 **$0.15 / $0.60** per Mtok in/out; Mistral Large 3 **$0.50 / $1.50**; GLM-5.2 on Scaleway ≈ **$1.80 / $5.50** (third-party tracker figure). Broader EU small-model class ≈ $0.05–0.20 in.
 - Local tier: fixed ~€200–900/mo GPU cost regardless of volume; crossover favors local once pilots produce steady volume. Fine-tune training itself: one-off rented-GPU hours.
 - BYO: near-zero marginal inference cost to CLARA; support burden instead.
 
 ## 8. Assumptions the reviewer should attack
 
-1. **Model-version claims** (Qwen3.8 naming, GLM-5.2/5.3 weight status, Mistral Small 4 alias behavior, licenses) — all **[web, Aug 2026]**; a reviewer with an older cutoff cannot refute these from memory, but should sanity-check internal consistency and flag anything for human re-verification.
+1. **Model-version claims** (Qwen3.8 naming, GLM-5.2/5.3 weight status and licenses, Mistral Small 4 alias behavior) — all **[web, Aug 2026]**, and the GLM-5.3 facts changed *within the day this was written*; a reviewer with an older cutoff cannot refute these from memory, but should sanity-check internal consistency and flag anything for human re-verification. Re-verify GLM-5.3's exact license terms before ever adopting it.
+1b. **Muse Glimmer 30B** is ~3 weeks old at time of writing — its tool-calling reputation is early; treat it as a candidate, not a commitment.
 2. **"Qwen3.5-9B is the best fine-tune base"** — defensible per 2026 benchmarks, but Ministral 3 14B / Granite 4.2 8B / Gemma 4 are legitimate; the qualification gate, not this document, should make the final call.
 3. **"Fine-tune enrichment only"** — assumes synthesis/ask stay good enough on managed APIs; if local-only tenants become the dominant segment, a second fine-tune (or Qwen3.8-27B local) for synthesis may be justified earlier.
 4. **mistral-embed → Qwen3-Embedding-0.6B swap magnitude** — the calibration data shows mistral-embed is weak, but the improvement claim is inferred from MTEB standings, not yet measured on CLARA's German/English feedback. Step-3 recalibration measures it before commitment.
