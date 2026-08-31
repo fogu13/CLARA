@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, FileText, AlertTriangle, BookOpen, CheckCircle, Download, Cpu, Globe, HelpCircle, UserX, Server, Scale } from "lucide-react";
+import { AlertTriangle, BookOpen, CheckCircle, Download, Cpu, Globe, HelpCircle, UserX, Server, Scale } from "lucide-react";
 import { apiBaseUrl, apiHeaders, getArticle50Status, getModelCardMetrics, getSystemConfig, getWorkspace } from "@/lib/client-api";
 import type { Article50Status, ModelCardMetrics, SystemConfig, WorkspaceSettings } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
@@ -112,35 +112,6 @@ export default function CompliancePage() {
           </Button>
           {exportError ? <p className="text-xs text-destructive">{exportError}</p> : null}
         </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm text-muted-foreground">{t.compliance.overallScore}</CardTitle>
-              <ShieldCheck className="h-4 w-4 text-emerald-500" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-emerald-600">87</div>
-            <p className="text-xs text-muted-foreground mt-1">{t.compliance.outOf}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">GDPR</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-emerald-600">92</div>
-            <p className="text-xs text-muted-foreground mt-1">Lawful basis + data minimization · self-assessed</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">EU AI Act</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-amber-600">82</div>
-            <p className="text-xs text-muted-foreground mt-1">Transparency + human oversight · self-assessed</p>
-          </CardContent>
-        </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -287,12 +258,16 @@ export default function CompliancePage() {
             <CardTitle className="flex items-center gap-2"><Globe className="h-4 w-4" /> {t.compliance.residency}</CardTitle>
             <CardDescription>{t.compliance.residencySubtitle}</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.residency1}</span></div>
-            <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.residency2}</span></div>
-            <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.residency3}</span></div>
-            <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.residency4}</span></div>
-            <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.residency5}</span></div>
+          <CardContent className="text-sm">
+            {/* Design-level self-description, not measured status — so no
+                check icons or badges pretending it was verified. */}
+            <ul className="ml-4 list-disc space-y-2">
+              <li>{t.complianceProse.residency1}</li>
+              <li>{t.complianceProse.residency2}</li>
+              <li>{t.complianceProse.residency3}</li>
+              <li>{t.complianceProse.residency4}</li>
+              <li>{t.complianceProse.residency5}</li>
+            </ul>
           </CardContent>
         </Card>
       </div>
@@ -324,8 +299,10 @@ export default function CompliancePage() {
           <CardDescription>{t.compliance.subprocessorsSubtitle}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
-          <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.subprocessors1}</span></div>
-          <div className="flex items-start gap-2"><CheckCircle className="mt-0.5 h-4 w-4 text-emerald-500" /><span>{t.complianceProse.subprocessors2}</span></div>
+          <ul className="ml-4 list-disc space-y-2">
+            <li>{t.complianceProse.subprocessors1}</li>
+            <li>{t.complianceProse.subprocessors2}</li>
+          </ul>
           <div className="rounded-md border p-3">
             <p className="font-medium">{t.compliance.securityContact}</p>
             {workspace?.notification_email ? (
@@ -345,18 +322,6 @@ export default function CompliancePage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="flex items-start gap-3">
-              <CheckCircle className="h-5 w-5 text-emerald-500 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium">Human Oversight (Art 14)</p>
-                <p className="text-xs text-muted-foreground">
-                  Human-in-the-loop approval for all consequential actions. The pipeline
-                  pauses at the approval interrupt before any external push.
-                </p>
-              </div>
-              <Badge variant="success">Compliant</Badge>
-            </div>
-
             <div className="flex items-start gap-3">
               {art50 === null ? (
                 <HelpCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
@@ -387,8 +352,19 @@ export default function CompliancePage() {
               )}
             </div>
 
-            <div className="flex items-start gap-3">
-              <CheckCircle className="h-5 w-5 text-emerald-500 mt-0.5" />
+            {/* Everything below is design documentation, not measured status:
+                no per-row status icons or "Compliant" badges the app cannot
+                actually verify. The Article-50 row above stays computed. */}
+            <p className="border-t pt-3 text-xs text-muted-foreground">{t.complianceProse.assessmentNote}</p>
+
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium">Human Oversight (Art 14)</p>
+                <p className="text-xs text-muted-foreground">
+                  Human-in-the-loop approval for all consequential actions. The pipeline
+                  pauses at the approval interrupt before any external push.
+                </p>
+              </div>
               <div>
                 <p className="text-sm font-medium">Data Minimization (GDPR Art 5)</p>
                 <p className="text-xs text-muted-foreground">
@@ -396,11 +372,6 @@ export default function CompliancePage() {
                   reviewers. Customer feedback capped at 2000 chars for LLM context.
                 </p>
               </div>
-              <Badge variant="success">Compliant</Badge>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <CheckCircle className="h-5 w-5 text-emerald-500 mt-0.5" />
               <div>
                 <p className="text-sm font-medium">Data-Subject Rights (GDPR Art 17 / 20)</p>
                 <p className="text-xs text-muted-foreground">
@@ -408,11 +379,6 @@ export default function CompliancePage() {
                   manual process. Erasure is all-or-nothing and audit-safe.
                 </p>
               </div>
-              <Badge variant="success">Compliant</Badge>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <CheckCircle className="h-5 w-5 text-emerald-500 mt-0.5" />
               <div>
                 <p className="text-sm font-medium">Local-First Processing</p>
                 <p className="text-xs text-muted-foreground">
@@ -420,11 +386,6 @@ export default function CompliancePage() {
                   No data leaves the EU when configured with local models.
                 </p>
               </div>
-              <Badge variant="success">Compliant</Badge>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <CheckCircle className="h-5 w-5 text-emerald-500 mt-0.5" />
               <div>
                 <p className="text-sm font-medium">Risk Classification (AI Act)</p>
                 <p className="text-xs text-muted-foreground">
@@ -432,11 +393,6 @@ export default function CompliancePage() {
                   minimal/limited risk, not an Annex III use case. See docs/eu-ai-act-mapping.md.
                 </p>
               </div>
-              <Badge variant="success">Documented</Badge>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
               <div>
                 <p className="text-sm font-medium">DPIA Documentation</p>
                 <p className="text-xs text-muted-foreground">
@@ -444,11 +400,6 @@ export default function CompliancePage() {
                   customers to complete per deployment, especially with API-based LLMs.
                 </p>
               </div>
-              <Badge variant="secondary">Template provided</Badge>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
               <div>
                 <p className="text-sm font-medium">Certifications</p>
                 <p className="text-xs text-muted-foreground">
@@ -456,7 +407,6 @@ export default function CompliancePage() {
                   export, RLS tenant isolation, RBAC, and contractual audit rights.
                 </p>
               </div>
-              <Badge variant="warning">Roadmapped</Badge>
             </div>
           </div>
         </CardContent>
@@ -482,34 +432,19 @@ export default function CompliancePage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>{t.compliance.governanceArchitecture}</CardTitle></CardHeader>
-        <CardContent>
-          <div className="grid gap-3 text-sm md:grid-cols-2">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              <span>PolicyRule blocking before approval</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              <span>Compliance concern auto-blocks action</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              <span>Audit trail for all AI outputs, exportable above</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              <span>Evidence + confidence + limitations on every claim</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              <span>Scheduled outcome re-measurement, real data only</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              <span>Per-problem evidence packs for audits</span>
-            </div>
-          </div>
+        <CardHeader>
+          <CardTitle>{t.compliance.governanceArchitecture}</CardTitle>
+          <CardDescription>{t.complianceProse.assessmentNote}</CardDescription>
+        </CardHeader>
+        <CardContent className="text-sm">
+          <ul className="ml-4 grid list-disc gap-x-8 gap-y-2 md:grid-cols-2">
+            <li>PolicyRule blocking before approval</li>
+            <li>Compliance concern auto-blocks action</li>
+            <li>Audit trail for all AI outputs, exportable above</li>
+            <li>Evidence + confidence + limitations on every claim</li>
+            <li>Scheduled outcome re-measurement, real data only</li>
+            <li>Per-problem evidence packs for audits</li>
+          </ul>
         </CardContent>
       </Card>
     </div>

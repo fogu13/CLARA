@@ -1,4 +1,4 @@
-import type { AffectedCohort, Evidence } from "../../lib/types";
+import type { Evidence } from "../../lib/types";
 import { percent } from "@/lib/format";
 
 
@@ -20,15 +20,17 @@ function uniqueCount(values: string[]): number {
   return new Set(values.filter(Boolean)).size;
 }
 
+// Cohort counts live in the page's "Affected cohort" card and the Affected
+// Context panel; this summary deliberately doesn't repeat them a third time.
 export function EvidencePanel({
   evidence,
   confidence,
-  affectedCohort,
+  dateRange,
   owner
 }: {
   evidence: Evidence[];
   confidence: number;
-  affectedCohort: AffectedCohort;
+  dateRange: string;
   owner: string;
 }) {
   const sourceCount = uniqueCount(evidence.map((item) => item.source));
@@ -54,12 +56,6 @@ export function EvidencePanel({
           <dd>{percent(confidence)}</dd>
         </div>
         <div>
-          <dt>Affected</dt>
-          <dd>
-            {affectedCohort.customers} customers, {affectedCohort.accounts} accounts
-          </dd>
-        </div>
-        <div>
           <dt>Sources</dt>
           <dd>{sourceCount}</dd>
         </div>
@@ -69,7 +65,7 @@ export function EvidencePanel({
         </div>
         <div>
           <dt>Date range</dt>
-          <dd>{affectedCohort.date_range}</dd>
+          <dd>{dateRange}</dd>
         </div>
         <div>
           <dt>Owner</dt>

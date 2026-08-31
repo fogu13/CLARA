@@ -7,18 +7,11 @@ import type {
   ClosureRecordRequest,
   AffectedContextExplorer,
   CandidateReviewRequest,
-  CustomerContextCompletenessReport,
-  CustomerContextImportResult,
-  CustomerContextRecord,
-  CustomerContextValidationReport,
   DemoDatasetImportResult,
   DemoDatasetSummary,
   EmergingProblemReport,
   ExecutionRecord,
   FeedbackRule,
-  JiraIssueDraft,
-  JourneyEventImportResult,
-  JourneyEventRecord,
   LanguageQualityReport,
   LearningConclusionRecord,
   LearningConclusionRequest,
@@ -179,10 +172,6 @@ export async function getProblem(problemId: string): Promise<ProblemRecord> {
   return requestJson<ProblemRecord>(`${apiBaseUrl()}/problems/${problemId}`);
 }
 
-export async function getJiraDrafts(): Promise<JiraIssueDraft[]> {
-  return requestJson<JiraIssueDraft[]>(`${apiBaseUrl()}/jira-drafts`);
-}
-
 export async function getApprovals(): Promise<ApprovalRecord[]> {
   return requestJson<ApprovalRecord[]>(`${apiBaseUrl()}/approvals`);
 }
@@ -334,34 +323,6 @@ export async function getMeasurements(): Promise<MeasurementPlan[]> {
 
 export async function runDueMeasurements(): Promise<{ measured: number; manual_required: number; skipped: number }> {
   return requestJson(`${apiBaseUrl()}/measurements/run-due`, { method: "POST", body: JSON.stringify({}) });
-}
-
-export async function getJourneyEvents(): Promise<JourneyEventRecord[]> {
-  return requestJson<JourneyEventRecord[]>(`${apiBaseUrl()}/journey-events`);
-}
-
-export async function importJourneyEvents(events: JourneyEventRecord[]): Promise<JourneyEventImportResult> {
-  return requestJson<JourneyEventImportResult>(`${apiBaseUrl()}/journey-events/import`, {
-    method: "POST",
-    body: JSON.stringify({ events })
-  });
-}
-
-export async function importJourneyEventCsv(csvText: string): Promise<JourneyEventImportResult> {
-  return requestJson<JourneyEventImportResult>(`${apiBaseUrl()}/journey-events/import-csv`, {
-    method: "POST",
-    body: JSON.stringify({ csv_text: csvText })
-  });
-}
-
-export async function getCustomerContext(): Promise<CustomerContextRecord[]> {
-  return requestJson<CustomerContextRecord[]>(`${apiBaseUrl()}/customer-context`);
-}
-
-export async function getCustomerContextCompleteness(): Promise<CustomerContextCompletenessReport> {
-  return requestJson<CustomerContextCompletenessReport>(
-    `${apiBaseUrl()}/customer-context/completeness`
-  );
 }
 
 export async function getAffectedContext(problemId: string): Promise<AffectedContextExplorer> {
@@ -529,31 +490,6 @@ export async function importDemoDataset(datasetId: string): Promise<DemoDatasetI
   });
 }
 
-export async function importCustomerContext(
-  records: CustomerContextRecord[]
-): Promise<CustomerContextImportResult> {
-  return requestJson<CustomerContextImportResult>(`${apiBaseUrl()}/customer-context/import`, {
-    method: "POST",
-    body: JSON.stringify({ records })
-  });
-}
-
-export async function importCustomerContextCsv(csvText: string): Promise<CustomerContextImportResult> {
-  return requestJson<CustomerContextImportResult>(`${apiBaseUrl()}/customer-context/import-csv`, {
-    method: "POST",
-    body: JSON.stringify({ csv_text: csvText })
-  });
-}
-
-export async function validateCustomerContextCsv(
-  csvText: string
-): Promise<CustomerContextValidationReport> {
-  return requestJson<CustomerContextValidationReport>(`${apiBaseUrl()}/customer-context/validate-csv`, {
-    method: "POST",
-    body: JSON.stringify({ csv_text: csvText })
-  });
-}
-
 export async function importSignals(signals: SignalRecord[]): Promise<SignalImportResult> {
   return requestJson<SignalImportResult>(`${apiBaseUrl()}/signals/import`, {
     method: "POST",
@@ -591,12 +527,6 @@ export async function validateSignalCsv(csvText: string): Promise<SignalValidati
 
 export async function getProblemCandidates(): Promise<ProblemCandidate[]> {
   return requestJson<ProblemCandidate[]>(`${apiBaseUrl()}/problem-candidates`);
-}
-
-export async function promoteProblemCandidate(candidateId: string): Promise<ProblemRecord> {
-  return requestJson<ProblemRecord>(`${apiBaseUrl()}/problem-candidates/${candidateId}/promote`, {
-    method: "POST"
-  });
 }
 
 export async function acceptProblemCandidate(

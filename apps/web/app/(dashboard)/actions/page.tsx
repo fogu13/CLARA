@@ -10,7 +10,8 @@ import { WorksCouncilBanner } from "@/app/components/works-council-banner";
 import { getExecutions, getProblem, getProblems, wrongOriginHint } from "@/lib/client-api";
 import { fallbackProblems } from "@/lib/sample-data";
 import type { ActionProposal, ExecutionRecord, ProblemRecord } from "@/lib/types";
-import { CheckCircle, XCircle, Clock, ArrowRight } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type ActionQueueItem = {
   problem: ProblemRecord;
@@ -33,36 +34,83 @@ export default function ActionsPage() {
   const [items, setItems] = useState<ActionQueueItem[]>([]);
   const [executions, setExecutions] = useState<ExecutionRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [usingFallback, setUsingFallback] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [demo, setDemo] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
+      setLoading(true);
       try {
         const [summaries, executionRecords] = await Promise.all([getProblems(), getExecutions()]);
         const problems = await Promise.all(summaries.map((problem) => getProblem(problem.problem_id)));
+        if (cancelled) return;
         setItems(
           problems.flatMap((problem) =>
             problem.action_proposals.map((action) => ({ problem, action }))
           )
         );
         setExecutions(executionRecords);
-      } catch {
-        setItems(
-          fallbackProblems.flatMap((problem) =>
-            problem.action_proposals.map((action) => ({ problem, action }))
-          )
+        setLoadError(null);
+        setDemo(false);
+      } catch (error) {
+        if (cancelled) return;
+        // Sample data is entered deliberately from the error state, same rule
+        // as the dashboard: an unreachable API must look broken, not populated.
+        const message = error instanceof Error ? error.message : "";
+        setLoadError(
+          message.startsWith("Failed to fetch") || message.includes("NetworkError") || !message
+            ? `${t.dashboard.apiUnreachable}${wrongOriginHint()}`
+            : message
         );
+        setItems([]);
         setExecutions([]);
-        setUsingFallback(true);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
     void load();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey, t.dashboard.apiUnreachable]);
 
-  if (loading) return <div className="text-muted-foreground">Loading actions...</div>;
+  function exploreSample() {
+    setDemo(true);
+    setLoadError(null);
+    setItems(
+      fallbackProblems.flatMap((problem) =>
+        problem.action_proposals.map((action) => ({ problem, action }))
+      )
+    );
+    setExecutions([]);
+  }
+
+  if (loading && !demo) return <div className="text-muted-foreground">Loading actions...</div>;
+
+  if (loadError && !demo) {
+    return (
+      <Card className="mx-auto max-w-xl">
+        <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+          <AlertTriangle className="h-8 w-8 text-destructive" aria-hidden="true" />
+          <div>
+            <h1 className="text-lg font-semibold">{t.actionsPage.errorTitle}</h1>
+            <p className="mt-2 text-sm text-muted-foreground">{loadError}</p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button size="sm" onClick={() => setReloadKey((key) => key + 1)}>
+              {t.common.retry}
+            </Button>
+            <Button size="sm" variant="outline" onClick={exploreSample}>
+              {t.dashboard.exploreSample}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const blockedActions = items.filter((item) =>
     item.problem.governance_checks.some((check) => check.blocking && check.status !== "pass")
@@ -89,9 +137,23 @@ export default function ActionsPage() {
         </p>
       </div>
 
-      {usingFallback ? (
-        <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
-          API unreachable. Showing sample action proposals.{wrongOriginHint()}
+      {demo ? (
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-800"
+        >
+          <span>{t.dashboard.sampleNotice}</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            onClick={() => {
+              setDemo(false);
+              setReloadKey((key) => key + 1);
+            }}
+          >
+            {t.dashboard.backToLive}
+          </Button>
         </div>
       ) : null}
 
@@ -253,22 +315,6 @@ export default function ActionsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader><CardTitle>{t.actionsPage.connectorPipeline}</CardTitle></CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2 text-sm flex-wrap">
-            <Badge variant="secondary">Zendesk in</Badge>
-            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <Badge variant="secondary">{t.actionsPage.triage}</Badge>
-            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <Badge variant="secondary">{t.actionsPage.governance}</Badge>
-            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <Badge variant="secondary">{t.actionsPage.humanApproval}</Badge>
-            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            <Badge variant="success">Jira / Slack drafts</Badge>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

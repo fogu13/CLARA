@@ -167,15 +167,25 @@ function InterventionBriefCard({ brief }: { brief: InterventionBrief }) {
 
 function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord; policyRules: PolicyRule[] }) {
   const { t } = useI18n();
+  // Only areas that actually hold drafts get a section; the rest collapse into
+  // one line instead of a stack of empty placeholder boxes.
+  const areasWithActions = portfolioAreas
+    .map((area) => ({
+      area,
+      actions: problem.action_proposals.filter((action) => action.class === area.actionClass)
+    }))
+    .filter(({ actions }) => actions.length > 0);
+  const emptyAreaTitles = portfolioAreas
+    .filter((area) => !areasWithActions.some((entry) => entry.area.actionClass === area.actionClass))
+    .map((area) => t.detail[area.titleKey]);
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t.detail.actionPortfolio}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {portfolioAreas.map((area) => {
-          const actions = problem.action_proposals.filter((action) => action.class === area.actionClass);
-
+        {areasWithActions.map(({ area, actions }) => {
           return (
             <section key={area.actionClass} className="rounded-lg border p-4">
               <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -183,11 +193,10 @@ function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord;
                   <h2 className="text-sm font-semibold">{t.detail[area.titleKey]}</h2>
                   <p className="mt-1 text-xs text-muted-foreground">{t.detail[area.intentKey]}</p>
                 </div>
-                <Badge variant="outline">{actions.length || t.detail.noDraft} {actions.length === 1 ? t.detail.draft : t.detail.drafts}</Badge>
+                <Badge variant="outline">{actions.length} {actions.length === 1 ? t.detail.draft : t.detail.drafts}</Badge>
               </div>
 
-              {actions.length > 0 ? (
-                <div className="mt-4 space-y-4">
+              <div className="mt-4 space-y-4">
                   {actions.map((action) => {
                     const rules = matchingRules(action, policyRules);
 
@@ -211,12 +220,6 @@ function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord;
                           <InterventionBriefCard brief={action.intervention_brief} />
                         ) : null}
                         <div className="mt-3 grid gap-3 text-xs text-muted-foreground md:grid-cols-2">
-                          <p>
-                            {t.detail.evidenceLine
-                              .replace("{n}", String(problem.evidence.length))
-                              .replace("{c}", percent(problem.evidence_confidence))
-                              .replace("{k}", String(problem.affected_cohort.customers))}
-                          </p>
                           <div>
                             <p className="font-medium text-foreground">{t.detail.dependencies}</p>
                             {action.depends_on && action.depends_on.length > 0 ? (
@@ -262,13 +265,15 @@ function ActionPortfolioCard({ problem, policyRules }: { problem: ProblemRecord;
                       </div>
                     );
                   })}
-                </div>
-              ) : (
-                <p className="mt-4 text-sm text-muted-foreground">{t.detail.noAreaDraftYet.replace("{area}", t.detail[area.titleKey])}</p>
-              )}
+              </div>
             </section>
           );
         })}
+        {emptyAreaTitles.length > 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {t.detail.noDraftAreas.replace("{areas}", emptyAreaTitles.join(", "))}
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -501,7 +506,7 @@ export default function InsightDetailPage() {
       <EvidencePanel
         evidence={problem.evidence}
         confidence={problem.evidence_confidence}
-        affectedCohort={problem.affected_cohort}
+        dateRange={problem.affected_cohort.date_range}
         owner={problem.owner}
       />
 
@@ -517,19 +522,33 @@ export default function InsightDetailPage() {
           <CardTitle>{t.detail.governanceChecks}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {problem.governance_checks.map((check) => (
-              <div key={check.check_id} className="rounded-lg border p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <strong className="text-sm">{check.rule}</strong>
-                  <Badge variant={check.blocking ? "destructive" : "secondary"}>
-                    {label(check.status)}{check.blocking ? t.detail.blockingSuffix : ""}
-                  </Badge>
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">{check.reason}</p>
-              </div>
-            ))}
-          </div>
+          {/* The per-action "Policy checks" lists in the portfolio above carry
+              the full detail; this card only rolls up what is NOT passing, so a
+              blocked problem still explains itself without repeating every
+              green check a second time. */}
+          {problem.governance_checks.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t.detail.notEvaluated}</p>
+          ) : problem.governance_checks.every((check) => check.status === "pass") ? (
+            <p className="text-sm text-muted-foreground">
+              {t.detail.governanceAllPass.replace("{n}", String(problem.governance_checks.length))}
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {problem.governance_checks
+                .filter((check) => check.status !== "pass")
+                .map((check) => (
+                  <div key={check.check_id} className="rounded-lg border p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <strong className="text-sm">{check.rule}</strong>
+                      <Badge variant={check.blocking ? "destructive" : "secondary"}>
+                        {label(check.status)}{check.blocking ? t.detail.blockingSuffix : ""}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">{check.reason}</p>
+                  </div>
+                ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

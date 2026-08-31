@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { currentUserEmail } from "../../lib/auth-client";
 import { getWorkflowState, transitionProblem } from "../../lib/client-api";
 import type { ProblemRecord, ProblemStatus, WorkflowState } from "../../lib/types";
 import { StateNotice } from "./state-notice";
@@ -84,9 +85,11 @@ export function ProblemLifecyclePanel({ problem }: { problem: ProblemRecord }) {
     setState((current) => ({ ...current, status: "saving", message: "Recording transition..." }));
 
     try {
+      // The transition lands in the audited timeline: attribute it to the real
+      // signed-in user (like approvals and closures), never a demo identity.
       await transitionProblem(problem.problem_id, {
         target_status: targetStatus,
-        actor: "demo_operator",
+        actor: currentUserEmail() ?? "local-user",
         note: note || undefined
       });
       const workflow = await getWorkflowState(problem.problem_id);
