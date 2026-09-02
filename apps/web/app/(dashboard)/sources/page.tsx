@@ -1,5 +1,6 @@
 "use client";
 
+import { CustomerContextPanel } from "../../components/customer-context-panel";
 import { SignalIntakePanel } from "../../components/signal-intake-panel";
 import { useI18n } from "@/lib/i18n";
 
@@ -13,6 +14,7 @@ export default function SourcesPage() {
       </div>
 
       <SignalIntakePanel />
+      <CustomerContextPanel />
     </div>
   );
 }

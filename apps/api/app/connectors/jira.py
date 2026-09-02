@@ -144,6 +144,10 @@ class JiraDestinationConnector:
         ]
         if signal_ids:
             description_lines.append(f"*Signals:* {', '.join(signal_ids[:10])}")
+        if action.get("problem_id"):
+            description_lines.append(f"*CLARA problem:* {action['problem_id']}")
+        if action.get("clara_url"):
+            description_lines.append(f"*Open in CLARA:* {action['clara_url']}")
         description = "\n".join(line for line in description_lines if line)
 
         return {

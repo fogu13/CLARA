@@ -168,9 +168,11 @@ class ZendeskSourceConnector:
         if not text:
             return None
 
-        external_id = str(ticket.get(ext_id_key, ""))
-        recorded_at = str(ticket.get(recorded_at_key, ""))
-        customer_id = str(ticket.get(customer_id_key, "unknown"))
+        external_id = str(ticket.get(ext_id_key) or "")
+        # JSON null requester/organization must not become the literal "None"
+        # (a phantom customer/account in every count).
+        recorded_at = str(ticket.get(recorded_at_key) or "")
+        customer_id = str(ticket.get(customer_id_key) or "unknown")
         tags_raw = ticket.get(tags_key, [])
         tags = tags_raw if isinstance(tags_raw, list) else []
 
@@ -191,7 +193,7 @@ class ZendeskSourceConnector:
         return {
             "signal_id": f"zd-{external_id}",
             "customer_id": customer_id,
-            "account_id": str(ticket.get("organization_id", "unknown")),
+            "account_id": str(ticket.get("organization_id") or "unknown"),
             "source": "zendesk",
             "journey": journey,
             "journey_stage": journey_stage,

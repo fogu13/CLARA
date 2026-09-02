@@ -91,6 +91,78 @@ def normalize_label(value: str) -> str:
     return value.replace("_", " ").strip().title()
 
 
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_TAG_RE = re.compile(r"<[^>]{1,200}>")
+_SPACE_RUNS = re.compile(r"[ \t\f\v]+")
+_BLANK_LINES = re.compile(r"\n{3,}")
+
+
+def clean_feedback_text(text: str) -> str:
+    """Normalize customer text once, at the door.
+
+    HTML entities are decoded and tags stripped (review sites and ticket systems
+    deliver both), control characters removed, Unicode NFC-normalised, and
+    whitespace collapsed while single blank lines are kept. The pitch's
+    "cleans, normalizes and standardizes" starts here; the model and the
+    clustering see the same string whatever channel it arrived on.
+    """
+    import html
+    import unicodedata
+
+    if not text:
+        return ""
+    value = html.unescape(str(text))
+    value = _TAG_RE.sub(" ", value)
+    value = _CONTROL_CHARS.sub("", value)
+    value = unicodedata.normalize("NFC", value)
+    value = value.replace("\r\n", "\n").replace("\r", "\n")
+    value = _SPACE_RUNS.sub(" ", value)
+    value = "\n".join(line.strip() for line in value.split("\n"))
+    value = _BLANK_LINES.sub("\n\n", value)
+    return value.strip()
+
+
+def _csv_reader(csv_text: str) -> csv.DictReader:
+    """DictReader that copes with what spreadsheets actually export.
+
+    Excel (German locale) writes semicolon-separated files with a UTF-8 BOM;
+    both used to surface as "Missing required column: feedback_text". The BOM
+    is stripped and the delimiter sniffed from the header line (comma,
+    semicolon or tab), falling back to the comma dialect.
+    """
+    text = csv_text.lstrip("\ufeff").strip()
+    header = text.split("\n", 1)[0]
+    counts = {",": header.count(","), ";": header.count(";"), "\t": header.count("\t")}
+    delimiter = max(counts, key=counts.get) if any(counts.values()) else ","
+    return csv.DictReader(io.StringIO(text), delimiter=delimiter)
+
+
+def normalize_incoming_signal(record: SignalRecord) -> SignalRecord:
+    """Apply the CSV/webhook door rules to a SignalRecord posted as JSON.
+
+    POST /signals/import used to store records verbatim: unparseable
+    timestamps, missing language and raw text slipped past the checks every
+    other import path runs. Timestamp defaults are flagged in metadata so a
+    substituted time stays auditable.
+    """
+    metadata = dict(record.metadata)
+    timestamp, defaulted = normalize_timestamp(record.timestamp)
+    if defaulted:
+        metadata["timestamp_defaulted"] = "true"
+    text = clean_feedback_text(record.feedback_text)
+    language = record.language
+    if not language or language == "unknown":
+        language = detect_language(text)
+    return record.model_copy(
+        update={
+            "feedback_text": text,
+            "timestamp": timestamp,
+            "language": language,
+            "metadata": metadata,
+        }
+    )
+
+
 def candidate_id_for(journey: str, journey_stage: str) -> str:
     token = f"{journey}-{journey_stage}".upper().replace("_", "-")
     return f"CAND-{token}"
@@ -349,9 +421,12 @@ KNOWN_SIGNAL_COLUMNS = frozenset(
 
 
 def read_signal_csv_rows(csv_text: str) -> tuple[list[str], list[dict[str, str]]]:
-    reader = csv.DictReader(io.StringIO(csv_text.strip()))
-    headers = reader.fieldnames or []
-    rows = [{key: value or "" for key, value in row.items() if key is not None} for row in reader]
+    reader = _csv_reader(csv_text)
+    headers = [header.strip() for header in (reader.fieldnames or [])]
+    rows = [
+        {key.strip(): value or "" for key, value in row.items() if key is not None}
+        for row in reader
+    ]
     return headers, rows
 
 
@@ -414,6 +489,24 @@ def validate_signal_csv(
                         message=f"Row {row_index} has no {field}; candidate quality may be lower.",
                     )
                 )
+
+        # A non-ISO timestamp ("23.06.2026 10:00", "6/23/2026") is not an
+        # error — import still works — but it is silently replaced by the
+        # import time, which drops the row out of every trend window. Say so
+        # in the preview instead of letting the substitution pass unseen.
+        raw_timestamp = row.get("timestamp", "").strip()
+        if "timestamp" in headers and raw_timestamp and normalize_timestamp(raw_timestamp)[1]:
+            warnings.append(
+                SignalValidationIssue(
+                    severity="warning",
+                    row_number=row_index,
+                    field="timestamp",
+                    message=(
+                        f"Row {row_index} timestamp '{raw_timestamp[:40]}' is not ISO 8601 and will"
+                        " be set to the import time (flagged in metadata)."
+                    ),
+                )
+            )
 
         if signal_id:
             first_seen_row = seen_signal_ids.get(signal_id)
@@ -497,7 +590,7 @@ def signal_from_row(row: dict[str, str], *, default_source: str = "csv_upload") 
         journey_stage=row.get("journey_stage") or "unknown_stage",
         campaign_exposure=split_multi_value(row.get("campaign_exposure")),
         product_events=split_multi_value(row.get("product_events")),
-        feedback_text=row.get("feedback_text") or "",
+        feedback_text=clean_feedback_text(row.get("feedback_text") or ""),
         # No language field -> detect from the text (DE/EN heuristic), so
         # German handling fires on real imports instead of "unknown".
         language=row.get("language") or detect_language(row.get("feedback_text") or ""),
@@ -507,8 +600,8 @@ def signal_from_row(row: dict[str, str], *, default_source: str = "csv_upload") 
 
 
 def parse_signal_csv(csv_text: str) -> list[SignalRecord]:
-    reader = csv.DictReader(io.StringIO(csv_text.strip()))
-    return [signal_from_row(row) for row in reader]
+    _headers, rows = read_signal_csv_rows(csv_text)
+    return [signal_from_row(row) for row in rows]
 
 
 def build_candidates(signals: list[SignalRecord]) -> list[ProblemCandidate]:

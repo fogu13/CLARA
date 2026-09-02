@@ -102,7 +102,7 @@ def test_email_only_workspace_still_gets_digest() -> None:
         now=datetime(2026, 7, 18, tzinfo=timezone.utc),
     )
 
-    assert result == {"alerted": 0, "digest_sent": 1}
+    assert result == {"alerted": 0, "loop_alerted": 0, "digest_sent": 1}
     assert sent == [("ops@example.com", "CLARA weekly digest")]
     assert telemetry.events[0][1]["channel"] == "email"
 
@@ -115,7 +115,7 @@ def test_no_channels_is_a_noop() -> None:
         push_slack=lambda *_: None,
         build_digest_text=lambda: "digest body",
     )
-    assert result == {"alerted": 0, "digest_sent": 0}
+    assert result == {"alerted": 0, "loop_alerted": 0, "digest_sent": 0}
 
 
 # --------------------------------------------------------------------------- #

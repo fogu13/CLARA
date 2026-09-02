@@ -120,6 +120,38 @@ class TestAuthEnabled:
         assert user.workspace_id == 7
         assert user.email == "test@example.com"
 
+    def test_rejects_foreign_workspace_on_single_workspace_deployment(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A real deployment (REQUIRE_AUTH) on the SQLite backend has no tenant
+        scoping: a token for workspace 7 must not be served workspace 1's data."""
+        import importlib
+
+        from fastapi import HTTPException
+
+        import app.auth as auth_mod
+
+        monkeypatch.setenv("SUPABASE_JWT_SECRET", "test-jwt-secret-for-hybrid")
+        monkeypatch.delenv("SUPABASE_URL", raising=False)
+        monkeypatch.setenv("CLARA_REQUIRE_AUTH", "true")
+        monkeypatch.setenv("DATABASE_URL", "")
+        importlib.reload(auth_mod)
+        try:
+            foreign = _make_token(
+                "test-jwt-secret-for-hybrid", sub="user-abc", workspace_id=7, aud="authenticated"
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                auth_mod._resolve_user(authorization=f"Bearer {foreign}")
+            assert exc_info.value.status_code == 403
+
+            home = _make_token(
+                "test-jwt-secret-for-hybrid", sub="user-abc", workspace_id=1, aud="authenticated"
+            )
+            assert auth_mod._resolve_user(authorization=f"Bearer {home}").workspace_id == 1
+        finally:
+            monkeypatch.delenv("CLARA_REQUIRE_AUTH", raising=False)
+            importlib.reload(auth_mod)
+
     def test_defaults_workspace_id_to_1_when_absent(self, _auth_env: None) -> None:
         from app.auth import _resolve_user
 

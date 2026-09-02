@@ -52,7 +52,7 @@ def test_action_items_alert_once_and_digest_sends(tmp_path: Path) -> None:
     telemetry, result = _sweep(
         tmp_path, report=_report(_item("Payment failures spiking")), configs=[SLACK], push=push
     )
-    assert result == {"alerted": 1, "digest_sent": 1}
+    assert result == {"alerted": 1, "loop_alerted": 0, "digest_sent": 1}
     assert push.posts == ["CLARA: emerging problem needs attention", "CLARA weekly digest"]
 
     # Second sweep same day: the alert is deduped AND the digest is not resent.
@@ -63,7 +63,7 @@ def test_action_items_alert_once_and_digest_sends(tmp_path: Path) -> None:
         push_slack=push,
         build_digest_text=lambda: "digest body",
     )
-    assert second == {"alerted": 0, "digest_sent": 0}
+    assert second == {"alerted": 0, "loop_alerted": 0, "digest_sent": 0}
     assert len(push.posts) == 2
 
 
@@ -78,7 +78,7 @@ def test_watch_items_do_not_alert(tmp_path: Path) -> None:
 def test_no_slack_config_is_a_noop(tmp_path: Path) -> None:
     push = Recorder()
     _, result = _sweep(tmp_path, report=_report(_item("X")), configs=[], push=push)
-    assert result == {"alerted": 0, "digest_sent": 0}
+    assert result == {"alerted": 0, "loop_alerted": 0, "digest_sent": 0}
     assert push.posts == []
 
 
@@ -110,7 +110,7 @@ def test_failed_post_does_not_mark_alerted(tmp_path: Path) -> None:
     telemetry, result = _sweep(
         tmp_path, report=_report(_item("Broken checkout")), configs=[SLACK], push=failing_push
     )
-    assert result == {"alerted": 0, "digest_sent": 0}
+    assert result == {"alerted": 0, "loop_alerted": 0, "digest_sent": 0}
     # Not marked: the next sweep with a healthy Slack must retry the alert.
     ok = Recorder()
     retry = run_alert_sweep(

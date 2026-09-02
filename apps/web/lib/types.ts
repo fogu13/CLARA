@@ -433,17 +433,31 @@ export type ApprovalRecord = ApprovalDecision & {
   created_at: string;
   action_snapshot?: ActionProposalSnapshot | null;
   action_diff: ActionProposalChange[];
+  // sha256 of the evidence pack as the approver saw it (tamper evidence).
+  evidence_pack_hash?: string | null;
 };
+
+export type ExecutionStatus =
+  | "draft_created"
+  | "blocked"
+  | "not_started"
+  | "completed"
+  | "pushed"
+  | "push_failed";
 
 export type ExecutionRecord = {
   execution_id: string;
   problem_id: string;
   action_id: string;
   destination: string;
-  status: "draft_created" | "blocked" | "not_started" | "completed";
+  status: ExecutionStatus;
   owner: string;
   summary: string;
   created_at: string;
+  // Real-push audit trail: the external system's id (Jira key, Slack ts) and a
+  // human-readable result or error note.
+  external_ref?: string | null;
+  detail?: string | null;
   human_reviewed?: boolean;
   reviewed_by?: string | null;
   reviewed_at?: string | null;
@@ -612,6 +626,7 @@ export type OutcomeBoard = {
   loop_closed?: number;
   fix_did_not_land?: number;
   overdue?: number;
+  by_owner?: OwnerRollup[];
   learning_inconclusive: number;
   learning_measurement_invalid: number;
   items: OutcomeBoardItem[];
@@ -678,6 +693,7 @@ export type SignalRecord = {
   // Written back by the triage pipeline once a signal has been enriched.
   sentiment?: string | null;
   urgency?: string | null;
+  tags?: string[];
   enriched?: boolean;
 };
 
@@ -697,6 +713,33 @@ export type ModelCardMetrics = {
     string,
     { n: number; sentiment_accuracy: number | null; urgency_accuracy: number | null }
   >;
+};
+
+// Destinations the API accepts on a route (domain/models.py KNOWN_DESTINATIONS).
+export const KNOWN_DESTINATIONS = [
+  "jira",
+  "slack",
+  "zendesk",
+  "hubspot",
+  "braze",
+  "salesforce",
+  "adobe_experience_platform",
+  "linear",
+  "servicenow",
+  "email",
+  "research_panel",
+  "policy_review"
+] as const;
+
+// Leadership view: where problems concentrate, per owning team.
+export type OwnerRollup = {
+  owner: string;
+  problems: number;
+  open: number;
+  overdue: number;
+  blocked: number;
+  loop_closed: number;
+  fix_did_not_land: number;
 };
 
 // One team-routing rule: a journey stage / AI theme substring -> owning team,
@@ -719,6 +762,7 @@ export type WorkspaceSettings = {
   // Resolution timeline: promoted problems are due this many days after promotion.
   resolution_sla_days?: number;
   owner_routes?: OwnerRoute[];
+  industry_profile?: string;
   ai_disclosure_template: string;
   works_council_mode: boolean;
   // Opt-in: actions need TWO distinct approvers before execution.

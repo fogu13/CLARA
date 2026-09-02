@@ -15,6 +15,7 @@ from app.auth import UserContext, get_current_user
 from app.domain.models import (
     ActionProposal,
     ActionProposalUpdateRequest,
+    SignalRecord,
     AffectedContextExplorer,
     ApprovalDecision,
     ApprovalDecisionStatus,
@@ -37,6 +38,7 @@ from app.domain.models import (
     OutcomeContractUpdateRequest,
     OutcomeMeasurement,
     OutcomeSnapshot,
+    OwnerRollup,
     ProblemCandidate,
     ProblemRecord,
     ProblemStatus,
@@ -191,6 +193,28 @@ def build_outcome_board(
         if item.outcome_status in counts:
             counts[item.outcome_status] += 1
 
+    # Leadership view: where problems concentrate, per owning team.
+    rollups: dict[str, OwnerRollup] = {}
+    for item in items:
+        rollup = rollups.get(item.owner)
+        if rollup is None:
+            rollup = OwnerRollup(
+                owner=item.owner, problems=0, open=0, overdue=0, blocked=0, loop_closed=0, fix_did_not_land=0
+            )
+            rollups[item.owner] = rollup
+        rollup.problems += 1
+        if item.problem_status != ProblemStatus.resolved:
+            rollup.open += 1
+        if item.overdue:
+            rollup.overdue += 1
+        if item.problem_status == ProblemStatus.blocked_by_policy:
+            rollup.blocked += 1
+        if item.loop_verdict == "loop_closed":
+            rollup.loop_closed += 1
+        elif item.loop_verdict == "fix_did_not_land":
+            rollup.fix_did_not_land += 1
+    by_owner = sorted(rollups.values(), key=lambda r: (r.open, r.overdue, r.problems), reverse=True)
+
     return OutcomeBoard(
         total=len(items),
         not_measured=counts["not_measured"],
@@ -205,6 +229,7 @@ def build_outcome_board(
         loop_closed=loop_closed,
         fix_did_not_land=fix_did_not_land,
         overdue=overdue_count,
+        by_owner=by_owner,
         items=items,
     )
 
@@ -446,10 +471,16 @@ def build_router(
     def transition_problem(
         problem_id: str,
         transition: ProblemTransitionRequest,
+        user: UserContext = Depends(get_current_user),  # noqa: B008
     ) -> ProblemTransitionRecord:
         problem = require_problem(problem_id)
         if problem.status == transition.target_status:
             raise HTTPException(status_code=409, detail="Problem is already in the target status")
+        # A "resolved" transition is the resolution proof: attribute it to the
+        # verified principal, never to a name the client typed (approvals already
+        # work this way).
+        if auth.AUTH_ENABLED:
+            transition = transition.model_copy(update={"actor": _actor_identifier(user)})
 
         updated_problem = active_problem_store.transition_problem_status(
             problem_id,
@@ -520,7 +551,7 @@ def build_router(
         signal_store.record_candidate_decision(
             candidate_id=candidate.candidate_id,
             decision=CandidateDecisionStatus.accepted,
-            reviewer=request.reviewer,
+            reviewer=_actor_identifier(user) if auth.AUTH_ENABLED else request.reviewer,
             note=request.note,
         )
         return enrich_problem_for_response(promoted_problem)
@@ -529,6 +560,7 @@ def build_router(
     def reject_problem_candidate(
         candidate_id: str,
         request: CandidateReviewRequest,
+        user: UserContext = Depends(get_current_user),  # noqa: B008
     ) -> ProblemCandidate:
         candidate = require_candidate(candidate_id)
         if candidate.review_status == CandidateReviewStatus.accepted:
@@ -537,7 +569,7 @@ def build_router(
         signal_store.record_candidate_decision(
             candidate_id=candidate.candidate_id,
             decision=CandidateDecisionStatus.rejected,
-            reviewer=request.reviewer,
+            reviewer=_actor_identifier(user) if auth.AUTH_ENABLED else request.reviewer,
             note=request.note,
         )
         return require_candidate(candidate_id)
@@ -679,6 +711,60 @@ def build_router(
 
         return record
 
+    @router.post(
+        "/problems/{problem_id}/executions/{execution_id}/retry",
+        response_model=ExecutionRecord,
+        dependencies=[Depends(require_role(Role.editor))],
+    )
+    def retry_execution(
+        problem_id: str,
+        execution_id: str,
+        user: UserContext = Depends(get_current_user),  # noqa: B008
+    ) -> ExecutionRecord:
+        """Re-run the destination push for an execution whose push failed.
+
+        Without this a failed push was terminal: the approval stands (so a
+        second approval is refused) and nothing retries. The idempotency scan in
+        push_approved_action prevents duplicate external records.
+        """
+        from app.services.action_push import push_approved_action
+        from app.services.workflow import find_action
+
+        problem = require_problem(problem_id)
+        execution = next(
+            (
+                item
+                for item in workflow_store.list_executions()
+                if item.execution_id == execution_id and item.problem_id == problem_id
+            ),
+            None,
+        )
+        if execution is None:
+            raise HTTPException(status_code=404, detail="Execution not found")
+        if execution.status != ExecutionStatus.push_failed:
+            raise HTTPException(
+                status_code=409, detail="Only executions whose push failed can be retried"
+            )
+        action = find_action(problem, execution.action_id)
+        if action is None:
+            raise HTTPException(status_code=404, detail="Action not found")
+        settings = workspace_store.get(user.workspace_id)
+        pushed = push_approved_action(
+            problem=problem,
+            action=action,
+            execution=execution,
+            config_store=connector_config_store,
+            workflow_store=workflow_store,
+            disclosure_template=settings.ai_disclosure_template,
+            owner_routes=settings.owner_routes,
+        )
+        telemetry_store.record(
+            "action_push_retried",
+            entity_id=execution_id,
+            metadata={"problem_id": problem_id, "status": pushed.status.value},
+        )
+        return pushed
+
     @router.get("/problems/{problem_id}/evidence-pack", dependencies=[read_dep])
     def export_evidence_pack(
         problem_id: str,
@@ -724,6 +810,17 @@ def build_router(
         if measurement.problem_id != problem_id:
             raise HTTPException(status_code=422, detail="Outcome problem_id must match the route")
 
+        # A future measured_at would out-rank every scheduled checkpoint (staleness
+        # guard rejects older readings), silencing the real measurements for good.
+        try:
+            measured_at = datetime.fromisoformat(measurement.measured_at.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="measured_at must be ISO 8601") from exc
+        if measured_at.tzinfo is None:
+            measured_at = measured_at.replace(tzinfo=UTC)
+        if measured_at > datetime.now(UTC) + timedelta(minutes=5):
+            raise HTTPException(status_code=422, detail="measured_at cannot be in the future")
+
         # Anything posted over the API is a manual assertion; only the measurement
         # scheduler (which calls the store directly) records "instrumented".
         measurement = measurement.model_copy(update={"measurement_source": "manual"})
@@ -764,7 +861,7 @@ def build_router(
     ) -> LearningConclusionRecord:
         problem = require_problem(problem_id)
         snapshot = workflow_store.outcome_snapshot(problem)
-        if snapshot.status == "not_measured":
+        if snapshot.latest_value is None:
             raise HTTPException(
                 status_code=409,
                 detail="Outcome must be measured before recording a learning conclusion",
@@ -921,24 +1018,35 @@ def build_router(
         approval interrupt and this returns status="awaiting_approval" with a
         thread_id; resume via POST /triage/resume to run action -> measure -> learn.
         """
-        raw_signals = body.get("signals", [])
-        if not raw_signals:
-            # If no signals provided, pull from the signal store
-            raw_signals = [
-                {
-                    "signal_id": s.signal_id,
-                    "id": s.signal_id,
-                    "feedback_text": s.feedback_text,
-                    "text": s.feedback_text,
-                    "signal_type": "qualitative",
-                    "source": s.source,
-                    "customer_id": s.customer_id,
-                    "account_id": s.account_id,
-                    "timestamp": s.timestamp,
-                    "contact_count": 1,
-                }
-                for s in signal_store.list_signals()
-            ]
+        from pydantic import ValidationError
+
+        from app.services.signals import UNKNOWN_IDENTITY_VALUES
+
+        def _graph_signal(record) -> dict:
+            # The WHOLE record travels: metadata (near-duplicate annotations feed
+            # the reach count), journey_stage (closed-set routing must not
+            # overwrite a source-provided stage), persisted tags/enrichment.
+            return {
+                **record.model_dump(),
+                "id": record.signal_id,
+                "text": record.feedback_text,
+                "signal_type": "qualitative",
+                "contact_count": 1,
+            }
+
+        body_signals = body.get("signals") or []
+        if body_signals:
+            # Caller-supplied rows are untrusted input: validate them like an
+            # import, and never let them overwrite enrichment on foreign ids.
+            try:
+                validated = [SignalRecord.model_validate(item) for item in body_signals]
+            except ValidationError as exc:
+                raise HTTPException(status_code=422, detail=exc.errors()) from exc
+            raw_signals = [_graph_signal(record) for record in validated]
+            known_ids = signal_store.existing_signal_ids()
+        else:
+            raw_signals = [_graph_signal(record) for record in signal_store.list_signals()]
+            known_ids = {item["signal_id"] for item in raw_signals}
 
         if not raw_signals:
             return {"insights": [], "status": "empty", "errors": ["No signals to process"]}
@@ -949,8 +1057,62 @@ def build_router(
             if cc.is_active:
                 conn_configs[cc.connector_type] = cc.config
 
-        # Optional context data for 8-factor severity
+        # Severity = volume x severity x VALUE OF THE CUSTOMER AT RISK: derive the
+        # context block from the imported customer/account context whenever the
+        # caller did not supply one, so the 8-factor model runs in production.
         context_data = body.get("context_data")
+        if context_data is None:
+            try:
+                context_rows = context_store.list_context()
+            except Exception:  # noqa: BLE001 — context is an overlay
+                context_rows = []
+            if context_rows:
+                from app.services.context_impact import has_valid_consent
+
+                customer_ids = {
+                    str(item.get("customer_id"))
+                    for item in raw_signals
+                    if item.get("customer_id") not in UNKNOWN_IDENTITY_VALUES
+                }
+                account_ids = {
+                    str(item.get("account_id"))
+                    for item in raw_signals
+                    if item.get("account_id") not in UNKNOWN_IDENTITY_VALUES
+                }
+                matched = [
+                    row
+                    for row in context_rows
+                    if row.customer_id in customer_ids or row.account_id in account_ids
+                ]
+                if matched:
+                    account_values: dict[str, float] = {}
+                    for row in matched:
+                        account_values[row.account_id] = max(
+                            account_values.get(row.account_id, 0.0), float(row.account_value or 0.0)
+                        )
+                    context_data = {
+                        "account_count": len(account_values),
+                        "context_impact": {
+                            "matched_customers": len({row.customer_id for row in matched}),
+                            "matched_accounts": len(account_values),
+                            "total_account_value": round(sum(account_values.values()), 2),
+                            "consent_risk_customers": sum(
+                                1 for row in matched if not has_valid_consent(row)
+                            ),
+                        },
+                    }
+
+        # The workspace's own vocabulary steers the tag label space: accepted
+        # taxonomy categories and terminology canonical terms ("trained on YOUR
+        # taxonomy"), refreshed on every run so taxonomy edits feed back.
+        workspace_vocabulary: list[str] = []
+        if taxonomy_store is not None:
+            try:
+                from app.services.taxonomies import workspace_vocabulary as build_vocabulary
+
+                workspace_vocabulary = build_vocabulary(taxonomy_store)
+            except Exception:  # noqa: BLE001 — vocabulary is guidance, not a gate
+                logger.warning("Workspace vocabulary unavailable", exc_info=True)
 
         # Past learnings inform synthesis (outcome-grounded self-improvement loop).
         # ponytail: best-effort — synthesis works fine without learnings, so a
@@ -981,6 +1143,8 @@ def build_router(
                 "context_data": context_data,
                 "learnings": learnings,
                 "journey_stage_inventory": stage_inventory,
+                "workspace_vocabulary": workspace_vocabulary,
+                "force_enrich": bool(body.get("force")),
             },
             config=config,
         )
@@ -991,8 +1155,10 @@ def build_router(
         for enriched_signal in result.get("enriched_signals") or []:
             if not enriched_signal.get("enriched"):
                 continue
+            if (enriched_signal.get("audit") or {}).get("source") == "persisted_enrichment":
+                continue  # already stored; nothing new to write
             sid = enriched_signal.get("signal_id") or enriched_signal.get("id")
-            if not sid:
+            if not sid or sid not in known_ids:
                 continue
             try:
                 signal_store.update_enrichment(
@@ -1081,8 +1247,10 @@ def build_router(
         # Thread ids are random, but a paused run belongs to the workspace that
         # started it: another tenant guessing the id must see the same 404, not
         # be able to approve (and push) someone else's actions.
+        # A thread without a recorded workspace is unattributable, so it is
+        # treated the same way (fail closed) rather than assumed to be ours.
         thread_workspace = (paused.values or {}).get("workspace_id")
-        if thread_workspace is not None and str(thread_workspace) != str(user.workspace_id):
+        if thread_workspace is None or str(thread_workspace) != str(user.workspace_id):
             raise not_found
 
         result = triage_graph.invoke(Command(resume=decision), config=config)

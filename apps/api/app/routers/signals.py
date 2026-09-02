@@ -41,6 +41,7 @@ from app.services.signals import (
     parse_signal_csv,
     signal_from_row,
     validate_signal_csv,
+    normalize_incoming_signal,
 )
 
 WEBHOOK_MAX_BODY_BYTES = 2 * 1024 * 1024  # 2 MB: far above real payloads, far below OOM
@@ -85,7 +86,25 @@ def build_router(
 
     @router.post("/signals/import", response_model=SignalImportResult, dependencies=[Depends(require_role(Role.editor))])
     def import_signals(request: SignalImportRequest) -> SignalImportResult:
-        return signal_store.import_signals(request.signals)
+        # Same door rules as CSV/webhook: timestamp normalisation (flagged),
+        # language detection, text cleaning, near-duplicate and authenticity
+        # annotation. JSON used to bypass all of them.
+        records = [normalize_incoming_signal(record) for record in request.signals]
+        existing = signal_store.list_signals()
+        near_dups = annotate_near_duplicates(records, existing)
+        review = assess_batch(records, existing, channel="api")
+        result = signal_store.import_signals(records)
+        telemetry_store.record(
+            "signals_imported",
+            metadata={
+                "source": "api",
+                "imported": result.imported,
+                "skipped": result.skipped_duplicates,
+                "near_duplicates": near_dups,
+                **{f"authenticity_{k}": v for k, v in review.summary().items()},
+            },
+        )
+        return result
 
     @router.post("/signals/import-csv", response_model=SignalImportResult, dependencies=[Depends(require_role(Role.editor))])
     def import_signal_csv(request: SignalCsvImportRequest) -> SignalImportResult:

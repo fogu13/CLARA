@@ -40,6 +40,7 @@ class TestEnrichmentFewShotInjection:
         captured = {}
 
         def fake_call_tool(*, system, user, tool, tool_name, trace_name=None):
+            captured["system"] = system
             captured["user"] = user
             return {"enrichments": []}
 
@@ -48,10 +49,11 @@ class TestEnrichmentFewShotInjection:
             [{"id": "1", "text": "the page crashed"}],
             exemplars=load_exemplars(),
         )
-        assert "Reference examples" in captured["user"]
+        # Exemplars are instructions, so they ride in the system turn; the user
+        # turn carries only the untrusted feedback items (injection hardening).
+        assert "Reference examples" in captured["system"]
+        assert "Reference examples" not in captured["user"]
         assert "Enrich these feedback items" in captured["user"]
-        # exemplars come before the items
-        assert captured["user"].index("Reference examples") < captured["user"].index("Enrich these")
 
     def test_no_exemplars_no_block(self, monkeypatch) -> None:
         captured = {}

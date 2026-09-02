@@ -767,3 +767,39 @@ def emerging_problem_score(
         confidence_factor = sum(item.confidence for item in classifications) / len(classifications) * 0.24
     novelty_factor = 0.12 if candidate.review_status.value == "pending" else 0.0
     return round(min(1.0, source_factor + volume_factor + confidence_factor + novelty_factor), 2)
+
+
+def _vocabulary_token(value: str) -> str:
+    token = "".join(ch if ch.isalnum() else "_" for ch in value.strip().lower())
+    while "__" in token:
+        token = token.replace("__", "_")
+    return token.strip("_")
+
+
+def workspace_vocabulary(
+    taxonomy_store: TaxonomyStore,
+    terminology_store: TerminologyStore | None = None,
+    *,
+    limit: int = 80,
+) -> list[str]:
+    """The workspace's own theme vocabulary for the enrichment prompt.
+
+    Accepted (active, non-proposed) taxonomy category labels across catalogs,
+    then terminology canonical terms. Human taxonomy decisions — accepting a
+    bootstrap proposal, merging, renaming — change this list and therefore the
+    label space the model is steered towards on the next triage run.
+    """
+    seen: list[str] = []
+    for catalog in taxonomy_store.list_catalogs():
+        for category in catalog.categories:
+            if category.status not in {"active", "accepted"}:
+                continue
+            token = _vocabulary_token(category.label)
+            if token and token not in seen:
+                seen.append(token)
+    if terminology_store is not None:
+        for entry in terminology_store.list_entries():
+            token = _vocabulary_token(entry.canonical_term)
+            if token and token not in seen:
+                seen.append(token)
+    return seen[:limit]

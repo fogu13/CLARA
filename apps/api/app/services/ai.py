@@ -233,7 +233,17 @@ def _truthy(value: str | None) -> bool:
     return (value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-AI_REQUIRE_EU = _truthy(os.getenv("CLARA_AI_REQUIRE_EU"))
+# Default ON whenever a real backend (DATABASE_URL) is configured — i.e. a
+# deployment — mirroring CLARA_REQUIRE_AUTH; an explicit false still opts out
+# (a pilot that has signed off a non-EU provider). Dev and tests run without
+# DATABASE_URL and stay unenforced.
+_require_eu_env = (os.getenv("CLARA_AI_REQUIRE_EU") or "").strip().lower()
+if _require_eu_env in {"1", "true", "yes", "on"}:
+    AI_REQUIRE_EU = True
+elif _require_eu_env in {"0", "false", "no", "off"}:
+    AI_REQUIRE_EU = False
+else:
+    AI_REQUIRE_EU = bool((os.getenv("DATABASE_URL") or "").strip())
 AI_EU_EXTRA_HOSTS = frozenset(
     host.strip().lower()
     for host in (os.getenv("CLARA_AI_EU_HOSTS") or "").split(",")

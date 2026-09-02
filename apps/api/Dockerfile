@@ -5,9 +5,13 @@
 # never land in the layer.
 FROM python:3.13-slim
 
+# FORWARDED_ALLOW_IPS: uvicorn only trusts X-Forwarded-* from these peers.
+# Caddy and the API share the compose network, so the default is the docker
+# bridge range; override with the proxy's address when it lives elsewhere.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    FORWARDED_ALLOW_IPS="172.16.0.0/12"
 
 WORKDIR /app
 
@@ -34,4 +38,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8000/health || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

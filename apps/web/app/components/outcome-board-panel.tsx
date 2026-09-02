@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getOutcomeBoard } from "../../lib/client-api";
 import type { OutcomeBoard, OutcomeBoardItem } from "../../lib/types";
 import { StateNotice } from "./state-notice";
+import { loopVerdictLabel } from "./outcome-contract-card";
 import { formatMetric, percent } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 
@@ -111,6 +112,18 @@ export function OutcomeBoardPanel() {
           <strong>{board?.not_measured ?? 0}</strong>
         </div>
         <div>
+          <span className="stat-label">{t.outcomeBoard.verdictLoopClosed}</span>
+          <strong>{board?.loop_closed ?? 0}</strong>
+        </div>
+        <div>
+          <span className="stat-label">{t.outcomeBoard.verdictFixDidNotLand}</span>
+          <strong>{board?.fix_did_not_land ?? 0}</strong>
+        </div>
+        <div>
+          <span className="stat-label">{t.dashboard.overdueChip}</span>
+          <strong>{board?.overdue ?? 0}</strong>
+        </div>
+        <div>
           <span className="stat-label">Learning reviewed</span>
           <strong>
             {(board?.learning_worked ?? 0) +
@@ -130,10 +143,21 @@ export function OutcomeBoardPanel() {
                 <span className={`outcome-status outcome-${item.outcome_status}`}>
                   {outcomeLabels(t)[item.outcome_status]}
                 </span>
+                {item.loop_verdict ? (
+                  <span className={`outcome-status outcome-verdict outcome-verdict-${item.loop_verdict}`}>
+                    {t.outcomeBoard.loopVerdict}: {loopVerdictLabel(item.loop_verdict, t)}
+                  </span>
+                ) : null}
+                {item.overdue ? (
+                  <span className="outcome-status outcome-verdict outcome-verdict-fix_did_not_land">
+                    {t.dashboard.overdueChip}
+                  </span>
+                ) : null}
                 <div>
                   <strong>{item.title}</strong>
                   <small>
                     {item.problem_id} / {item.owner} / {item.problem_status.replaceAll("_", " ")}
+                    {item.due_at ? ` / ${t.dashboard.dueLabel} ${item.due_at.slice(0, 10)}` : ""}
                   </small>
                 </div>
               </div>

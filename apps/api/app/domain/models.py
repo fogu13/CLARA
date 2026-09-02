@@ -142,6 +142,26 @@ class TaxonomySplitRequest(BaseModel):
     actor: str = "taxonomy_owner"
 
 
+# Destinations the action model and connectors understand. jira/slack push for
+# real; the others are draft-only destinations governed by policy rules.
+KNOWN_DESTINATIONS = frozenset(
+    {
+        "jira",
+        "slack",
+        "zendesk",
+        "hubspot",
+        "braze",
+        "salesforce",
+        "adobe_experience_platform",
+        "linear",
+        "servicenow",
+        "email",
+        "research_panel",
+        "policy_review",
+    }
+)
+
+
 class OwnerRoute(BaseModel):
     """One team-routing rule: which team owns a journey stage or AI theme, and
     which tool that team works in.
@@ -160,6 +180,30 @@ class OwnerRoute(BaseModel):
     destination: str | None = None
     jira_project_key: str | None = None
     slack_channel: str | None = None
+
+    @field_validator("destination")
+    @classmethod
+    def destination_must_be_known(cls, value: str | None) -> str | None:
+        # A route can only point at destinations the action model knows; an
+        # arbitrary string would land on structural actions and never push.
+        if value is None:
+            return None
+        cleaned = value.strip().lower()
+        if not cleaned:
+            return None
+        if cleaned not in KNOWN_DESTINATIONS:
+            raise ValueError(
+                f"destination must be one of {sorted(KNOWN_DESTINATIONS)}"
+            )
+        return cleaned
+
+    @field_validator("owner", "match")
+    @classmethod
+    def strip_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("must not be blank")
+        return cleaned
 
 
 class WorkspaceSettings(BaseModel):
@@ -713,6 +757,10 @@ class ClosureRecordRequest(BaseModel):
     follow_up_channel: str = Field(min_length=1)
     response_draft: str | None = Field(default=None, max_length=2000)
     limitations: list[str] = Field(default_factory=list)
+    # Proof that someone went back to the customer: the ticket/thread id (or a
+    # "manual: ..." note) in the follow-up channel. Optional so existing pilots
+    # keep working; surfaced on the closure timeline when present.
+    external_ref: str | None = Field(default=None, max_length=200)
 
     @field_validator("owner", "follow_up_channel", "response_draft")
     @classmethod
@@ -839,6 +887,18 @@ class OutcomeBoardItem(BaseModel):
     overdue: bool = False
 
 
+class OwnerRollup(BaseModel):
+    """Leadership view: where problems concentrate, per owning team."""
+
+    owner: str
+    problems: int = Field(ge=0)
+    open: int = Field(ge=0)
+    overdue: int = Field(ge=0)
+    blocked: int = Field(ge=0)
+    loop_closed: int = Field(ge=0)
+    fix_did_not_land: int = Field(ge=0)
+
+
 class OutcomeBoard(BaseModel):
     total: int
     not_measured: int
@@ -855,6 +915,7 @@ class OutcomeBoard(BaseModel):
     loop_closed: int = 0
     fix_did_not_land: int = 0
     overdue: int = 0
+    by_owner: list[OwnerRollup] = Field(default_factory=list)
     items: list[OutcomeBoardItem]
 
 

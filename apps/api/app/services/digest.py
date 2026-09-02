@@ -51,5 +51,19 @@ def build_digest(
         f"• {outcome_board.target_met} target met · {outcome_board.improving} improving · "
         f"{outcome_board.not_improved} not improved · {outcome_board.not_measured} not yet measured"
     )
+    lines.append("")
+
+    # The proof step: did the fix land? Read-time verdicts from the closing
+    # checkpoints, plus the resolution timeline.
+    loop_closed = getattr(outcome_board, "loop_closed", 0) or 0
+    did_not_land = getattr(outcome_board, "fix_did_not_land", 0) or 0
+    overdue = getattr(outcome_board, "overdue", 0) or 0
+    lines.append("*Loop verdicts*")
+    lines.append(
+        f"• {loop_closed} loop(s) closed · {did_not_land} fix(es) did not land · "
+        f"{overdue} problem(s) past their due date"
+    )
+    for item in [i for i in getattr(outcome_board, "items", []) if getattr(i, "loop_verdict", None) == "fix_did_not_land"][:3]:
+        lines.append(f"  – {item.title} ({item.owner}): {item.metric} still at {item.latest_value} vs baseline {item.baseline}")
 
     return "\n".join(lines)

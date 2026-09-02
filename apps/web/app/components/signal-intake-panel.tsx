@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import sampleSignals from "../../../../data/sample_signals.json";
 import {
   acceptProblemCandidate,
   getDemoDatasets,
@@ -16,8 +15,8 @@ import {
   inferColumnMapping,
   parseCsv,
   signalCsvFields,
-  toCanonicalSignalCsv,
-  unmappedRequiredFields
+  essentialSignalCsvField,
+  toCanonicalSignalCsvWithDefaults
 } from "../../lib/csv";
 import type { ColumnMapping } from "../../lib/csv";
 import type {
@@ -164,7 +163,7 @@ export function SignalIntakePanel() {
         setState({
           status: "error",
           message: "API is not connected. Start the backend to import and persist signals.",
-          signals: sampleSignals as SignalRecord[],
+          signals: [],
           candidates: [],
           demoDatasets: []
         });
@@ -299,12 +298,13 @@ export function SignalIntakePanel() {
   async function importMappedCsv() {
     if (!fileCsv) return;
 
-    const missingFields = unmappedRequiredFields(fileCsv.mapping);
-    if (missingFields.length > 0) {
+    // Only the feedback text must be mapped; unmapped fields get backend defaults
+    // (same contract as the Signals page importer).
+    if (!fileCsv.mapping[essentialSignalCsvField]) {
       setState((current) => ({
         ...current,
         status: "error",
-        message: `Map all required fields before import. Missing: ${missingFields.join(", ")}.`
+        message: `Map the ${essentialSignalCsvField} column before import.`
       }));
       return;
     }
@@ -312,7 +312,12 @@ export function SignalIntakePanel() {
     setState((current) => ({ ...current, status: "saving", message: "Importing mapped CSV..." }));
 
     try {
-      const canonicalCsv = toCanonicalSignalCsv(fileCsv.rows, fileCsv.mapping);
+      const canonicalCsv = toCanonicalSignalCsvWithDefaults(
+        fileCsv.rows,
+        fileCsv.mapping,
+        Date.now().toString(36),
+        Object.keys(fileCsv.rows[0] ?? {})
+      );
       const report = await validateSignalCsv(canonicalCsv);
       setValidation({ source: "mapped", report });
       if (!report.valid) {
@@ -345,12 +350,11 @@ export function SignalIntakePanel() {
   async function validateMappedCsv() {
     if (!fileCsv) return;
 
-    const missingFields = unmappedRequiredFields(fileCsv.mapping);
-    if (missingFields.length > 0) {
+    if (!fileCsv.mapping[essentialSignalCsvField]) {
       setState((current) => ({
         ...current,
         status: "error",
-        message: `Map all required fields before validation. Missing: ${missingFields.join(", ")}.`
+        message: `Map the ${essentialSignalCsvField} column before validation.`
       }));
       return;
     }
@@ -358,7 +362,14 @@ export function SignalIntakePanel() {
     setState((current) => ({ ...current, status: "saving", message: "Validating mapped CSV..." }));
 
     try {
-      const report = await validateSignalCsv(toCanonicalSignalCsv(fileCsv.rows, fileCsv.mapping));
+      const report = await validateSignalCsv(
+        toCanonicalSignalCsvWithDefaults(
+          fileCsv.rows,
+          fileCsv.mapping,
+          Date.now().toString(36),
+          Object.keys(fileCsv.rows[0] ?? {})
+        )
+      );
       setValidation({ source: "mapped", report });
       setState((current) => ({
         ...current,

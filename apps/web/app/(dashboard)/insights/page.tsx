@@ -1,17 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Lightbulb, AlertCircle } from "lucide-react";
 import { getProblems } from "@/lib/client-api";
+import type { ProblemSummary } from "@/lib/types";
 import { AskClaraPanel } from "../../components/ask-clara-panel";
 import { useI18n } from "@/lib/i18n";
 
 export default function InsightsPage() {
   const { t } = useI18n();
-  const [problems, setProblems] = useState<any[]>([]);
+  const searchParams = useSearchParams();
+  const owner = searchParams.get("owner") ?? "";
+  const [problems, setProblems] = useState<ProblemSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +24,7 @@ export default function InsightsPage() {
       try {
         // getProblems() sends the auth headers and throws on a non-2xx response, so a
         // failure surfaces as an error instead of being masked as "No insights yet".
-        setProblems(await getProblems());
+        setProblems(await getProblems({ owner: owner || undefined }));
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load insights");
       } finally {
@@ -28,7 +32,7 @@ export default function InsightsPage() {
       }
     }
     load();
-  }, []);
+  }, [owner]);
 
   if (loading) return <div className="text-muted-foreground">{t.common.loading}</div>;
 
@@ -83,8 +87,17 @@ export default function InsightsPage() {
                     <Card className="cursor-pointer hover:shadow-md transition-shadow">
                       <CardContent className="p-4">
                         <p className="text-sm font-medium line-clamp-2">{p.title}</p>
-                        <div className="flex items-center gap-2 mt-2">
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
                           <Badge variant="secondary" className="text-xs">{p.journey}</Badge>
+                          {p.overdue ? (
+                            <Badge variant="destructive" className="text-xs" title={p.due_at ?? undefined}>
+                              {t.dashboard.overdueChip}
+                            </Badge>
+                          ) : p.due_at ? (
+                            <Badge variant="outline" className="text-xs" title={p.due_at}>
+                              {t.dashboard.dueLabel} {p.due_at.slice(0, 10)}
+                            </Badge>
+                          ) : null}
                           {p.status === "blocked_by_policy" && (
                             <Badge variant="destructive" className="text-xs">
                               <AlertCircle className="h-3 w-3 mr-1" />

@@ -816,6 +816,51 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
+              {/* 2b · Leadership: where problems concentrate, per owning team. */}
+              {(board.by_owner ?? []).length > 0 ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{td.concentration}</CardTitle>
+                    <CardDescription>{td.concentrationSubtitle}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                            <th className="py-2 pr-3">{td.colTeam}</th>
+                            <th className="py-2 pr-3 text-right">{td.colOpen}</th>
+                            <th className="py-2 pr-3 text-right">{td.colOverdue}</th>
+                            <th className="py-2 pr-3 text-right">{td.colBlocked}</th>
+                            <th className="py-2 pr-3 text-right">{td.colLoopClosed}</th>
+                            <th className="py-2 pr-3 text-right">{td.colDidNotLand}</th>
+                            <th className="py-2" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(board.by_owner ?? []).map((row) => (
+                            <tr key={row.owner} className="border-t">
+                              <td className="py-2 pr-3 font-medium">{humanize(row.owner)}</td>
+                              <td className="py-2 pr-3 text-right tabular-nums">{row.open}</td>
+                              <td className={cn("py-2 pr-3 text-right tabular-nums", row.overdue > 0 && "text-destructive font-semibold")}>{row.overdue}</td>
+                              <td className={cn("py-2 pr-3 text-right tabular-nums", row.blocked > 0 && "text-amber-600")}>{row.blocked}</td>
+                              <td className={cn("py-2 pr-3 text-right tabular-nums", row.loop_closed > 0 && "text-emerald-600")}>{row.loop_closed}</td>
+                              <td className={cn("py-2 pr-3 text-right tabular-nums", row.fix_did_not_land > 0 && "text-destructive font-semibold")}>{row.fix_did_not_land}</td>
+                              <td className="py-2 text-right">
+                                <Link href={`/actions?owner=${encodeURIComponent(row.owner)}`} className="inline-flex items-center gap-1 text-primary hover:underline">
+                                  {td.openTeamQueue}
+                                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                                </Link>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
+
               {/* 3 · Watch: what is new or moving, and whether actions worked. */}
               <div className="grid items-start gap-4 xl:grid-cols-2">
                 <Card>

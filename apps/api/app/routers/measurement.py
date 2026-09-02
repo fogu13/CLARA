@@ -37,12 +37,29 @@ def build_router(
         """
         requested_now = (body or {}).get("now")
         if requested_now is not None:
-            from datetime import datetime
+            import os
+            from datetime import UTC, datetime, timedelta
 
             try:
-                datetime.fromisoformat(str(requested_now).replace("Z", "+00:00"))
+                parsed_now = datetime.fromisoformat(str(requested_now).replace("Z", "+00:00"))
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail="'now' must be ISO 8601") from exc
+            if parsed_now.tzinfo is None:
+                parsed_now = parsed_now.replace(tzinfo=UTC)
+            # A future clock fires every checkpoint early and dilutes the rate
+            # while the outcome is still stamped real_data_source=true. Only
+            # demo/test environments may time-travel (CLARA_ALLOW_CLOCK_OVERRIDE=1).
+            allow_override = (os.getenv("CLARA_ALLOW_CLOCK_OVERRIDE") or "").strip().lower() in {
+                "1", "true", "yes", "on"
+            }
+            if not allow_override and parsed_now > datetime.now(UTC) + timedelta(minutes=5):
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "'now' is in the future; scheduled measurements run on real time. "
+                        "Set CLARA_ALLOW_CLOCK_OVERRIDE=1 in demo environments to time-travel."
+                    ),
+                )
             # Explicit clock overrides stay allowed (tests/demos time-travel),
             # but the honesty-critical outcome loop records them for audit.
             telemetry_store.record(

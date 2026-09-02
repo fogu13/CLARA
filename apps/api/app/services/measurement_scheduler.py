@@ -54,6 +54,11 @@ def _parse_ts(value: str) -> datetime:
     return parsed
 
 
+UNKNOWN_JOURNEY_N = "unknown journey"
+UNKNOWN_STAGE_N = "unknown stage"
+SOURCE_FEEDBACK_SUFFIX = " feedback"
+
+
 def _norm_stage(value: str) -> str:
     """Journey names round-trip through the metric string as lowercase with
     underscores; normalize both sides so 'customer_onboarding' still matches
@@ -72,13 +77,49 @@ def signal_matches_scope(signal: Any, *, journey: str, journey_stage: str) -> bo
     all three count the same signals.
     """
     stage_n = _norm_stage(journey_stage)
-    if _norm_stage(journey) == THEME_JOURNEY:
+    journey_n = _norm_stage(journey)
+    if journey_n == THEME_JOURNEY:
         tags = {_norm_stage(str(tag)) for tag in (getattr(signal, "tags", None) or [])}
         return stage_n in tags
+    if _norm_stage(signal.journey) != journey_n:
+        return False
+    signal_stage_n = _norm_stage(signal.journey_stage)
+    if signal_stage_n == stage_n:
+        return True
+    # Journey-less feedback (connector/CSV rows without journey metadata) is
+    # grouped per source by build_candidates as "<source>_feedback" while the
+    # signals themselves keep journey_stage "unknown_stage". The contract
+    # promoted from such a candidate must count those same signals — otherwise
+    # every measurement reads 0/day and the loop "closes" without evidence.
     return (
-        _norm_stage(signal.journey) == _norm_stage(journey)
-        and _norm_stage(signal.journey_stage) == stage_n
+        journey_n == UNKNOWN_JOURNEY_N
+        and signal_stage_n == UNKNOWN_STAGE_N
+        and stage_n.endswith(SOURCE_FEEDBACK_SUFFIX)
+        and _norm_stage(f"{getattr(signal, 'source', '')} feedback") == stage_n
     )
+
+
+def unenriched_in_window(signals: list[Any], *, since: str, until: str) -> int:
+    """Signals inside [since, until] that triage has not enriched yet.
+
+    Theme contracts are counted by tag, and tags only exist after enrichment.
+    A window with unenriched signals cannot be read honestly: the count would
+    under-report and a theme could be declared "closed" merely because triage
+    was never run on the new inflow.
+    """
+    start = _parse_ts(since)
+    end = _parse_ts(until)
+    pending = 0
+    for signal in signals:
+        if getattr(signal, "enriched", False):
+            continue
+        try:
+            ts = _parse_ts(signal.timestamp)
+        except ValueError:
+            continue
+        if start <= ts <= end:
+            pending += 1
+    return pending
 
 
 class SQLiteMeasurementPlanStore:
@@ -111,15 +152,19 @@ class SQLiteMeasurementPlanStore:
         executed_at: str,
         due_at: str,
         kind: str,
-    ) -> None:
-        # One pending plan per problem+kind — re-approving must not double-schedule.
+    ) -> bool:
+        """Insert one checkpoint; False when an equivalent pending plan exists.
+
+        One pending plan per problem+kind — re-approving (or approving a second
+        action on the same problem) must not double-schedule or restart the clock.
+        """
         existing = self._connection.execute(
             "SELECT id FROM measurement_plans WHERE problem_id = ? AND kind = ?"
             " AND status IN ('pending', 'manual_required')",
             (problem_id, kind),
         ).fetchone()
         if existing:
-            return
+            return False
         self._connection.execute(
             "INSERT INTO measurement_plans"
             " (problem_id, execution_id, executed_at, due_at, kind, created_at)"
@@ -127,6 +172,7 @@ class SQLiteMeasurementPlanStore:
             (problem_id, execution_id, executed_at, due_at, kind, utc_now()),
         )
         self._connection.commit()
+        return True
 
     def list_plans(self) -> list[dict[str, Any]]:
         rows = self._connection.execute(
@@ -170,15 +216,27 @@ def schedule_measurements(
     scheduled: list[str] = []
     for kind, days in checkpoints.items():
         due_at = (executed + timedelta(days=days)).isoformat().replace("+00:00", "Z")
-        plan_store.schedule(
+        inserted = plan_store.schedule(
             problem_id=problem.problem_id,
             execution_id=execution_id,
             executed_at=executed_at,
             due_at=due_at,
             kind=kind,
         )
-        scheduled.append(kind)
+        # Stores return False when the checkpoint already exists (a second approved
+        # action on the same problem); only report what was really scheduled so
+        # telemetry never claims a clock that did not start.
+        if inserted is not False:
+            scheduled.append(kind)
     return scheduled
+
+
+def followup_window_start(executed_at: str, window_days: int) -> str:
+    """The keep-listening read covers the month AFTER the measurement window,
+    not the cumulative span since execution: averaged over [executed, now] a
+    theme that fully returns in month two would still read as improved."""
+    start = _parse_ts(executed_at) + timedelta(days=window_days)
+    return start.isoformat().replace("+00:00", "Z")
 
 
 def signal_rate_per_day(
@@ -361,11 +419,33 @@ def run_due_measurements(
             continue
 
         journey, _, stage = metric.removeprefix(SIGNAL_METRIC_PREFIX).partition("/")
+        since = plan["executed_at"]
+        span_note = "since action execution"
+        if plan["kind"] == "followup":
+            since = followup_window_start(
+                plan["executed_at"], problem.outcome_contract.measurement_window_days
+            )
+            span_note = "in the month after the measurement window closed (keep-listening read)"
+        if _norm_stage(journey) == THEME_JOURNEY:
+            pending_enrichment = unenriched_in_window(signals, since=since, until=now)
+            if pending_enrichment:
+                # Stay pending (re-tried next tick) and say why: the readout
+                # would be silently incomplete until triage tags the new inflow.
+                plan_store.mark(
+                    plan["id"],
+                    status="pending",
+                    note=(
+                        f"{pending_enrichment} in-window signals not yet enriched — run triage"
+                        " before this theme can be measured"
+                    ),
+                )
+                skipped += 1
+                continue
         rate, sample = signal_rate_per_day(
             signals,
             journey=journey.replace("_", " "),
             journey_stage=stage.replace("_", " "),
-            since=plan["executed_at"],
+            since=since,
             until=now,
         )
         measurement = OutcomeMeasurement(
@@ -376,14 +456,20 @@ def run_due_measurements(
             measurement_source="instrumented",
             notes=(
                 f"Auto-measured by the scheduler ({plan['kind']}): {sample} matching"
-                f" signals since action execution. real_data_source=true"
+                f" signals {span_note}. real_data_source=true"
             ),
         )
         try:
             workflow_store.record_outcome(problem=problem, measurement=measurement)
-        except Exception:  # noqa: BLE001 — one bad plan must not stall the loop
-            logger.exception("Scheduled measurement failed for %s", problem.problem_id)
-            plan_store.mark(plan["id"], status="skipped", note="record_outcome failed")
+        except Exception as exc:  # noqa: BLE001 — one bad plan must not stall the loop
+            detail = str(getattr(exc, "detail", "") or exc)[:200]
+            if getattr(exc, "status_code", None) == 409:
+                # A newer (manual) measurement exists: say so instead of a
+                # generic skip, so the checkpoint panel can show why.
+                plan_store.mark(plan["id"], status="blocked", note=detail)
+            else:
+                logger.exception("Scheduled measurement failed for %s", problem.problem_id)
+                plan_store.mark(plan["id"], status="skipped", note=f"record_outcome failed: {detail}")
             skipped += 1
             continue
 
@@ -438,6 +524,40 @@ def run_due_measurements(
         "loop_closed": loop_closed,
         "fix_did_not_land": fix_did_not_land,
     }
+
+
+def measure_guardrails_for_processed(
+    processed: list[dict[str, Any]],
+    *,
+    problem_lookup: Callable[[str], ProblemRecord | None],
+    signal_store: Any,
+    workflow_store: Any,
+    now: str | None = None,
+) -> int:
+    """Guardrail readouts for plans the DB-side tick already measured.
+
+    clara_run_due_measurements (pg_cron) writes the outcome record but has no
+    guardrail branch; without this pass every declared guardrail stayed
+    decorative on Postgres while the SQLite path measured it. Returns the
+    number of guardrail records written.
+    """
+    if not processed:
+        return 0
+    now = now or utc_now()
+    signals = signal_store.list_signals()
+    written = 0
+    for plan in processed:
+        problem = problem_lookup(str(plan.get("problem_id")))
+        executed_at = plan.get("executed_at")
+        if problem is None or not executed_at:
+            continue
+        try:
+            written += measure_guardrails(
+                problem, signals, executed_at=str(executed_at), now=now, workflow_store=workflow_store
+            )
+        except Exception:  # noqa: BLE001 — guardrails must not stall the loop
+            logger.exception("Guardrail measurement failed for %s", problem.problem_id)
+    return written
 
 
 def scheduler_enabled() -> bool:

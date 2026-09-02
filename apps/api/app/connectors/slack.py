@@ -172,13 +172,18 @@ class SlackDestinationConnector:
                 ],
             })
 
-        # Add footer with provenance
+        # Add footer with provenance (+ deep link back to the problem)
+        footer = "🤖 Sent by CLARA Feedback-to-Action Platform"
+        if action.get("clara_url"):
+            footer += f" · <{action['clara_url']}|Open in CLARA>"
+        elif action.get("problem_id"):
+            footer += f" · {action['problem_id']}"
         blocks.append({
             "type": "context",
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": "🤖 Sent by CLARA Feedback-to-Action Platform",
+                    "text": footer,
                 }
             ],
         })

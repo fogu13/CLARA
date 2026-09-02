@@ -1,5 +1,7 @@
 "use client";
 
+import { currentUserEmail } from "@/lib/auth-client";
+
 import { useEffect, useMemo, useState } from "react";
 import { getWorkflowState, transitionProblem } from "../../lib/client-api";
 import type { ProblemRecord, ProblemStatus, WorkflowState } from "../../lib/types";
@@ -86,7 +88,9 @@ export function ProblemLifecyclePanel({ problem }: { problem: ProblemRecord }) {
     try {
       await transitionProblem(problem.problem_id, {
         target_status: targetStatus,
-        actor: "demo_operator",
+        // The API replaces this with the verified principal when auth is on;
+        // locally it records the signed-in email (or a neutral placeholder).
+        actor: currentUserEmail() ?? "local-user",
         note: note || undefined
       });
       const workflow = await getWorkflowState(problem.problem_id);

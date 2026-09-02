@@ -195,6 +195,15 @@ export async function getProblem(problemId: string): Promise<ProblemRecord> {
   return requestJson<ProblemRecord>(`${apiBaseUrl()}/problems/${problemId}`);
 }
 
+// Re-run the destination push for an execution whose push failed (idempotent
+// on the connector side; the approval itself is never repeated).
+export async function retryExecution(problemId: string, executionId: string): Promise<ExecutionRecord> {
+  return requestJson<ExecutionRecord>(
+    `${apiBaseUrl()}/problems/${problemId}/executions/${executionId}/retry`,
+    { method: "POST" }
+  );
+}
+
 export async function getJiraDrafts(): Promise<JiraIssueDraft[]> {
   return requestJson<JiraIssueDraft[]>(`${apiBaseUrl()}/jira-drafts`);
 }

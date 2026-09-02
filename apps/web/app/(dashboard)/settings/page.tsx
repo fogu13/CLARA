@@ -16,6 +16,7 @@ import {
   type MfaFactor,
 } from "@/lib/auth-client";
 import { apiBaseUrl, apiHeaders, getSystemConfig, getWorkspace, updateWorkspace } from "@/lib/client-api";
+import { KNOWN_DESTINATIONS } from "@/lib/types";
 import type { AiResidency, OwnerRoute, SystemConfig, WorkspaceSettings } from "@/lib/types";
 import { useI18n } from "@/lib/i18n";
 
@@ -318,12 +319,19 @@ export default function SettingsPage() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor={`route-dest-${index}`} className="text-xs">{t.settings.routeDestination}</Label>
-                <Input
+                <select
                   id={`route-dest-${index}`}
                   value={route.destination ?? ""}
-                  placeholder="jira"
                   onChange={(event) => updateRoute(index, { destination: event.target.value || null })}
-                />
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                >
+                  <option value="">—</option>
+                  {KNOWN_DESTINATIONS.map((destination) => (
+                    <option key={destination} value={destination}>
+                      {destination}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-1">
                 <Label htmlFor={`route-jira-${index}`} className="text-xs">{t.settings.routeJira}</Label>
@@ -449,8 +457,6 @@ export default function SettingsPage() {
             <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => { setAiUrl("https://api.mistral.ai/v1"); setAiModel("mistral-small-latest"); setAiEmbedModel("mistral-embed"); }}>Mistral (EU)</button>
             {" · "}
             <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => { setAiUrl("http://localhost:11434/v1"); setAiModel("qwen3:32b"); setAiEmbedModel("nomic-embed-text"); }}>Ollama (local)</button>
-            {" · "}
-            <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => { setAiUrl("https://opencode.ai/zen/v1"); setAiModel("glm-5.2"); setAiEmbedModel("gemini-embedding-001"); }}>OpenCode Zen</button>
           </p>
           <div className="flex gap-2">
             <Button size="sm" onClick={saveAi} disabled={aiBusy}>

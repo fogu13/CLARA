@@ -7,7 +7,7 @@
 - DB: Supabase Postgres via the session pooler; Supabase Auth Site URL = the frontend URL
 - Server layout: `/opt/stacks/caddy/` (Caddyfile: `api.clara.odradekai.com { reverse_proxy clara-api:8000 }`) and `/opt/stacks/clara/` (compose + `.env` + repo clone at `./repo`)
 - Compose: builds `./repo/apps/api`, joins the shared external `proxy` network (`external: true` is required — omitting it silently aborts the stack), publishes no ports (Caddy is the only public entry), sets `CLARA_REPO_ROOT=/app` via `environment:`, mounts `./repo/data` read-only at `/app/data`
-- `.env` on the server (chmod 600): `DATABASE_URL` (pooler string), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CLARA_REQUIRE_AUTH=true`, `AI_*` vars (**including `AI_EMBED_MODEL`** — the default is a Google model and 4xxs against Mistral), and `APP_CORS_ORIGINS=https://clara.odradekai.com,https://clara-theta-nine.vercel.app,http://localhost:3000`
+- `.env` on the server (chmod 600): `DATABASE_URL` (pooler string), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CLARA_REQUIRE_AUTH=true`, `AI_*` vars (defaults are Mistral: `mistral-small-latest` / `mistral-embed` / `AI_EMBED_DIM=0`; set all three explicitly when using another provider), and `APP_CORS_ORIGINS=https://clara.odradekai.com,https://clara-theta-nine.vercel.app,http://localhost:3000`
 - Also in `.env` (Jul 2026 additions): `CLARA_CONFIG_SECRET_KEY` (Fernet key — connector secrets encrypted at rest; **back the key up**: losing it means re-entering connector credentials), optional `CLARA_SMTP_*` (weekly digest email; recipient = workspace notification email), and later `CLARA_REQUIRE_AAL2=true` once every user has enrolled MFA
 - Sep 2026 additions: `CLARA_AI_REQUIRE_EU=true` (fail-closed data residency — a non-EU or unrecognised AI/embeddings/Langfuse host refuses to boot and cannot be saved from Settings; allowlist a private EU gateway via `CLARA_AI_EU_HOSTS`), `CLARA_TRIAGE_CHECKPOINTER=auto` (PostgresSaver: paused triage approvals survive restarts; `memory` opts out). The image now runs as an unprivileged user with a Docker `HEALTHCHECK` on `/health`; `GET /ready` is the deep probe (DB round-trip + residency) for Caddy/uptime checks
 - Vercel production env (not previews): `NEXT_PUBLIC_COOKIE_AUTH=1` + `AUTH_COOKIE_DOMAIN=clara.odradekai.com` (HttpOnly cookie sessions); `NEXT_PUBLIC_LEGAL_PAGES=1` publishes `/legal/*` + the launch surface AFTER legal review (fail-closed: DRAFT-marked docs never publish)
@@ -123,13 +123,14 @@ git push -u origin main
 |---|---|
 | `DATABASE_URL` | Session-pooler string from Step 2.6 (`...pooler.supabase.com:5432`) |
 | `SUPABASE_URL` | `https://XXXXX.supabase.co` (drives JWKS verification of ES256 tokens) |
-| `SUPABASE_SERVICE_ROLE_KEY` | `<service role key>` |
 | `CLARA_REQUIRE_AUTH` | `true` (fail closed — refuse to boot if auth is unconfigured) |
+| `CLARA_SEED_DEMO_DATA` | leave unset: defaults to off whenever `DATABASE_URL` is set, so an empty production DB never receives demo signals/problems (`1` only for a demo tenant) |
+| `LOG_LEVEL` | `INFO` (app loggers; `DEBUG` for a support session, `WARNING` to quiet tick summaries) |
 | `AI_BASE_URL` | `https://api.mistral.ai/v1` (chat) |
 | `AI_API_KEY` | `<your Mistral API key>` |
 | `AI_MODEL` | `mistral-small-latest` |
-| `AI_EMBED_MODEL` | `mistral-embed` — **required with a non-Google embed host**; the default is `gemini-embedding-001` |
-| `AI_EMBED_DIM` | `0` for Mistral (it 422s on the `dimensions` param); `768` for `gemini-embedding-001` |
+| `AI_EMBED_MODEL` | `mistral-embed` (the default). `gemini-embedding-001` is a Google/US model: refused under `CLARA_AI_REQUIRE_EU` |
+| `AI_EMBED_DIM` | `0` for Mistral (the default; it 422s on the `dimensions` param); `768` for models that accept a dimension |
 | `AI_EMBED_BASE_URL` | *optional* — only when `AI_BASE_URL` is a **chat-only** gateway. OpenCode Zen serves 61 chat models and 404s on `/embeddings`, so a Zen deployment needs e.g. `https://api.mistral.ai/v1` here while chat stays on `glm-5.2`. Unset = same host as chat |
 | `AI_EMBED_API_KEY` | *optional* — required whenever `AI_EMBED_BASE_URL` points elsewhere; the chat key is never forwarded to a different provider |
 | `APP_CORS_ORIGINS` | `https://clara-theta-nine.vercel.app` (your Vercel URL, set after Step 4) |
@@ -228,7 +229,7 @@ docker compose -f docker-compose.langfuse.yml up -d
 | pgvector not found | Enable `vector` extension in Supabase dashboard |
 | API cold start (Render free) | First request takes ~30s; upgrade to paid for always-on |
 | LLM calls fail | Check `AI_BASE_URL` + `AI_API_KEY` + `AI_MODEL` are set |
-| Insights search / taxonomy bootstrap 502s | An embeddings problem, not a chat one: `AI_EMBED_MODEL` defaults to `gemini-embedding-001` and must be a model the embed host actually serves. The `/ask` error names the knob; `docker compose logs api \| grep "AI provider error"` has the provider's raw status. Check the split with `GET /system-config` → `ai_embed_base_url` |
+| Insights search / taxonomy bootstrap 502s | An embeddings problem, not a chat one: `AI_EMBED_MODEL` defaults to `mistral-embed` and must be a model the embed host actually serves. The `/ask` error names the knob; `docker compose logs api \| grep "AI provider error"` has the provider's raw status. Check the split with `GET /system-config` → `ai_embed_base_url` |
 | Embeddings 404 while chat works | The host is chat-only. Point `AI_EMBED_BASE_URL` + `AI_EMBED_API_KEY` at a provider that serves `/embeddings`; no `AI_EMBED_MODEL` value fixes a missing endpoint |
 | **`.env` says one thing, `/system-config` says another** | A **Settings-page** AI config beats `.env` and survives restarts — see "Settings overrides env" below. Editing `.env` has no effect until it's cleared |
 | Switching embed model | `taxonomy_nodes.embedding` is `vector(768)` (migration 003). A model with different dims needs a migration before taxonomy bootstrap; `/ask` is unaffected (it embeds in memory). **Also recalibrate every cosine threshold** — similarity distributions differ per embedder; run `python3 -m scripts.calibrate_embed_thresholds` and set the printed `ASK_MIN_SIMILARITY` / `TAXONOMY_*` / `CLUSTER_SEMANTIC_THRESHOLD` values in `.env` (for `mistral-embed`, measured 2026-08-08: 0.75 / 0.85 / 0.85 / 0.91 / 0.75 — the legacy defaults admit everything under it) |
@@ -253,9 +254,10 @@ save. **Also set the API key field** — the route keeps the previously stored k
 that field is left empty (by design: edit forms would otherwise wipe it), so clearing
 only the URL sends the *old* key to the *new* host.
 
-Beware the preset buttons: "OpenCode Zen" also sets `gemini-embedding-001` as the
-embed model, which then overrides `AI_EMBED_MODEL` from env. On a split setup that
-posts a Google model name to your embed provider.
+Beware the preset buttons: a preset also sets the embed model, which then overrides
+`AI_EMBED_MODEL` from env. On a split setup that posts the preset's model name to your
+embed provider. (The non-EU "OpenCode Zen" preset was removed in Sep 2026; any stored
+non-EU override is refused at boot and on save while `CLARA_AI_REQUIRE_EU` is on.)
 
 Since Aug 2026 the `/ask` and Test-connection errors say when an override is active,
 so you are not sent to edit a file that has no effect.

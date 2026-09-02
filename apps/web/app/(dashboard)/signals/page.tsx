@@ -137,6 +137,7 @@ export default function SignalsPage() {
   ).map(([batch, ids]) => ({ batch, ids }));
 
   async function removeBatch(batch: string, ids: string[]) {
+    setThemesFound(null);
     if (!window.confirm(`Remove all ${ids.length} signal(s) from import batch ${batch}? This cannot be undone.`)) return;
     setStatus({ tone: "busy", message: "Removing import batch..." });
     try {
@@ -170,6 +171,7 @@ export default function SignalsPage() {
   }
 
   async function importMapped() {
+    setThemesFound(null);
     if (!fileCsv) return;
     if (!fileCsv.mapping[essentialSignalCsvField]) {
       setStatus({ tone: "error", message: "Map the column that holds the feedback text. It's the only required field." });
@@ -204,6 +206,7 @@ export default function SignalsPage() {
   }
 
   async function assessExisting() {
+    setThemesFound(null);
     setStatus({ tone: "busy", message: t.authenticity.assessing });
     try {
       const result = await backfillAuthenticity();

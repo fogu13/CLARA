@@ -108,9 +108,15 @@ def build_router(
         telemetry_store.record("gdpr_erasure", metadata=deleted)  # no customer id retained
         return {
             "erased": deleted,
+            # Scrubbing evidence in place changes the bytes an evidence-pack hash
+            # was computed over, so previously recorded hashes for affected
+            # problems no longer verify. That is the intended trade-off (Art. 17
+            # beats tamper-evidence) but it must be visible to the operator.
+            "evidence_pack_hashes_invalidated": bool(deleted.get("problems_scrubbed")),
             "note": (
                 "Signals, journey events and context deleted; draft-problem evidence "
-                "scrubbed in place. Seed/demo problems contain synthetic data only."
+                "scrubbed in place (earlier evidence-pack hashes for those problems "
+                "will no longer verify). Seed/demo problems contain synthetic data only."
             ),
         }
 

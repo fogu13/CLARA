@@ -15,6 +15,7 @@ def _capture_call_tool(monkeypatch) -> dict[str, Any]:
     captured: dict[str, Any] = {}
 
     def fake_call_tool(*, system: str, user: str, tool, tool_name, trace_name=None):
+        captured["system"] = system
         captured["user"] = user
         return {
             "title": "t", "summary": "s", "category": "product_issue",
@@ -34,8 +35,11 @@ def test_learnings_injected_into_prompt(monkeypatch) -> None:
     ]
     syn.synthesize_cluster("checkout_failure", [{"text": "payment fails"}], learnings=learnings)
 
-    assert "Relevant past learnings" in captured["user"]
-    assert "Adding a retry button recovered carts" in captured["user"]
+    # Learnings steer the model, so they ride in the system turn; the user turn
+    # carries only the untrusted signal text (injection hardening).
+    assert "Relevant past learnings" in captured["system"]
+    assert "Adding a retry button recovered carts" in captured["system"]
+    assert "Relevant past learnings" not in captured["user"]
 
 
 def test_no_learnings_no_block(monkeypatch) -> None:

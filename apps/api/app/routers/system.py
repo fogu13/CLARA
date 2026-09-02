@@ -33,13 +33,7 @@ def build_router(
         Docker HEALTHCHECK and the uptime workflow hit it every few seconds)."""
         return {"status": "ok"}
 
-    @router.get("/ready")
-    def ready(response: Response) -> dict[str, object]:
-        """Readiness: can this instance serve requests? Checks the persistence
-        layer (SELECT 1 against Postgres, or the SQLite file) and reports the AI
-        provider's residency classification. 503 when the store is unreachable,
-        so an orchestrator or load balancer stops routing to a broken instance
-        instead of serving 500s."""
+    def _readiness_report() -> tuple[bool, dict[str, object]]:
         checks: dict[str, object] = {}
         healthy = True
         if readiness_check is not None:
@@ -53,6 +47,26 @@ def build_router(
             "embeddings": ai.provider_residency(ai.effective_embed_base_url()),
             "eu_only_enforced": ai.eu_only_enforced(),
         }
+        return healthy, checks
+
+    @router.get("/ready")
+    def ready(response: Response) -> dict[str, object]:
+        """Readiness: can this instance serve requests? Runs the persistence
+        probe (SELECT 1 against Postgres, or the SQLite file) and answers 503
+        when it fails, so a load balancer stops routing to a broken instance.
+        Unauthenticated, therefore minimal: status only — backend type, error
+        classes and the residency posture are on /ready/details for signed-in
+        users."""
+        healthy, _checks = _readiness_report()
+        if not healthy:
+            response.status_code = 503
+        return {"status": "ok" if healthy else "degraded"}
+
+    @router.get("/ready/details", dependencies=[read_dep])
+    def ready_details(response: Response) -> dict[str, object]:
+        """The full readiness report: database probe result and the AI
+        residency classification of the configured providers."""
+        healthy, checks = _readiness_report()
         if not healthy:
             response.status_code = 503
         return {"status": "ok" if healthy else "degraded", "checks": checks}
@@ -164,7 +178,14 @@ def build_router(
     # Governance-bearing settings: an editor toggling works_council_mode off
     # would defeat the §87 BetrVG control it exists for, and blanking the
     # disclosure template silently disables the Art. 50 line.
-    ADMIN_ONLY_SETTINGS = ("works_council_mode", "ai_disclosure_template", "four_eyes_approval")
+    # owner_routes decide where approved work is pushed (Jira project / Slack
+    # channel), so they are admin-only too.
+    ADMIN_ONLY_SETTINGS = (
+        "works_council_mode",
+        "ai_disclosure_template",
+        "four_eyes_approval",
+        "owner_routes",
+    )
 
     @router.put(
         "/workspace",

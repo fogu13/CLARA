@@ -18,6 +18,7 @@ Design rules:
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Protocol
 
 from app.connectors import DESTINATIONS
@@ -71,10 +72,16 @@ def _build_push_payload(
     description = action.proposal
     if disclosure:
         description = apply_disclosure(description, disclosure)
+    # Deep link back to the problem so the team working in Jira/Slack can reach
+    # the evidence, the approval trail and the outcome contract in one click.
+    web_url = (os.getenv("CLARA_WEB_URL") or "").rstrip("/")
+    clara_url = f"{web_url}/insights/{problem.problem_id}" if web_url else ""
     return {
         "title": f"{problem.title} [{action.class_.value}]",
         "description": description,
         "priority": risk_priority.get(action.risk_level.value, 3),
+        "problem_id": problem.problem_id,
+        "clara_url": clara_url,
         "insight_title": problem.title,
         "insight_summary": problem.statement,
         "insight_severity": problem.impact_band,
@@ -164,6 +171,20 @@ def push_approved_action(
             execution.execution_id,
             status=ExecutionStatus.push_failed,
             detail=str(exc)[:300],
+        )
+    except Exception as exc:  # noqa: BLE001 — a malformed response or a config
+        # error must land on the execution as push_failed (retryable), never
+        # leave it looking like an untouched draft.
+        logger.exception(
+            "Action push crashed: problem=%s action=%s destination=%s",
+            problem.problem_id,
+            action.action_id,
+            destination,
+        )
+        return workflow_store.update_execution(
+            execution.execution_id,
+            status=ExecutionStatus.push_failed,
+            detail=f"{type(exc).__name__}: {str(exc)[:250]}",
         )
 
     external_id = result.get("external_id") or ""

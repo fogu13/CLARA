@@ -4,7 +4,7 @@ services:
   - type: web
     name: clara-api
     runtime: python
-    buildCommand: pip install -e ".[dev]"
+    buildCommand: pip install -e "."
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
@@ -12,8 +12,6 @@ services:
       - key: SUPABASE_JWT_SECRET
         sync: false
       - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       # Require auth in production: refuses to boot if neither SUPABASE_URL (JWKS) nor
       # SUPABASE_JWT_SECRET is set, instead of silently treating every caller as owner.

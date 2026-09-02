@@ -8,7 +8,9 @@ readiness probe added in the same hardening pass.
 
 from __future__ import annotations
 
+import tempfile
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -18,12 +20,18 @@ import app.services.ai as ai
 from app.domain.models import SignalRecord
 from app.main import create_app
 from app.routers.problems import is_overdue
+from app.connectors.config_store import ConnectorConfigStore
 from app.services.contexts import CustomerContextStore
-from app.services.measurement_scheduler import signal_matches_scope
+from app.services.measurement_scheduler import (
+    SQLiteMeasurementPlanStore,
+    signal_matches_scope,
+    signal_rate_per_day,
+    unenriched_in_window,
+)
 from app.services.outcome_engine import loop_verdict
 from app.services.problems import ProblemStore
 from app.services.seed import load_seed_problems
-from app.services.signals import SignalStore
+from app.services.signals import SignalStore, build_candidates, promote_candidate
 from app.services.workflow import WorkflowStore
 from app.tests.test_triage_graph import _mock_enrich_signals, _mock_synthesize_insights
 
@@ -33,12 +41,18 @@ def _iso(moment: datetime) -> str:
 
 
 def _client(problem_store: ProblemStore | None = None) -> TestClient:
+    # Own plan and connector stores per app: the default SQLite file is shared
+    # by every test in the process, so pending checkpoints (or a Jira config)
+    # left by one loop test would leak into the next test's approvals.
+    plans = SQLiteMeasurementPlanStore(Path(tempfile.mkdtemp(prefix="clara-plans-")) / "plans.db")
     return TestClient(
         create_app(
             problem_store=problem_store or ProblemStore([]),
             workflows=WorkflowStore(),
             signals=SignalStore(),
             contexts=CustomerContextStore(),
+            connector_configs=ConnectorConfigStore(),
+            measurement_plans=plans,
         )
     )
 
@@ -258,7 +272,7 @@ def test_learning_conclusion_reaches_learning_memory_and_next_triage(monkeypatch
                 "problem_id": problem_id,
                 "metric": metric,
                 "observed_value": 0.0,
-                "measured_at": _iso(now + timedelta(days=30)),
+                "measured_at": _iso(datetime.now(UTC)),
                 "notes": "manual read",
             },
         )
@@ -399,6 +413,104 @@ def test_theme_scope_matches_by_tag_and_stage_scope_by_columns() -> None:
     assert not signal_matches_scope(tagged, journey="checkout", journey_stage="payment")
 
 
+def test_journey_less_source_candidates_are_measured_by_the_same_scope() -> None:
+    """Connector/CSV rows without journey metadata are grouped per source
+    ("<source>_feedback") — the contract promoted from them must count those
+    same signals, or every such loop reads 0/day and "closes" for free."""
+    now = datetime.now(UTC)
+    signals = [
+        SignalRecord(
+            signal_id=f"tp-{i}",
+            feedback_text=f"Support never answered, attempt {i}",
+            source="trustpilot",
+            customer_id=f"C-{i}",
+            timestamp=_iso(now - timedelta(days=4 - i)),
+        )
+        for i in range(4)
+    ]
+    other = SignalRecord(
+        signal_id="as-1",
+        feedback_text="App keeps logging me out",
+        source="app_store",
+        timestamp=_iso(now - timedelta(days=1)),
+    )
+    candidate = next(
+        c for c in build_candidates([*signals, other])
+        if c.journey_stage.lower().replace(" ", "_") == "trustpilot_feedback"
+    )
+    problem = promote_candidate(candidate)
+    metric = problem.outcome_contract.primary_metric
+    assert metric == "signal_rate_per_day:unknown_journey/trustpilot_feedback"
+    assert problem.outcome_contract.baseline > 0
+
+    journey, _, stage = metric.removeprefix("signal_rate_per_day:").partition("/")
+    rate, sample = signal_rate_per_day(
+        [*signals, other],
+        journey=journey.replace("_", " "),
+        journey_stage=stage.replace("_", " "),
+        since=_iso(now - timedelta(days=5)),
+        until=_iso(now),
+    )
+    assert sample == 4  # the app_store row belongs to its own per-source candidate
+    assert rate == pytest.approx(4 / 5, abs=1e-3)
+    assert not signal_matches_scope(other, journey="unknown journey", journey_stage="trustpilot feedback")
+    # A real journey stage that merely ends in "feedback" still matches by column.
+    staged = SignalRecord(signal_id="st-1", feedback_text="x", journey_stage="beta_feedback", source="trustpilot")
+    assert signal_matches_scope(staged, journey="unknown journey", journey_stage="beta feedback")
+    assert not signal_matches_scope(staged, journey="unknown journey", journey_stage="trustpilot feedback")
+
+
+def test_theme_measurement_waits_for_enrichment_of_new_inflow(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Theme contracts count by tag and tags only exist after triage: a window
+    with unenriched inflow stays pending (and says why) instead of reading a
+    flattering 0/day. Once triage tags the inflow the checkpoints measure."""
+    monkeypatch.setenv("CLARA_SEED_DEMO_DATA", "0")
+    enr, syn = _mocks()
+    with enr, syn:
+        client = _client()
+        now = datetime.now(UTC)
+        _import_signals(client, 4, start=now - timedelta(hours=3), step=timedelta(minutes=30))
+        assert client.post("/triage/run", json={}).status_code == 200
+        accepted = client.post(
+            "/problem-candidates/CAND-THEME-CHECKOUT-FAILURE/accept",
+            json={"reviewer": "reviewer-1", "note": "Real theme."},
+        )
+        assert accepted.status_code == 200, accepted.text
+        problem_id = accepted.json()["problem_id"]
+        _approve_structural(client, problem_id)
+        plans = [plan for plan in client.get("/measurements").json() if plan["problem_id"] == problem_id]
+        executed = datetime.fromisoformat(plans[0]["executed_at"].replace("Z", "+00:00"))
+
+        # New inflow after the fix, imported raw (no tags, not enriched).
+        _import_signals(client, 1, start=executed + timedelta(days=1), step=timedelta(minutes=1), prefix="raw")
+        at_window = _iso(executed + timedelta(days=40))
+        blocked = client.post("/measurements/run-due", json={"now": at_window}).json()
+        assert blocked["measured"] == 0
+        assert blocked["loop_closed"] == 0
+        assert blocked["skipped"] == 2  # t7 and window both wait for triage
+        pending = [plan for plan in client.get("/measurements").json() if plan["problem_id"] == problem_id]
+        assert {plan["status"] for plan in pending} == {"pending"}
+        assert any("not yet enriched" in (plan["note"] or "") for plan in pending)
+        assert client.get(f"/problems/{problem_id}/outcome").json()["status"] == "not_measured"
+
+        # Triage tags the inflow (stored enrichment is written back) -> measurable.
+        assert client.post("/triage/run", json={}).status_code == 200
+        raw = next(signal for signal in client.get("/signals").json() if signal["signal_id"] == "raw-0")
+        assert raw["enriched"] is True and raw["tags"] == ["checkout_failure"]
+        result = client.post("/measurements/run-due", json={"now": at_window}).json()
+        assert result["measured"] == 2
+        assert result["loop_closed"] == 1
+        assert client.get(f"/problems/{problem_id}/outcome").json()["loop_verdict"] == "loop_closed"
+
+
+def test_unenriched_in_window_counts_only_the_window() -> None:
+    now = datetime.now(UTC)
+    inside = SignalRecord(signal_id="a", feedback_text="x", timestamp=_iso(now - timedelta(days=1)))
+    tagged = SignalRecord(signal_id="b", feedback_text="x", timestamp=_iso(now - timedelta(days=1)), enriched=True)
+    before = SignalRecord(signal_id="c", feedback_text="x", timestamp=_iso(now - timedelta(days=9)))
+    assert unenriched_in_window([inside, tagged, before], since=_iso(now - timedelta(days=7)), until=_iso(now)) == 1
+
+
 def test_loop_verdict_matrix() -> None:
     done_window = [{"kind": "window", "status": "done", "problem_id": "p"}]
     pending = [{"kind": "t7", "status": "pending", "problem_id": "p"}]
@@ -469,10 +581,271 @@ def test_ready_probe_and_system_config_expose_residency() -> None:
     client = _client()
     ready = client.get("/ready")
     assert ready.status_code == 200
-    body = ready.json()
+    assert ready.json() == {"status": "ok"}  # unauthenticated probe: status only, no internals
+    details = client.get("/ready/details")
+    assert details.status_code == 200
+    body = details.json()
     assert body["status"] == "ok"
     assert body["checks"]["database"]["ok"] is True
     assert set(body["checks"]["ai_residency"]) == {"chat", "embeddings", "eu_only_enforced"}
     config = client.get("/system-config").json()
     assert config["ai_residency"] in {"eu", "self_hosted", "non_eu", "unknown"}
     assert config["eu_only_enforced"] is False
+
+
+# ---------------------------------------------------------------------------
+# Audit follow-ups: keep-listening window, retries, guards, intake hygiene
+# ---------------------------------------------------------------------------
+
+
+def test_followup_reads_the_month_after_the_window_not_the_cumulative_span(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A theme that is quiet during the window but returns in month two must read
+    fix_did_not_land at the follow-up, not stay loop_closed on the average."""
+    monkeypatch.setenv("CLARA_SEED_DEMO_DATA", "0")
+    enr, syn = _mocks()
+    with enr, syn:
+        client = _client()
+        now = datetime.now(UTC)
+        _import_signals(client, 4, start=now - timedelta(hours=3), step=timedelta(minutes=30))
+        client.post("/triage/run", json={})
+        theme = next(c for c in client.get("/problem-candidates").json() if c["origin"] == "ai_theme")
+        problem_id = client.post(
+            f"/problem-candidates/{theme['candidate_id']}/accept", json={"reviewer": "r"}
+        ).json()["problem_id"]
+        _approve_structural(client, problem_id)
+        plans = [plan for plan in client.get("/measurements").json() if plan["problem_id"] == problem_id]
+        executed = datetime.fromisoformat(plans[0]["executed_at"].replace("Z", "+00:00"))
+        window_days = client.get(f"/problems/{problem_id}").json()["outcome_contract"]["measurement_window_days"]
+
+        # Window: silence. Month two: the theme is back at 6/day (baseline 4/day).
+        rows = [
+            SignalRecord(
+                signal_id=f"return-{i}",
+                feedback_text="Checkout crashes again",
+                source="app_store",
+                timestamp=_iso(executed + timedelta(days=window_days, hours=4 * i + 1)),
+                tags=["checkout_failure"],
+                enriched=True,
+            ).model_dump()
+            for i in range(180)  # 30 days x 6/day
+        ]
+        assert client.post("/signals/import", json={"signals": rows}).status_code == 200
+
+        window_run = client.post(
+            "/measurements/run-due", json={"now": _iso(executed + timedelta(days=window_days))}
+        ).json()
+        assert window_run["loop_closed"] == 1  # the window itself was quiet
+        followup_run = client.post(
+            "/measurements/run-due", json={"now": _iso(executed + timedelta(days=window_days + 30))}
+        ).json()
+        assert followup_run["measured"] == 1
+        assert followup_run["fix_did_not_land"] == 1  # cumulative average would have hidden this
+        snapshot = client.get(f"/problems/{problem_id}/outcome").json()
+        assert snapshot["loop_verdict"] == "fix_did_not_land"
+        assert snapshot["latest_value"] == pytest.approx(6.0, rel=0.05)
+        followup_plan = next(p for p in client.get("/measurements").json() if p["problem_id"] == problem_id and p["kind"] == "followup")
+        assert followup_plan["status"] == "done"
+
+
+def test_manual_outcome_cannot_be_dated_in_the_future_and_learning_needs_a_reading() -> None:
+    client = _client(ProblemStore(load_seed_problems()))
+    problem_id = "PRB-108"  # seed problem with a business metric
+    metric = client.get(f"/problems/{problem_id}/outcome").json()["metric"]
+    future = client.post(
+        f"/problems/{problem_id}/outcomes",
+        json={
+            "problem_id": problem_id,
+            "metric": metric,
+            "observed_value": 0.5,
+            "measured_at": _iso(datetime.now(UTC) + timedelta(days=3)),
+        },
+    )
+    assert future.status_code == 422
+    blocked = client.post(
+        f"/problems/{problem_id}/learning-conclusions",
+        json={"learning_status": "worked", "summary": "x", "limitations": "y"},
+    )
+    assert blocked.status_code == 409
+
+
+def test_run_due_refuses_future_clock_outside_demo_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CLARA_ALLOW_CLOCK_OVERRIDE", raising=False)
+    client = _client()
+    response = client.post(
+        "/measurements/run-due", json={"now": _iso(datetime.now(UTC) + timedelta(days=10))}
+    )
+    assert response.status_code == 422
+    assert "CLARA_ALLOW_CLOCK_OVERRIDE" in response.json()["detail"]
+    # Real time is always allowed.
+    assert client.post("/measurements/run-due", json={}).status_code == 200
+
+
+def test_failed_push_can_be_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.connectors import DESTINATIONS
+    from app.connectors.base import ConnectorError
+
+    monkeypatch.setenv("CLARA_SEED_DEMO_DATA", "0")
+    client = _client()
+    now = datetime.now(UTC)
+    _import_signals(
+        client, 2, start=now - timedelta(hours=2), step=timedelta(minutes=30),
+        journey="checkout", journey_stage="payment",
+    )
+    problem_id = client.post(
+        "/problem-candidates/CAND-CHECKOUT-PAYMENT/accept", json={"reviewer": "r"}
+    ).json()["problem_id"]
+    assert client.put(
+        "/connectors/jira",
+        json={"base_url": "https://example.atlassian.net", "email": "a@b.c", "api_token": "t", "project_key": "PAY"},
+    ).status_code == 200
+
+    calls: list[dict] = []
+
+    class _FailingJira:
+        connector_type = "jira"
+
+        def push(self, action, config):
+            calls.append({"action": action, "config": config})
+            if len(calls) == 1:
+                raise ConnectorError("Jira returned 500", connector="jira", status=500)
+            return {"external_id": "PAY-42", "status": "pushed", "audit": {}}
+
+    monkeypatch.setitem(DESTINATIONS, "jira", _FailingJira())
+    _approve_structural(client, problem_id)
+    execution = next(e for e in client.get("/executions").json() if e["problem_id"] == problem_id)
+    assert execution["status"] == "push_failed"
+
+    # Re-approving is refused (append-only audit) — retry is the way back.
+    again = client.post(
+        f"/problems/{problem_id}/approvals",
+        json={"action_id": f"ACT-{problem_id}-STRUCTURAL", "decision": "approved", "reviewer": "r"},
+    )
+    assert again.status_code == 409
+    retried = client.post(f"/problems/{problem_id}/executions/{execution['execution_id']}/retry")
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["status"] == "pushed"
+    assert retried.json()["external_ref"] == "PAY-42"
+    assert calls[-1]["action"]["problem_id"] == problem_id  # deep link payload
+    # A second retry is refused: the push already succeeded.
+    assert client.post(f"/problems/{problem_id}/executions/{execution['execution_id']}/retry").status_code == 409
+
+
+def test_team_rollup_on_the_outcome_board(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CLARA_SEED_DEMO_DATA", "0")
+    client = _client()
+    now = datetime.now(UTC)
+    _import_signals(
+        client, 2, start=now - timedelta(hours=2), step=timedelta(minutes=30),
+        journey="checkout", journey_stage="payment",
+    )
+    problem = client.post("/problem-candidates/CAND-CHECKOUT-PAYMENT/accept", json={"reviewer": "r"}).json()
+    board = client.get("/outcome-board").json()
+    rollup = next(item for item in board["by_owner"] if item["owner"] == problem["owner"])
+    assert rollup["problems"] == 1
+    assert rollup["open"] == 1
+    assert rollup["overdue"] == 0
+
+
+def test_json_import_applies_the_same_door_rules_as_csv(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CLARA_SEED_DEMO_DATA", "0")
+    client = _client()
+    response = client.post(
+        "/signals/import",
+        json={
+            "signals": [
+                {
+                    "signal_id": "json-1",
+                    "feedback_text": "  Die &amp; App   st\u00fcrzt <b>st\u00e4ndig</b> ab, sehr \u00e4rgerlich.  ",
+                    "timestamp": "23.06.2026 10:00",
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200, response.text
+    stored = next(s for s in client.get("/signals").json() if s["signal_id"] == "json-1")
+    assert stored["feedback_text"] == "Die & App st\u00fcrzt st\u00e4ndig ab, sehr \u00e4rgerlich."
+    assert stored["language"] == "de"
+    assert stored["metadata"]["timestamp_defaulted"] == "true"
+    assert stored["timestamp"].endswith("Z") and "2026-06-23" not in stored["timestamp"]
+
+
+def test_semicolon_csv_with_bom_imports_and_warns_on_odd_timestamps(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CLARA_SEED_DEMO_DATA", "0")
+    client = _client()
+    csv_text = (
+        "\ufeffsignal_id;feedback_text;timestamp\n"
+        "de-1;Bezahlung schl\u00e4gt fehl;23.06.2026 10:00\n"
+        "de-2;Login geht nicht;2026-06-23T10:00:00Z\n"
+    )
+    report = client.post("/signals/validate-csv", json={"csv_text": csv_text}).json()
+    assert report["valid"] is True
+    assert report["importable_rows"] == 2
+    assert any(issue["field"] == "timestamp" and issue["row_number"] == 2 for issue in report["warnings"])
+    imported = client.post("/signals/import-csv", json={"csv_text": csv_text}).json()
+    assert imported["imported"] == 2
+
+
+def test_second_triage_run_keeps_stored_enrichment_and_passes_vocabulary(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CLARA_SEED_DEMO_DATA", "0")
+    seen: list[dict] = []
+
+    def enrich_capture(signals, **kw):
+        seen.append({"count": len(signals), "vocabulary": kw.get("vocabulary")})
+        return _mock_enrich_signals(signals, **kw)
+
+    with patch("app.agents.triage_graph.enrich_signals", side_effect=enrich_capture), patch(
+        "app.agents.triage_graph.synthesize_insights", side_effect=_mock_synthesize_insights
+    ):
+        client = _client()
+        now = datetime.now(UTC)
+        _import_signals(client, 3, start=now - timedelta(hours=2), step=timedelta(minutes=20))
+        client.post("/triage/run", json={})
+        assert seen[-1]["count"] == 3
+        assert seen[-1]["vocabulary"]  # accepted taxonomy labels reach the prompt
+        # Nothing new: the stored enrichment is reused, the model is not called again.
+        client.post("/triage/run", json={})
+        assert len(seen) == 1
+        # force=true re-enriches everything.
+        client.post("/triage/run", json={"force": True})
+        assert len(seen) == 2 and seen[-1]["count"] == 3
+
+
+def test_enrichment_and_insight_output_are_sanitized() -> None:
+    from app.services.enrichment import sanitize_enrichment
+    from app.services.synthesis import sanitize_insight
+
+    assert sanitize_enrichment("not a dict", {"a"}) is None
+    assert sanitize_enrichment({"id": "zzz", "tags": ["x"]}, {"a"}) is None  # foreign id
+    cleaned = sanitize_enrichment(
+        {"id": "a", "sentiment": "FURIOUS", "urgency": "panic", "sentiment_score": -7, "tags": ["Checkout Failure", "", "x" * 100, 42]},
+        {"a"},
+    )
+    assert cleaned == {
+        "id": "a",
+        "sentiment": None,
+        "sentiment_score": -1.0,
+        "urgency": "medium",
+        "tags": ["checkout_failure", "x" * 60, "42"],
+    }
+    insight = sanitize_insight({"title": " T ", "confidence": 3, "suggested_actions": ["junk", {"type": "create_ticket", "priority": "9"}], "tag": "t"})
+    assert insight["title"] == "T"
+    assert insight["confidence"] == 1.0
+    assert insight["suggested_actions"] == [{"type": "create_ticket", "title": "", "description": "", "priority": 5}]
+    assert insight["tag"] == "t"
+
+
+def test_clean_feedback_text_and_zendesk_null_ids() -> None:
+    from app.connectors.zendesk import ZendeskSourceConnector
+    from app.services.signals import clean_feedback_text
+
+    assert clean_feedback_text("  Hi &amp; <b>bye</b>\r\n\r\n\r\nend  ") == "Hi & bye\n\nend"
+    connector = ZendeskSourceConnector()
+    mapped = connector._map_ticket(
+        {"id": 7, "description": "help", "requester_id": None, "organization_id": None, "created_at": None},
+        {},
+        {},
+    )
+    assert mapped["customer_id"] == "unknown"
+    assert mapped["account_id"] == "unknown"

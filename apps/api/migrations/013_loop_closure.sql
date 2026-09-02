@@ -97,6 +97,10 @@ DECLARE
   skipped integer := 0;
   loop_closed integer := 0;
   fix_did_not_land integer := 0;
+  window_days integer;
+  unenriched integer;
+  span_note text;
+  processed jsonb := '[]'::jsonb;
 BEGIN
   PERFORM set_config('app.tenant_id', _ws_id::text, true);
   PERFORM set_config('app.workspace_id', _ws_id::text, true);
@@ -143,8 +147,35 @@ BEGIN
       IF since_ts IS NULL THEN
         RAISE EXCEPTION 'unparseable executed_at: %', plan.executed_at;
       END IF;
+      span_note := 'since action execution';
+      IF plan.kind = 'followup' THEN
+        -- Keep-listening read: the month AFTER the window, not the cumulative
+        -- span (mirrors measurement_scheduler.followup_window_start).
+        window_days := COALESCE(
+          (problem_payload #>> '{outcome_contract,measurement_window_days}')::int, 28);
+        since_ts := since_ts + make_interval(days => window_days);
+        span_note := 'in the month after the measurement window closed (keep-listening read)';
+      END IF;
 
       IF journey_n = 'theme' THEN
+        -- Tags only exist after triage enrichment: a window holding unenriched
+        -- signals cannot be read honestly — the count would under-report and a
+        -- theme could "close" merely because triage never ran on the new inflow.
+        -- Stay pending (re-tried next tick) and say why
+        -- (mirrors measurement_scheduler.unenriched_in_window).
+        SELECT count(*) INTO unenriched
+        FROM clara_signals s
+        WHERE NOT coalesce((s.payload->>'enriched')::boolean, false)
+          AND clara_safe_ts(s.payload->>'timestamp') BETWEEN since_ts AND _now;
+        IF unenriched > 0 THEN
+          UPDATE clara_measurement_plans
+            SET note = format(
+              '%s in-window signals not yet enriched — run triage before this theme can be measured',
+              unenriched)
+            WHERE id = plan.id;
+          skipped := skipped + 1;
+          CONTINUE;
+        END IF;
         -- Theme contract: a signal is in scope when it carries the theme tag
         -- (written back by triage enrichment), whatever journey it came from.
         SELECT count(*) INTO sample
@@ -155,6 +186,23 @@ BEGIN
                   CASE WHEN jsonb_typeof(s.payload->'tags') = 'array'
                        THEN s.payload->'tags' ELSE '[]'::jsonb END) AS t(tag)
                 WHERE btrim(lower(replace(t.tag, '_', ' '))) = stage_n)
+          AND clara_safe_ts(s.payload->>'timestamp') BETWEEN since_ts AND _now;
+      ELSIF journey_n = 'unknown journey' AND stage_n LIKE '% feedback' THEN
+        -- Journey-less feedback is grouped per source ("<source>_feedback") by
+        -- build_candidates while the signals keep journey_stage unknown_stage;
+        -- count those same signals or the contract reads 0/day forever
+        -- (mirrors measurement_scheduler.signal_matches_scope).
+        SELECT count(*) INTO sample
+        FROM clara_signals s
+        WHERE btrim(lower(replace(s.payload->>'journey', '_', ' '))) = journey_n
+          AND (
+            btrim(lower(replace(s.payload->>'journey_stage', '_', ' '))) = stage_n
+            OR (
+              btrim(lower(replace(s.payload->>'journey_stage', '_', ' '))) = 'unknown stage'
+              AND btrim(lower(replace(coalesce(s.payload->>'source', ''), '_', ' '))) || ' feedback'
+                  = stage_n
+            )
+          )
           AND clara_safe_ts(s.payload->>'timestamp') BETWEEN since_ts AND _now;
       ELSE
         SELECT count(*) INTO sample
@@ -191,8 +239,8 @@ BEGIN
           'observed_value', rate,
           'measured_at', measured_at_str,
           'notes', format(
-            'Auto-measured by the scheduler (%s): %s matching signals since action execution. real_data_source=true',
-            plan.kind, sample),
+            'Auto-measured by the scheduler (%s): %s matching signals %s. real_data_source=true',
+            plan.kind, sample, span_note),
           'measurement_source', 'instrumented'
         )
       );
@@ -206,6 +254,8 @@ BEGIN
                 jsonb_build_object('source', 'scheduler', 'real_data_source', true,
                                    'kind', plan.kind, 'observed_value', rate));
       measured := measured + 1;
+      processed := processed || jsonb_build_object(
+        'problem_id', plan.problem_id, 'executed_at', plan.executed_at, 'kind', plan.kind);
 
       -- Loop verdict on the closing checkpoints (outcome_engine.outcome_status,
       -- decrease direction: signal-rate metrics are complaint-style).
@@ -246,8 +296,17 @@ BEGIN
     END;
   END LOOP;
 
+  -- 'processed' lets the API run the Python guardrail pass for exactly the
+  -- plans this tick measured (the function has no guardrail branch).
   RETURN jsonb_build_object(
     'measured', measured, 'manual_required', manual, 'skipped', skipped,
-    'loop_closed', loop_closed, 'fix_did_not_land', fix_did_not_land);
+    'loop_closed', loop_closed, 'fix_did_not_land', fix_did_not_land,
+    'processed', processed);
 END;
 $$;
+
+-- ====== 4. Timestamps without an offset are UTC, as in Python ======
+-- measurement_scheduler._parse_ts treats naive strings as UTC; clara_safe_ts
+-- parsed them in the session TimeZone, so a non-UTC session could shift a
+-- signal across a day boundary relative to the Python path.
+ALTER FUNCTION public.clara_safe_ts(text) SET TimeZone = 'UTC';
