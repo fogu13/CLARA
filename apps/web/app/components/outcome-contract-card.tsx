@@ -8,12 +8,37 @@ import {
   updateOutcomeContract
 } from "@/lib/client-api";
 import { useI18n } from "@/lib/i18n";
-import type { ItsResult, OutcomeContractProposalPreview, ProblemRecord } from "@/lib/types";
+import type { ItsResult, LoopVerdict, OutcomeContractProposalPreview, ProblemRecord } from "@/lib/types";
+
+export function loopVerdictLabel(verdict: LoopVerdict | null | undefined, t: ReturnType<typeof useI18n>["t"]): string {
+  switch (verdict) {
+    case "loop_closed":
+      return t.outcomeBoard.verdictLoopClosed;
+    case "fix_did_not_land":
+      return t.outcomeBoard.verdictFixDidNotLand;
+    case "on_track":
+      return t.outcomeBoard.verdictOnTrack;
+    case "manual_required":
+      return t.outcomeBoard.verdictManual;
+    case "measuring":
+      return t.outcomeBoard.verdictMeasuring;
+    default:
+      return t.outcomeBoard.verdictNotMeasured;
+  }
+}
+
+export function loopVerdictTone(verdict: LoopVerdict | null | undefined): string {
+  if (verdict === "loop_closed") return "text-emerald-600";
+  if (verdict === "fix_did_not_land") return "text-destructive";
+  if (verdict === "on_track") return "text-emerald-600";
+  return "text-muted-foreground";
+}
 
 export function OutcomeContractCard({ problem }: { problem: ProblemRecord }) {
   const { t } = useI18n();
   const [proposal, setProposal] = useState<OutcomeContractProposalPreview | null>(null);
   const [its, setIts] = useState<ItsResult | null>(null);
+  const [loop, setLoop] = useState<{ verdict: LoopVerdict | null; note: string | null } | null>(null);
   const [applyState, setApplyState] = useState<"idle" | "saving" | "error">("idle");
   const [editing, setEditing] = useState(false);
   const [editWindow, setEditWindow] = useState(
@@ -36,10 +61,14 @@ export function OutcomeContractCard({ problem }: { problem: ProblemRecord }) {
 
     getOutcomeSnapshot(problem.problem_id)
       .then((snapshot) => {
-        if (!cancelled) setIts(snapshot.its ?? null);
+        if (cancelled) return;
+        setIts(snapshot.its ?? null);
+        setLoop({ verdict: snapshot.loop_verdict ?? null, note: snapshot.loop_note ?? null });
       })
       .catch(() => {
-        if (!cancelled) setIts(null);
+        if (cancelled) return;
+        setIts(null);
+        setLoop(null);
       });
 
     return () => {
@@ -97,6 +126,12 @@ export function OutcomeContractCard({ problem }: { problem: ProblemRecord }) {
           {problem.outcome_contract.comparison_method} /{" "}
           {problem.outcome_contract.measurement_window_days} {t.detail.days}
         </p>
+        {loop ? (
+          <p className={`mt-2 text-xs ${loopVerdictTone(loop.verdict)}`} title={loop.note ?? undefined}>
+            <span className="font-semibold">{t.detail.loopVerdict}:</span> {loopVerdictLabel(loop.verdict, t)}
+            {loop.note ? <span className="text-muted-foreground"> — {loop.note}</span> : null}
+          </p>
+        ) : null}
         {proposed ? (
           <div className="mt-2 rounded-md border p-2 text-xs text-muted-foreground">
             <p>

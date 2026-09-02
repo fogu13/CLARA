@@ -2,7 +2,7 @@
 name = "clara-api"
 version = "0.1.0"
 description = "API prototype for the CLARA Feedback-to-Outcome platform."
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
   # <0.129 pins starlette to the validated 0.x line: fastapi 0.129+ moves to
   # starlette 1.x, where include_router no longer flattens APIRoutes into

@@ -22,7 +22,14 @@ from typing import Any, Protocol
 
 from app.connectors import DESTINATIONS
 from app.connectors.base import ConnectorError
-from app.domain.models import ActionProposal, ExecutionRecord, ExecutionStatus, ProblemRecord
+from app.domain.models import (
+    ActionProposal,
+    ExecutionRecord,
+    ExecutionStatus,
+    OwnerRoute,
+    ProblemRecord,
+)
+from app.services.routing import connector_overrides, route_for_owner
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +92,7 @@ def push_approved_action(
     config_store: _ConfigStore,
     workflow_store: _WorkflowStore,
     disclosure_template: str | None = None,
+    owner_routes: list[OwnerRoute] | None = None,
 ) -> ExecutionRecord:
     """Push an approved action to its destination system, if one is configured.
 
@@ -94,6 +102,11 @@ def push_approved_action(
     Art. 50: executions without a human-review stamp get `disclosure_template`
     appended to the outbound text and `disclosure_applied=True` recorded;
     human-reviewed executions are Art. 50(4)-exempt and pushed verbatim.
+
+    Team routing: when the workspace declares an ``OwnerRoute`` for the action's
+    owner with its own Jira project / Slack channel, that override is layered
+    over the workspace connector config (credentials are never overridable), so
+    each team receives its work in the tool and place it already uses.
     """
     destination = execution.destination
     connector = DESTINATIONS.get(destination)
@@ -128,6 +141,12 @@ def push_approved_action(
                 detail=f"Reused existing {destination} record (idempotent skip).",
             )
 
+    route = route_for_owner(owner_routes or [], action.owner)
+    overrides = connector_overrides(route, destination)
+    if overrides:
+        config = {**config, **overrides}
+    route_note = f" via team route '{route.owner}'" if overrides and route is not None else ""
+
     disclosure = None if execution.human_reviewed else disclosure_template
     try:
         result = connector.push(
@@ -152,6 +171,6 @@ def push_approved_action(
         execution.execution_id,
         status=ExecutionStatus.pushed,
         external_ref=external_id,
-        detail=f"{destination} record created: {external_id}",
+        detail=f"{destination} record created: {external_id}{route_note}",
         disclosure_applied=True if disclosure else None,
     )

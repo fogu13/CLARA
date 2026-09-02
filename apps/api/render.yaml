@@ -19,6 +19,9 @@ services:
       # SUPABASE_JWT_SECRET is set, instead of silently treating every caller as owner.
       - key: CLARA_REQUIRE_AUTH
         value: "true"
+      # Fail closed on data residency: non-EU AI/embeddings/Langfuse hosts refuse to boot.
+      - key: CLARA_AI_REQUIRE_EU
+        value: "true"
       - key: AI_BASE_URL
         value: https://api.mistral.ai/v1
       - key: AI_API_KEY

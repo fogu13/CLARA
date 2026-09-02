@@ -9,6 +9,7 @@
 - Compose: builds `./repo/apps/api`, joins the shared external `proxy` network (`external: true` is required — omitting it silently aborts the stack), publishes no ports (Caddy is the only public entry), sets `CLARA_REPO_ROOT=/app` via `environment:`, mounts `./repo/data` read-only at `/app/data`
 - `.env` on the server (chmod 600): `DATABASE_URL` (pooler string), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CLARA_REQUIRE_AUTH=true`, `AI_*` vars (**including `AI_EMBED_MODEL`** — the default is a Google model and 4xxs against Mistral), and `APP_CORS_ORIGINS=https://clara.odradekai.com,https://clara-theta-nine.vercel.app,http://localhost:3000`
 - Also in `.env` (Jul 2026 additions): `CLARA_CONFIG_SECRET_KEY` (Fernet key — connector secrets encrypted at rest; **back the key up**: losing it means re-entering connector credentials), optional `CLARA_SMTP_*` (weekly digest email; recipient = workspace notification email), and later `CLARA_REQUIRE_AAL2=true` once every user has enrolled MFA
+- Sep 2026 additions: `CLARA_AI_REQUIRE_EU=true` (fail-closed data residency — a non-EU or unrecognised AI/embeddings/Langfuse host refuses to boot and cannot be saved from Settings; allowlist a private EU gateway via `CLARA_AI_EU_HOSTS`), `CLARA_TRIAGE_CHECKPOINTER=auto` (PostgresSaver: paused triage approvals survive restarts; `memory` opts out). The image now runs as an unprivileged user with a Docker `HEALTHCHECK` on `/health`; `GET /ready` is the deep probe (DB round-trip + residency) for Caddy/uptime checks
 - Vercel production env (not previews): `NEXT_PUBLIC_COOKIE_AUTH=1` + `AUTH_COOKIE_DOMAIN=clara.odradekai.com` (HttpOnly cookie sessions); `NEXT_PUBLIC_LEGAL_PAGES=1` publishes `/legal/*` + the launch surface AFTER legal review (fail-closed: DRAFT-marked docs never publish)
 
 Deploy:
@@ -91,6 +92,12 @@ git push -u origin main
      for pg_cron WARNINGs. Ad-hoc SQL-editor DML now needs
      `SELECT set_config('app.tenant_id','1',false), set_config('app.workspace_id','1',false);`
      first (RLS is FORCEd for the owner role too).
+   - `apps/api/migrations/013_loop_closure.sql` — AI theme insights (`clara_theme_insights`),
+     learning memory (`clara_learnings`, both RLS-forced) and the theme-aware
+     `clara_run_due_measurements` that also records `loop_closed` / `fix_did_not_land`
+     telemetry on window/follow-up checkpoints. The API self-heals the two tables and their
+     RLS on boot; the function replacement only lives in this file, so apply it or theme
+     contracts measure 0 signals under pg_cron. Safe to re-run.
    - `apps/api/migrations/012_embedding_dim_1024.sql` — **only if `AI_EMBED_MODEL` is
      1024-dim (e.g. `mistral-embed`)**. 003 pins `taxonomy_nodes.embedding` to
      `vector(768)`; this retargets it. ⚠️ **It clears every stored embedding** — vectors

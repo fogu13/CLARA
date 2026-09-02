@@ -566,6 +566,12 @@ export function SignalIntakePanel() {
                     <span className={`candidate-status candidate-status-${candidate.review_status}`}>
                       {candidateStatusLabels(t)[candidate.review_status]}
                     </span>
+                    <span
+                      className={`candidate-status candidate-origin candidate-origin-${candidate.origin ?? "journey_stage"}`}
+                      title={candidate.origin === "ai_theme" ? candidate.theme_summary ?? undefined : undefined}
+                    >
+                      {candidate.origin === "ai_theme" ? t.intake.aiTheme : t.intake.journeyStageOrigin}
+                    </span>
                     <strong>{candidate.title}</strong>
                     <small>
                       {candidate.candidate_id} / {candidate.journey} / {candidate.journey_stage}
@@ -593,6 +599,18 @@ export function SignalIntakePanel() {
                     <dt>Owner</dt>
                     <dd>{candidate.suggested_owner}</dd>
                   </div>
+                  {candidate.origin === "ai_theme" && candidate.triage_urgency ? (
+                    <div>
+                      <dt>{t.intake.urgency}</dt>
+                      <dd>{candidate.triage_urgency}</dd>
+                    </div>
+                  ) : null}
+                  {candidate.origin === "ai_theme" && typeof candidate.triage_impact_score === "number" ? (
+                    <div>
+                      <dt>{t.intake.severity}</dt>
+                      <dd>{percent(candidate.triage_impact_score)}</dd>
+                    </div>
+                  ) : null}
                 </dl>
                 {candidate.duplicate_problem_id ? (
                   <p className="candidate-duplicate">

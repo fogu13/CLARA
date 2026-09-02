@@ -175,6 +175,7 @@ from app.services.policies import PolicyRuleStore
 from app.services.postgres import (
     PostgresCustomerContextStore,
     PostgresJourneyEventStore,
+    PostgresLearningStore,
     PostgresProblemStore,
     PostgresRuleStore,
     PostgresSignalStore,
@@ -188,6 +189,7 @@ from app.services.postgres import (
     PostgresApiKeyStore,
     database_url,
 )
+from app.services.routing import resolve_owner_route
 from app.services.problems import ProblemStore, SQLiteProblemStore
 from app.services.rules import SQLiteRuleStore
 from app.services.seed import (
@@ -224,6 +226,44 @@ def demo_seed_enabled() -> bool:
     duplicates and seed signals mix into real-data triage.
     """
     return (os.getenv("CLARA_SEED_DEMO_DATA") or "1").strip().lower() not in {"0", "false", "no"}
+
+
+def _build_triage_checkpointer(pg_url: str | None):
+    """LangGraph checkpointer for the triage graph.
+
+    CLARA_TRIAGE_CHECKPOINTER=memory forces the in-process saver (tests, or a
+    deployment that prefers not to create LangGraph's checkpoint tables).
+    """
+    from langgraph.checkpoint.memory import MemorySaver
+
+    preference = (os.getenv("CLARA_TRIAGE_CHECKPOINTER") or "auto").strip().lower()
+    if not pg_url or preference == "memory":
+        return MemorySaver()
+    try:
+        import psycopg
+        from langgraph.checkpoint.postgres import PostgresSaver
+        from psycopg.rows import dict_row
+
+        from app.services.postgres import normalize_database_url
+
+        connection = psycopg.connect(
+            normalize_database_url(pg_url),
+            autocommit=True,
+            prepare_threshold=0,
+            row_factory=dict_row,
+            connect_timeout=10,
+        )
+        saver = PostgresSaver(connection)
+        saver.setup()
+        logger.info("Triage checkpointer: PostgresSaver (paused runs survive restarts)")
+        return saver
+    except Exception:  # noqa: BLE001 — never let checkpoint plumbing block boot
+        logger.warning(
+            "PostgresSaver unavailable; falling back to the in-process MemorySaver "
+            "(paused triage runs will not survive a restart)",
+            exc_info=True,
+        )
+        return MemorySaver()
 
 
 def default_workflow_store() -> SQLiteWorkflowStore:
@@ -281,14 +321,31 @@ def default_rule_store():
 
 
 def default_learning_store():
-    """Local-first learning store (SQLite). Feeds rank_learnings into synthesis.
+    """Learning memory that synthesis reads (rank_learnings) and the Action Queue
+    writes (learning conclusions, resume-path learnings).
 
-    The Postgres learning_conclusions table (migration 005) is the production
-    counterpart; the SQLite store is the local/offline path the thesis runs on.
+    Postgres when DATABASE_URL is set (clara_learnings, RLS-scoped), SQLite
+    otherwise. Before the Postgres store existed a production deployment wrote
+    its learnings to an ephemeral SQLite file inside the container, so the
+    "model learns which resolutions work" loop was open in exactly the
+    environment that mattered.
     """
+    url = database_url()
+    if url:
+        return PostgresLearningStore(url)
     from app.services.learning_store import SQLiteLearningStore
 
     return SQLiteLearningStore(default_db_path())
+
+
+def _current_workspace_id() -> int:
+    """Workspace id of the request/loop context (auth ContextVar), default 1."""
+    from app.auth import current_tenant
+
+    try:
+        return int(current_tenant())
+    except (TypeError, ValueError):
+        return 1
 
 
 def review_match_key(value: str) -> str:
@@ -299,6 +356,12 @@ def matching_problem_for_candidate(
     candidate: ProblemCandidate,
     problems: list[ProblemRecord],
 ) -> ProblemRecord | None:
+    # AI themes are keyed by tag: the majority journey can shift between runs
+    # as signals arrive, but the promoted theme problem stays the same one.
+    if candidate.origin == "ai_theme" and candidate.theme_tag:
+        for problem in problems:
+            if getattr(problem, "theme_tag", None) == candidate.theme_tag:
+                return problem
     candidate_key = (
         review_match_key(candidate.journey),
         review_match_key(candidate.journey_stage),
@@ -324,10 +387,17 @@ def enrich_candidate(
     signal_store,
     taxonomy_store: TaxonomyStore,
     terminology_store: TerminologyStore,
+    owner_routes=(),
 ) -> ProblemCandidate:
     decision = signal_store.get_candidate_decision(candidate.candidate_id)
     duplicate_problem = matching_problem_for_candidate(candidate, problems)
     updates: dict[str, object] = {}
+
+    # Team routing (Settings → Teams): a workspace rule for this stage/theme
+    # overrides the built-in owner defaults and the model's team suggestion.
+    route = resolve_owner_route(owner_routes, candidate.journey_stage, candidate.theme_tag)
+    if route is not None and route.owner != candidate.suggested_owner:
+        updates["suggested_owner"] = route.owner
 
     if duplicate_problem is not None:
         updates.update(
@@ -552,6 +622,11 @@ def create_app(
 
     def current_candidates() -> list[ProblemCandidate]:
         problems = active_problem_store.list_problems()
+        try:
+            owner_routes = workspace_store.get(_current_workspace_id()).owner_routes
+        except Exception:  # noqa: BLE001 — routing is an overlay; candidates must still list
+            logger.warning("Owner routes unavailable; using default owners", exc_info=True)
+            owner_routes = []
         return [
             enrich_candidate(
                 candidate,
@@ -559,9 +634,24 @@ def create_app(
                 signal_store=signal_store,
                 taxonomy_store=taxonomy_store,
                 terminology_store=terminology_store,
+                owner_routes=owner_routes,
             )
             for candidate in signal_store.candidates()
         ]
+
+    def _readiness() -> dict[str, object]:
+        """Persistence probe for GET /ready: one trivial query against the
+        configured backend. Raises on failure; the route turns that into 503."""
+        if _pg_url:
+            from app.services.postgres import PostgresConnectionMixin
+
+            probe = PostgresConnectionMixin.__new__(PostgresConnectionMixin)
+            probe.url = _pg_url
+            with probe._connect() as conn:
+                conn.execute("SELECT 1").fetchone()
+            return {"ok": True, "backend": "postgres"}
+        signal_store.list_signals()  # SQLite/in-memory: the store answers
+        return {"ok": True, "backend": "sqlite" if isinstance(signal_store, SQLiteSignalStore) else "memory"}
 
     def require_candidate(candidate_id: str) -> ProblemCandidate:
         candidate = next(
@@ -705,8 +795,6 @@ def create_app(
         return {"synced": synced, "failed": failed}
 
     # ====== Triage pipeline endpoint ======
-    from langgraph.checkpoint.memory import MemorySaver
-
     from app.agents.triage_graph import build_triage_graph
 
     # App-scoped graph + checkpointer so a run that pauses at the human-approval
@@ -714,9 +802,10 @@ def create_app(
     # endpoint built a fresh per-request MemorySaver and discarded it, so the paused
     # state was lost and action/measure/learn never ran for consequential actions —
     # the whole outcome loop was unreachable in production.
-    # ponytail: in-process MemorySaver — resume works within one worker. Multi-worker
-    # durability needs PostgresSaver (langgraph-checkpoint-postgres is already a dep).
-    triage_graph = build_triage_graph(checkpointer=MemorySaver())
+    # Durability: PostgresSaver when DATABASE_URL is set (paused runs survive a
+    # container restart and a multi-worker uvicorn), MemorySaver otherwise or when
+    # the Postgres saver cannot be set up — the graph must never block boot.
+    triage_graph = build_triage_graph(checkpointer=_build_triage_checkpointer(_pg_url))
 
 
     # ====== Domain routers (composition root: stores/closures passed explicitly) ======
@@ -731,6 +820,7 @@ def create_app(
             telemetry_store=telemetry_store,
             connector_config_store=connector_config_store,
             enrich_problem_for_response=enrich_problem_for_response,
+            readiness_check=_readiness,
         )
     )
     api.include_router(

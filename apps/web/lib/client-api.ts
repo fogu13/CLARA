@@ -22,6 +22,7 @@ import type {
   LanguageQualityReport,
   LearningConclusionRecord,
   LearningConclusionRequest,
+  LearningMemoryItem,
   OutcomeBoard,
   OutcomeContractProposalPreview,
   OutcomeContractUpdateRequest,
@@ -171,8 +172,23 @@ export async function getWorkflowState(problemId: string): Promise<WorkflowState
   return requestJson<WorkflowState>(`${apiBaseUrl()}/problems/${problemId}/workflow`);
 }
 
-export async function getProblems(): Promise<ProblemSummary[]> {
-  return requestJson<ProblemSummary[]>(`${apiBaseUrl()}/problems`);
+export async function getProblems(filters?: {
+  owner?: string;
+  overdue?: boolean;
+  status?: string;
+}): Promise<ProblemSummary[]> {
+  const params = new URLSearchParams();
+  if (filters?.owner) params.set("owner", filters.owner);
+  if (filters?.overdue !== undefined) params.set("overdue", String(filters.overdue));
+  if (filters?.status) params.set("status", filters.status);
+  const query = params.toString();
+  return requestJson<ProblemSummary[]>(`${apiBaseUrl()}/problems${query ? `?${query}` : ""}`);
+}
+
+// Learning memory: what was done for a theme and whether it worked, with
+// decayed confidence. Only retrieval_eligible items steer future triage.
+export async function getLearnings(): Promise<LearningMemoryItem[]> {
+  return requestJson<LearningMemoryItem[]>(`${apiBaseUrl()}/learnings`);
 }
 
 export async function getProblem(problemId: string): Promise<ProblemRecord> {

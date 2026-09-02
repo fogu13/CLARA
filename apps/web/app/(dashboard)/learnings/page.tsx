@@ -1,5 +1,6 @@
 "use client";
 
+import { LearningMemoryPanel } from "../../components/learning-memory-panel";
 import { MeasurementCheckpointsPanel } from "../../components/measurement-checkpoints-panel";
 import { OutcomeBoardPanel } from "../../components/outcome-board-panel";
 import { useI18n } from "@/lib/i18n";
@@ -15,6 +16,7 @@ export default function LearningsPage() {
 
       <MeasurementCheckpointsPanel />
       <OutcomeBoardPanel />
+      <LearningMemoryPanel />
     </div>
   );
 }

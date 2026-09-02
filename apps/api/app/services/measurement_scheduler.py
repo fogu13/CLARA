@@ -35,6 +35,14 @@ logger = logging.getLogger(__name__)
 
 SIGNAL_METRIC_PREFIX = "signal_rate_per_day:"
 LOOP_INTERVAL_SECONDS = 15 * 60
+# AI-theme contracts use the pseudo-journey "theme": the stage part of the
+# metric is then a theme TAG and signals match by carrying that tag (written
+# back by triage enrichment) instead of by journey/stage columns.
+THEME_JOURNEY = "theme"
+# "Keep listening": one more checkpoint a month after the measurement window
+# closes, so a theme that comes back after a premature "target met" is caught.
+FOLLOWUP_GAP_DAYS = 30
+LOOP_CHECKPOINT_KINDS = frozenset({"window", "followup"})
 
 
 def _parse_ts(value: str) -> datetime:
@@ -51,6 +59,26 @@ def _norm_stage(value: str) -> str:
     underscores; normalize both sides so 'customer_onboarding' still matches
     after the metric parser turns it into 'customer onboarding'."""
     return value.lower().replace("_", " ").strip()
+
+
+def signal_matches_scope(signal: Any, *, journey: str, journey_stage: str) -> bool:
+    """Does a signal belong to a contract's scope?
+
+    Journey/stage contracts (promoted from deterministic candidates) match on
+    the journey and journey_stage columns. Theme contracts (promoted from AI
+    triage themes; journey == "theme") match any signal carrying the theme tag,
+    whatever journey it came from — the theme is the unit of ownership there.
+    One helper, used by the scheduler, ITS scoring and contract proposals so
+    all three count the same signals.
+    """
+    stage_n = _norm_stage(journey_stage)
+    if _norm_stage(journey) == THEME_JOURNEY:
+        tags = {_norm_stage(str(tag)) for tag in (getattr(signal, "tags", None) or [])}
+        return stage_n in tags
+    return (
+        _norm_stage(signal.journey) == _norm_stage(journey)
+        and _norm_stage(signal.journey_stage) == stage_n
+    )
 
 
 class SQLiteMeasurementPlanStore:
@@ -135,6 +163,9 @@ def schedule_measurements(
     checkpoints = {"t7": 7}
     if window_days != 7:
         checkpoints["window"] = window_days
+    # Keep listening after the window closes: the pitch's "if the theme drops
+    # the following month, the loop worked; if not, the fix didn't land".
+    checkpoints["followup"] = window_days + FOLLOWUP_GAP_DAYS
 
     scheduled: list[str] = []
     for kind, days in checkpoints.items():
@@ -165,9 +196,7 @@ def signal_rate_per_day(
 
     count = 0
     for signal in signals:
-        if _norm_stage(signal.journey) != _norm_stage(journey):
-            continue
-        if _norm_stage(signal.journey_stage) != _norm_stage(journey_stage):
+        if not signal_matches_scope(signal, journey=journey, journey_stage=journey_stage):
             continue
         try:
             ts = _parse_ts(signal.timestamp)
@@ -222,9 +251,9 @@ def measure_guardrails(
         end = _parse_ts(now)
 
         def _matches(sig: Any) -> bool:
-            return _norm_stage(sig.journey) == _norm_stage(problem.journey) and _norm_stage(
-                sig.journey_stage
-            ) == _norm_stage(problem.journey_stage)
+            return signal_matches_scope(
+                sig, journey=problem.journey, journey_stage=problem.journey_stage
+            )
 
         pre_count = 0
         pre_customers: set[str] = set()
@@ -281,11 +310,20 @@ def run_due_measurements(
     telemetry: Any,
     now: str | None = None,
 ) -> dict[str, int]:
-    """Process all due checkpoints. Returns {measured, manual_required, skipped}."""
+    """Process all due checkpoints. Returns {measured, manual_required, skipped,
+    loop_closed, fix_did_not_land}.
+
+    The last two count window/followup checkpoints whose real-signal readout
+    met the contract target (the loop closed) or showed no improvement (the
+    fix did not land) — the pitch's proof step, written to telemetry so the
+    leadership view and alerts can pick it up without re-deriving it.
+    """
     now = now or utc_now()
     measured = 0
     manual = 0
     skipped = 0
+    loop_closed = 0
+    fix_did_not_land = 0
 
     for plan in plan_store.due(now):
         problem = problem_lookup(plan["problem_id"])
@@ -364,7 +402,42 @@ def run_due_measurements(
         )
         measured += 1
 
-    return {"measured": measured, "manual_required": manual, "skipped": skipped}
+        # Loop verdict on the closing checkpoints only — the T+7 early read is
+        # too soon to declare either way (detectability_note explains why).
+        if plan["kind"] in LOOP_CHECKPOINT_KINDS:
+            try:
+                status = workflow_store.outcome_snapshot(problem).status
+            except Exception:  # noqa: BLE001 — a verdict must never stall the loop
+                logger.exception("Loop verdict failed for %s", problem.problem_id)
+                status = None
+            verdict_event = None
+            if status == "target_met":
+                verdict_event = "loop_closed"
+                loop_closed += 1
+            elif status == "not_improved":
+                verdict_event = "fix_did_not_land"
+                fix_did_not_land += 1
+            if verdict_event:
+                telemetry.record(
+                    verdict_event,
+                    entity_id=problem.problem_id,
+                    metadata={
+                        "kind": plan["kind"],
+                        "metric": metric,
+                        "observed_value": rate,
+                        "baseline": problem.outcome_contract.baseline,
+                        "success_threshold": problem.outcome_contract.success_threshold,
+                        "real_data_source": True,
+                    },
+                )
+
+    return {
+        "measured": measured,
+        "manual_required": manual,
+        "skipped": skipped,
+        "loop_closed": loop_closed,
+        "fix_did_not_land": fix_did_not_land,
+    }
 
 
 def scheduler_enabled() -> bool:

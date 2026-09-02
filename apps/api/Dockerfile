@@ -1,20 +1,37 @@
-# CLARA API — Dockerfile for Railway/Render/Fly.io
+# CLARA API — production image (Hetzner VPS behind Caddy; any Docker host works)
+#
+# Hardening (2026-09): runtime dependencies only (no pytest/ruff in the image),
+# unprivileged user, HEALTHCHECK, and a .dockerignore so local .venv/.data/.env
+# never land in the layer.
 FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-# Install system deps for psycopg
+# libpq for psycopg; curl for the container HEALTHCHECK.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libpq-dev \
+    libpq5 curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy pyproject and install deps first (cache layer)
-COPY pyproject.toml .
-RUN pip install --no-cache-dir -e ".[dev]"
+# Dependency layer first (cache), runtime extras only.
+COPY pyproject.toml ./
+RUN pip install --upgrade pip && pip install -e "."
 
-# Copy app code
+# App code, then drop privileges. /app/.data is the SQLite fallback path when
+# DATABASE_URL is unset; production sets DATABASE_URL and never writes here.
 COPY . .
+RUN useradd --system --uid 10001 --create-home clara \
+    && mkdir -p /app/.data \
+    && chown -R clara:clara /app
+USER clara
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# /health is the shallow liveness probe (always cheap); /ready checks the DB.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8000/health || exit 1
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]

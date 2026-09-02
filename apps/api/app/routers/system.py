@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 import app.services.ai as ai
 from app.auth import UserContext, get_current_user
@@ -22,13 +22,40 @@ def build_router(
     telemetry_store,
     connector_config_store,
     enrich_problem_for_response,
+    readiness_check=None,
 ) -> APIRouter:
     router = APIRouter()
     read_dep = Depends(require_role(Role.viewer))
 
     @router.get("/health")
     def health() -> dict[str, str]:
+        """Shallow liveness probe: the process is up. Cheap by design (Caddy,
+        Docker HEALTHCHECK and the uptime workflow hit it every few seconds)."""
         return {"status": "ok"}
+
+    @router.get("/ready")
+    def ready(response: Response) -> dict[str, object]:
+        """Readiness: can this instance serve requests? Checks the persistence
+        layer (SELECT 1 against Postgres, or the SQLite file) and reports the AI
+        provider's residency classification. 503 when the store is unreachable,
+        so an orchestrator or load balancer stops routing to a broken instance
+        instead of serving 500s."""
+        checks: dict[str, object] = {}
+        healthy = True
+        if readiness_check is not None:
+            try:
+                checks["database"] = readiness_check()
+            except Exception as exc:  # noqa: BLE001 — the probe must answer, not crash
+                healthy = False
+                checks["database"] = {"ok": False, "error": type(exc).__name__}
+        checks["ai_residency"] = {
+            "chat": ai.provider_residency(ai.effective_base_url()),
+            "embeddings": ai.provider_residency(ai.effective_embed_base_url()),
+            "eu_only_enforced": ai.eu_only_enforced(),
+        }
+        if not healthy:
+            response.status_code = 503
+        return {"status": "ok" if healthy else "degraded", "checks": checks}
 
     @router.post("/ask", dependencies=[read_dep, Depends(rate_limiter)])
     def ask_clara_endpoint(body: dict) -> dict:
@@ -187,6 +214,13 @@ def build_router(
         api_key = str(body.get("api_key") or "").strip()
         if base_url and not base_url.startswith(("http://", "https://")):
             raise HTTPException(status_code=422, detail="base_url must be http(s)")
+        # EU-only mode: refuse to point the product at a non-EU provider from
+        # the GUI too — the boot check alone would let a runtime override slip.
+        if base_url:
+            try:
+                ai.assert_residency_allowed(base_url, purpose="AI endpoint")
+            except ai.ResidencyViolation as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
         # Edit forms may echo the masked value from the redacted read path back.
         if api_key == "***redacted***":
             api_key = ""
@@ -283,6 +317,9 @@ def build_router(
             ai_model=ai.effective_model(),
             ai_embed_model=ai.effective_embed_model(),
             ai_embed_base_url=ai.effective_embed_base_url(),
+            ai_residency=ai.provider_residency(ai.effective_base_url()),
+            ai_embed_residency=ai.provider_residency(ai.effective_embed_base_url()),
+            eu_only_enforced=ai.eu_only_enforced(),
             auth_enabled=AUTH_ENABLED,
         )
 

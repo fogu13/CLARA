@@ -142,6 +142,26 @@ class TaxonomySplitRequest(BaseModel):
     actor: str = "taxonomy_owner"
 
 
+class OwnerRoute(BaseModel):
+    """One team-routing rule: which team owns a journey stage or AI theme, and
+    which tool that team works in.
+
+    ``match`` is compared case-insensitively (underscores and spaces are
+    equivalent) as a substring of the journey stage and of the AI theme tag.
+    The first matching route in ``WorkspaceSettings.owner_routes`` wins; when
+    none matches, the built-in ``owner_for_stage`` defaults apply. Per-route
+    Jira project / Slack channel overrides let each team receive work in its
+    own project or channel without changing the workspace-wide connector.
+    """
+
+    match: str = Field(min_length=1)
+    owner: str = Field(min_length=1)
+    label: str | None = None
+    destination: str | None = None
+    jira_project_key: str | None = None
+    slack_channel: str | None = None
+
+
 class WorkspaceSettings(BaseModel):
     name: str = "My Workspace"
     slug: str = "my-workspace"
@@ -151,6 +171,12 @@ class WorkspaceSettings(BaseModel):
     # Industry profile retunes impact prioritisation (see industry_profiles.py).
     # Persisted per workspace; the active global scorer reads env INDUSTRY_PROFILE.
     industry_profile: str = "default"
+    # Resolution timeline: every promoted problem gets due_at = promotion +
+    # this many days; the Action Queue and dashboard flag it as overdue after
+    # that. The pitch's "holds each theme to a timeline".
+    resolution_sla_days: int = Field(default=30, gt=0)
+    # Team routing: journey stage / AI theme -> owning team (+ its tool).
+    owner_routes: list[OwnerRoute] = Field(default_factory=list)
     # EU AI Act Art. 50: appended to any outbound text that was NOT human-reviewed
     # (Art. 50(4) exempts reviewed content, so approved pushes carry no line).
     ai_disclosure_template: str = (
@@ -179,6 +205,13 @@ class SystemConfig(BaseModel):
     # Equal to ai_base_url unless AI_EMBED_BASE_URL splits embeddings onto their
     # own provider. Exposed because a mismatch here is invisible otherwise.
     ai_embed_base_url: str = ""
+    # Data-residency classification of the configured providers
+    # (ai.provider_residency): "eu" | "self_hosted" | "non_eu" | "unknown".
+    ai_residency: str = "unknown"
+    ai_embed_residency: str = "unknown"
+    # CLARA_AI_REQUIRE_EU=1: non-EU providers are refused at boot and in
+    # Settings, so the pitch's "never leaves the EU" is enforced, not promised.
+    eu_only_enforced: bool = False
     auth_enabled: bool
 
 
@@ -447,6 +480,12 @@ class ProblemRecord(BaseModel):
     approval_pressure: str | None = None
     context_impact: ContextImpactSummary | None = None
     journey_impact: JourneyImpactSummary | None = None
+    # Resolution timeline: set at promotion from the workspace SLA; None for
+    # seed/reference problems. Read-side code derives ``overdue`` from it.
+    due_at: str | None = None
+    # "journey_stage" (deterministic grouping) or "ai_theme" (LLM triage theme).
+    origin: str = "journey_stage"
+    theme_tag: str | None = None
 
 
 class ProblemSummary(BaseModel):
@@ -465,6 +504,10 @@ class ProblemSummary(BaseModel):
     top_action_classes: list[ActionClass]
     context_impact: ContextImpactSummary | None = None
     journey_impact: JourneyImpactSummary | None = None
+    due_at: str | None = None
+    overdue: bool = False
+    origin: str = "journey_stage"
+    theme_tag: str | None = None
 
 
 class ProblemUpdateRequest(BaseModel):
@@ -764,6 +807,10 @@ class OutcomeSnapshot(BaseModel):
     # either {method: "its", effect, ci_low, ci_high, ...} or the honest
     # sparse fallback {method: "delta_insufficient_data", label, delta, ...}.
     its: dict[str, Any] | None = None
+    # Did the loop close? (outcome_engine.loop_verdict) One of not_measured |
+    # measuring | manual_required | on_track | loop_closed | fix_did_not_land.
+    loop_verdict: str | None = None
+    loop_note: str | None = None
 
 
 class OutcomeBoardItem(BaseModel):
@@ -787,6 +834,9 @@ class OutcomeBoardItem(BaseModel):
     measurement_source: str | None = None
     evidence_grade: str | None = None
     guardrails: list[GuardrailMeasurement] = Field(default_factory=list)
+    loop_verdict: str | None = None
+    due_at: str | None = None
+    overdue: bool = False
 
 
 class OutcomeBoard(BaseModel):
@@ -800,6 +850,11 @@ class OutcomeBoard(BaseModel):
     learning_did_not_work: int = 0
     learning_inconclusive: int = 0
     learning_measurement_invalid: int = 0
+    # Loop-closure roll-up (leadership view): themes whose post-fix inflow
+    # dropped vs. themes where the fix demonstrably did not land.
+    loop_closed: int = 0
+    fix_did_not_land: int = 0
+    overdue: int = 0
     items: list[OutcomeBoardItem]
 
 
@@ -1055,6 +1110,16 @@ class ProblemCandidate(BaseModel):
     known_limitations: list[str] = Field(default_factory=list)
     evaluation_notes: list[str] = Field(default_factory=list)
     emerging_problem_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    # Where this candidate came from. "journey_stage": deterministic grouping
+    # of imported signals by journey/stage columns. "ai_theme": a theme the LLM
+    # triage sorted signals into (persisted from POST /triage/run), carrying
+    # the model's summary, deterministic severity and urgency as evidence.
+    origin: Literal["journey_stage", "ai_theme"] = "journey_stage"
+    theme_tag: str | None = None
+    theme_summary: str | None = None
+    triage_impact_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    triage_urgency: str | None = None
+    triage_run_id: str | None = None
     review_status: CandidateReviewStatus = CandidateReviewStatus.pending
     duplicate_problem_id: str | None = None
     duplicate_reason: str | None = None

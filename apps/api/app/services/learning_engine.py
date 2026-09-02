@@ -222,3 +222,79 @@ def build_learning_from_conclusion(
         "losing_examples": [] if status != "did_not_work" else [insight.get("title", "")],
         "reviewer": conclusion.get("reviewer", "system"),
     }
+
+
+def learning_from_problem_conclusion(
+    *,
+    problem: Any,
+    conclusion: Any,
+    outcome_status: str,
+    resolution_score: float | None = None,
+    resolution_actions: list[str] | None = None,
+) -> dict[str, Any]:
+    """Learning-memory record for a HUMAN conclusion recorded on an Action Queue problem.
+
+    This is the production bridge the thesis harness never needed: a reviewer's
+    ``LearningConclusionRecord`` (append-only audit record) becomes a retrievable
+    learning that ``rank_learnings`` can hand to the next synthesis run — so the
+    model learns which resolutions actually changed customer behaviour, per the
+    product promise. Keyed by the conclusion id so re-recording upserts.
+
+    ``resolution_actions`` are the approved action proposals' text: that is the
+    WHAT-was-done half of the learning, without which "worked" is not reusable.
+    """
+    theme = getattr(problem, "theme_tag", None) or problem.journey_stage
+    insight = {
+        "title": problem.title,
+        "tag": theme,
+        "category": problem.journey,
+        "severity": problem.impact_band or "",
+    }
+    outcome = {
+        "metric": problem.outcome_contract.primary_metric,
+        "status": outcome_status,
+        "resolution_score": resolution_score,
+    }
+    payload = {
+        "learning_status": conclusion.learning_status.value
+        if hasattr(conclusion.learning_status, "value")
+        else str(conclusion.learning_status),
+        "summary": conclusion.summary,
+        "limitations": conclusion.limitations,
+        "next_step": conclusion.next_step,
+        "reviewer": conclusion.reviewer,
+    }
+    learning = build_learning_from_conclusion(conclusion=payload, insight=insight, outcome=outcome)
+    actions = [text for text in (resolution_actions or []) if text]
+    if actions:
+        learning["pattern"] = f"{problem.title} -> {'; '.join(actions)} -> {conclusion.summary}"
+        if learning["learning_status"] == "worked":
+            learning["winning_examples"] = actions
+        elif learning["learning_status"] == "did_not_work":
+            learning["losing_examples"] = actions
+    learning.update(
+        {
+            "conclusion_id": conclusion.conclusion_id,
+            "problem_id": problem.problem_id,
+            "owner": problem.owner,
+            "journey": problem.journey,
+            "journey_stage": problem.journey_stage,
+            "theme_tag": getattr(problem, "theme_tag", None),
+            "resolution_actions": actions,
+            "created_at": conclusion.reviewed_at,
+            "last_validated_at": conclusion.reviewed_at,
+            "retention_expires_at": conclusion.retention_expires_at,
+            "source": "action_queue_conclusion",
+        }
+    )
+    return learning
+
+
+def with_decay(learning: dict[str, Any], *, now: float | None = None) -> dict[str, Any]:
+    """Read-side copy carrying the current decayed confidence and freshness badge."""
+    return {
+        **learning,
+        "decayed_confidence": round(decayed_confidence(learning, now=now), 4),
+        "freshness": learning_freshness(learning, now=now),
+        "retrieval_eligible": learning.get("reviewer") != "system",
+    }

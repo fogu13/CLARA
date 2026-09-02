@@ -404,7 +404,13 @@ def classify_candidate(
         dictionary_entries,
     )
     candidate_dictionary_hits = dictionary_hits(candidate_signals, dictionary_entries)
-    limitations = candidate_limitations(candidate, candidate_signals, classifications)
+    # Merge, don't overwrite: builders (theme_candidates) attach origin-specific
+    # limitations that classification must preserve.
+    computed_limitations = candidate_limitations(candidate, candidate_signals, classifications)
+    limitations = [
+        *candidate.known_limitations,
+        *[item for item in computed_limitations if item not in candidate.known_limitations],
+    ]
     contradictory_evidence = sorted(
         {
             item
@@ -428,7 +434,14 @@ def classify_candidate(
         ),
         "contradictory_evidence": contradictory_evidence,
         "known_limitations": limitations,
-        "evaluation_notes": evaluation_notes(candidate, classifications),
+        "evaluation_notes": [
+            *candidate.evaluation_notes,
+            *[
+                note
+                for note in evaluation_notes(candidate, classifications)
+                if note not in candidate.evaluation_notes
+            ],
+        ],
         "emerging_problem_score": emerging_problem_score(candidate, classifications),
     }
     return candidate.model_copy(update=updates)

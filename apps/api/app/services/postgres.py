@@ -176,6 +176,30 @@ CREATE TABLE IF NOT EXISTS clara_api_keys (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     revoked_at TIMESTAMPTZ
 );
+
+-- AI triage themes persisted from POST /triage/run so they surface as problem
+-- candidates (origin=ai_theme). One row per (workspace, theme tag); the latest
+-- run wins. Migration 013 is the SQL-editor twin of this DDL.
+CREATE TABLE IF NOT EXISTS clara_theme_insights (
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
+    theme_tag TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, theme_tag)
+);
+
+-- Learning memory (retrieval store for synthesis). Human conclusions from the
+-- Action Queue and resume-path learnings land here; rank_learnings reads it.
+CREATE TABLE IF NOT EXISTS clara_learnings (
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
+    conclusion_id TEXT NOT NULL,
+    topic TEXT,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, conclusion_id)
+);
 """
 
 
@@ -372,6 +396,22 @@ class PostgresConnectionMixin:
                     WITH CHECK (workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint)
                     """
                 )
+                # Same self-healed policy for the two loop-closure tables this
+                # DDL owns (theme insights + learning memory): a boot against a
+                # DB that predates migration 013 must never leave them open.
+                for loop_table in ("clara_theme_insights", "clara_learnings"):
+                    cursor.execute(f"ALTER TABLE {loop_table} ENABLE ROW LEVEL SECURITY")
+                    cursor.execute(
+                        f"DROP POLICY IF EXISTS {loop_table}_workspace_isolation ON {loop_table}"
+                    )
+                    cursor.execute(
+                        f"""
+                        CREATE POLICY {loop_table}_workspace_isolation ON {loop_table}
+                        USING (workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint)
+                        WITH CHECK (workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint)
+                        """
+                    )
+                    cursor.execute(f"ALTER TABLE {loop_table} FORCE ROW LEVEL SECURITY")
                 cursor.execute("ALTER TABLE clara_workflow_records ENABLE ROW LEVEL SECURITY")
                 # FORCE = the policies bind the table owner too (the app connects
                 # as `postgres`). Without it every policy here is decorative —
@@ -583,7 +623,38 @@ class PostgresSignalStore(PostgresConnectionMixin):
         )
 
     def candidates(self):
-        return build_candidates(self.list_signals())
+        from app.services.signals import theme_candidates
+
+        signals = self.list_signals()
+        return [*build_candidates(signals), *theme_candidates(self.list_theme_insights(), signals)]
+
+    def save_theme_insights(self, insights: list[dict[str, Any]], *, run_id: str) -> int:
+        from app.services.signals import prepare_theme_insight
+
+        saved = 0
+        with self._connect() as conn:
+            for insight in insights:
+                prepared = prepare_theme_insight(insight, run_id=run_id)
+                if prepared is None:
+                    continue
+                conn.execute(
+                    """
+                    INSERT INTO clara_theme_insights (theme_tag, payload)
+                    VALUES (%s, %s)
+                    ON CONFLICT (workspace_id, theme_tag) DO UPDATE
+                    SET payload = excluded.payload, updated_at = now()
+                    """,
+                    (prepared["tag"], self._jsonb(prepared)),
+                )
+                saved += 1
+        return saved
+
+    def list_theme_insights(self) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT payload FROM clara_theme_insights ORDER BY theme_tag"
+            ).fetchall()
+        return [_payload(row["payload"]) for row in rows]
 
     def get_candidate_decision(self, candidate_id: str) -> CandidateDecisionRecord | None:
         with self._connect() as conn:
@@ -1370,6 +1441,42 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
             ).fetchone()
         result = row["result"]
         return result if isinstance(result, dict) else json.loads(result)
+
+
+class PostgresLearningStore(PostgresConnectionMixin):
+    """Postgres learning memory (parity with SQLiteLearningStore).
+
+    Before this store existed, default_learning_store returned SQLite even on a
+    Postgres deployment, so production conclusions were written to an ephemeral
+    file inside the container and synthesis never saw a single learning.
+    """
+
+    def load(self, workspace_id: int = 1) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT payload FROM clara_learnings WHERE workspace_id = %s ORDER BY updated_at",
+                (workspace_id,),
+            ).fetchall()
+        return [_payload(row["payload"]) for row in rows]
+
+    def persist(self, learning: dict[str, Any], *, workspace_id: int = 1) -> dict[str, Any]:
+        cid = learning.get("conclusion_id") or uuid4().hex
+        stored = {**learning, "conclusion_id": cid}
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO clara_learnings (workspace_id, conclusion_id, topic, payload)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (workspace_id, conclusion_id) DO UPDATE
+                SET topic = excluded.topic, payload = excluded.payload, updated_at = now()
+                """,
+                (workspace_id, cid, stored.get("topic", ""), self._jsonb(stored)),
+            )
+        return stored
+
+    def clear(self, workspace_id: int = 1) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM clara_learnings WHERE workspace_id = %s", (workspace_id,))
 
 
 class PostgresConnectorConfigStore(PostgresConnectionMixin):

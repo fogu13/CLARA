@@ -705,6 +705,16 @@ select {
   color: var(--danger);
 }
 
+.candidate-origin {
+  margin-left: 0.4rem;
+}
+
+.candidate-origin-ai_theme {
+  background: hsl(var(--primary) / 0.12);
+  color: hsl(var(--primary));
+}
+
+
 .candidate-score {
   text-align: right;
 }
