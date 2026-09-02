@@ -22,6 +22,7 @@ import type {
   LanguageQualityReport,
   LearningConclusionRecord,
   LearningConclusionRequest,
+  LearningMemoryItem,
   OutcomeBoard,
   OutcomeContractProposalPreview,
   OutcomeContractUpdateRequest,
@@ -116,12 +117,35 @@ export function apiHeaders(headers?: HeadersInit): Headers {
 // but a bare status code helps nobody — translate it once, here.
 // For call sites that need the raw Response (file downloads, custom error
 // handling): same transport rules as requestJson.
-export function apiFetch(url: string, init?: RequestInit): Promise<Response> {
-  return fetch(url, {
+// A request that never settles leaves a spinner forever and hides an outage.
+// 60s covers the slowest real call (a triage run over a large import) with
+// margin; callers that need their own AbortSignal keep it.
+const REQUEST_TIMEOUT_MS = 60_000;
+
+function transport(init?: RequestInit): RequestInit {
+  return {
     ...init,
     credentials: "include",
-    headers: apiHeaders(init?.headers)
-  });
+    headers: apiHeaders(init?.headers),
+    signal: init?.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  };
+}
+
+function timeoutError(error: unknown): Error | null {
+  if (error instanceof DOMException && error.name === "TimeoutError") {
+    return new Error(
+      `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s. The API may be down or unreachable.`
+    );
+  }
+  return null;
+}
+
+export async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, transport(init));
+  } catch (error) {
+    throw timeoutError(error) ?? error;
+  }
 }
 
 export function httpErrorMessage(action: string, status: number): string {
@@ -143,11 +167,12 @@ export function httpErrorMessage(action: string, status: number): string {
 // (fetch's default "same-origin" would drop it — same SITE, different ORIGIN).
 // Harmless in legacy bearer mode, where no auth cookie exists.
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...init,
-    credentials: "include",
-    headers: apiHeaders(init?.headers)
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, transport(init));
+  } catch (error) {
+    throw timeoutError(error) ?? error;
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => null);
@@ -171,12 +196,36 @@ export async function getWorkflowState(problemId: string): Promise<WorkflowState
   return requestJson<WorkflowState>(`${apiBaseUrl()}/problems/${problemId}/workflow`);
 }
 
-export async function getProblems(): Promise<ProblemSummary[]> {
-  return requestJson<ProblemSummary[]>(`${apiBaseUrl()}/problems`);
+export async function getProblems(filters?: {
+  owner?: string;
+  overdue?: boolean;
+  status?: string;
+}): Promise<ProblemSummary[]> {
+  const params = new URLSearchParams();
+  if (filters?.owner) params.set("owner", filters.owner);
+  if (filters?.overdue !== undefined) params.set("overdue", String(filters.overdue));
+  if (filters?.status) params.set("status", filters.status);
+  const query = params.toString();
+  return requestJson<ProblemSummary[]>(`${apiBaseUrl()}/problems${query ? `?${query}` : ""}`);
+}
+
+// Learning memory: what was done for a theme and whether it worked, with
+// decayed confidence. Only retrieval_eligible items steer future triage.
+export async function getLearnings(): Promise<LearningMemoryItem[]> {
+  return requestJson<LearningMemoryItem[]>(`${apiBaseUrl()}/learnings`);
 }
 
 export async function getProblem(problemId: string): Promise<ProblemRecord> {
   return requestJson<ProblemRecord>(`${apiBaseUrl()}/problems/${problemId}`);
+}
+
+// Re-run the destination push for an execution whose push failed (idempotent
+// on the connector side; the approval itself is never repeated).
+export async function retryExecution(problemId: string, executionId: string): Promise<ExecutionRecord> {
+  return requestJson<ExecutionRecord>(
+    `${apiBaseUrl()}/problems/${problemId}/executions/${executionId}/retry`,
+    { method: "POST" }
+  );
 }
 
 export async function getJiraDrafts(): Promise<JiraIssueDraft[]> {

@@ -21,7 +21,6 @@ import {
 } from "@/lib/client-api";
 import type { TaxonomyHygieneReport } from "@/lib/client-api";
 import { useI18n } from "@/lib/i18n";
-import { fallbackTaxonomies, fallbackTerminologyDictionary } from "@/lib/sample-data";
 import type {
   LanguageQualityReport,
   TaxonomyCatalog,
@@ -31,7 +30,7 @@ import type {
 } from "@/lib/types";
 
 type TaxonomyState = {
-  status: "loading" | "ready" | "fallback" | "error";
+  status: "loading" | "ready" | "error";
   message: string;
   catalogs: TaxonomyCatalog[];
   terms: TerminologyDictionaryEntry[];
@@ -262,12 +261,16 @@ export default function TaxonomyPage() {
           terms,
           languageQuality
         });
-      } catch {
+      } catch (error) {
+        // Never substitute sample catalogs here: the rename/merge/lock buttons
+        // stay live and would act on ids that do not exist in this workspace.
         setState({
-          status: "fallback",
-          message: "API unreachable. Showing sample taxonomy data." + wrongOriginHint(),
-          catalogs: fallbackTaxonomies,
-          terms: fallbackTerminologyDictionary
+          status: "error",
+          message:
+            (error instanceof Error ? error.message : "Taxonomy catalogs could not be loaded.") +
+            wrongOriginHint(),
+          catalogs: [],
+          terms: []
         });
       }
     }
@@ -310,9 +313,8 @@ export default function TaxonomyPage() {
         </div>
       </div>
 
-      {state.status === "error" ? <div className="text-sm text-destructive">{state.message}</div> : null}
-      {state.status === "fallback" ? (
-        <div className="rounded-md border border-dashed border-yellow-500/50 bg-yellow-500/5 p-3 text-sm text-yellow-700 dark:text-yellow-400">
+      {state.status === "error" ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
           {state.message}
         </div>
       ) : null}

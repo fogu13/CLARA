@@ -101,7 +101,7 @@ export function MeasurementCheckpointsPanel() {
                   <div>
                     <span className="font-medium">{plan.problem_id}</span>
                     <span className="ml-2 text-xs text-muted-foreground">
-                      {plan.kind === "t7" ? t.learnings.t7Check : t.learnings.windowClose} · {t.learnings.due} {plan.due_at.slice(0, 10)}
+                      {plan.kind === "t7" ? t.learnings.t7Check : plan.kind === "followup" ? t.learnings.followUp : t.learnings.windowClose} · {t.learnings.due} {plan.due_at.slice(0, 10)}
                     </span>
                     {plan.note ? (
                       <p className="mt-0.5 text-xs text-muted-foreground">{plan.note}</p>

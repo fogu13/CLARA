@@ -88,7 +88,7 @@ export function CustomerContextPanel() {
         setState({
           status: "error",
           message: "API is not connected. Start the backend to import account context.",
-          records: sampleContext as CustomerContextRecord[],
+          records: [],
           completeness: undefined
         });
       });

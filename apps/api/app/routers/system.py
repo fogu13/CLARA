@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 import app.services.ai as ai
 from app.auth import UserContext, get_current_user
@@ -22,13 +22,55 @@ def build_router(
     telemetry_store,
     connector_config_store,
     enrich_problem_for_response,
+    readiness_check=None,
+    measurement_plan_store=None,
 ) -> APIRouter:
     router = APIRouter()
     read_dep = Depends(require_role(Role.viewer))
 
     @router.get("/health")
     def health() -> dict[str, str]:
+        """Shallow liveness probe: the process is up. Cheap by design (Caddy,
+        Docker HEALTHCHECK and the uptime workflow hit it every few seconds)."""
         return {"status": "ok"}
+
+    def _readiness_report() -> tuple[bool, dict[str, object]]:
+        checks: dict[str, object] = {}
+        healthy = True
+        if readiness_check is not None:
+            try:
+                checks["database"] = readiness_check()
+            except Exception as exc:  # noqa: BLE001 — the probe must answer, not crash
+                healthy = False
+                checks["database"] = {"ok": False, "error": type(exc).__name__}
+        checks["ai_residency"] = {
+            "chat": ai.provider_residency(ai.effective_base_url()),
+            "embeddings": ai.provider_residency(ai.effective_embed_base_url()),
+            "eu_only_enforced": ai.eu_only_enforced(),
+        }
+        return healthy, checks
+
+    @router.get("/ready")
+    def ready(response: Response) -> dict[str, object]:
+        """Readiness: can this instance serve requests? Runs the persistence
+        probe (SELECT 1 against Postgres, or the SQLite file) and answers 503
+        when it fails, so a load balancer stops routing to a broken instance.
+        Unauthenticated, therefore minimal: status only — backend type, error
+        classes and the residency posture are on /ready/details for signed-in
+        users."""
+        healthy, _checks = _readiness_report()
+        if not healthy:
+            response.status_code = 503
+        return {"status": "ok" if healthy else "degraded"}
+
+    @router.get("/ready/details", dependencies=[read_dep])
+    def ready_details(response: Response) -> dict[str, object]:
+        """The full readiness report: database probe result and the AI
+        residency classification of the configured providers."""
+        healthy, checks = _readiness_report()
+        if not healthy:
+            response.status_code = 503
+        return {"status": "ok" if healthy else "degraded", "checks": checks}
 
     @router.post("/ask", dependencies=[read_dep, Depends(rate_limiter)])
     def ask_clara_endpoint(body: dict) -> dict:
@@ -112,8 +154,14 @@ def build_router(
             "problems": lambda: exports.problems_csv(
                 [to_summary(enrich_problem_for_response(p)) for p in active_problem_store.list_problems()]
             ),
+            # With plans the board carries loop verdicts (measuring / loop_closed /
+            # fix_did_not_land); without them every row exported as not_measured.
             "outcomes": lambda: exports.outcomes_csv(
-                build_outcome_board(active_problem_store.list_problems(), workflow_store)
+                build_outcome_board(
+                    active_problem_store.list_problems(),
+                    workflow_store,
+                    plans=measurement_plan_store.list_plans() if measurement_plan_store else None,
+                )
             ),
             "telemetry": lambda: exports.telemetry_csv(telemetry_store.list_events(limit=1000)),
         }
@@ -137,7 +185,14 @@ def build_router(
     # Governance-bearing settings: an editor toggling works_council_mode off
     # would defeat the §87 BetrVG control it exists for, and blanking the
     # disclosure template silently disables the Art. 50 line.
-    ADMIN_ONLY_SETTINGS = ("works_council_mode", "ai_disclosure_template", "four_eyes_approval")
+    # owner_routes decide where approved work is pushed (Jira project / Slack
+    # channel), so they are admin-only too.
+    ADMIN_ONLY_SETTINGS = (
+        "works_council_mode",
+        "ai_disclosure_template",
+        "four_eyes_approval",
+        "owner_routes",
+    )
 
     @router.put(
         "/workspace",
@@ -187,6 +242,13 @@ def build_router(
         api_key = str(body.get("api_key") or "").strip()
         if base_url and not base_url.startswith(("http://", "https://")):
             raise HTTPException(status_code=422, detail="base_url must be http(s)")
+        # EU-only mode: refuse to point the product at a non-EU provider from
+        # the GUI too — the boot check alone would let a runtime override slip.
+        if base_url:
+            try:
+                ai.assert_residency_allowed(base_url, purpose="AI endpoint")
+            except ai.ResidencyViolation as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
         # Edit forms may echo the masked value from the redacted read path back.
         if api_key == "***redacted***":
             api_key = ""
@@ -283,6 +345,9 @@ def build_router(
             ai_model=ai.effective_model(),
             ai_embed_model=ai.effective_embed_model(),
             ai_embed_base_url=ai.effective_embed_base_url(),
+            ai_residency=ai.provider_residency(ai.effective_base_url()),
+            ai_embed_residency=ai.provider_residency(ai.effective_embed_base_url()),
+            eu_only_enforced=ai.eu_only_enforced(),
             auth_enabled=AUTH_ENABLED,
         )
 

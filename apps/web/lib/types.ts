@@ -358,6 +358,11 @@ export type ProblemRecord = {
   approval_pressure?: string;
   context_impact?: ContextImpactSummary | null;
   journey_impact?: JourneyImpactSummary | null;
+  // Resolution timeline (set at promotion from the workspace SLA; null for seed problems).
+  due_at?: string | null;
+  // "journey_stage" (deterministic grouping) | "ai_theme" (LLM triage theme).
+  origin?: string;
+  theme_tag?: string | null;
 };
 
 export type ProblemSummary = {
@@ -376,6 +381,10 @@ export type ProblemSummary = {
   top_action_classes: ActionClass[];
   context_impact?: ContextImpactSummary | null;
   journey_impact?: JourneyImpactSummary | null;
+  due_at?: string | null;
+  overdue?: boolean;
+  origin?: string;
+  theme_tag?: string | null;
 };
 
 export type ProblemUpdateRequest = {
@@ -424,17 +433,33 @@ export type ApprovalRecord = ApprovalDecision & {
   created_at: string;
   action_snapshot?: ActionProposalSnapshot | null;
   action_diff: ActionProposalChange[];
+  // sha256 of the evidence pack as the approver saw it (tamper evidence).
+  evidence_pack_hash?: string | null;
+  // Execution created by this decision (null while four-eyes holds it).
+  execution_id?: string | null;
 };
+
+export type ExecutionStatus =
+  | "draft_created"
+  | "blocked"
+  | "not_started"
+  | "completed"
+  | "pushed"
+  | "push_failed";
 
 export type ExecutionRecord = {
   execution_id: string;
   problem_id: string;
   action_id: string;
   destination: string;
-  status: "draft_created" | "blocked" | "not_started" | "completed";
+  status: ExecutionStatus;
   owner: string;
   summary: string;
   created_at: string;
+  // Real-push audit trail: the external system's id (Jira key, Slack ts) and a
+  // human-readable result or error note.
+  external_ref?: string | null;
+  detail?: string | null;
   human_reviewed?: boolean;
   reviewed_by?: string | null;
   reviewed_at?: string | null;
@@ -505,7 +530,19 @@ export type OutcomeSnapshot = {
   // A–E design grade: A holdout, C ITS, D before/after, E manual/unmeasured.
   evidence_grade?: string | null;
   guardrails?: GuardrailMeasurement[];
+  // Did the fix land? not_measured | measuring | manual_required | on_track |
+  // loop_closed | fix_did_not_land (outcome_engine.loop_verdict).
+  loop_verdict?: LoopVerdict | null;
+  loop_note?: string | null;
 };
+
+export type LoopVerdict =
+  | "not_measured"
+  | "measuring"
+  | "manual_required"
+  | "on_track"
+  | "loop_closed"
+  | "fix_did_not_land";
 
 export type GuardrailMeasurement = {
   guardrail_id: string;
@@ -540,6 +577,36 @@ export type OutcomeBoardItem = {
   measurement_source?: string | null;
   evidence_grade?: string | null;
   guardrails?: GuardrailMeasurement[];
+  loop_verdict?: LoopVerdict | null;
+  due_at?: string | null;
+  overdue?: boolean;
+};
+
+// A retrievable learning (GET /learnings): what was done for a theme and whether
+// it worked, with confidence that decays over time. Only human-validated
+// learnings (retrieval_eligible) steer future synthesis.
+export type LearningMemoryItem = {
+  conclusion_id: string;
+  problem_id?: string;
+  topic?: string;
+  pattern?: string;
+  learning_status: LearningStatus;
+  summary?: string;
+  limitations?: string;
+  next_step?: string | null;
+  owner?: string;
+  journey?: string;
+  journey_stage?: string;
+  theme_tag?: string | null;
+  resolution_actions?: string[];
+  base_confidence?: number;
+  decayed_confidence: number;
+  freshness: "VALIDATED" | "EMERGING" | "STALE";
+  retrieval_eligible: boolean;
+  reviewer?: string;
+  created_at?: string;
+  last_validated_at?: string;
+  source?: string;
 };
 
 export type LearningStatus =
@@ -558,6 +625,10 @@ export type OutcomeBoard = {
   learning_worked: number;
   learning_partially_worked: number;
   learning_did_not_work: number;
+  loop_closed?: number;
+  fix_did_not_land?: number;
+  overdue?: number;
+  by_owner?: OwnerRollup[];
   learning_inconclusive: number;
   learning_measurement_invalid: number;
   items: OutcomeBoardItem[];
@@ -624,6 +695,7 @@ export type SignalRecord = {
   // Written back by the triage pipeline once a signal has been enriched.
   sentiment?: string | null;
   urgency?: string | null;
+  tags?: string[];
   enriched?: boolean;
 };
 
@@ -645,12 +717,54 @@ export type ModelCardMetrics = {
   >;
 };
 
+// Destinations the API accepts on a route (domain/models.py KNOWN_DESTINATIONS).
+export const KNOWN_DESTINATIONS = [
+  "jira",
+  "slack",
+  "zendesk",
+  "hubspot",
+  "braze",
+  "salesforce",
+  "adobe_experience_platform",
+  "linear",
+  "servicenow",
+  "email",
+  "research_panel",
+  "policy_review"
+] as const;
+
+// Leadership view: where problems concentrate, per owning team.
+export type OwnerRollup = {
+  owner: string;
+  problems: number;
+  open: number;
+  overdue: number;
+  blocked: number;
+  loop_closed: number;
+  fix_did_not_land: number;
+};
+
+// One team-routing rule: a journey stage / AI theme substring -> owning team,
+// optionally with that team's own Jira project or Slack channel.
+export type OwnerRoute = {
+  match: string;
+  owner: string;
+  label?: string | null;
+  destination?: string | null;
+  jira_project_key?: string | null;
+  slack_channel?: string | null;
+};
+
 export type WorkspaceSettings = {
   name: string;
   slug: string;
   notification_email: string;
   measurement_window_days: number;
   learning_half_life_days: number;
+  // Resolution timeline: promoted problems are due this many days after promotion.
+  resolution_sla_days?: number;
+  owner_routes?: OwnerRoute[];
+  industry_profile?: string;
   ai_disclosure_template: string;
   works_council_mode: boolean;
   // Opt-in: actions need TWO distinct approvers before execution.
@@ -667,11 +781,16 @@ export type Article50Status = {
   generated_at: string;
 };
 
+export type AiResidency = "eu" | "self_hosted" | "non_eu" | "unknown";
+
 export type SystemConfig = {
   ai_base_url: string;
   ai_model: string;
   ai_embed_model?: string;
   ai_embed_base_url?: string;
+  ai_residency?: AiResidency;
+  ai_embed_residency?: AiResidency;
+  eu_only_enforced?: boolean;
   auth_enabled: boolean;
 };
 
@@ -699,6 +818,8 @@ export type SignalImportResult = {
   imported: number;
   skipped_duplicates: number;
   total_signals: number;
+  // Webhook rows that were not objects or had no feedback text.
+  dropped_rows?: number;
 };
 
 export type CustomerContextRecord = {
@@ -852,6 +973,13 @@ export type ProblemCandidate = {
   known_limitations: string[];
   evaluation_notes: string[];
   emerging_problem_score: number;
+  // "journey_stage" (deterministic grouping) | "ai_theme" (persisted LLM triage theme).
+  origin?: "journey_stage" | "ai_theme";
+  theme_tag?: string | null;
+  theme_summary?: string | null;
+  triage_impact_score?: number | null;
+  triage_urgency?: string | null;
+  triage_run_id?: string | null;
   review_status: "pending" | "duplicate" | "accepted" | "rejected";
   duplicate_problem_id?: string | null;
   duplicate_reason?: string | null;

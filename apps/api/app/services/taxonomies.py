@@ -404,7 +404,13 @@ def classify_candidate(
         dictionary_entries,
     )
     candidate_dictionary_hits = dictionary_hits(candidate_signals, dictionary_entries)
-    limitations = candidate_limitations(candidate, candidate_signals, classifications)
+    # Merge, don't overwrite: builders (theme_candidates) attach origin-specific
+    # limitations that classification must preserve.
+    computed_limitations = candidate_limitations(candidate, candidate_signals, classifications)
+    limitations = [
+        *candidate.known_limitations,
+        *[item for item in computed_limitations if item not in candidate.known_limitations],
+    ]
     contradictory_evidence = sorted(
         {
             item
@@ -428,7 +434,14 @@ def classify_candidate(
         ),
         "contradictory_evidence": contradictory_evidence,
         "known_limitations": limitations,
-        "evaluation_notes": evaluation_notes(candidate, classifications),
+        "evaluation_notes": [
+            *candidate.evaluation_notes,
+            *[
+                note
+                for note in evaluation_notes(candidate, classifications)
+                if note not in candidate.evaluation_notes
+            ],
+        ],
         "emerging_problem_score": emerging_problem_score(candidate, classifications),
     }
     return candidate.model_copy(update=updates)
@@ -754,3 +767,39 @@ def emerging_problem_score(
         confidence_factor = sum(item.confidence for item in classifications) / len(classifications) * 0.24
     novelty_factor = 0.12 if candidate.review_status.value == "pending" else 0.0
     return round(min(1.0, source_factor + volume_factor + confidence_factor + novelty_factor), 2)
+
+
+def _vocabulary_token(value: str) -> str:
+    token = "".join(ch if ch.isalnum() else "_" for ch in value.strip().lower())
+    while "__" in token:
+        token = token.replace("__", "_")
+    return token.strip("_")
+
+
+def workspace_vocabulary(
+    taxonomy_store: TaxonomyStore,
+    terminology_store: TerminologyStore | None = None,
+    *,
+    limit: int = 80,
+) -> list[str]:
+    """The workspace's own theme vocabulary for the enrichment prompt.
+
+    Accepted (active, non-proposed) taxonomy category labels across catalogs,
+    then terminology canonical terms. Human taxonomy decisions — accepting a
+    bootstrap proposal, merging, renaming — change this list and therefore the
+    label space the model is steered towards on the next triage run.
+    """
+    seen: list[str] = []
+    for catalog in taxonomy_store.list_catalogs():
+        for category in catalog.categories:
+            if category.status not in {"active", "accepted"}:
+                continue
+            token = _vocabulary_token(category.label)
+            if token and token not in seen:
+                seen.append(token)
+    if terminology_store is not None:
+        for entry in terminology_store.list_entries():
+            token = _vocabulary_token(entry.canonical_term)
+            if token and token not in seen:
+                seen.append(token)
+    return seen[:limit]

@@ -28,9 +28,10 @@ from app.domain.models import OutcomeContract, ProblemRecord
 # Shared with the scheduler so proposal, ITS scoring and scheduled
 # re-measurement all match/bucket signals identically.
 from app.services.measurement_scheduler import (
+    LOOP_CHECKPOINT_KINDS,
     SIGNAL_METRIC_PREFIX,
-    _norm_stage,
     _parse_ts,
+    signal_matches_scope,
 )
 
 logger = logging.getLogger(__name__)
@@ -494,15 +495,72 @@ def _matching_timestamps(
 ) -> list:
     stamps = []
     for signal in signals:
-        if _norm_stage(signal.journey) != _norm_stage(journey):
-            continue
-        if _norm_stage(signal.journey_stage) != _norm_stage(journey_stage):
+        if not signal_matches_scope(signal, journey=journey, journey_stage=journey_stage):
             continue
         try:
             stamps.append(_parse_ts(signal.timestamp))
         except ValueError:
             continue
     return sorted(stamps)
+
+
+# --- Loop verdict ---------------------------------------------------------
+# The pitch's proof step in one word: did the fix land? Derived at read time
+# from the contract status plus the scheduled checkpoints, never stored, so it
+# always reflects the latest real-signal measurement.
+LOOP_VERDICTS = (
+    "not_measured",
+    "measuring",
+    "manual_required",
+    "on_track",
+    "loop_closed",
+    "fix_did_not_land",
+)
+
+
+def loop_verdict(
+    *,
+    outcome_status: str,
+    plans: list[dict[str, Any]],
+    measurement_source: str | None = None,
+) -> tuple[str, str]:
+    """(verdict, note) for one problem.
+
+    - not_measured: no approved action has started the clock.
+    - measuring: checkpoints are scheduled but the closing read is not in yet.
+    - manual_required: CLARA cannot observe the metric; a human must record it.
+    - on_track: an early read (T+7, or a manual read) looks good — not proof yet.
+    - loop_closed: the window or follow-up checkpoint met the target on real
+      post-fix signal inflow. The theme dropped: the loop worked.
+    - fix_did_not_land: the closing checkpoint shows no improvement.
+    """
+    done_closing = {
+        plan["kind"] for plan in plans if plan.get("status") == "done" and plan.get("kind") in LOOP_CHECKPOINT_KINDS
+    }
+    pending = any(plan.get("status") == "pending" for plan in plans)
+    manual = any(plan.get("status") == "manual_required" for plan in plans)
+
+    if outcome_status == "not_measured":
+        if manual:
+            return "manual_required", "CLARA cannot observe this metric; record the measurement by hand."
+        if pending:
+            return "measuring", "Checkpoints are scheduled; the closing read is not in yet."
+        return "not_measured", "No approved action has started the measurement clock."
+
+    closing_label = "follow-up" if "followup" in done_closing else "window"
+    if outcome_status == "target_met":
+        if done_closing:
+            return "loop_closed", f"Post-fix inflow met the target at the {closing_label} checkpoint on real signals."
+        if measurement_source == "manual":
+            return "on_track", "A manual reading met the target; the scheduled read will confirm it."
+        return "on_track", "The early read met the target; the window checkpoint will confirm it."
+    if outcome_status == "improving":
+        return "on_track", "Inflow is moving the right way but has not reached the target yet."
+    if outcome_status == "not_improved":
+        if done_closing:
+            return "fix_did_not_land", f"The {closing_label} checkpoint shows no improvement: the fix did not land."
+        return "measuring", "The early read shows no improvement yet; the window checkpoint decides."
+    return "measuring", "Measurement in progress."
 
 
 def propose_outcome_contract(

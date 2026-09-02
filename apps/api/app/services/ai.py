@@ -1,12 +1,13 @@
 """Provider-agnostic AI client — Python port of reference/elvis/supabase/functions/_shared/ai.ts.
 
-Works with any OpenAI-compatible Chat Completions endpoint:
-  - OpenAI:        AI_BASE_URL=https://api.openai.com/v1            AI_MODEL=gpt-4o-mini
-  - Google Gemini: AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
-  - Groq / OpenRouter / Together: set their base URL + model
+Works with any OpenAI-compatible Chat Completions endpoint. EU-first defaults:
+  - Mistral (FR, default): AI_BASE_URL=https://api.mistral.ai/v1  AI_MODEL=mistral-small-latest
+                           AI_EMBED_MODEL=mistral-embed  AI_EMBED_DIM=0
   - Local (Ollama): AI_BASE_URL=http://localhost:11434/v1   AI_MODEL=llama3.1
                     (AI_API_KEY optional)
   - Local (vLLM):   AI_BASE_URL=http://localhost:8000/v1    AI_MODEL=<served-model>
+  - Any other OpenAI-compatible host works technically, but see provider_residency():
+    with CLARA_AI_REQUIRE_EU=1 a non-EU provider is refused at boot and in Settings.
 
 Local-first is a hard requirement (EU data-residency moat): keyless operation with
 Ollama/vLLM must keep working. Tool-calling is used for structured-output extraction,
@@ -39,15 +40,20 @@ logger = logging.getLogger(__name__)
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 # --- Configuration (read once at import; mirror _shared/ai.ts) ---
-AI_BASE_URL = (os.getenv("AI_BASE_URL") or "https://api.openai.com/v1").rstrip("/")
+# Defaults are the EU provider production runs on (render.yaml / DEPLOY.md). The
+# earlier defaults (api.openai.com + gpt-4o-mini + gemini-embedding-001) put a
+# US provider one missing env var away from receiving customer feedback, which
+# contradicts the product's residency promise.
+AI_BASE_URL = (os.getenv("AI_BASE_URL") or "https://api.mistral.ai/v1").rstrip("/")
 AI_API_KEY = os.getenv("AI_API_KEY") or ""
-AI_MODEL = os.getenv("AI_MODEL") or "gpt-4o-mini"
-AI_EMBED_MODEL = os.getenv("AI_EMBED_MODEL") or "gemini-embedding-001"
+AI_MODEL = os.getenv("AI_MODEL") or "mistral-small-latest"
+AI_EMBED_MODEL = os.getenv("AI_EMBED_MODEL") or "mistral-embed"
 # Must match the pgvector column dimension of taxonomy_nodes.embedding — vector(768)
 # from migration 003, or vector(1024) once 012 has been applied for mistral-embed.
-# gemini-embedding-001 defaults to 3072; request 768. Cosine distance is scale-invariant
-# so the reduced (un-normalised) vectors are fine for nearest-neighbour matching.
-AI_EMBED_DIM = int(os.getenv("AI_EMBED_DIM") or "768")
+# 0 = do not send the `dimensions` parameter (mistral-embed rejects it and is a
+# fixed 1024). Models that accept it (gemini-embedding-001 defaults to 3072)
+# should request the column width explicitly.
+AI_EMBED_DIM = int(os.getenv("AI_EMBED_DIM") or "0")
 # Embeddings may live on a different provider than chat. Unset = same host and key
 # as chat, which is every existing deployment and the keyless Ollama path. Needed
 # because chat-only gateways exist: OpenCode Zen serves 61 chat models and 404s on
@@ -114,10 +120,179 @@ def effective_embed_api_key() -> str:
         return explicit
     return effective_api_key() if effective_embed_base_url() == effective_base_url() else ""
 
+
+# --- Data residency ---------------------------------------------------------
+# The pitch: feedback never leaves the EU and never passes through US or Chinese
+# providers. This module is the one place every AI call goes through, so the
+# classification lives here and is surfaced in /system-config and the Settings
+# page. Enforcement is opt-in (CLARA_AI_REQUIRE_EU=1) so local dev can use any
+# endpoint, and fail-closed once on: a non-EU host refuses to boot, mirroring
+# CLARA_REQUIRE_AUTH.
+#
+# Host suffixes are matched on the hostname only (no path/scheme games). The
+# lists are deliberately conservative: an unrecognised host is "unknown", which
+# the EU-only mode also refuses unless the operator allowlists it explicitly
+# via CLARA_AI_EU_HOSTS (e.g. a private EU vLLM gateway on a public hostname).
+EU_PROVIDER_HOST_SUFFIXES: tuple[str, ...] = (
+    "mistral.ai",
+    "aleph-alpha.com",
+    "ionos.com",
+    "ionos.de",
+    "scaleway.com",
+    "scw.cloud",
+    "ovh.net",
+    "ovhcloud.com",
+    "stackit.cloud",
+    "stackit.de",
+    "t-systems.com",
+    "telekom.de",
+    "infomaniak.com",
+    "exoscale.com",
+    "hetzner.cloud",
+    "cloud.langfuse.com",
+)
+NON_EU_PROVIDER_HOST_SUFFIXES: tuple[str, ...] = (
+    "openai.com",
+    "anthropic.com",
+    "googleapis.com",
+    "google.com",
+    "groq.com",
+    "together.xyz",
+    "together.ai",
+    "openrouter.ai",
+    "perplexity.ai",
+    "cohere.ai",
+    "cohere.com",
+    "x.ai",
+    "fireworks.ai",
+    "cerebras.ai",
+    "deepinfra.com",
+    "replicate.com",
+    "huggingface.co",
+    "amazonaws.com",
+    "azure.com",
+    "microsoft.com",
+    "us.cloud.langfuse.com",
+    "deepseek.com",
+    "aliyuncs.com",
+    "moonshot.cn",
+    "baidubce.com",
+    "volces.com",
+    "bigmodel.cn",
+    "minimax.chat",
+)
+_SELF_HOSTED_HOSTS = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "::1", "host.docker.internal"})
+RESIDENCY_EU = "eu"
+RESIDENCY_SELF_HOSTED = "self_hosted"
+RESIDENCY_NON_EU = "non_eu"
+RESIDENCY_UNKNOWN = "unknown"
+
+
+def _is_private_host(host: str) -> bool:
+    if host in _SELF_HOSTED_HOSTS or "." not in host:
+        return True
+    if host.endswith((".local", ".internal", ".lan", ".home.arpa")):
+        return True
+    parts = host.split(".")
+    if len(parts) == 4 and all(part.isdigit() for part in parts):
+        first, second = int(parts[0]), int(parts[1])
+        return (
+            first == 10
+            or (first == 172 and 16 <= second <= 31)
+            or (first == 192 and second == 168)
+            or first == 127
+        )
+    return False
+
+
+def provider_residency(base_url: str | None) -> str:
+    """Classify where a provider URL sends data: eu | self_hosted | non_eu | unknown."""
+    if not base_url:
+        return RESIDENCY_UNKNOWN
+    try:
+        host = (urlparse(base_url).hostname or "").lower()
+    except ValueError:
+        return RESIDENCY_UNKNOWN
+    if not host:
+        return RESIDENCY_UNKNOWN
+    if _is_private_host(host):
+        return RESIDENCY_SELF_HOSTED
+    # Longest-suffix-wins so "us.cloud.langfuse.com" beats "cloud.langfuse.com".
+    best: tuple[int, str] | None = None
+    for suffix, verdict in (
+        *((suffix, RESIDENCY_EU) for suffix in EU_PROVIDER_HOST_SUFFIXES),
+        *((suffix, RESIDENCY_NON_EU) for suffix in NON_EU_PROVIDER_HOST_SUFFIXES),
+    ):
+        if host == suffix or host.endswith("." + suffix):
+            if best is None or len(suffix) > best[0]:
+                best = (len(suffix), verdict)
+    return best[1] if best else RESIDENCY_UNKNOWN
+
+
+def _truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+# Default ON whenever a real backend (DATABASE_URL) is configured — i.e. a
+# deployment — mirroring CLARA_REQUIRE_AUTH; an explicit false still opts out
+# (a pilot that has signed off a non-EU provider). Dev and tests run without
+# DATABASE_URL and stay unenforced.
+_require_eu_env = (os.getenv("CLARA_AI_REQUIRE_EU") or "").strip().lower()
+if _require_eu_env in {"1", "true", "yes", "on"}:
+    AI_REQUIRE_EU = True
+elif _require_eu_env in {"0", "false", "no", "off"}:
+    AI_REQUIRE_EU = False
+else:
+    AI_REQUIRE_EU = bool((os.getenv("DATABASE_URL") or "").strip())
+AI_EU_EXTRA_HOSTS = frozenset(
+    host.strip().lower()
+    for host in (os.getenv("CLARA_AI_EU_HOSTS") or "").split(",")
+    if host.strip()
+)
+
+
+class ResidencyViolation(RuntimeError):
+    """A provider outside the EU (or unknown) was configured while EU-only mode is on."""
+
+
+def residency_allowed(base_url: str | None) -> bool:
+    residency = provider_residency(base_url)
+    if residency in (RESIDENCY_EU, RESIDENCY_SELF_HOSTED):
+        return True
+    try:
+        host = (urlparse(base_url or "").hostname or "").lower()
+    except ValueError:
+        host = ""
+    return bool(host) and host in AI_EU_EXTRA_HOSTS
+
+
+def assert_residency_allowed(base_url: str | None, *, purpose: str) -> None:
+    """Raise ResidencyViolation when EU-only mode is on and the host is not EU/self-hosted."""
+    if not AI_REQUIRE_EU or residency_allowed(base_url):
+        return
+    raise ResidencyViolation(
+        f"{purpose} points at {urlparse(base_url or '').hostname or base_url!r}, classified as "
+        f"'{provider_residency(base_url)}'. CLARA_AI_REQUIRE_EU=1 refuses providers outside the "
+        "EU; use an EU-hosted or self-hosted endpoint, or allowlist a private EU host via "
+        "CLARA_AI_EU_HOSTS."
+    )
+
+
+def eu_only_enforced() -> bool:
+    return AI_REQUIRE_EU
+
 # --- Langfuse (optional tracing + evals) ---
 _LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY") or ""
 _LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY") or ""
 _LANGFUSE_BASE_URL = os.getenv("LANGFUSE_BASE_URL") or "http://localhost:3000"
+
+# Boot-time residency gate (fail closed, like CLARA_REQUIRE_AUTH): traces carry
+# feedback text too, so a configured Langfuse host is checked as well.
+if AI_REQUIRE_EU:
+    assert_residency_allowed(effective_base_url(), purpose="AI_BASE_URL")
+    assert_residency_allowed(effective_embed_base_url(), purpose="AI_EMBED_BASE_URL")
+    if _LANGFUSE_PUBLIC_KEY and _LANGFUSE_SECRET_KEY:
+        assert_residency_allowed(_LANGFUSE_BASE_URL, purpose="LANGFUSE_BASE_URL")
 
 _langfuse_client: Any = None
 

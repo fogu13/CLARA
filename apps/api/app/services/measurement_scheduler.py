@@ -35,6 +35,14 @@ logger = logging.getLogger(__name__)
 
 SIGNAL_METRIC_PREFIX = "signal_rate_per_day:"
 LOOP_INTERVAL_SECONDS = 15 * 60
+# AI-theme contracts use the pseudo-journey "theme": the stage part of the
+# metric is then a theme TAG and signals match by carrying that tag (written
+# back by triage enrichment) instead of by journey/stage columns.
+THEME_JOURNEY = "theme"
+# "Keep listening": one more checkpoint a month after the measurement window
+# closes, so a theme that comes back after a premature "target met" is caught.
+FOLLOWUP_GAP_DAYS = 30
+LOOP_CHECKPOINT_KINDS = frozenset({"window", "followup"})
 
 
 def _parse_ts(value: str) -> datetime:
@@ -46,11 +54,72 @@ def _parse_ts(value: str) -> datetime:
     return parsed
 
 
+UNKNOWN_JOURNEY_N = "unknown journey"
+UNKNOWN_STAGE_N = "unknown stage"
+SOURCE_FEEDBACK_SUFFIX = " feedback"
+
+
 def _norm_stage(value: str) -> str:
     """Journey names round-trip through the metric string as lowercase with
     underscores; normalize both sides so 'customer_onboarding' still matches
     after the metric parser turns it into 'customer onboarding'."""
     return value.lower().replace("_", " ").strip()
+
+
+def signal_matches_scope(signal: Any, *, journey: str, journey_stage: str) -> bool:
+    """Does a signal belong to a contract's scope?
+
+    Journey/stage contracts (promoted from deterministic candidates) match on
+    the journey and journey_stage columns. Theme contracts (promoted from AI
+    triage themes; journey == "theme") match any signal carrying the theme tag,
+    whatever journey it came from — the theme is the unit of ownership there.
+    One helper, used by the scheduler, ITS scoring and contract proposals so
+    all three count the same signals.
+    """
+    stage_n = _norm_stage(journey_stage)
+    journey_n = _norm_stage(journey)
+    if journey_n == THEME_JOURNEY:
+        tags = {_norm_stage(str(tag)) for tag in (getattr(signal, "tags", None) or [])}
+        return stage_n in tags
+    if _norm_stage(signal.journey) != journey_n:
+        return False
+    signal_stage_n = _norm_stage(signal.journey_stage)
+    if signal_stage_n == stage_n:
+        return True
+    # Journey-less feedback (connector/CSV rows without journey metadata) is
+    # grouped per source by build_candidates as "<source>_feedback" while the
+    # signals themselves keep journey_stage "unknown_stage". The contract
+    # promoted from such a candidate must count those same signals — otherwise
+    # every measurement reads 0/day and the loop "closes" without evidence.
+    return (
+        journey_n == UNKNOWN_JOURNEY_N
+        and signal_stage_n == UNKNOWN_STAGE_N
+        and stage_n.endswith(SOURCE_FEEDBACK_SUFFIX)
+        and _norm_stage(f"{getattr(signal, 'source', '')} feedback") == stage_n
+    )
+
+
+def unenriched_in_window(signals: list[Any], *, since: str, until: str) -> int:
+    """Signals inside [since, until] that triage has not enriched yet.
+
+    Theme contracts are counted by tag, and tags only exist after enrichment.
+    A window with unenriched signals cannot be read honestly: the count would
+    under-report and a theme could be declared "closed" merely because triage
+    was never run on the new inflow.
+    """
+    start = _parse_ts(since)
+    end = _parse_ts(until)
+    pending = 0
+    for signal in signals:
+        if getattr(signal, "enriched", False):
+            continue
+        try:
+            ts = _parse_ts(signal.timestamp)
+        except ValueError:
+            continue
+        if start <= ts <= end:
+            pending += 1
+    return pending
 
 
 class SQLiteMeasurementPlanStore:
@@ -83,15 +152,19 @@ class SQLiteMeasurementPlanStore:
         executed_at: str,
         due_at: str,
         kind: str,
-    ) -> None:
-        # One pending plan per problem+kind — re-approving must not double-schedule.
+    ) -> bool:
+        """Insert one checkpoint; False when an equivalent pending plan exists.
+
+        One pending plan per problem+kind — re-approving (or approving a second
+        action on the same problem) must not double-schedule or restart the clock.
+        """
         existing = self._connection.execute(
             "SELECT id FROM measurement_plans WHERE problem_id = ? AND kind = ?"
             " AND status IN ('pending', 'manual_required')",
             (problem_id, kind),
         ).fetchone()
         if existing:
-            return
+            return False
         self._connection.execute(
             "INSERT INTO measurement_plans"
             " (problem_id, execution_id, executed_at, due_at, kind, created_at)"
@@ -99,6 +172,7 @@ class SQLiteMeasurementPlanStore:
             (problem_id, execution_id, executed_at, due_at, kind, utc_now()),
         )
         self._connection.commit()
+        return True
 
     def list_plans(self) -> list[dict[str, Any]]:
         rows = self._connection.execute(
@@ -135,19 +209,34 @@ def schedule_measurements(
     checkpoints = {"t7": 7}
     if window_days != 7:
         checkpoints["window"] = window_days
+    # Keep listening after the window closes: the pitch's "if the theme drops
+    # the following month, the loop worked; if not, the fix didn't land".
+    checkpoints["followup"] = window_days + FOLLOWUP_GAP_DAYS
 
     scheduled: list[str] = []
     for kind, days in checkpoints.items():
         due_at = (executed + timedelta(days=days)).isoformat().replace("+00:00", "Z")
-        plan_store.schedule(
+        inserted = plan_store.schedule(
             problem_id=problem.problem_id,
             execution_id=execution_id,
             executed_at=executed_at,
             due_at=due_at,
             kind=kind,
         )
-        scheduled.append(kind)
+        # Stores return False when the checkpoint already exists (a second approved
+        # action on the same problem); only report what was really scheduled so
+        # telemetry never claims a clock that did not start.
+        if inserted is not False:
+            scheduled.append(kind)
     return scheduled
+
+
+def followup_window_start(executed_at: str, window_days: int) -> str:
+    """The keep-listening read covers the month AFTER the measurement window,
+    not the cumulative span since execution: averaged over [executed, now] a
+    theme that fully returns in month two would still read as improved."""
+    start = _parse_ts(executed_at) + timedelta(days=window_days)
+    return start.isoformat().replace("+00:00", "Z")
 
 
 def signal_rate_per_day(
@@ -165,9 +254,7 @@ def signal_rate_per_day(
 
     count = 0
     for signal in signals:
-        if _norm_stage(signal.journey) != _norm_stage(journey):
-            continue
-        if _norm_stage(signal.journey_stage) != _norm_stage(journey_stage):
+        if not signal_matches_scope(signal, journey=journey, journey_stage=journey_stage):
             continue
         try:
             ts = _parse_ts(signal.timestamp)
@@ -222,9 +309,9 @@ def measure_guardrails(
         end = _parse_ts(now)
 
         def _matches(sig: Any) -> bool:
-            return _norm_stage(sig.journey) == _norm_stage(problem.journey) and _norm_stage(
-                sig.journey_stage
-            ) == _norm_stage(problem.journey_stage)
+            return signal_matches_scope(
+                sig, journey=problem.journey, journey_stage=problem.journey_stage
+            )
 
         pre_count = 0
         pre_customers: set[str] = set()
@@ -281,11 +368,20 @@ def run_due_measurements(
     telemetry: Any,
     now: str | None = None,
 ) -> dict[str, int]:
-    """Process all due checkpoints. Returns {measured, manual_required, skipped}."""
+    """Process all due checkpoints. Returns {measured, manual_required, skipped,
+    loop_closed, fix_did_not_land}.
+
+    The last two count window/followup checkpoints whose real-signal readout
+    met the contract target (the loop closed) or showed no improvement (the
+    fix did not land) — the pitch's proof step, written to telemetry so the
+    leadership view and alerts can pick it up without re-deriving it.
+    """
     now = now or utc_now()
     measured = 0
     manual = 0
     skipped = 0
+    loop_closed = 0
+    fix_did_not_land = 0
 
     for plan in plan_store.due(now):
         problem = problem_lookup(plan["problem_id"])
@@ -323,11 +419,33 @@ def run_due_measurements(
             continue
 
         journey, _, stage = metric.removeprefix(SIGNAL_METRIC_PREFIX).partition("/")
+        since = plan["executed_at"]
+        span_note = "since action execution"
+        if plan["kind"] == "followup":
+            since = followup_window_start(
+                plan["executed_at"], problem.outcome_contract.measurement_window_days
+            )
+            span_note = "in the month after the measurement window closed (keep-listening read)"
+        if _norm_stage(journey) == THEME_JOURNEY:
+            pending_enrichment = unenriched_in_window(signals, since=since, until=now)
+            if pending_enrichment:
+                # Stay pending (re-tried next tick) and say why: the readout
+                # would be silently incomplete until triage tags the new inflow.
+                plan_store.mark(
+                    plan["id"],
+                    status="pending",
+                    note=(
+                        f"{pending_enrichment} in-window signals not yet enriched — run triage"
+                        " before this theme can be measured"
+                    ),
+                )
+                skipped += 1
+                continue
         rate, sample = signal_rate_per_day(
             signals,
             journey=journey.replace("_", " "),
             journey_stage=stage.replace("_", " "),
-            since=plan["executed_at"],
+            since=since,
             until=now,
         )
         measurement = OutcomeMeasurement(
@@ -338,14 +456,20 @@ def run_due_measurements(
             measurement_source="instrumented",
             notes=(
                 f"Auto-measured by the scheduler ({plan['kind']}): {sample} matching"
-                f" signals since action execution. real_data_source=true"
+                f" signals {span_note}. real_data_source=true"
             ),
         )
         try:
             workflow_store.record_outcome(problem=problem, measurement=measurement)
-        except Exception:  # noqa: BLE001 — one bad plan must not stall the loop
-            logger.exception("Scheduled measurement failed for %s", problem.problem_id)
-            plan_store.mark(plan["id"], status="skipped", note="record_outcome failed")
+        except Exception as exc:  # noqa: BLE001 — one bad plan must not stall the loop
+            detail = str(getattr(exc, "detail", "") or exc)[:200]
+            if getattr(exc, "status_code", None) == 409:
+                # A newer (manual) measurement exists: say so instead of a
+                # generic skip, so the checkpoint panel can show why.
+                plan_store.mark(plan["id"], status="blocked", note=detail)
+            else:
+                logger.exception("Scheduled measurement failed for %s", problem.problem_id)
+                plan_store.mark(plan["id"], status="skipped", note=f"record_outcome failed: {detail}")
             skipped += 1
             continue
 
@@ -364,7 +488,76 @@ def run_due_measurements(
         )
         measured += 1
 
-    return {"measured": measured, "manual_required": manual, "skipped": skipped}
+        # Loop verdict on the closing checkpoints only — the T+7 early read is
+        # too soon to declare either way (detectability_note explains why).
+        if plan["kind"] in LOOP_CHECKPOINT_KINDS:
+            try:
+                status = workflow_store.outcome_snapshot(problem).status
+            except Exception:  # noqa: BLE001 — a verdict must never stall the loop
+                logger.exception("Loop verdict failed for %s", problem.problem_id)
+                status = None
+            verdict_event = None
+            if status == "target_met":
+                verdict_event = "loop_closed"
+                loop_closed += 1
+            elif status == "not_improved":
+                verdict_event = "fix_did_not_land"
+                fix_did_not_land += 1
+            if verdict_event:
+                telemetry.record(
+                    verdict_event,
+                    entity_id=problem.problem_id,
+                    metadata={
+                        "kind": plan["kind"],
+                        "metric": metric,
+                        "observed_value": rate,
+                        "baseline": problem.outcome_contract.baseline,
+                        "success_threshold": problem.outcome_contract.success_threshold,
+                        "real_data_source": True,
+                    },
+                )
+
+    return {
+        "measured": measured,
+        "manual_required": manual,
+        "skipped": skipped,
+        "loop_closed": loop_closed,
+        "fix_did_not_land": fix_did_not_land,
+    }
+
+
+def measure_guardrails_for_processed(
+    processed: list[dict[str, Any]],
+    *,
+    problem_lookup: Callable[[str], ProblemRecord | None],
+    signal_store: Any,
+    workflow_store: Any,
+    now: str | None = None,
+) -> int:
+    """Guardrail readouts for plans the DB-side tick already measured.
+
+    clara_run_due_measurements (pg_cron) writes the outcome record but has no
+    guardrail branch; without this pass every declared guardrail stayed
+    decorative on Postgres while the SQLite path measured it. Returns the
+    number of guardrail records written.
+    """
+    if not processed:
+        return 0
+    now = now or utc_now()
+    signals = signal_store.list_signals()
+    written = 0
+    for plan in processed:
+        problem = problem_lookup(str(plan.get("problem_id")))
+        executed_at = plan.get("executed_at")
+        if problem is None or not executed_at:
+            continue
+        try:
+            written += measure_guardrails(
+                problem, signals, executed_at=str(executed_at), now=now, workflow_store=workflow_store
+            )
+        except Exception:  # noqa: BLE001 — guardrails must not stall the loop
+            logger.exception("Guardrail measurement failed for %s", problem.problem_id)
+    return written
 
 
 def scheduler_enabled() -> bool:

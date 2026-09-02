@@ -41,6 +41,7 @@ from app.services.signals import (
     parse_signal_csv,
     signal_from_row,
     validate_signal_csv,
+    normalize_incoming_signal,
 )
 
 WEBHOOK_MAX_BODY_BYTES = 2 * 1024 * 1024  # 2 MB: far above real payloads, far below OOM
@@ -85,7 +86,25 @@ def build_router(
 
     @router.post("/signals/import", response_model=SignalImportResult, dependencies=[Depends(require_role(Role.editor))])
     def import_signals(request: SignalImportRequest) -> SignalImportResult:
-        return signal_store.import_signals(request.signals)
+        # Same door rules as CSV/webhook: timestamp normalisation (flagged),
+        # language detection, text cleaning, near-duplicate and authenticity
+        # annotation. JSON used to bypass all of them.
+        records = [normalize_incoming_signal(record) for record in request.signals]
+        existing = signal_store.list_signals()
+        near_dups = annotate_near_duplicates(records, existing)
+        review = assess_batch(records, existing, channel="api")
+        result = signal_store.import_signals(records)
+        telemetry_store.record(
+            "signals_imported",
+            metadata={
+                "source": "api",
+                "imported": result.imported,
+                "skipped": result.skipped_duplicates,
+                "near_duplicates": near_dups,
+                **{f"authenticity_{k}": v for k, v in review.summary().items()},
+            },
+        )
+        return result
 
     @router.post("/signals/import-csv", response_model=SignalImportResult, dependencies=[Depends(require_role(Role.editor))])
     def import_signal_csv(request: SignalCsvImportRequest) -> SignalImportResult:
@@ -163,28 +182,36 @@ def build_router(
         if len(rows) > 1000:
             raise HTTPException(status_code=422, detail="Max 1000 signals per webhook call")
 
+        def _cell(value: object) -> str:
+            # Nested objects arrive as JSON, not as a Python repr nobody can parse.
+            if isinstance(value, (dict, list)):
+                return json.dumps(value, ensure_ascii=False, sort_keys=True)
+            return str(value)
+
         records = [
             signal_from_row(
-                {key: str(value) for key, value in row.items() if value is not None},
+                {key: _cell(value) for key, value in row.items() if value is not None},
                 default_source="webhook",
             )
             for row in rows
             if isinstance(row, dict)
         ]
         records = [record for record in records if record.feedback_text.strip()]
+        dropped = len(rows) - len(records)
         if not records:
             raise HTTPException(status_code=422, detail="No rows with feedback_text")
 
         existing = signal_store.list_signals()
         near_dups = annotate_near_duplicates(records, existing)
         review = assess_batch(records, existing, channel="webhook")
-        result = signal_store.import_signals(records)
+        result = signal_store.import_signals(records).model_copy(update={"dropped_rows": dropped})
         telemetry_store.record(
             "signals_imported",
             metadata={
                 "source": "webhook",
                 "imported": result.imported,
                 "skipped": result.skipped_duplicates,
+                "dropped_rows": dropped,
                 "near_duplicates": near_dups,
                 **{f"authenticity_{k}": v for k, v in review.summary().items()},
             },

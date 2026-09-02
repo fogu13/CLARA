@@ -4,7 +4,7 @@ services:
   - type: web
     name: clara-api
     runtime: python
-    buildCommand: pip install -e ".[dev]"
+    buildCommand: pip install -e "."
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
@@ -13,11 +13,12 @@ services:
         sync: false
       - key: SUPABASE_URL
         sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
       # Require auth in production: refuses to boot if neither SUPABASE_URL (JWKS) nor
       # SUPABASE_JWT_SECRET is set, instead of silently treating every caller as owner.
       - key: CLARA_REQUIRE_AUTH
+        value: "true"
+      # Fail closed on data residency: non-EU AI/embeddings/Langfuse hosts refuse to boot.
+      - key: CLARA_AI_REQUIRE_EU
         value: "true"
       - key: AI_BASE_URL
         value: https://api.mistral.ai/v1

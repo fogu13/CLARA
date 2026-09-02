@@ -227,6 +227,8 @@ export default function DashboardPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [demo, setDemo] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // Per-team view ("every team sees what it can act on"): "" = all teams.
+  const [team, setTeam] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -338,8 +340,30 @@ export default function DashboardPage() {
     );
   }
 
-  const problems = data?.problems ?? [];
-  const board = data?.outcomeBoard ?? sampleOutcomeBoard();
+  const allProblems = data?.problems ?? [];
+  const teams = [...new Set(allProblems.map((problem) => problem.owner).filter(Boolean))].sort();
+  const problems = team ? allProblems.filter((problem) => problem.owner === team) : allProblems;
+  const fullBoard = data?.outcomeBoard ?? sampleOutcomeBoard();
+  const board: OutcomeBoard = team
+    ? (() => {
+        const items = fullBoard.items.filter((item) => item.owner === team);
+        const count = (status: OutcomeBoardItem["outcome_status"]) =>
+          items.filter((item) => item.outcome_status === status).length;
+        return {
+          ...fullBoard,
+          total: items.length,
+          not_measured: count("not_measured"),
+          not_improved: count("not_improved"),
+          improving: count("improving"),
+          target_met: count("target_met"),
+          loop_closed: items.filter((item) => item.loop_verdict === "loop_closed").length,
+          fix_did_not_land: items.filter((item) => item.loop_verdict === "fix_did_not_land").length,
+          overdue: items.filter((item) => item.overdue).length,
+          items
+        };
+      })()
+    : fullBoard;
+  const overdueProblems = problems.filter((problem) => problem.overdue && isOpen(problem));
   const approvals = data?.approvals ?? [];
   const executions = data?.executions ?? [];
   const connectors = data?.connectors ?? [];
@@ -443,7 +467,11 @@ export default function DashboardPage() {
       href: "/insights",
       label: td.loopProblems,
       value: String(open.length),
-      sub: fill(td.highImpactCount, { n: highImpact.length })
+      sub:
+        overdueProblems.length > 0
+          ? `${fill(td.highImpactCount, { n: highImpact.length })} · ${fill(td.overdueCount, { n: overdueProblems.length })}`
+          : fill(td.highImpactCount, { n: highImpact.length }),
+      subClass: overdueProblems.length > 0 ? "text-destructive" : undefined
     },
     {
       href: "/actions",
@@ -463,10 +491,19 @@ export default function DashboardPage() {
       label: td.loopOutcomes,
       value: `${improvingOutcomes}/${board.total}`,
       sub:
-        board.target_met > 0
-          ? fill(td.targetMetCount, { n: board.target_met })
-          : fill(td.measuredPending, { measured, pending: board.not_measured }),
-      subClass: board.target_met > 0 ? "text-emerald-600" : undefined
+        (board.fix_did_not_land ?? 0) > 0
+          ? `${board.fix_did_not_land} ${td.fixDidNotLand}`
+          : (board.loop_closed ?? 0) > 0
+            ? `${board.loop_closed} ${td.loopClosed}`
+            : board.target_met > 0
+              ? fill(td.targetMetCount, { n: board.target_met })
+              : fill(td.measuredPending, { measured, pending: board.not_measured }),
+      subClass:
+        (board.fix_did_not_land ?? 0) > 0
+          ? "text-destructive"
+          : (board.loop_closed ?? 0) > 0 || board.target_met > 0
+            ? "text-emerald-600"
+            : undefined
     }
   ];
 
@@ -528,6 +565,24 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-3">
             {demo ? <Badge variant="warning">{td.sampleChip}</Badge> : null}
+            {teams.length > 1 ? (
+              <label className="inline-flex items-center gap-2">
+                <span>{td.teamFilter}</span>
+                <select
+                  value={team}
+                  onChange={(event) => setTeam(event.target.value)}
+                  className="rounded-md border bg-background px-2 py-1 text-sm text-foreground"
+                  aria-label={td.teamFilter}
+                >
+                  <option value="">{td.allTeams}</option>
+                  {teams.map((owner) => (
+                    <option key={owner} value={owner}>
+                      {humanize(owner)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <Link href="/integrations" className="inline-flex items-center gap-2 hover:text-foreground">
               <span
                 aria-hidden="true"
@@ -680,6 +735,15 @@ export default function DashboardPage() {
                                     <Badge variant="outline">
                                       {compact(problem.affected_customers)} {t.common.customers}
                                     </Badge>
+                                    {problem.overdue ? (
+                                      <Badge variant="destructive" title={problem.due_at ?? undefined}>
+                                        {td.overdueChip}
+                                      </Badge>
+                                    ) : problem.due_at ? (
+                                      <Badge variant="outline" title={problem.due_at}>
+                                        {td.dueLabel} {new Date(problem.due_at).toLocaleDateString()}
+                                      </Badge>
+                                    ) : null}
                                     <span className="inline-flex items-center gap-1 text-sm font-medium text-primary">
                                       {verbFor[group.status]}
                                       <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -752,6 +816,51 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
+              {/* 2b · Leadership: where problems concentrate, per owning team. */}
+              {(board.by_owner ?? []).length > 0 ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{td.concentration}</CardTitle>
+                    <CardDescription>{td.concentrationSubtitle}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
+                            <th className="py-2 pr-3">{td.colTeam}</th>
+                            <th className="py-2 pr-3 text-right">{td.colOpen}</th>
+                            <th className="py-2 pr-3 text-right">{td.colOverdue}</th>
+                            <th className="py-2 pr-3 text-right">{td.colBlocked}</th>
+                            <th className="py-2 pr-3 text-right">{td.colLoopClosed}</th>
+                            <th className="py-2 pr-3 text-right">{td.colDidNotLand}</th>
+                            <th className="py-2" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(board.by_owner ?? []).map((row) => (
+                            <tr key={row.owner} className="border-t">
+                              <td className="py-2 pr-3 font-medium">{humanize(row.owner)}</td>
+                              <td className="py-2 pr-3 text-right tabular-nums">{row.open}</td>
+                              <td className={cn("py-2 pr-3 text-right tabular-nums", row.overdue > 0 && "text-destructive font-semibold")}>{row.overdue}</td>
+                              <td className={cn("py-2 pr-3 text-right tabular-nums", row.blocked > 0 && "text-amber-600")}>{row.blocked}</td>
+                              <td className={cn("py-2 pr-3 text-right tabular-nums", row.loop_closed > 0 && "text-emerald-600")}>{row.loop_closed}</td>
+                              <td className={cn("py-2 pr-3 text-right tabular-nums", row.fix_did_not_land > 0 && "text-destructive font-semibold")}>{row.fix_did_not_land}</td>
+                              <td className="py-2 text-right">
+                                <Link href={`/actions?owner=${encodeURIComponent(row.owner)}`} className="inline-flex items-center gap-1 text-primary hover:underline">
+                                  {td.openTeamQueue}
+                                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                                </Link>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
+
               {/* 3 · Watch: what is new or moving, and whether actions worked. */}
               <div className="grid items-start gap-4 xl:grid-cols-2">
                 <Card>
@@ -810,9 +919,9 @@ export default function DashboardPage() {
                   <CardContent className="space-y-3">
                     <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
                       {[
-                        { label: t.outcomeBoard.targetMet, value: board.target_met, className: "text-emerald-600" },
+                        { label: td.loopClosed, value: board.loop_closed ?? 0, className: "text-emerald-600" },
+                        { label: td.fixDidNotLand, value: board.fix_did_not_land ?? 0, className: "text-destructive" },
                         { label: t.outcomeBoard.improving, value: board.improving, className: "text-emerald-600" },
-                        { label: t.outcomeBoard.notImproved, value: board.not_improved, className: "text-amber-600" },
                         { label: t.outcomeBoard.notMeasured, value: board.not_measured, className: "" }
                       ].map((tile) => (
                         <div key={tile.label} className="rounded-lg border p-2.5">
@@ -837,20 +946,26 @@ export default function DashboardPage() {
                               </span>
                               <Badge
                                 variant={
-                                  item.outcome_status === "target_met" || item.outcome_status === "improving"
-                                    ? "success"
-                                    : item.outcome_status === "not_improved"
-                                      ? "warning"
-                                      : "outline"
+                                  item.loop_verdict === "fix_did_not_land"
+                                    ? "destructive"
+                                    : item.outcome_status === "target_met" || item.outcome_status === "improving"
+                                      ? "success"
+                                      : item.outcome_status === "not_improved"
+                                        ? "warning"
+                                        : "outline"
                                 }
                               >
-                                {item.outcome_status === "not_measured"
-                                  ? t.outcomeBoard.notMeasured
-                                  : item.outcome_status === "target_met"
-                                    ? t.outcomeBoard.targetMet
-                                    : item.outcome_status === "improving"
-                                      ? t.outcomeBoard.improving
-                                      : t.outcomeBoard.notImproved}
+                                {item.loop_verdict === "loop_closed"
+                                  ? td.loopClosed
+                                  : item.loop_verdict === "fix_did_not_land"
+                                    ? td.fixDidNotLand
+                                    : item.outcome_status === "not_measured"
+                                      ? t.outcomeBoard.notMeasured
+                                      : item.outcome_status === "target_met"
+                                        ? t.outcomeBoard.targetMet
+                                        : item.outcome_status === "improving"
+                                          ? t.outcomeBoard.improving
+                                          : t.outcomeBoard.notImproved}
                               </Badge>
                             </div>
                             <p className="mt-1 text-xs text-muted-foreground">

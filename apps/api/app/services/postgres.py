@@ -59,40 +59,53 @@ from app.services.workflow import WorkflowStore
 logger = logging.getLogger(__name__)
 
 SCHEMA_SQL = """
+-- Tenant-first keys (migration 014): ids repeat across workspaces (Zendesk
+-- ticket 123, PRB-DRAFT-CHECKOUT-PAYMENT), so uniqueness is per workspace.
+-- workspace_id defaults read the session GUC set by _connect().
 CREATE TABLE IF NOT EXISTS clara_problems (
-    problem_id TEXT PRIMARY KEY,
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
+    problem_id TEXT NOT NULL,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, problem_id)
 );
 
 CREATE TABLE IF NOT EXISTS clara_signals (
-    signal_id TEXT PRIMARY KEY,
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
+    signal_id TEXT NOT NULL,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, signal_id)
 );
 
 CREATE TABLE IF NOT EXISTS clara_candidate_decisions (
-    candidate_id TEXT PRIMARY KEY,
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
+    candidate_id TEXT NOT NULL,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, candidate_id)
 );
 
 CREATE TABLE IF NOT EXISTS clara_journey_events (
-    event_id TEXT PRIMARY KEY,
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
+    event_id TEXT NOT NULL,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, event_id)
 );
 
 CREATE TABLE IF NOT EXISTS clara_customer_context (
-    customer_id TEXT PRIMARY KEY,
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
+    customer_id TEXT NOT NULL,
     account_id TEXT,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, customer_id)
 );
 
 CREATE TABLE IF NOT EXISTS clara_workflow_records (
@@ -114,17 +127,21 @@ CREATE INDEX IF NOT EXISTS clara_workflow_problem_idx
     ON clara_workflow_records (problem_id, record_type);
 
 CREATE TABLE IF NOT EXISTS clara_taxonomy_catalogs (
-    taxonomy_type TEXT PRIMARY KEY,
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
+    taxonomy_type TEXT NOT NULL,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, taxonomy_type)
 );
 
 CREATE TABLE IF NOT EXISTS clara_terminology_dictionary (
-    term_id TEXT PRIMARY KEY,
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
+    term_id TEXT NOT NULL,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, term_id)
 );
 
 CREATE TABLE IF NOT EXISTS clara_workspace_settings (
@@ -159,11 +176,12 @@ CREATE TABLE IF NOT EXISTS clara_measurement_plans (
 );
 
 CREATE TABLE IF NOT EXISTS clara_connector_configs (
-    connector_type TEXT PRIMARY KEY,
     workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
+    connector_type TEXT NOT NULL,
     payload JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, connector_type)
 );
 
 CREATE TABLE IF NOT EXISTS clara_api_keys (
@@ -175,6 +193,30 @@ CREATE TABLE IF NOT EXISTS clara_api_keys (
     key_prefix TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     revoked_at TIMESTAMPTZ
+);
+
+-- AI triage themes persisted from POST /triage/run so they surface as problem
+-- candidates (origin=ai_theme). One row per (workspace, theme tag); the latest
+-- run wins. Migration 013 is the SQL-editor twin of this DDL.
+CREATE TABLE IF NOT EXISTS clara_theme_insights (
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
+    theme_tag TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, theme_tag)
+);
+
+-- Learning memory (retrieval store for synthesis). Human conclusions from the
+-- Action Queue and resume-path learnings land here; rank_learnings reads it.
+CREATE TABLE IF NOT EXISTS clara_learnings (
+    workspace_id BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
+    conclusion_id TEXT NOT NULL,
+    topic TEXT,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id, conclusion_id)
 );
 """
 
@@ -253,6 +295,18 @@ def _model_payload(model: Any) -> dict[str, Any]:
 
 
 _SCHEMA_ENSURED: set[str] = set()
+
+# (table, natural key) pairs whose primary key must be (workspace_id, key).
+TENANT_KEYED_TABLES: tuple[tuple[str, str], ...] = (
+    ("clara_problems", "problem_id"),
+    ("clara_signals", "signal_id"),
+    ("clara_candidate_decisions", "candidate_id"),
+    ("clara_journey_events", "event_id"),
+    ("clara_customer_context", "customer_id"),
+    ("clara_taxonomy_catalogs", "taxonomy_type"),
+    ("clara_terminology_dictionary", "term_id"),
+    ("clara_connector_configs", "connector_type"),
+)
 
 
 class PostgresConnectionMixin:
@@ -358,6 +412,58 @@ class PostgresConnectionMixin:
                         COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint
                         """
                     )
+                # Tenant-first primary keys (migration 014): ids repeat across
+                # workspaces, so a single-column PK made every ON CONFLICT
+                # collide with a row RLS hides (dropped import / 42501). Swap on
+                # boot wherever the table has a workspace_id column; the stores'
+                # ON CONFLICT targets name the composite key.
+                for table_name, key_col in TENANT_KEYED_TABLES:
+                    cursor.execute(
+                        """
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = current_schema() AND table_name = %s
+                          AND column_name = 'workspace_id'
+                        """,
+                        (table_name,),
+                    )
+                    if cursor.fetchone() is None:
+                        logger.critical(
+                            "%s has no workspace_id column (apply migration 004); "
+                            "tenant-scoped keys cannot be enforced for it",
+                            table_name,
+                        )
+                        continue
+                    cursor.execute(
+                        f"""
+                        ALTER TABLE {table_name} ALTER COLUMN workspace_id SET DEFAULT
+                        COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint
+                        """
+                    )
+                    cursor.execute(
+                        f"""
+                        DO $$
+                        DECLARE
+                            pk_cols text;
+                            pk_name text;
+                        BEGIN
+                            SELECT c.conname, string_agg(a.attname, ',' ORDER BY k.ord)
+                              INTO pk_name, pk_cols
+                            FROM pg_constraint c
+                            JOIN unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord) ON true
+                            JOIN pg_attribute a
+                              ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+                            WHERE c.conrelid = '{table_name}'::regclass
+                              AND c.contype = 'p'
+                            GROUP BY c.conname;
+                            IF pk_cols IS DISTINCT FROM 'workspace_id,{key_col}' THEN
+                                IF pk_name IS NOT NULL THEN
+                                    EXECUTE format('ALTER TABLE {table_name} DROP CONSTRAINT %I', pk_name);
+                                END IF;
+                                ALTER TABLE {table_name} ADD PRIMARY KEY (workspace_id, {key_col});
+                            END IF;
+                        END $$
+                        """
+                    )
                 # api-keys RLS is applied here (not only migration 010) so a boot
                 # against a DB that predates the migration self-heals the policy -
                 # the 007-era lesson: never leave a clara_ table without RLS.
@@ -368,10 +474,29 @@ class PostgresConnectionMixin:
                 cursor.execute(
                     """
                     CREATE POLICY clara_api_keys_workspace_isolation ON clara_api_keys
-                    USING (workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint)
+                    USING (
+                      workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint
+                      OR current_setting('app.api_key_lookup', true) = 'on'
+                    )
                     WITH CHECK (workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint)
                     """
                 )
+                # Same self-healed policy for the two loop-closure tables this
+                # DDL owns (theme insights + learning memory): a boot against a
+                # DB that predates migration 013 must never leave them open.
+                for loop_table in ("clara_theme_insights", "clara_learnings"):
+                    cursor.execute(f"ALTER TABLE {loop_table} ENABLE ROW LEVEL SECURITY")
+                    cursor.execute(
+                        f"DROP POLICY IF EXISTS {loop_table}_workspace_isolation ON {loop_table}"
+                    )
+                    cursor.execute(
+                        f"""
+                        CREATE POLICY {loop_table}_workspace_isolation ON {loop_table}
+                        USING (workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint)
+                        WITH CHECK (workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint)
+                        """
+                    )
+                    cursor.execute(f"ALTER TABLE {loop_table} FORCE ROW LEVEL SECURITY")
                 cursor.execute("ALTER TABLE clara_workflow_records ENABLE ROW LEVEL SECURITY")
                 # FORCE = the policies bind the table owner too (the app connects
                 # as `postgres`). Without it every policy here is decorative —
@@ -488,7 +613,7 @@ class PostgresProblemStore(PostgresConnectionMixin):
                 """
                 INSERT INTO clara_problems (problem_id, payload)
                 VALUES (%s, %s)
-                ON CONFLICT (problem_id) DO NOTHING
+                ON CONFLICT (workspace_id, problem_id) DO NOTHING
                 """,
                 (problem.problem_id, self._jsonb(_model_payload(problem))),
             )
@@ -501,7 +626,7 @@ class PostgresProblemStore(PostgresConnectionMixin):
                 """
                 INSERT INTO clara_problems (problem_id, payload)
                 VALUES (%s, %s)
-                ON CONFLICT (problem_id) DO UPDATE
+                ON CONFLICT (workspace_id, problem_id) DO UPDATE
                 SET payload = excluded.payload, updated_at = now()
                 """,
                 (problem.problem_id, self._jsonb(_model_payload(problem))),
@@ -557,7 +682,7 @@ class PostgresSignalStore(PostgresConnectionMixin):
     def list_signals(self) -> list[SignalRecord]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT payload FROM clara_signals ORDER BY signal_id"
+                "SELECT payload FROM clara_signals ORDER BY payload->>'timestamp', signal_id"
             ).fetchall()
         return [SignalRecord.model_validate(_payload(row["payload"])) for row in rows]
 
@@ -571,7 +696,7 @@ class PostgresSignalStore(PostgresConnectionMixin):
                     """
                     INSERT INTO clara_signals (signal_id, payload)
                     VALUES (%s, %s)
-                    ON CONFLICT (signal_id) DO NOTHING
+                    ON CONFLICT (workspace_id, signal_id) DO NOTHING
                     """,
                     (signal.signal_id, self._jsonb(_model_payload(signal))),
                 )
@@ -583,7 +708,38 @@ class PostgresSignalStore(PostgresConnectionMixin):
         )
 
     def candidates(self):
-        return build_candidates(self.list_signals())
+        from app.services.signals import theme_candidates
+
+        signals = self.list_signals()
+        return [*build_candidates(signals), *theme_candidates(self.list_theme_insights(), signals)]
+
+    def save_theme_insights(self, insights: list[dict[str, Any]], *, run_id: str) -> int:
+        from app.services.signals import prepare_theme_insight
+
+        saved = 0
+        with self._connect() as conn:
+            for insight in insights:
+                prepared = prepare_theme_insight(insight, run_id=run_id)
+                if prepared is None:
+                    continue
+                conn.execute(
+                    """
+                    INSERT INTO clara_theme_insights (theme_tag, payload)
+                    VALUES (%s, %s)
+                    ON CONFLICT (workspace_id, theme_tag) DO UPDATE
+                    SET payload = excluded.payload, updated_at = now()
+                    """,
+                    (prepared["tag"], self._jsonb(prepared)),
+                )
+                saved += 1
+        return saved
+
+    def list_theme_insights(self) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT payload FROM clara_theme_insights ORDER BY theme_tag"
+            ).fetchall()
+        return [_payload(row["payload"]) for row in rows]
 
     def get_candidate_decision(self, candidate_id: str) -> CandidateDecisionRecord | None:
         with self._connect() as conn:
@@ -617,7 +773,7 @@ class PostgresSignalStore(PostgresConnectionMixin):
                 """
                 INSERT INTO clara_candidate_decisions (candidate_id, payload)
                 VALUES (%s, %s)
-                ON CONFLICT (candidate_id) DO UPDATE
+                ON CONFLICT (workspace_id, candidate_id) DO UPDATE
                 SET payload = excluded.payload, updated_at = now()
                 """,
                 (candidate_id, self._jsonb(_model_payload(record))),
@@ -694,7 +850,7 @@ class PostgresJourneyEventStore(PostgresConnectionMixin):
                     """
                     INSERT INTO clara_journey_events (event_id, payload)
                     VALUES (%s, %s)
-                    ON CONFLICT (event_id) DO NOTHING
+                    ON CONFLICT (workspace_id, event_id) DO NOTHING
                     """,
                     (event.event_id, self._jsonb(_model_payload(event))),
                 )
@@ -744,7 +900,7 @@ class PostgresCustomerContextStore(PostgresConnectionMixin, CustomerContextStore
                     """
                     INSERT INTO clara_customer_context (customer_id, account_id, payload)
                     VALUES (%s, %s, %s)
-                    ON CONFLICT (customer_id) DO UPDATE
+                    ON CONFLICT (workspace_id, customer_id) DO UPDATE
                     SET account_id = excluded.account_id,
                         payload = excluded.payload,
                         updated_at = now()
@@ -837,8 +993,13 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
     def _load_records(self, *, force: bool = False) -> None:
         # getattr: tests construct via __new__ without __init__, so the
         # timestamp may not exist yet — treat that as "never loaded".
+        # The cache is keyed by tenant as well as by age: RLS scopes the SELECT
+        # below to the tenant GUC, so a cached snapshot loaded under tenant A
+        # must never be served to a request (or background tick) for tenant B.
+        tenant = current_tenant()
         if (
             not force
+            and getattr(self, "_records_tenant", None) == tenant
             and time.monotonic() - getattr(self, "_records_loaded_at", 0.0)
             < _WORKFLOW_REFRESH_TTL_SECONDS
         ):
@@ -899,6 +1060,7 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         self._guardrails = guardrails
         self._guardrail_ids = count(_next_id(guardrails, "guardrail_id", "GRD") + 1)
         self._records_loaded_at = time.monotonic()
+        self._records_tenant = tenant
 
     def _save_workflow_record(
         self,
@@ -1078,12 +1240,47 @@ def _next_id(records: list[Any], field_name: str, prefix: str) -> int:
 
 
 class PostgresTaxonomyStore(PostgresConnectionMixin, TaxonomyStore):
+    """Per-workspace taxonomy catalogs.
+
+    The base store keeps one in-memory catalog list. Here that list is swapped
+    to the active tenant's catalogs (lazy-loaded under RLS) around every
+    operation, under a lock, so workspace 2 never reads or edits workspace 1's
+    taxonomy — the pitch's "trained on YOUR taxonomy" needs the taxonomy to be
+    yours. Bootstrap proposals and review decisions are persisted too (they
+    used to live in memory only).
+    """
+
     def __init__(self, url: str) -> None:
         PostgresConnectionMixin.__init__(self, url)
-        if not self._load_catalogs():
-            for catalog in load_seed_taxonomies():
-                self._save_catalog(catalog)
-        TaxonomyStore.__init__(self, self._load_catalogs())
+        self._lock = threading.RLock()
+        self._by_tenant: dict[str, list[TaxonomyCatalog]] = {}
+        TaxonomyStore.__init__(self, self._catalogs_for_tenant())
+
+    def _catalogs_for_tenant(self) -> list[TaxonomyCatalog]:
+        tenant = current_tenant()
+        with self._lock:
+            catalogs = self._by_tenant.get(tenant)
+            if catalogs is None:
+                catalogs = self._load_catalogs()
+                if not catalogs:
+                    for catalog in load_seed_taxonomies():
+                        self._save_catalog(catalog)
+                    catalogs = self._load_catalogs()
+                self._by_tenant[tenant] = catalogs
+            return catalogs
+
+    def _run(self, operation, *args: Any, **kwargs: Any):
+        with self._lock:
+            self._catalogs = self._catalogs_for_tenant()
+            result = operation(self, *args, **kwargs)
+            self._by_tenant[current_tenant()] = self._catalogs
+            return result
+
+    def list_catalogs(self) -> list[TaxonomyCatalog]:
+        return list(self._catalogs_for_tenant())
+
+    def version_key(self) -> str:
+        return self._run(TaxonomyStore.version_key)
 
     def _load_catalogs(self) -> list[TaxonomyCatalog]:
         with self._connect() as conn:
@@ -1098,31 +1295,34 @@ class PostgresTaxonomyStore(PostgresConnectionMixin, TaxonomyStore):
                 """
                 INSERT INTO clara_taxonomy_catalogs (taxonomy_type, payload)
                 VALUES (%s, %s)
-                ON CONFLICT (taxonomy_type) DO UPDATE
+                ON CONFLICT (workspace_id, taxonomy_type) DO UPDATE
                 SET payload = excluded.payload, updated_at = now()
                 """,
                 (catalog.taxonomy_type.value, self._jsonb(_model_payload(catalog))),
             )
 
-    def rename_category(self, *args: Any, **kwargs: Any) -> TaxonomyCatalog:
-        catalog = TaxonomyStore.rename_category(self, *args, **kwargs)
+    def _mutate(self, operation, *args: Any, **kwargs: Any) -> TaxonomyCatalog:
+        catalog = self._run(operation, *args, **kwargs)
         self._save_catalog(catalog)
         return catalog
+
+    def rename_category(self, *args: Any, **kwargs: Any) -> TaxonomyCatalog:
+        return self._mutate(TaxonomyStore.rename_category, *args, **kwargs)
 
     def lock_category(self, *args: Any, **kwargs: Any) -> TaxonomyCatalog:
-        catalog = TaxonomyStore.lock_category(self, *args, **kwargs)
-        self._save_catalog(catalog)
-        return catalog
+        return self._mutate(TaxonomyStore.lock_category, *args, **kwargs)
 
     def merge_categories(self, *args: Any, **kwargs: Any) -> TaxonomyCatalog:
-        catalog = TaxonomyStore.merge_categories(self, *args, **kwargs)
-        self._save_catalog(catalog)
-        return catalog
+        return self._mutate(TaxonomyStore.merge_categories, *args, **kwargs)
 
     def split_category(self, *args: Any, **kwargs: Any) -> TaxonomyCatalog:
-        catalog = TaxonomyStore.split_category(self, *args, **kwargs)
-        self._save_catalog(catalog)
-        return catalog
+        return self._mutate(TaxonomyStore.split_category, *args, **kwargs)
+
+    def propose_category(self, *args: Any, **kwargs: Any) -> TaxonomyCatalog:
+        return self._mutate(TaxonomyStore.propose_category, *args, **kwargs)
+
+    def review_category(self, *args: Any, **kwargs: Any) -> TaxonomyCatalog:
+        return self._mutate(TaxonomyStore.review_category, *args, **kwargs)
 
 
 class PostgresTerminologyStore(PostgresConnectionMixin, TerminologyStore):
@@ -1149,7 +1349,7 @@ class PostgresTerminologyStore(PostgresConnectionMixin, TerminologyStore):
                 """
                 INSERT INTO clara_terminology_dictionary (term_id, payload)
                 VALUES (%s, %s)
-                ON CONFLICT (term_id) DO UPDATE
+                ON CONFLICT (workspace_id, term_id) DO UPDATE
                 SET payload = excluded.payload, updated_at = now()
                 """,
                 (entry.term_id, self._jsonb(_model_payload(entry))),
@@ -1157,6 +1357,22 @@ class PostgresTerminologyStore(PostgresConnectionMixin, TerminologyStore):
 
 
 class PostgresWorkspaceStore(PostgresConnectionMixin):
+    def list_workspace_ids(self) -> list[int]:
+        """Every workspace the background tick must serve.
+
+        public.workspaces is the Supabase-side registry (004); without it the
+        loop stays on the default workspace, which is also the pre-multi-tenant
+        behaviour, so this never fails a boot.
+        """
+        try:
+            with self._connect() as conn:
+                rows = conn.execute("SELECT id FROM public.workspaces ORDER BY id").fetchall()
+            ids = [int(row["id"]) for row in rows]
+        except Exception:  # noqa: BLE001 — registry optional
+            logger.warning("public.workspaces unavailable; background tick serves workspace 1 only")
+            return [1]
+        return ids or [1]
+
     def get(self, workspace_id: int) -> WorkspaceSettings:
         with self._connect() as conn:
             row = conn.execute(
@@ -1242,8 +1458,9 @@ class PostgresTelemetryStore(PostgresConnectionMixin):
                     " VALUES (%s, %s, %s)",
                     (event_type, entity_id, self._jsonb(metadata or {})),
                 )
-        except Exception:  # ponytail: swallow — metrics never break the product
-            pass
+        except Exception:  # noqa: BLE001 — metrics never break the product...
+            # ...but loop verdicts and audit events must not vanish without a trace.
+            logger.warning("telemetry write failed for %s", event_type, exc_info=True)
 
     def list_events(self, *, limit: int = 500) -> list[dict[str, Any]]:
         with self._connect() as conn:
@@ -1300,7 +1517,9 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
         executed_at: str,
         due_at: str,
         kind: str,
-    ) -> None:
+    ) -> bool:
+        """Insert one checkpoint; False when an equivalent pending plan exists
+        (same contract as the SQLite store, so callers report dedup honestly)."""
         with self._connect() as conn:
             existing = conn.execute(
                 "SELECT id FROM clara_measurement_plans"
@@ -1308,13 +1527,14 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
                 (problem_id, kind),
             ).fetchone()
             if existing:
-                return
+                return False
             conn.execute(
                 "INSERT INTO clara_measurement_plans"
                 " (problem_id, execution_id, executed_at, due_at, kind)"
                 " VALUES (%s, %s, %s, %s, %s)",
                 (problem_id, execution_id, executed_at, due_at, kind),
             )
+        return True
 
     def _row_to_plan(self, row: Any) -> dict[str, Any]:
         return {
@@ -1372,6 +1592,42 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
         return result if isinstance(result, dict) else json.loads(result)
 
 
+class PostgresLearningStore(PostgresConnectionMixin):
+    """Postgres learning memory (parity with SQLiteLearningStore).
+
+    Before this store existed, default_learning_store returned SQLite even on a
+    Postgres deployment, so production conclusions were written to an ephemeral
+    file inside the container and synthesis never saw a single learning.
+    """
+
+    def load(self, workspace_id: int = 1) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT payload FROM clara_learnings WHERE workspace_id = %s ORDER BY updated_at",
+                (workspace_id,),
+            ).fetchall()
+        return [_payload(row["payload"]) for row in rows]
+
+    def persist(self, learning: dict[str, Any], *, workspace_id: int = 1) -> dict[str, Any]:
+        cid = learning.get("conclusion_id") or uuid4().hex
+        stored = {**learning, "conclusion_id": cid}
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO clara_learnings (workspace_id, conclusion_id, topic, payload)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (workspace_id, conclusion_id) DO UPDATE
+                SET topic = excluded.topic, payload = excluded.payload, updated_at = now()
+                """,
+                (workspace_id, cid, stored.get("topic", ""), self._jsonb(stored)),
+            )
+        return stored
+
+    def clear(self, workspace_id: int = 1) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM clara_learnings WHERE workspace_id = %s", (workspace_id,))
+
+
 class PostgresConnectorConfigStore(PostgresConnectionMixin):
     """Postgres-backed connector configs — survive redeploys, unlike SQLite on
     a PaaS ephemeral disk (losing them silently killed continuous sync)."""
@@ -1408,7 +1664,7 @@ class PostgresConnectorConfigStore(PostgresConnectionMixin):
             conn.execute(
                 "INSERT INTO clara_connector_configs (connector_type, payload)"
                 " VALUES (%s, %s)"
-                " ON CONFLICT (connector_type) DO UPDATE"
+                " ON CONFLICT (workspace_id, connector_type) DO UPDATE"
                 " SET payload = excluded.payload, updated_at = now()",
                 (config.connector_type, self._jsonb(payload)),
             )
@@ -1476,9 +1732,15 @@ class PostgresApiKeyStore(PostgresConnectionMixin):
 
         if not plaintext.startswith(KEY_PREFIX):
             return None
-        with self._connect() as conn:
+        with self._connect() as conn:  # one pooled checkout == one transaction
+            # An X-Api-Key request carries no tenant yet — the key row itself
+            # names the workspace. The isolation policy (migration 015) admits
+            # a SELECT by exact hash only while this transaction-local flag is
+            # on; writes keep the strict WITH CHECK, and the flag dies with the
+            # transaction. Without it every key outside workspace 1 was a 401.
+            conn.execute("SELECT set_config('app.api_key_lookup', 'on', true)")
             row = conn.execute(
-                "SELECT id, name, role FROM clara_api_keys"
+                "SELECT id, name, role, workspace_id FROM clara_api_keys"
                 " WHERE key_hash = %s AND revoked_at IS NULL",
                 (_hash(plaintext),),
             ).fetchone()

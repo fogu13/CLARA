@@ -84,11 +84,26 @@ def enrich_node(state: TriageState) -> dict[str, Any]:
     # calibration (Phase B). On by default; disable with ENRICH_FEWSHOT=0.
     from app.services.exemplar_store import fewshot_enabled, load_exemplars
 
+    # Signals already enriched on an earlier run keep their stored enrichment
+    # unless the caller forces a re-run: re-enriching the whole store on every
+    # run cost a full LLM pass and let tags drift between runs.
+    force = bool(state.get("force_enrich"))
+    persisted = [
+        item for item in items if not force and item.get("enriched") and item.get("tags")
+    ]
+    persisted_ids = {item["id"] for item in persisted}
+    todo = [item for item in items if item["id"] not in persisted_ids]
+
     exemplars = load_exemplars() if fewshot_enabled() else None
-    enrichments = enrich_signals(
-        items,
-        exemplars=exemplars,
-        journey_stage_inventory=state.get("journey_stage_inventory"),
+    enrichments = (
+        enrich_signals(
+            todo,
+            exemplars=exemplars,
+            journey_stage_inventory=state.get("journey_stage_inventory"),
+            vocabulary=state.get("workspace_vocabulary"),
+        )
+        if todo
+        else []
     )
 
     # Merge enrichments back into signals. Guard e.get("id") — a record missing its
@@ -97,6 +112,19 @@ def enrich_node(state: TriageState) -> dict[str, Any]:
     enriched = []
     success = 0
     for item in items:
+        if item["id"] in persisted_ids:
+            enriched.append({
+                **item,
+                "enriched": True,
+                "audit": {
+                    "source": "persisted_enrichment",
+                    "model": (item.get("audit") or {}).get("model", "stored"),
+                    "confidence": "derived",
+                    "limitations": ["Stored enrichment from an earlier run; not re-scored"],
+                },
+            })
+            success += 1
+            continue
         enr = enrichment_map.get(item["id"])
         if enr:
             enriched.append(merge_enrichment_into_signal(item, enr))

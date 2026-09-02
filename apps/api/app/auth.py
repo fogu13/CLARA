@@ -157,6 +157,16 @@ def verify_token(token: str) -> dict:
     verified against the project JWKS; HS256 is verified with the shared secret. Raises
     HTTPException(401) if the token is invalid/expired, 500 if auth is misconfigured.
     """
+    # Supabase mints access tokens with aud="authenticated" and iss=<url>/auth/v1.
+    # In a real deployment (REQUIRE_AUTH) both are verified, so a token minted
+    # for another audience with a shared HS256 secret is refused; local/dev
+    # tokens (tests) carry neither claim and stay accepted.
+    decode_options = {"verify_aud": REQUIRE_AUTH}
+    decode_kwargs: dict = {}
+    if REQUIRE_AUTH:
+        decode_kwargs["audience"] = "authenticated"
+        if SUPABASE_URL:
+            decode_kwargs["issuer"] = f"{SUPABASE_URL}/auth/v1"
     try:
         alg = jwt.get_unverified_header(token).get("alg", "")
         if alg.startswith(("ES", "RS")):
@@ -165,7 +175,8 @@ def verify_token(token: str) -> dict:
                 token,
                 signing_key,
                 algorithms=["ES256", "RS256"],
-                options={"verify_aud": False},
+                options=decode_options,
+                **decode_kwargs,
             )
         if not SUPABASE_JWT_SECRET:
             raise HTTPException(
@@ -176,7 +187,8 @@ def verify_token(token: str) -> dict:
             token,
             SUPABASE_JWT_SECRET,
             algorithms=["HS256"],
-            options={"verify_aud": False},
+            options=decode_options,
+            **decode_kwargs,
         )
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired") from None
@@ -209,9 +221,16 @@ def _resolve_user(
         record = _API_KEY_VERIFIER(x_api_key) if _API_KEY_VERIFIER else None
         if record is None:
             raise HTTPException(status_code=401, detail="Invalid or revoked API key")
+        # The key's own workspace (Postgres stores return it; SQLite is single
+        # workspace). Pinning every key to workspace 1 made keys minted by any
+        # other workspace act inside the default tenant.
+        try:
+            key_workspace = int(record.get("workspace_id") or 1)
+        except (TypeError, ValueError):
+            key_workspace = 1
         return UserContext(
             user_id=f"api-key:{record['id']}",
-            workspace_id=1,
+            workspace_id=key_workspace,
             email=f"api-key:{record['name']}",
             role=record["role"],
         )
@@ -238,14 +257,42 @@ def _resolve_user(
     # Role/workspace live in app_metadata (admin-controlled, not user-editable), which
     # Supabase embeds in the JWT. Fall back to top-level custom claims, then defaults.
     app_metadata = claims.get("app_metadata") or {}
-    workspace_id = app_metadata.get("workspace_id", claims.get("workspace_id", 1))
+    raw_workspace = app_metadata.get("workspace_id", claims.get("workspace_id"))
     role = app_metadata.get("user_role", claims.get("user_role", "viewer"))
     email = claims.get("email", "")
+    is_bootstrap_owner = bool(email and email.lower() in OWNER_EMAILS)
+
+    # Fail closed on tenancy: a verified login with NO workspace assignment used
+    # to fall into workspace 1 as a viewer — any account the Supabase project
+    # accepts could read the default tenant. In a real deployment
+    # (REQUIRE_AUTH) that token is refused unless it is the bootstrap owner.
+    if raw_workspace is None:
+        if REQUIRE_AUTH and not is_bootstrap_owner:
+            raise HTTPException(
+                status_code=401,
+                detail="No workspace assigned to this account (app_metadata.workspace_id)",
+            )
+        raw_workspace = 1
+    try:
+        workspace_id = int(raw_workspace)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=401, detail="Invalid workspace claim") from exc
+
+    # SQLite has no tenant scoping at all: in a real deployment (REQUIRE_AUTH)
+    # without DATABASE_URL the backend is single-workspace by construction, so
+    # a token for any other workspace must not be served workspace 1's data.
+    # The hybrid dev mode (secret set, REQUIRE_AUTH off) keeps parsing claims
+    # as-is so multi-workspace tokens can be exercised without Postgres.
+    if REQUIRE_AUTH and not (os.getenv("DATABASE_URL") or "").strip() and workspace_id != 1:
+        raise HTTPException(
+            status_code=403,
+            detail="This deployment serves a single workspace (SQLite backend)",
+        )
 
     # Founder bootstrap: a configured owner email is always `owner`, so the
     # operator can never be locked out of admin features by a missing
     # app_metadata role. `owner` is the highest role, so this only ever elevates.
-    if email and email.lower() in OWNER_EMAILS:
+    if is_bootstrap_owner:
         role = "owner"
 
     return UserContext(user_id=user_id, workspace_id=workspace_id, email=email, role=role)

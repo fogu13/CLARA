@@ -103,6 +103,30 @@ class TestWebhookIntake:
         assert signals["WH-1"]["source"] == "webhook"
         assert signals["WH-2"]["language"] == "de"  # detection fires on webhook rows too
 
+    def test_unusable_rows_are_counted_not_swallowed(self, tmp_path: Path) -> None:
+        client = _client(tmp_path)
+        body = json.dumps(
+            {
+                "signals": [
+                    {
+                        "signal_id": "WH-OK",
+                        "feedback_text": "Refund took three weeks",
+                        "metadata": {"ticket": {"id": 42, "tags": ["refund"]}},
+                    },
+                    {"signal_id": "WH-EMPTY", "feedback_text": "   "},
+                    "not-an-object",
+                ]
+            }
+        ).encode()
+        response = client.post(
+            "/ingest/webhook", content=body, headers={"x-clara-signature": _sign(body)}
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["imported"] == 1
+        assert response.json()["dropped_rows"] == 2
+        stored = {s["signal_id"]: s for s in client.get("/signals").json()}
+        assert "WH-OK" in stored and "WH-EMPTY" not in stored  # seed signals may coexist
+
     def test_replay_is_deduplicated(self, tmp_path: Path) -> None:
         client = _client(tmp_path)
         body = json.dumps(

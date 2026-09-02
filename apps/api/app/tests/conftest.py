@@ -38,3 +38,7 @@ os.environ["DATABASE_URL"] = ""
 os.environ["SUPABASE_URL"] = ""
 os.environ["SUPABASE_JWT_SECRET"] = ""
 os.environ["SUPABASE_ANON_KEY"] = ""
+
+# Tests and demos time-travel the measurement clock (POST /measurements/run-due
+# {"now": ...}); production refuses a future clock without this flag.
+os.environ["CLARA_ALLOW_CLOCK_OVERRIDE"] = "1"

@@ -379,6 +379,8 @@ export default function InsightDetailPage() {
   }
 
   const score = problem.impact_score ?? 0;
+  const dueDate = problem.due_at ? new Date(problem.due_at) : null;
+  const overdue = Boolean(dueDate) && problem.status !== "resolved" && (dueDate as Date).getTime() < Date.now();
 
   return (
     <div className="space-y-6">
@@ -398,6 +400,15 @@ export default function InsightDetailPage() {
           </Badge>
           <Badge variant="outline">{t.detail.impact} {percent(score)}</Badge>
           <Badge variant="outline">{t.detail.evidence} {percent(problem.evidence_confidence)}</Badge>
+          <Badge variant="outline" title={problem.theme_tag ?? undefined}>
+            {problem.origin === "ai_theme" ? t.detail.originTheme : t.detail.originStage}
+          </Badge>
+          {dueDate ? (
+            <Badge variant={overdue ? "destructive" : "secondary"} title={dueDate.toISOString()}>
+              {overdue ? `${t.detail.overdue} · ` : `${t.detail.dueDate} `}
+              {dueDate.toLocaleDateString()}
+            </Badge>
+          ) : null}
           <button
             type="button"
             disabled={packBusy}

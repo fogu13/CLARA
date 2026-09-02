@@ -116,7 +116,11 @@ API domain. This value is the API URL, not the Supabase URL.
 ## Current API Surface
 
 ```text
-GET  /health
+GET  /health                       liveness (cheap)
+GET  /ready                        readiness: DB round-trip + AI residency (503 when degraded)
+POST /triage/run                   AI triage; themes persisted as problem candidates (origin=ai_theme)
+POST /triage/resume                approve/reject a paused triage run (thread bound to the workspace)
+GET  /learnings                    learning memory with decayed confidence (feeds the next triage)
 GET  /signals
 POST /signals/import
 POST /signals/import-csv
@@ -134,7 +138,7 @@ GET  /problem-candidates
 POST /problem-candidates/{candidate_id}/accept
 POST /problem-candidates/{candidate_id}/reject
 POST /problem-candidates/{candidate_id}/promote
-GET  /problems
+GET  /problems                     ?owner=<team>  ?overdue=true|false  ?status=
 GET  /problems/{problem_id}
 GET  /problems/{problem_id}/affected-context
 PATCH /problems/{problem_id}
@@ -164,7 +168,16 @@ Outcome direction is inferred from the contract: when `success_threshold` is gre
 
 After an outcome is measured, a reviewer can record a human learning conclusion: `worked`, `partially_worked`, `did_not_work`, `inconclusive` or `measurement_invalid`. Summary, limitations and next-step text are reviewer-authored; common email, phone, IP, address and customer/account ID patterns are redacted. Reviewer and tenant IDs come from trusted headers, are pseudonymized, and learning-conclusion records carry a 730-day retention-expiry timestamp.
 
-The outcome board aggregates every problem's latest outcome snapshot into a queue-level view with counts for each measurement state and latest learning status.
+The outcome board aggregates every problem's latest outcome snapshot into a queue-level view with counts for each measurement state and latest learning status, plus the loop roll-up: `loop_closed` (post-fix inflow met the target at the window or follow-up checkpoint), `fix_did_not_land` (the closing checkpoint showed no improvement) and `overdue` (past the resolution due date).
+
+### The closed loop, end to end
+
+1. **Collect** — CSV/JSON upload, the HMAC webhook, or a source connector (Zendesk, Trustpilot, App Store, Google Play, Google Business) writes normalized signals.
+2. **Triage** — `POST /triage/run` enriches signals (sentiment, urgency, tags — written back), clusters them into themes and synthesizes one insight per theme. Themes are persisted and appear in `GET /problem-candidates` with `origin=ai_theme` next to the deterministic journey/stage candidates; a reviewer accepts them into the Action Queue like any other candidate.
+3. **Route** — Settings → Teams declares `owner_routes` (stage/theme substring → owning team, optional per-team Jira project or Slack channel). Candidates and promoted problems take the team's owner; approved pushes land in that team's project/channel; `GET /problems?owner=` gives each team its own queue and the dashboard a team filter.
+4. **Close & learn** — promotion stamps `due_at` from the workspace `resolution_sla_days` (overdue is derived at read time). Approval schedules T+7, T+window **and a follow-up a month after the window** ("keep listening"); the scheduler re-measures real signal inflow (theme contracts match by tag), and `GET /problems/{id}/outcome` carries a `loop_verdict`: `loop_closed` or `fix_did_not_land`. A reviewer's learning conclusion is written to the learning memory (`GET /learnings`, Postgres `clara_learnings`), which `rank_learnings` hands to the next synthesis run — so the model learns which resolutions changed customer behaviour.
+
+AI residency: `GET /system-config` classifies the configured chat/embedding providers (`eu`, `self_hosted`, `non_eu`, `unknown`); `CLARA_AI_REQUIRE_EU=1` refuses non-EU providers at boot and in Settings.
 
 Imported signals are also persisted in SQLite. The first run seeds the local signal table from `data/sample_signals.json` and the local context table from `data/sample_customer_context.json` when those tables are empty. JSON, pasted CSV, uploaded CSV files and reusable demo datasets share the same signal import path. Uploaded signal CSVs can be mapped to the canonical signal fields in the UI before import. CSV validation reports row counts, importable rows, missing required values, duplicate IDs and warnings for already-imported records. Problem candidates are deterministic groups by journey and journey stage with evidence excerpts and a first-pass root-cause hypothesis. Candidate review flags duplicate journey/stage matches, lets a user accept non-duplicates into the Action Queue, and persists rejected candidates.
 

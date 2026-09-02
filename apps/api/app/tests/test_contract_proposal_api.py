@@ -117,7 +117,7 @@ class TestApprovalAppliesProposal:
             for plan in plan_store.list_plans()
             if plan["problem_id"] == problem["problem_id"]
         }
-        assert set(plans) == {"t7", "window"}
+        assert set(plans) == {"t7", "window", "followup"}  # followup = keep listening
         executed = _parse_ts(plans["window"]["executed_at"])
         assert (_parse_ts(plans["t7"]["due_at"]) - executed).days == 7
         assert (_parse_ts(plans["window"]["due_at"]) - executed).days == 30

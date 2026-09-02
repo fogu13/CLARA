@@ -116,6 +116,19 @@ def main() -> int:
         f"got {status}" + (" — AUTH APPEARS DISABLED" if status == 200 else ""),
     )
 
+    status, _, _ = fetch(f"{api}/health")
+    check("liveness probe (/health -> 200)", status == 200, f"got {status}")
+    status, _, body_bytes = fetch(f"{api}/ready")
+    try:
+        ready = json.loads(body_bytes)
+    except json.JSONDecodeError:
+        ready = {}
+    check(
+        "readiness probe (/ready -> 200, status ok: DB round-trip + AI residency)",
+        status == 200 and ready.get("status") == "ok",
+        f"got {status} {ready}",
+    )
+
     status, _, _ = fetch(f"{api}/model-card/metrics")
     check(
         "model-card metrics endpoint present (401, not 404)",

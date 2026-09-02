@@ -83,6 +83,8 @@ def test_approval_creates_execution_record() -> None:
     assert workflow["executions"]
     assert workflow["executions"][-1]["action_id"] == "ACT-501"
     assert workflow["executions"][-1]["status"] == "draft_created"
+    # The decision names the execution it created (no re-derivation by scan).
+    assert approval["execution_id"] == workflow["executions"][-1]["execution_id"]
     assert workflow["jira_issue_drafts"]
     assert workflow["jira_issue_drafts"][-1]["action_id"] == "ACT-501"
     assert workflow["jira_issue_drafts"][-1]["project_key"] == "ODR"

@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.domain.models import CustomerContextRecord
 from app.main import create_app
+from app.services import context_impact as context_impact_module
 from app.services.context_impact import enrich_problem_with_context
 from app.services.contexts import CustomerContextStore
 from app.services.problems import ProblemStore
@@ -88,7 +89,21 @@ def test_context_impact_uses_renewal_and_lifecycle_in_priority() -> None:
     assert enriched.impact_score > problem.impact_score
 
 
-def test_problem_api_returns_context_adjusted_priority() -> None:
+class _FrozenDate(date):
+    """Pin ``date.today()`` so renewal-risk assertions stop depending on the wall clock.
+
+    The seed context carries fixed renewal dates (2026-11-30); once the real
+    calendar drifts inside the 90-day urgency window, ``renewal risk`` appears as
+    a driver and this test starts failing for reasons unrelated to any change.
+    """
+
+    @classmethod
+    def today(cls) -> "date":
+        return cls(2026, 7, 1)
+
+
+def test_problem_api_returns_context_adjusted_priority(monkeypatch) -> None:
+    monkeypatch.setattr(context_impact_module, "date", _FrozenDate)
     client = make_client()
 
     detail_response = client.get("/problems/PRB-108")

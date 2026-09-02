@@ -705,6 +705,32 @@ select {
   color: var(--danger);
 }
 
+.candidate-origin {
+  margin-left: 0.4rem;
+}
+
+.candidate-origin-ai_theme {
+  background: hsl(var(--primary) / 0.12);
+  color: hsl(var(--primary));
+}
+
+.outcome-verdict {
+  margin-left: 0.4rem;
+}
+
+.outcome-verdict-loop_closed,
+.outcome-verdict-on_track {
+  background: hsl(142 70% 45% / 0.15);
+  color: hsl(142 60% 30%);
+}
+
+.outcome-verdict-fix_did_not_land {
+  background: hsl(var(--destructive) / 0.12);
+  color: hsl(var(--destructive));
+}
+
+
+
 .candidate-score {
   text-align: right;
 }

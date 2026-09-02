@@ -38,7 +38,9 @@ EDITOR_SUB = "deadbeef-dead-beef-dead-beefdeadbeef"  # -> actor "user-deadbeef"
 # (reviewer identity is never self-asserted), so the seeded approval identity
 # is the editor's pseudonym, same as CLOSURE_ACTOR.
 APPROVAL_REVIEWER = "user-deadbeef"
-CANDIDATE_REVIEWER = "wc-candidate-reviewer@example.com"
+# Candidate accept/reject follow the same rule: the JWT actor is recorded, the
+# body's reviewer is ignored — so the seeded identity is again the pseudonym.
+CANDIDATE_REVIEWER = "user-deadbeef"
 TAXONOMY_ACTOR = "wc-taxonomist-anna"
 CLOSURE_ACTOR = "user-deadbeef"  # _actor_identifier(EDITOR_SUB)
 
@@ -136,10 +138,11 @@ def _seed_person_data(client: TestClient) -> None:
     rejectable = next(c for c in candidates if c["review_status"] != "accepted")
     rejected = client.post(
         f"/problem-candidates/{rejectable['candidate_id']}/reject",
-        json={"reviewer": CANDIDATE_REVIEWER, "note": "Rejected for walker seed."},
+        json={"reviewer": "wc-candidate-reviewer@example.com", "note": "Rejected for walker seed."},
         headers=editor,
     )
     assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["reviewer"] == CANDIDATE_REVIEWER  # never self-asserted
 
     # Taxonomy change -> categories[].change_history[].actor.
     catalog = client.get("/taxonomies", headers=editor).json()[0]

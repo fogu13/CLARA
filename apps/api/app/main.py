@@ -70,7 +70,7 @@ class RateLimitMiddleware:
     safety net; move to the edge (Caddy) for exactness across workers.
     """
 
-    EXEMPT_PATHS = {"/health"}
+    EXEMPT_PATHS = {"/health", "/ready"}
     _MAX_KEYS = 100_000  # hard cap on tracked clients per window (fail-open above)
 
     def __init__(self, app, *, limit_per_minute: int | None = None):
@@ -175,6 +175,7 @@ from app.services.policies import PolicyRuleStore
 from app.services.postgres import (
     PostgresCustomerContextStore,
     PostgresJourneyEventStore,
+    PostgresLearningStore,
     PostgresProblemStore,
     PostgresRuleStore,
     PostgresSignalStore,
@@ -188,6 +189,7 @@ from app.services.postgres import (
     PostgresApiKeyStore,
     database_url,
 )
+from app.services.routing import resolve_owner_route
 from app.services.problems import ProblemStore, SQLiteProblemStore
 from app.services.rules import SQLiteRuleStore
 from app.services.seed import (
@@ -205,6 +207,14 @@ from app.services.telemetry import SQLiteTelemetryStore
 from app.services.workflow import SQLiteWorkflowStore
 from app.services.workspace import SQLiteWorkspaceStore
 
+# Uvicorn configures only its own loggers: without a root handler every app.*
+# WARNING (residency refusals, telemetry write failures, tick summaries) is
+# dropped. No-op when a handler already exists (pytest, a custom --log-config).
+_log_level = (os.getenv("LOG_LEVEL") or "INFO").strip().upper()
+logging.basicConfig(
+    level=_log_level if _log_level in logging.getLevelNamesMapping() else "INFO",
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 
@@ -219,11 +229,66 @@ def default_db_path() -> Path:
 def demo_seed_enabled() -> bool:
     """CLARA_SEED_DEMO_DATA=0 starts pilots with an EMPTY workspace.
 
-    Default on: demos and tests rely on seed signals/problems/context. Pilots
-    must disable it — seed problems otherwise mark real candidates as
-    duplicates and seed signals mix into real-data triage.
+    Default: on without DATABASE_URL (demos and tests rely on seed
+    signals/problems/context), OFF once a real backend is configured — a first
+    boot on an empty production database must not plant fake signals, and seed
+    problems would mark real candidates as duplicates. An explicit value wins.
     """
-    return (os.getenv("CLARA_SEED_DEMO_DATA") or "1").strip().lower() not in {"0", "false", "no"}
+    raw = (os.getenv("CLARA_SEED_DEMO_DATA") or "").strip().lower()
+    if raw:
+        return raw not in {"0", "false", "no"}
+    return not (os.getenv("DATABASE_URL") or "").strip()
+
+
+def _build_triage_checkpointer(pg_url: str | None):
+    """LangGraph checkpointer for the triage graph.
+
+    CLARA_TRIAGE_CHECKPOINTER=memory forces the in-process saver (tests, or a
+    deployment that prefers not to create LangGraph's checkpoint tables).
+    """
+    from langgraph.checkpoint.memory import MemorySaver
+
+    preference = (os.getenv("CLARA_TRIAGE_CHECKPOINTER") or "auto").strip().lower()
+    if not pg_url or preference == "memory":
+        return MemorySaver()
+    try:
+        import psycopg
+        from langgraph.checkpoint.postgres import PostgresSaver
+        from psycopg.rows import dict_row
+
+        from app.services.postgres import normalize_database_url
+
+        connection = psycopg.connect(
+            normalize_database_url(pg_url),
+            autocommit=True,
+            prepare_threshold=0,
+            row_factory=dict_row,
+            connect_timeout=10,
+        )
+        saver = PostgresSaver(connection)
+        saver.setup()
+        # The checkpoint tables hold raw graph state (feedback text, customer
+        # ids). LangGraph creates them without RLS or grants management: keep
+        # them owner-only so the Supabase anon/authenticated roles can never
+        # read them through PostgREST. Best-effort — roles may not exist off
+        # Supabase.
+        for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes", "checkpoint_migrations"):
+            try:
+                connection.execute(f"REVOKE ALL ON TABLE public.{table} FROM PUBLIC")
+                connection.execute(
+                    f"REVOKE ALL ON TABLE public.{table} FROM anon, authenticated"
+                )
+            except Exception:  # noqa: BLE001 — roles absent outside Supabase
+                logger.debug("Checkpoint table grant hardening skipped for %s", table, exc_info=True)
+        logger.info("Triage checkpointer: PostgresSaver (paused runs survive restarts)")
+        return saver
+    except Exception:  # noqa: BLE001 — never let checkpoint plumbing block boot
+        logger.warning(
+            "PostgresSaver unavailable; falling back to the in-process MemorySaver "
+            "(paused triage runs will not survive a restart)",
+            exc_info=True,
+        )
+        return MemorySaver()
 
 
 def default_workflow_store() -> SQLiteWorkflowStore:
@@ -281,14 +346,31 @@ def default_rule_store():
 
 
 def default_learning_store():
-    """Local-first learning store (SQLite). Feeds rank_learnings into synthesis.
+    """Learning memory that synthesis reads (rank_learnings) and the Action Queue
+    writes (learning conclusions, resume-path learnings).
 
-    The Postgres learning_conclusions table (migration 005) is the production
-    counterpart; the SQLite store is the local/offline path the thesis runs on.
+    Postgres when DATABASE_URL is set (clara_learnings, RLS-scoped), SQLite
+    otherwise. Before the Postgres store existed a production deployment wrote
+    its learnings to an ephemeral SQLite file inside the container, so the
+    "model learns which resolutions work" loop was open in exactly the
+    environment that mattered.
     """
+    url = database_url()
+    if url:
+        return PostgresLearningStore(url)
     from app.services.learning_store import SQLiteLearningStore
 
     return SQLiteLearningStore(default_db_path())
+
+
+def _current_workspace_id() -> int:
+    """Workspace id of the request/loop context (auth ContextVar), default 1."""
+    from app.auth import current_tenant
+
+    try:
+        return int(current_tenant())
+    except (TypeError, ValueError):
+        return 1
 
 
 def review_match_key(value: str) -> str:
@@ -299,6 +381,12 @@ def matching_problem_for_candidate(
     candidate: ProblemCandidate,
     problems: list[ProblemRecord],
 ) -> ProblemRecord | None:
+    # AI themes are keyed by tag: the majority journey can shift between runs
+    # as signals arrive, but the promoted theme problem stays the same one.
+    if candidate.origin == "ai_theme" and candidate.theme_tag:
+        for problem in problems:
+            if getattr(problem, "theme_tag", None) == candidate.theme_tag:
+                return problem
     candidate_key = (
         review_match_key(candidate.journey),
         review_match_key(candidate.journey_stage),
@@ -324,10 +412,18 @@ def enrich_candidate(
     signal_store,
     taxonomy_store: TaxonomyStore,
     terminology_store: TerminologyStore,
+    owner_routes=(),
+    signals: list[SignalRecord] | None = None,
 ) -> ProblemCandidate:
     decision = signal_store.get_candidate_decision(candidate.candidate_id)
     duplicate_problem = matching_problem_for_candidate(candidate, problems)
     updates: dict[str, object] = {}
+
+    # Team routing (Settings → Teams): a workspace rule for this stage/theme
+    # overrides the built-in owner defaults and the model's team suggestion.
+    route = resolve_owner_route(owner_routes, candidate.journey_stage, candidate.theme_tag)
+    if route is not None and route.owner != candidate.suggested_owner:
+        updates["suggested_owner"] = route.owner
 
     if duplicate_problem is not None:
         updates.update(
@@ -359,7 +455,9 @@ def enrich_candidate(
     enriched_candidate = candidate.model_copy(update=updates)
     return classify_candidate(
         enriched_candidate,
-        signals=signal_store.list_signals(),
+        # Callers listing many candidates pass the table once; a single lookup
+        # may still let this helper load it (one read either way, never K).
+        signals=signal_store.list_signals() if signals is None else signals,
         taxonomy_store=taxonomy_store,
         terminology_store=terminology_store,
     )
@@ -454,7 +552,7 @@ def create_app(
         # between Render, local dev, and cron on the shared database).
         if _pg_url and hasattr(measurement_plan_store, "run_due"):
             try:
-                return measurement_plan_store.run_due(now)
+                result = measurement_plan_store.run_due(now)
             except Exception as exc:
                 from psycopg import errors as psycopg_errors
 
@@ -465,6 +563,22 @@ def create_app(
                     "clara_run_due_measurements missing (run migration 011); "
                     "falling back to the in-process measurement pass"
                 )
+            else:
+                # The DB function measures outcomes but has no guardrail branch:
+                # run the Python guardrail pass for exactly the plans it processed
+                # (returned since migration 013) so declared guardrails are never
+                # decorative on Postgres.
+                processed = result.pop("processed", None) or []
+                from app.services.measurement_scheduler import measure_guardrails_for_processed
+
+                result["guardrails"] = measure_guardrails_for_processed(
+                    processed,
+                    problem_lookup=active_problem_store.get_problem,
+                    signal_store=signal_store,
+                    workflow_store=workflow_store,
+                    now=now,
+                )
+                return {key: value for key, value in result.items() if isinstance(value, int)}
         return run_due_measurements(
             plan_store=measurement_plan_store,
             problem_lookup=active_problem_store.get_problem,
@@ -480,18 +594,47 @@ def create_app(
     # loop first fires the name is resolved.
     _tick_counter = {"n": 0}
 
-    def _background_tick(now: str | None = None) -> dict[str, int]:
-        result = _run_due_measurements(now)
-        _tick_counter["n"] += 1
-        if _tick_counter["n"] % 4 == 1:  # first tick + hourly thereafter
-            sync = _run_source_sync()
-            result = {**result, **{f"sync_{k}": v for k, v in sync.items()}}
+    def _workspace_ids() -> list[int]:
+        """Workspaces the background loop serves. Every store is RLS-scoped by
+        the tenant ContextVar, so a loop that never set it measured, synced and
+        alerted for workspace 1 only."""
+        lister = getattr(workspace_store, "list_workspace_ids", None)
+        if _pg_url and callable(lister):
             try:
-                alerts = _run_alert_sweep()
-                result = {**result, **{f"alert_{k}": v for k, v in alerts.items()}}
-            except Exception:  # noqa: BLE001 — alerting must never break the loop
-                logger.exception("Alert sweep failed")
-        return result
+                return [int(item) for item in lister()] or [1]
+            except Exception:  # noqa: BLE001 — never stall the loop on the registry
+                logger.warning("Workspace registry unavailable; ticking workspace 1 only")
+        return [1]
+
+    def _background_tick(now: str | None = None) -> dict[str, int]:
+        from app.auth import set_current_tenant
+
+        _tick_counter["n"] += 1
+        hourly = _tick_counter["n"] % 4 == 1  # first tick + hourly thereafter
+        totals: dict[str, int] = {}
+
+        def _add(prefix: str, counts: dict[str, int]) -> None:
+            for key, value in counts.items():
+                if isinstance(value, int):
+                    totals[f"{prefix}{key}"] = totals.get(f"{prefix}{key}", 0) + value
+
+        for workspace_id in _workspace_ids():
+            token = set_current_tenant(str(workspace_id))
+            try:
+                _add("", _run_due_measurements(now))
+                if hourly:
+                    _add("sync_", _run_source_sync())
+                    try:
+                        _add("alert_", _run_alert_sweep())
+                    except Exception:  # noqa: BLE001 — alerting must never break the loop
+                        logger.exception("Alert sweep failed for workspace %s", workspace_id)
+            except Exception:  # noqa: BLE001 — one workspace must not stop the others
+                logger.exception("Background tick failed for workspace %s", workspace_id)
+            finally:
+                from app.auth import _current_tenant
+
+                _current_tenant.reset(token)
+        return totals
 
     attach_measurement_loop(api, _background_tick)
     url = database_url()
@@ -519,12 +662,22 @@ def create_app(
     # re-apply on boot so a restart keeps the configured endpoint.
     _ai_stored = connector_config_store.get_config("ai")
     if _ai_stored and _ai_stored.is_active:
-        ai.set_runtime_config(
-            base_url=_ai_stored.config.get("base_url"),
-            model=_ai_stored.config.get("model"),
-            api_key=_ai_stored.config.get("api_key"),
-            embed_model=_ai_stored.config.get("embed_model"),
-        )
+        # The stored override beats the env, so it must pass the same residency
+        # gate as the env config — otherwise a Settings entry saved before
+        # EU-only mode was switched on would route feedback abroad on every boot.
+        try:
+            ai.assert_residency_allowed(
+                _ai_stored.config.get("base_url"), purpose="stored AI endpoint (Settings)"
+            )
+        except ai.ResidencyViolation as exc:
+            logger.critical("Ignoring stored AI endpoint: %s", exc)
+        else:
+            ai.set_runtime_config(
+                base_url=_ai_stored.config.get("base_url"),
+                model=_ai_stored.config.get("model"),
+                api_key=_ai_stored.config.get("api_key"),
+                embed_model=_ai_stored.config.get("embed_model"),
+            )
     if demo_seed_enabled():
         if not signal_store.list_signals():
             signal_store.import_signals(load_seed_signals())
@@ -552,6 +705,12 @@ def create_app(
 
     def current_candidates() -> list[ProblemCandidate]:
         problems = active_problem_store.list_problems()
+        try:
+            owner_routes = workspace_store.get(_current_workspace_id()).owner_routes
+        except Exception:  # noqa: BLE001 — routing is an overlay; candidates must still list
+            logger.warning("Owner routes unavailable; using default owners", exc_info=True)
+            owner_routes = []
+        signals = signal_store.list_signals()
         return [
             enrich_candidate(
                 candidate,
@@ -559,9 +718,25 @@ def create_app(
                 signal_store=signal_store,
                 taxonomy_store=taxonomy_store,
                 terminology_store=terminology_store,
+                owner_routes=owner_routes,
+                signals=signals,
             )
             for candidate in signal_store.candidates()
         ]
+
+    def _readiness() -> dict[str, object]:
+        """Persistence probe for GET /ready: one trivial query against the
+        configured backend. Raises on failure; the route turns that into 503."""
+        if _pg_url:
+            from app.services.postgres import PostgresConnectionMixin
+
+            probe = PostgresConnectionMixin.__new__(PostgresConnectionMixin)
+            probe.url = _pg_url
+            with probe._connect() as conn:
+                conn.execute("SELECT 1").fetchone()
+            return {"ok": True, "backend": "postgres"}
+        signal_store.list_signals()  # SQLite/in-memory: the store answers
+        return {"ok": True, "backend": "sqlite" if isinstance(signal_store, SQLiteSignalStore) else "memory"}
 
     def require_candidate(candidate_id: str) -> ProblemCandidate:
         candidate = next(
@@ -604,6 +779,9 @@ def create_app(
         except ConnectorError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+        from app.services.authenticity import assess_batch
+        from app.services.signals import annotate_near_duplicates, clean_feedback_text
+
         last_synced_at = None
         notes: list[str] = []
         records = []
@@ -620,7 +798,14 @@ def create_app(
                 key: value if isinstance(value, str) else json.dumps(value)
                 for key, value in (item.get("metadata") or {}).items()
             }
+            if item.get("feedback_text"):
+                item["feedback_text"] = clean_feedback_text(str(item["feedback_text"]))
             records.append(SignalRecord.model_validate({**item, "metadata": metadata}))
+        # Same annotation pass as CSV/webhook imports: a review that exists on two
+        # channels, or a suspicious batch, must be flagged whatever the entry point.
+        existing = signal_store.list_signals()
+        near_dups = annotate_near_duplicates(records, existing)
+        review = assess_batch(records, existing, channel=connector_type)
         result = signal_store.import_signals(records)
 
         if not config and stored is not None and last_synced_at:
@@ -637,6 +822,8 @@ def create_app(
                 "source": connector_type,
                 "imported": result.imported,
                 "skipped": result.skipped_duplicates,
+                "near_duplicates": near_dups,
+                **{f"authenticity_{k}": v for k, v in review.summary().items()},
             },
         )
         return {
@@ -660,24 +847,33 @@ def create_app(
             get_destination("slack").push({"title": title, "description": description}, config)
 
         # Digest email goes to the workspace's notification address when SMTP
-        # is configured (CLARA_SMTP_*); the default workspace drives the loop.
+        # is configured (CLARA_SMTP_*); the tick sets the tenant per workspace.
         digest_email = (
-            workspace_store.get(1).notification_email if smtp_configured() else None
+            workspace_store.get(_current_workspace_id()).notification_email
+            if smtp_configured()
+            else None
         ) or None
 
+        # One board per sweep: it carries the loop verdicts ("fix did not land")
+        # the alerts fire on and the digest summarises.
+        plans = measurement_plan_store.list_plans()
+        board = build_outcome_board(
+            active_problem_store.list_problems(), workflow_store, plans=plans
+        )
+        emerging = build_emerging_problem_report(current_candidates(), signal_store.list_signals())
+
         return run_alert_sweep(
-            emerging_report=build_emerging_problem_report(current_candidates(), signal_store.list_signals()),
+            emerging_report=emerging,
             connector_config_store=connector_config_store,
             telemetry=telemetry_store,
             push_slack=push_slack,
             send_email=send_email,
             digest_email=digest_email,
+            outcome_board=board,
             build_digest_text=lambda: build_digest(
-                emerging=build_emerging_problem_report(current_candidates(), signal_store.list_signals()),
-                outcome_board=build_outcome_board(
-                    active_problem_store.list_problems(), workflow_store
-                ),
-                measurement_plans=measurement_plan_store.list_plans(),
+                emerging=emerging,
+                outcome_board=board,
+                measurement_plans=plans,
             ),
         )
 
@@ -705,8 +901,6 @@ def create_app(
         return {"synced": synced, "failed": failed}
 
     # ====== Triage pipeline endpoint ======
-    from langgraph.checkpoint.memory import MemorySaver
-
     from app.agents.triage_graph import build_triage_graph
 
     # App-scoped graph + checkpointer so a run that pauses at the human-approval
@@ -714,9 +908,10 @@ def create_app(
     # endpoint built a fresh per-request MemorySaver and discarded it, so the paused
     # state was lost and action/measure/learn never ran for consequential actions —
     # the whole outcome loop was unreachable in production.
-    # ponytail: in-process MemorySaver — resume works within one worker. Multi-worker
-    # durability needs PostgresSaver (langgraph-checkpoint-postgres is already a dep).
-    triage_graph = build_triage_graph(checkpointer=MemorySaver())
+    # Durability: PostgresSaver when DATABASE_URL is set (paused runs survive a
+    # container restart and a multi-worker uvicorn), MemorySaver otherwise or when
+    # the Postgres saver cannot be set up — the graph must never block boot.
+    triage_graph = build_triage_graph(checkpointer=_build_triage_checkpointer(_pg_url))
 
 
     # ====== Domain routers (composition root: stores/closures passed explicitly) ======
@@ -731,6 +926,8 @@ def create_app(
             telemetry_store=telemetry_store,
             connector_config_store=connector_config_store,
             enrich_problem_for_response=enrich_problem_for_response,
+            readiness_check=_readiness,
+            measurement_plan_store=measurement_plan_store,
         )
     )
     api.include_router(

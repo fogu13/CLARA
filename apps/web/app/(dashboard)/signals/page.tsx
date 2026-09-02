@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +44,8 @@ export default function SignalsPage() {
   const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<Status>({ tone: "idle", message: "" });
+  // Themes the last triage run sorted signals into (now reviewable as candidates).
+  const [themesFound, setThemesFound] = useState<number | null>(null);
   const [fileCsv, setFileCsv] = useState<FileCsv | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -134,6 +137,7 @@ export default function SignalsPage() {
   ).map(([batch, ids]) => ({ batch, ids }));
 
   async function removeBatch(batch: string, ids: string[]) {
+    setThemesFound(null);
     if (!window.confirm(`Remove all ${ids.length} signal(s) from import batch ${batch}? This cannot be undone.`)) return;
     setStatus({ tone: "busy", message: "Removing import batch..." });
     try {
@@ -167,6 +171,7 @@ export default function SignalsPage() {
   }
 
   async function importMapped() {
+    setThemesFound(null);
     if (!fileCsv) return;
     if (!fileCsv.mapping[essentialSignalCsvField]) {
       setStatus({ tone: "error", message: "Map the column that holds the feedback text. It's the only required field." });
@@ -201,6 +206,7 @@ export default function SignalsPage() {
   }
 
   async function assessExisting() {
+    setThemesFound(null);
     setStatus({ tone: "busy", message: t.authenticity.assessing });
     try {
       const result = await backfillAuthenticity();
@@ -225,7 +231,15 @@ export default function SignalsPage() {
       }
       const result = await response.json();
       await refresh();
-      setStatus({ tone: "ok", message: `Triage ${result.status}: ${result.insights?.length ?? 0} insight(s) generated.` });
+      const themes: number = result.theme_candidate_ids?.length ?? result.insights?.length ?? 0;
+      setThemesFound(themes);
+      setStatus({
+        tone: "ok",
+        message:
+          themes > 0
+            ? `Triage ${result.status}: ${themes} theme${themes === 1 ? "" : "s"} sorted and saved as problem candidates. Review them in Sources to accept them into the Action Queue.`
+            : `Triage ${result.status}: no themes met the corroboration threshold (needs several signals per theme).`
+      });
     } catch (error) {
       setStatus({ tone: "error", message: error instanceof Error ? error.message : "Couldn't run triage." });
     }
@@ -276,6 +290,14 @@ export default function SignalsPage() {
           )}
         >
           {status.message}
+          {themesFound && themesFound > 0 && status.tone === "ok" ? (
+            <>
+              {" "}
+              <Link href="/sources" className="font-medium underline underline-offset-2">
+                Open candidate review →
+              </Link>
+            </>
+          ) : null}
         </div>
       ) : null}
 

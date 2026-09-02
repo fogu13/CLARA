@@ -67,6 +67,10 @@ class TrustpilotSourceConnector:
 
         signals: list[dict[str, Any]] = []
         latest = ""
+        # The cursor may only advance when the source was exhausted: advancing it
+        # after a page-budget cut would skip everything older than page MAX_PAGES
+        # forever on a large first sync.
+        exhausted = False
         try:
             with httpx.Client(timeout=30.0) as client:
                 for page in range(1, MAX_PAGES + 1):
@@ -101,6 +105,7 @@ class TrustpilotSourceConnector:
 
                     reviews = resp.json().get("reviews") or []
                     if not reviews:
+                        exhausted = True
                         break
 
                     stop = False
@@ -116,14 +121,20 @@ class TrustpilotSourceConnector:
                             if created:
                                 latest = max(latest, created)
                     if stop or len(reviews) < PER_PAGE:
+                        exhausted = True
                         break
         except httpx.RequestError as exc:
             raise ConnectorError(
                 f"Trustpilot unreachable: {exc}", connector="trustpilot"
             ) from exc
 
-        if signals and latest:
+        if signals and latest and exhausted:
             signals[0].setdefault("_sync_metadata", {})["last_synced_at"] = latest
+        elif signals and not exhausted:
+            signals[0]["_pull_note"] = (
+                f"More history available than one sync fetches ({MAX_PAGES} pages);"
+                " the cursor was not advanced. Pull again to continue."
+            )
         return signals
 
     def _map_review(self, review: dict[str, Any]) -> dict[str, Any] | None:

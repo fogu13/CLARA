@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { hasRole } from "../../lib/auth-client";
-import { getContractProposal, getWorkflowState, submitApproval } from "../../lib/client-api";
+import { getContractProposal, getWorkflowState, submitApproval,
+  retryExecution
+} from "../../lib/client-api";
 import { currentUserEmail } from "../../lib/auth-client";
 import { useI18n } from "../../lib/i18n";
 import type {
@@ -88,6 +90,7 @@ export function ActionDecisionPanel({
     setCanDecide(hasRole("editor"));
   }, []);
   const [acceptContract, setAcceptContract] = useState(true);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -242,10 +245,44 @@ export function ActionDecisionPanel({
       <p className={`decision-message decision-${decisionState.state}`}>{decisionState.message}</p>
       <ActionDiff title={matchingApproval ? "Approved action diff" : "Pending approval diff"} changes={changes} />
       {matchingExecution ? (
-        <p className="execution-message">
-          Execution: {matchingExecution.status.replaceAll("_", " ")} in{" "}
-          {matchingExecution.destination}
-        </p>
+        <div className="execution-message">
+          <p>
+            Execution: {matchingExecution.status.replaceAll("_", " ")} in{" "}
+            {matchingExecution.destination}
+            {matchingExecution.external_ref ? ` · ${t.actionsPage.externalRef}: ${matchingExecution.external_ref}` : ""}
+          </p>
+          {matchingExecution.status === "push_failed" ? (
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {matchingExecution.detail ? (
+                <span className="text-destructive">{matchingExecution.detail}</span>
+              ) : null}
+              {canDecide ? (
+                <button
+                  type="button"
+                  disabled={retrying}
+                  onClick={async () => {
+                    setRetrying(true);
+                    try {
+                      await retryExecution(problemId, matchingExecution.execution_id);
+                      const workflow = await getWorkflowState(problemId);
+                      setDecisionState((current) => ({ ...current, workflow }));
+                    } catch (error) {
+                      setDecisionState((current) => ({
+                        ...current,
+                        state: "error",
+                        message: error instanceof Error ? error.message : "Retry failed."
+                      }));
+                    } finally {
+                      setRetrying(false);
+                    }
+                  }}
+                >
+                  {retrying ? t.actionsPage.retrying : t.actionsPage.retryPush}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       ) : null}
       {matchingJiraDraft ? (
         <p className="jira-draft-message">

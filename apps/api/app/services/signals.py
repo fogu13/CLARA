@@ -27,7 +27,9 @@ from app.domain.models import (
     SignalValidationIssue,
     SignalValidationReport,
 )
+from app.domain.models import redact_common_pii
 from app.domain.scoring import approval_pressure, impact_band, normalized_impact_score
+from app.services.measurement_scheduler import THEME_JOURNEY
 from app.services.common import (  # re-exported for existing importers, SerializedConnection
     SerializedConnection,
     normalize_timestamp,
@@ -89,6 +91,78 @@ def normalize_label(value: str) -> str:
     return value.replace("_", " ").strip().title()
 
 
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_TAG_RE = re.compile(r"<[^>]{1,200}>")
+_SPACE_RUNS = re.compile(r"[ \t\f\v]+")
+_BLANK_LINES = re.compile(r"\n{3,}")
+
+
+def clean_feedback_text(text: str) -> str:
+    """Normalize customer text once, at the door.
+
+    HTML entities are decoded and tags stripped (review sites and ticket systems
+    deliver both), control characters removed, Unicode NFC-normalised, and
+    whitespace collapsed while single blank lines are kept. The pitch's
+    "cleans, normalizes and standardizes" starts here; the model and the
+    clustering see the same string whatever channel it arrived on.
+    """
+    import html
+    import unicodedata
+
+    if not text:
+        return ""
+    value = html.unescape(str(text))
+    value = _TAG_RE.sub(" ", value)
+    value = _CONTROL_CHARS.sub("", value)
+    value = unicodedata.normalize("NFC", value)
+    value = value.replace("\r\n", "\n").replace("\r", "\n")
+    value = _SPACE_RUNS.sub(" ", value)
+    value = "\n".join(line.strip() for line in value.split("\n"))
+    value = _BLANK_LINES.sub("\n\n", value)
+    return value.strip()
+
+
+def _csv_reader(csv_text: str) -> csv.DictReader:
+    """DictReader that copes with what spreadsheets actually export.
+
+    Excel (German locale) writes semicolon-separated files with a UTF-8 BOM;
+    both used to surface as "Missing required column: feedback_text". The BOM
+    is stripped and the delimiter sniffed from the header line (comma,
+    semicolon or tab), falling back to the comma dialect.
+    """
+    text = csv_text.lstrip("\ufeff").strip()
+    header = text.split("\n", 1)[0]
+    counts = {",": header.count(","), ";": header.count(";"), "\t": header.count("\t")}
+    delimiter = max(counts, key=counts.get) if any(counts.values()) else ","
+    return csv.DictReader(io.StringIO(text), delimiter=delimiter)
+
+
+def normalize_incoming_signal(record: SignalRecord) -> SignalRecord:
+    """Apply the CSV/webhook door rules to a SignalRecord posted as JSON.
+
+    POST /signals/import used to store records verbatim: unparseable
+    timestamps, missing language and raw text slipped past the checks every
+    other import path runs. Timestamp defaults are flagged in metadata so a
+    substituted time stays auditable.
+    """
+    metadata = dict(record.metadata)
+    timestamp, defaulted = normalize_timestamp(record.timestamp)
+    if defaulted:
+        metadata["timestamp_defaulted"] = "true"
+    text = clean_feedback_text(record.feedback_text)
+    language = record.language
+    if not language or language == "unknown":
+        language = detect_language(text)
+    return record.model_copy(
+        update={
+            "feedback_text": text,
+            "timestamp": timestamp,
+            "language": language,
+            "metadata": metadata,
+        }
+    )
+
+
 def candidate_id_for(journey: str, journey_stage: str) -> str:
     token = f"{journey}-{journey_stage}".upper().replace("_", "-")
     return f"CAND-{token}"
@@ -102,6 +176,209 @@ def owner_for_stage(journey_stage: str) -> str:
     if "payment" in journey_stage:
         return "payments_product"
     return "cx_operations"
+
+
+# --- AI themes as problem candidates --------------------------------------
+# POST /triage/run sorts signals into themes (LLM enrichment + deterministic
+# clustering + synthesis). Until these helpers existed the resulting insights
+# were returned in the HTTP response and dropped: the AI triage never reached
+# the Action Queue, which only knew the deterministic journey/stage grouping.
+# Themes are now persisted (stores' save_theme_insights) and surfaced as
+# ProblemCandidates with origin="ai_theme", so the same human accept -> promote
+# -> approve -> measure path applies to what the model found.
+
+THEME_TITLE_MAX = 160
+THEME_SUMMARY_MAX = 1000
+THEME_EVIDENCE_ROWS = 5
+# A theme belongs to one journey when that journey carries at least this share
+# of its signals; otherwise it is reported as cross-journey.
+THEME_JOURNEY_MAJORITY = 0.6
+CROSS_JOURNEY_LABEL = "Cross Journey"
+
+
+def slugify_owner(value: str | None) -> str:
+    token = re.sub(r"[^a-z0-9]+", "_", (value or "").strip().lower()).strip("_")
+    return token
+
+
+def theme_candidate_id(tag: str) -> str:
+    return f"CAND-THEME-{tag.upper().replace('_', '-').replace(' ', '-')}"
+
+
+def _clip01(value: object) -> float:
+    try:
+        number = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(1.0, number))
+
+
+def _safe_text(value: object, limit: int) -> str:
+    if value is None:
+        return ""
+    return (redact_common_pii(str(value)) or "")[:limit]
+
+
+def prepare_theme_insight(insight: dict, *, run_id: str) -> dict | None:
+    """Reduce a synthesis insight to the persisted theme record.
+
+    Model output is untrusted: only known fields are kept, free text is PII-
+    redacted and length-capped, numbers are clipped to [0, 1]. Returns None for
+    an insight without a theme tag (nothing to key on).
+    """
+    tag = str(insight.get("tag") or "").strip().lower().replace(" ", "_")
+    if not tag:
+        return None
+    audit = insight.get("audit") if isinstance(insight.get("audit"), dict) else {}
+    actions = []
+    for action in insight.get("suggested_actions") or []:
+        if not isinstance(action, dict):
+            continue
+        actions.append(
+            {
+                "type": _safe_text(action.get("type"), 40),
+                "title": _safe_text(action.get("title"), THEME_TITLE_MAX),
+                "description": _safe_text(action.get("description"), 300),
+            }
+        )
+        if len(actions) >= 5:
+            break
+    return {
+        "tag": tag,
+        "title": _safe_text(insight.get("title"), THEME_TITLE_MAX),
+        "summary": _safe_text(insight.get("summary"), THEME_SUMMARY_MAX),
+        "category": _safe_text(insight.get("category"), 80),
+        "target_team": _safe_text(insight.get("target_team"), 80),
+        "confidence": _clip01(insight.get("confidence")),
+        "severity": _safe_text(insight.get("severity"), 20),
+        "severity_score": _clip01(
+            insight.get("severity_score", insight.get("impact_score"))
+        ),
+        "max_urgency": _safe_text(insight.get("max_urgency"), 20),
+        "signal_ids": [str(item) for item in (insight.get("signal_ids") or [])][:5000],
+        "suggested_actions": actions,
+        "audit": {
+            "model": _safe_text(audit.get("model"), 80),
+            "source": _safe_text(audit.get("source"), 40),
+            "limitations": [_safe_text(item, 200) for item in (audit.get("limitations") or [])][:6],
+            "applied_learnings": [
+                _safe_text(item, 80) for item in (audit.get("applied_learnings") or [])
+            ][:6],
+        },
+        "triage_run_id": run_id,
+        "saved_at": utc_now(),
+    }
+
+
+def theme_candidates(insights: list[dict], signals: list[SignalRecord]) -> list[ProblemCandidate]:
+    """ProblemCandidates (origin=ai_theme) from persisted triage themes.
+
+    Counts are recomputed from the signals that still exist, so a deleted import
+    batch shrinks or removes the theme instead of leaving stale numbers.
+    """
+    by_id = {signal.signal_id: signal for signal in signals}
+    candidates: list[ProblemCandidate] = []
+    for insight in insights:
+        tag = str(insight.get("tag") or "").strip()
+        if not tag:
+            continue
+        group = [by_id[sid] for sid in insight.get("signal_ids") or [] if sid in by_id]
+        if not group:
+            continue
+        sorted_group = sorted(group, key=lambda signal: signal.timestamp)
+        customers = {
+            signal.customer_id for signal in group if signal.customer_id not in UNKNOWN_IDENTITY_VALUES
+        }
+        accounts = {
+            signal.account_id for signal in group if signal.account_id not in UNKNOWN_IDENTITY_VALUES
+        }
+        journeys = Counter(signal.journey for signal in group if signal.journey != "unknown_journey")
+        journey = CROSS_JOURNEY_LABEL
+        if journeys:
+            top_journey, top_count = journeys.most_common(1)[0]
+            if top_count >= THEME_JOURNEY_MAJORITY * len(group):
+                journey = normalize_label(top_journey)
+        stage_label = normalize_label(tag)
+        raw_confidence = _clip01(insight.get("confidence"))
+        confidence = round(min(0.95, max(0.3, raw_confidence or 0.5)), 2)
+        summary = str(insight.get("summary") or "").strip()
+        audit = insight.get("audit") if isinstance(insight.get("audit"), dict) else {}
+        actions = insight.get("suggested_actions") or []
+        first_action = actions[0] if actions and isinstance(actions[0], dict) else None
+        if first_action and (first_action.get("title") or first_action.get("description")):
+            suggested_action = ": ".join(
+                part for part in (first_action.get("title"), first_action.get("description")) if part
+            )
+        else:
+            suggested_action = (
+                f"Review the {stage_label} theme with its evidence, confirm the owning team, "
+                "then create a structural fix plus customer recovery action."
+            )
+        limitations = [
+            "AI-sorted theme (LLM synthesis); not human-validated until a reviewer accepts it.",
+            *[str(item) for item in (audit.get("limitations") or []) if item],
+        ]
+        if journey == CROSS_JOURNEY_LABEL:
+            limitations.append(
+                "Signals span several journeys; the theme, not a journey stage, is the unit of ownership."
+            )
+        evaluation_notes = []
+        if audit.get("model"):
+            evaluation_notes.append(f"Synthesized by {audit['model']} ({audit.get('source') or 'llm'}).")
+        if insight.get("severity"):
+            evaluation_notes.append(
+                f"Deterministic cross-signal severity: {insight['severity']} "
+                f"({round(_clip01(insight.get('severity_score')) * 100)}%)."
+            )
+        if audit.get("applied_learnings"):
+            evaluation_notes.append(
+                "Past learnings applied: " + ", ".join(str(x) for x in audit["applied_learnings"])
+            )
+        candidates.append(
+            ProblemCandidate(
+                candidate_id=theme_candidate_id(tag),
+                title=str(insight.get("title") or "").strip() or f"Theme: {stage_label}",
+                journey=journey,
+                journey_stage=stage_label,
+                signal_count=len(group),
+                customer_count=len(customers),
+                account_count=len(accounts),
+                sources=sorted({signal.source for signal in group}),
+                languages=sorted({signal.language for signal in group}),
+                first_seen=sorted_group[0].timestamp,
+                last_seen=sorted_group[-1].timestamp,
+                confidence=confidence,
+                evidence=[
+                    Evidence(
+                        signal_id=signal.signal_id,
+                        source=signal.source,
+                        language=signal.language,
+                        excerpt=signal.feedback_text[:220],
+                        customer_id=signal.customer_id,
+                        account_id=signal.account_id,
+                        timestamp=signal.timestamp,
+                    )
+                    for signal in sorted_group[:THEME_EVIDENCE_ROWS]
+                ],
+                root_cause_hypothesis=(
+                    f"{summary} This is an AI-sorted theme, not a confirmed root cause."
+                    if summary
+                    else f"Signals were sorted into the theme {stage_label}. "
+                    "This is an AI-sorted theme, not a confirmed root cause."
+                ),
+                suggested_owner=slugify_owner(insight.get("target_team")) or owner_for_stage(tag),
+                suggested_action=suggested_action,
+                known_limitations=limitations,
+                evaluation_notes=evaluation_notes,
+                origin="ai_theme",
+                theme_tag=tag,
+                theme_summary=summary or None,
+                triage_impact_score=_clip01(insight.get("severity_score")) or None,
+                triage_urgency=str(insight.get("max_urgency") or "") or None,
+                triage_run_id=str(insight.get("triage_run_id") or "") or None,
+            )
+        )
+    return sorted(candidates, key=lambda candidate: candidate.signal_count, reverse=True)
 
 
 def split_multi_value(value: str | None) -> list[str]:
@@ -144,9 +421,12 @@ KNOWN_SIGNAL_COLUMNS = frozenset(
 
 
 def read_signal_csv_rows(csv_text: str) -> tuple[list[str], list[dict[str, str]]]:
-    reader = csv.DictReader(io.StringIO(csv_text.strip()))
-    headers = reader.fieldnames or []
-    rows = [{key: value or "" for key, value in row.items() if key is not None} for row in reader]
+    reader = _csv_reader(csv_text)
+    headers = [header.strip() for header in (reader.fieldnames or [])]
+    rows = [
+        {key.strip(): value or "" for key, value in row.items() if key is not None}
+        for row in reader
+    ]
     return headers, rows
 
 
@@ -209,6 +489,24 @@ def validate_signal_csv(
                         message=f"Row {row_index} has no {field}; candidate quality may be lower.",
                     )
                 )
+
+        # A non-ISO timestamp ("23.06.2026 10:00", "6/23/2026") is not an
+        # error — import still works — but it is silently replaced by the
+        # import time, which drops the row out of every trend window. Say so
+        # in the preview instead of letting the substitution pass unseen.
+        raw_timestamp = row.get("timestamp", "").strip()
+        if "timestamp" in headers and raw_timestamp and normalize_timestamp(raw_timestamp)[1]:
+            warnings.append(
+                SignalValidationIssue(
+                    severity="warning",
+                    row_number=row_index,
+                    field="timestamp",
+                    message=(
+                        f"Row {row_index} timestamp '{raw_timestamp[:40]}' is not ISO 8601 and will"
+                        " be set to the import time (flagged in metadata)."
+                    ),
+                )
+            )
 
         if signal_id:
             first_seen_row = seen_signal_ids.get(signal_id)
@@ -292,7 +590,7 @@ def signal_from_row(row: dict[str, str], *, default_source: str = "csv_upload") 
         journey_stage=row.get("journey_stage") or "unknown_stage",
         campaign_exposure=split_multi_value(row.get("campaign_exposure")),
         product_events=split_multi_value(row.get("product_events")),
-        feedback_text=row.get("feedback_text") or "",
+        feedback_text=clean_feedback_text(row.get("feedback_text") or ""),
         # No language field -> detect from the text (DE/EN heuristic), so
         # German handling fires on real imports instead of "unknown".
         language=row.get("language") or detect_language(row.get("feedback_text") or ""),
@@ -302,8 +600,8 @@ def signal_from_row(row: dict[str, str], *, default_source: str = "csv_upload") 
 
 
 def parse_signal_csv(csv_text: str) -> list[SignalRecord]:
-    reader = csv.DictReader(io.StringIO(csv_text.strip()))
-    return [signal_from_row(row) for row in reader]
+    _headers, rows = read_signal_csv_rows(csv_text)
+    return [signal_from_row(row) for row in rows]
 
 
 def build_candidates(signals: list[SignalRecord]) -> list[ProblemCandidate]:
@@ -316,7 +614,11 @@ def build_candidates(signals: list[SignalRecord]) -> list[ProblemCandidate]:
             # back to per-source grouping so each channel gets a readable candidate
             # ("Repeated friction in Trustpilot Feedback").
             journey_stage = f"{signal.source}_feedback"
-        grouped[(signal.journey, journey_stage)].append(signal)
+        # Group case-insensitively: candidate ids are upper-cased, so
+        # "Checkout/Payment" and "checkout/payment" rows would otherwise form two
+        # candidates with the same id and a baseline that disagrees with the
+        # (normalised) measurement scope.
+        grouped[(signal.journey.strip().lower(), journey_stage.strip().lower())].append(signal)
 
     candidates: list[ProblemCandidate] = []
     for (journey, journey_stage), group in grouped.items():
@@ -471,14 +773,47 @@ def _signal_rate_baseline(candidate: ProblemCandidate) -> float:
 
 
 def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
-    journey_token = candidate.journey.upper().replace(" ", "-")
-    stage_token = candidate.journey_stage.upper().replace(" ", "-")
-    problem_id = f"PRB-DRAFT-{journey_token}-{stage_token}"
+    is_theme = candidate.origin == "ai_theme" and bool(candidate.theme_tag)
+    if is_theme:
+        theme_tag = str(candidate.theme_tag)
+        problem_id = f"PRB-DRAFT-THEME-{theme_tag.upper().replace('_', '-')}"
+        # Theme contracts are measured by tag, whatever journey the signals came
+        # from (measurement_scheduler.signal_matches_scope).
+        primary_metric = f"signal_rate_per_day:{THEME_JOURNEY}/{theme_tag}"
+        statement = candidate.theme_summary or (
+            f"{candidate.signal_count} imported signals were sorted into the theme "
+            f"{candidate.journey_stage}."
+        )
+        severity_factor = (
+            candidate.triage_impact_score if candidate.triage_impact_score is not None else 0.55
+        )
+        limitations = [
+            "AI-sorted theme: the grouping and summary are model output, accepted by a reviewer;"
+            " the root cause is not confirmed.",
+            "Customer value and consent metadata are not available for this draft.",
+        ]
+    else:
+        journey_token = candidate.journey.upper().replace(" ", "-")
+        stage_token = candidate.journey_stage.upper().replace(" ", "-")
+        problem_id = f"PRB-DRAFT-{journey_token}-{stage_token}"
+        primary_metric = (
+            f"signal_rate_per_day:{candidate.journey.lower().replace(' ', '_')}"
+            f"/{candidate.journey_stage.lower().replace(' ', '_')}"
+        )
+        statement = (
+            f"{candidate.signal_count} imported signals indicate recurring friction in "
+            f"{candidate.journey_stage}."
+        )
+        severity_factor = 0.55
+        limitations = [
+            "Generated from imported signals only; behavioural comparison is not attached yet.",
+            "Customer value and consent metadata are not available for this draft.",
+        ]
     reach = min(1.0, candidate.customer_count / 250)
     recurrence = min(1.0, candidate.signal_count / 25)
     impact_factors = {
         "customer_reach": max(0.2, reach),
-        "severity": 0.55,
+        "severity": max(0.2, severity_factor),
         "recurrence": max(0.25, recurrence),
         "journey_criticality": 0.7,
         "account_exposure": min(1.0, candidate.account_count / 100),
@@ -491,10 +826,7 @@ def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
     return ProblemRecord(
         problem_id=problem_id,
         title=candidate.title,
-        statement=(
-            f"{candidate.signal_count} imported signals indicate recurring friction in "
-            f"{candidate.journey_stage}."
-        ),
+        statement=statement,
         journey=candidate.journey,
         journey_stage=candidate.journey_stage,
         owner=candidate.suggested_owner,
@@ -508,11 +840,10 @@ def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
             date_range=f"{candidate.first_seen} to {candidate.last_seen}",
         ),
         root_cause_hypothesis=candidate.root_cause_hypothesis,
-        known_limitations=[
-            "Generated from imported signals only; behavioural comparison is not attached yet.",
-            "Customer value and consent metadata are not available for this draft.",
-        ],
+        known_limitations=limitations,
         evidence=candidate.evidence,
+        origin=candidate.origin,
+        theme_tag=candidate.theme_tag,
         action_proposals=[
             ActionProposal.model_validate(
                 {
@@ -646,10 +977,7 @@ def promote_candidate(candidate: ProblemCandidate) -> ProblemRecord:
             # signals. CLARA can re-measure this itself after the action executes
             # (scheduled T+7/T+window), so promoted problems get real, non-simulated
             # outcome data. Success = halving the complaint rate.
-            primary_metric=(
-                f"signal_rate_per_day:{candidate.journey.lower().replace(' ', '_')}"
-                f"/{candidate.journey_stage.lower().replace(' ', '_')}"
-            ),
+            primary_metric=primary_metric,
             baseline=_signal_rate_baseline(candidate),
             success_threshold=round(_signal_rate_baseline(candidate) * 0.5, 4),
             measurement_window_days=28,
@@ -667,6 +995,7 @@ class SignalStore:
     def __init__(self) -> None:
         self._signals: dict[str, SignalRecord] = {}
         self._candidate_decisions: dict[str, CandidateDecisionRecord] = {}
+        self._theme_insights: dict[str, dict] = {}
 
     def list_signals(self) -> list[SignalRecord]:
         return sorted(self._signals.values(), key=lambda signal: signal.timestamp)
@@ -728,7 +1057,21 @@ class SignalStore:
             )
 
     def candidates(self) -> list[ProblemCandidate]:
-        return build_candidates(self.list_signals())
+        signals = self.list_signals()
+        return [*build_candidates(signals), *theme_candidates(self.list_theme_insights(), signals)]
+
+    def save_theme_insights(self, insights: list[dict], *, run_id: str) -> int:
+        saved = 0
+        for insight in insights:
+            prepared = prepare_theme_insight(insight, run_id=run_id)
+            if prepared is None:
+                continue
+            self._theme_insights[prepared["tag"]] = prepared
+            saved += 1
+        return saved
+
+    def list_theme_insights(self) -> list[dict]:
+        return [self._theme_insights[tag] for tag in sorted(self._theme_insights)]
 
     def get_candidate_decision(self, candidate_id: str) -> CandidateDecisionRecord | None:
         return self._candidate_decisions.get(candidate_id)
@@ -812,11 +1155,45 @@ class SQLiteSignalStore:
             )
             """
         )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS theme_insights (
+                theme_tag TEXT PRIMARY KEY,
+                payload TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
         self._connection.commit()
 
     def list_signals(self) -> list[SignalRecord]:
         rows = self._connection.execute("SELECT * FROM signals ORDER BY timestamp").fetchall()
         return [self._signal_from_row(row) for row in rows]
+
+    def save_theme_insights(self, insights: list[dict], *, run_id: str) -> int:
+        saved = 0
+        for insight in insights:
+            prepared = prepare_theme_insight(insight, run_id=run_id)
+            if prepared is None:
+                continue
+            self._connection.execute(
+                """
+                INSERT INTO theme_insights (theme_tag, payload, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(theme_tag) DO UPDATE SET
+                    payload = excluded.payload, updated_at = excluded.updated_at
+                """,
+                (prepared["tag"], json.dumps(prepared), utc_now()),
+            )
+            saved += 1
+        self._connection.commit()
+        return saved
+
+    def list_theme_insights(self) -> list[dict]:
+        rows = self._connection.execute(
+            "SELECT payload FROM theme_insights ORDER BY theme_tag"
+        ).fetchall()
+        return [json.loads(row["payload"]) for row in rows]
 
     def update_enrichment(
         self,
@@ -922,7 +1299,8 @@ class SQLiteSignalStore:
         )
 
     def candidates(self) -> list[ProblemCandidate]:
-        return build_candidates(self.list_signals())
+        signals = self.list_signals()
+        return [*build_candidates(signals), *theme_candidates(self.list_theme_insights(), signals)]
 
     def get_candidate_decision(self, candidate_id: str) -> CandidateDecisionRecord | None:
         row = self._connection.execute(

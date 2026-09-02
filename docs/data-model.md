@@ -149,6 +149,12 @@ Key fields:
 
 Problem evidence carries the source signal ID, source system, language, excerpt, customer ID, account ID and timestamp. The Action Queue renders these as reviewable evidence rows rather than a single quote.
 
+Timeline and origin fields:
+
+- `due_at` — resolution due date, set at promotion from `WorkspaceSettings.resolution_sla_days`; `ProblemSummary.overdue` is derived at read time (never for resolved problems, never for seed problems without a due date).
+- `origin` — `journey_stage` (deterministic grouping) or `ai_theme` (accepted from an LLM triage theme).
+- `theme_tag` — the canonical theme tag for `ai_theme` problems; their outcome contract metric is `signal_rate_per_day:theme/<tag>` and matches signals carrying the tag, whatever journey they came from.
+
 ### Problem Candidate
 
 A deterministic pre-problem generated from imported signals before a human accepts it into the Action Queue.
@@ -174,6 +180,8 @@ Key fields:
 - `reviewer`
 - `review_note`
 - `reviewed_at`
+
+Candidates have an `origin`: `journey_stage` (grouped by the imported journey/stage columns) or `ai_theme` (a theme `POST /triage/run` sorted signals into; persisted per workspace and tag, latest run wins). AI-theme candidates carry `theme_tag`, `theme_summary`, `triage_impact_score` (deterministic cross-signal severity), `triage_urgency` and `triage_run_id`; their evidence and counts are recomputed from the signals that still exist.
 
 Candidate review statuses are `pending`, `duplicate`, `accepted`, and `rejected`. Duplicate detection compares candidate journey and journey stage against existing Action Queue problems. Accepting a non-duplicate candidate creates a durable `validation_required` draft `Problem` with evidence, initial action proposals, governance checks and an outcome contract. Rejected decisions are persisted so the candidate review list survives local restarts. In the prototype, promoted drafts are persisted in SQLite while seed problems still load from JSON.
 
@@ -329,3 +337,26 @@ Key fields:
 - `items`
 
 Each item carries the problem ID, title, owner, impact score, impact band, primary metric, baseline, target, latest value, outcome status, latest learning status, measurement window and responsible outcome owner.
+
+
+### Owner Route
+
+A workspace team-routing rule (`WorkspaceSettings.owner_routes`, first match wins):
+
+- `match` — case-insensitive substring compared against the journey stage and the AI theme tag
+- `owner` — the owning team identifier
+- `destination` — default destination for the team's structural action (optional)
+- `jira_project_key`, `slack_channel` — per-team overrides layered over the workspace connector config at push time; credentials are never overridable
+
+### Loop Verdict
+
+Derived at read time on `OutcomeSnapshot` and `OutcomeBoardItem` from the contract status and the scheduled checkpoints (T+7, window, follow-up = window + 30 days):
+
+- `not_measured`, `measuring`, `manual_required`
+- `on_track` — an early or manual read met the target; not proof yet
+- `loop_closed` — the window or follow-up checkpoint met the target on real post-fix inflow
+- `fix_did_not_land` — the closing checkpoint showed no improvement
+
+### Learning Memory Item
+
+`GET /learnings` returns the retrievable learnings synthesis reads (`rank_learnings`): `topic`, `pattern`, `learning_status`, `summary`, `limitations`, `resolution_actions` (the approved actions' text), `base_confidence`, `decayed_confidence`, `freshness` (`VALIDATED` / `EMERGING` / `STALE`) and `retrieval_eligible` (false for auto-derived `reviewer=system` learnings, which are shown but never steer the model).

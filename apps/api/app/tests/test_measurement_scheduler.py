@@ -110,7 +110,7 @@ class TestSchedulingAndMeasurement:
 
         plans = plan_store.list_plans()
         kinds = {plan["kind"] for plan in plans if plan["problem_id"] == problem.problem_id}
-        assert kinds == {"t7", "window"}
+        assert kinds == {"t7", "window", "followup"}
         assert all(plan["status"] == "pending" for plan in plans)
 
         # Re-approving another action must not double-schedule the same checkpoints.
@@ -163,7 +163,13 @@ class TestSchedulingAndMeasurement:
         first = client.post("/measurements/run-due", json={"now": later}).json()
         second = client.post("/measurements/run-due", json={"now": later}).json()
         assert first["measured"] >= 1
-        assert second == {"measured": 0, "manual_required": 0, "skipped": 0}
+        assert second == {
+            "measured": 0,
+            "manual_required": 0,
+            "skipped": 0,
+            "loop_closed": 0,
+            "fix_did_not_land": 0,
+        }
 
     def test_business_metric_contract_becomes_manual_task(self, tmp_path: Path) -> None:
         client, _, _, plan_store, telemetry = _app(tmp_path)

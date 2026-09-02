@@ -22,6 +22,7 @@ from typing import Any, Callable
 logger = logging.getLogger(__name__)
 
 ALERT_EVENT = "emerging_alerted"
+LOOP_ALERT_EVENT = "fix_did_not_land_alerted"
 DIGEST_EVENT = "digest_sent"
 DIGEST_INTERVAL = timedelta(days=6, hours=12)  # weekly, tolerant of tick jitter
 
@@ -48,18 +49,52 @@ def run_alert_sweep(
     send_email: Callable[[str, str, str], bool] | None = None,
     digest_email: str | None = None,
     now: datetime | None = None,
+    outcome_board: Any = None,
 ) -> dict[str, int]:
-    """One sweep: alert new action-grade emerging problems, send the weekly
-    digest when due (Slack and/or email — an email-only workspace still gets
-    its digest). Returns {alerted, digest_sent} counts for the loop log."""
+    """One sweep: alert new action-grade emerging problems, alert once per
+    problem whose fix demonstrably did not land (loop verdict), and send the
+    weekly digest when due (Slack and/or email — an email-only workspace still
+    gets its digest). Returns {alerted, loop_alerted, digest_sent}."""
     slack = connector_config_store.get_config("slack")
     if slack is not None and not slack.is_active:
         slack = None
     email_ready = bool(send_email and digest_email)
     if slack is None and not email_ready:
-        return {"alerted": 0, "digest_sent": 0}
+        return {"alerted": 0, "loop_alerted": 0, "digest_sent": 0}
 
     alerted = 0
+    loop_alerted = 0
+    # "Fix did not land": the closing checkpoint showed no improvement. This is
+    # the pitch's proof step failing, so it must reach the owning team — a
+    # telemetry row nobody reads is not an alert. Once per problem.
+    for item in list(getattr(outcome_board, "items", None) or []):
+        if getattr(item, "loop_verdict", None) != "fix_did_not_land":
+            continue
+        key = str(item.problem_id)
+        if telemetry.has_event(LOOP_ALERT_EVENT, key):
+            continue
+        title = "CLARA: fix did not land"
+        body = (
+            f"*{item.title}*\n"
+            f"Owner {item.owner}. Post-fix inflow {item.latest_value} vs baseline {item.baseline} "
+            f"(target {item.success_threshold}) on {item.metric}: the closing checkpoint shows no "
+            "improvement. Re-open the problem or record why the fix did not land."
+        )
+        delivered = False
+        if slack is not None:
+            try:
+                push_slack(title, body, slack.config)
+                delivered = True
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Loop alert Slack push failed: %s", str(exc)[:200])
+        if not delivered and email_ready:
+            try:
+                delivered = bool(send_email(digest_email, title, body.replace("*", "")))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Loop alert email failed: %s", str(exc)[:200])
+        if delivered:
+            telemetry.record(LOOP_ALERT_EVENT, entity_id=key, metadata={"metric": item.metric})
+            loop_alerted += 1
     if slack is None:
         emerging_iter: list[Any] = []  # emerging alerts stay Slack-only for now
     else:
@@ -114,4 +149,4 @@ def run_alert_sweep(
             )
             digest_sent = 1
 
-    return {"alerted": alerted, "digest_sent": digest_sent}
+    return {"alerted": alerted, "loop_alerted": loop_alerted, "digest_sent": digest_sent}

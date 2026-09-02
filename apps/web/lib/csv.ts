@@ -147,25 +147,17 @@ export function unmappedRequiredFields(mapping: ColumnMapping): SignalCsvField[]
 // auto-filled with a sensible default so arbitrary CSVs import without busywork.
 export const essentialSignalCsvField: SignalCsvField = "feedback_text";
 
-function defaultSignalValue(field: SignalCsvField, rowIndex: number, batchId: string, now: string): string {
+// Only the signal id gets a client-side default (a stable batch label so a
+// mis-mapped import can be removed as one batch). Every other unmapped field is
+// left EMPTY so the backend applies its own defaults and detection: language is
+// detected from the text (a German review used to be stamped "en"), the
+// timestamp falls back to import time WITH an audit flag, and journey/stage/
+// source take the canonical unknown values the candidate grouping understands.
+function defaultSignalValue(field: SignalCsvField, rowIndex: number, batchId: string): string {
   switch (field) {
     case "signal_id":
       return `csv-${batchId}-${rowIndex}`;
-    case "customer_id":
-    case "account_id":
-      return "unknown";
-    case "source":
-      return "csv_import";
-    case "journey":
-      return "unknown";
-    case "journey_stage":
-      return "general";
-    case "language":
-      return "en";
-    case "timestamp":
-      return now;
     default:
-      // feedback_text (required, no default), campaign_exposure, product_events
       return "";
   }
 }
@@ -179,7 +171,6 @@ export function toCanonicalSignalCsvWithDefaults(
   batchId: string,
   sourceHeaders: string[] = []
 ): string {
-  const now = new Date().toISOString();
   const usedHeaders = new Set(Object.values(mapping).filter(Boolean));
   const knownFields = new Set<string>(signalCsvFields);
   // Columns the user didn't map and that don't collide with a canonical name -> metadata.
@@ -193,7 +184,7 @@ export function toCanonicalSignalCsvWithDefaults(
     const canonical = signalCsvFields.map((field) => {
       const mappedHeader = mapping[field];
       const raw = mappedHeader ? (row[mappedHeader] ?? "").trim() : "";
-      return escapeCsvCell(raw || defaultSignalValue(field, rowNumber, batchId, now));
+      return escapeCsvCell(raw || defaultSignalValue(field, rowNumber, batchId));
     });
     const extras = extraHeaders.map((header) => escapeCsvCell((row[header] ?? "").trim()));
     return [...canonical, ...extras].join(",");
