@@ -435,6 +435,8 @@ export type ApprovalRecord = ApprovalDecision & {
   action_diff: ActionProposalChange[];
   // sha256 of the evidence pack as the approver saw it (tamper evidence).
   evidence_pack_hash?: string | null;
+  // Execution created by this decision (null while four-eyes holds it).
+  execution_id?: string | null;
 };
 
 export type ExecutionStatus =
@@ -816,6 +818,8 @@ export type SignalImportResult = {
   imported: number;
   skipped_duplicates: number;
   total_signals: number;
+  // Webhook rows that were not objects or had no feedback text.
+  dropped_rows?: number;
 };
 
 export type CustomerContextRecord = {

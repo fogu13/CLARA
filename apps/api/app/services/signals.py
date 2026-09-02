@@ -614,7 +614,11 @@ def build_candidates(signals: list[SignalRecord]) -> list[ProblemCandidate]:
             # back to per-source grouping so each channel gets a readable candidate
             # ("Repeated friction in Trustpilot Feedback").
             journey_stage = f"{signal.source}_feedback"
-        grouped[(signal.journey, journey_stage)].append(signal)
+        # Group case-insensitively: candidate ids are upper-cased, so
+        # "Checkout/Payment" and "checkout/payment" rows would otherwise form two
+        # candidates with the same id and a baseline that disagrees with the
+        # (normalised) measurement scope.
+        grouped[(signal.journey.strip().lower(), journey_stage.strip().lower())].append(signal)
 
     candidates: list[ProblemCandidate] = []
     for (journey, journey_stage), group in grouped.items():

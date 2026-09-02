@@ -117,12 +117,35 @@ export function apiHeaders(headers?: HeadersInit): Headers {
 // but a bare status code helps nobody — translate it once, here.
 // For call sites that need the raw Response (file downloads, custom error
 // handling): same transport rules as requestJson.
-export function apiFetch(url: string, init?: RequestInit): Promise<Response> {
-  return fetch(url, {
+// A request that never settles leaves a spinner forever and hides an outage.
+// 60s covers the slowest real call (a triage run over a large import) with
+// margin; callers that need their own AbortSignal keep it.
+const REQUEST_TIMEOUT_MS = 60_000;
+
+function transport(init?: RequestInit): RequestInit {
+  return {
     ...init,
     credentials: "include",
-    headers: apiHeaders(init?.headers)
-  });
+    headers: apiHeaders(init?.headers),
+    signal: init?.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  };
+}
+
+function timeoutError(error: unknown): Error | null {
+  if (error instanceof DOMException && error.name === "TimeoutError") {
+    return new Error(
+      `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s. The API may be down or unreachable.`
+    );
+  }
+  return null;
+}
+
+export async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, transport(init));
+  } catch (error) {
+    throw timeoutError(error) ?? error;
+  }
 }
 
 export function httpErrorMessage(action: string, status: number): string {
@@ -144,11 +167,12 @@ export function httpErrorMessage(action: string, status: number): string {
 // (fetch's default "same-origin" would drop it — same SITE, different ORIGIN).
 // Harmless in legacy bearer mode, where no auth cookie exists.
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...init,
-    credentials: "include",
-    headers: apiHeaders(init?.headers)
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, transport(init));
+  } catch (error) {
+    throw timeoutError(error) ?? error;
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => null);

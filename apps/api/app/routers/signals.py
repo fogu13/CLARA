@@ -182,28 +182,36 @@ def build_router(
         if len(rows) > 1000:
             raise HTTPException(status_code=422, detail="Max 1000 signals per webhook call")
 
+        def _cell(value: object) -> str:
+            # Nested objects arrive as JSON, not as a Python repr nobody can parse.
+            if isinstance(value, (dict, list)):
+                return json.dumps(value, ensure_ascii=False, sort_keys=True)
+            return str(value)
+
         records = [
             signal_from_row(
-                {key: str(value) for key, value in row.items() if value is not None},
+                {key: _cell(value) for key, value in row.items() if value is not None},
                 default_source="webhook",
             )
             for row in rows
             if isinstance(row, dict)
         ]
         records = [record for record in records if record.feedback_text.strip()]
+        dropped = len(rows) - len(records)
         if not records:
             raise HTTPException(status_code=422, detail="No rows with feedback_text")
 
         existing = signal_store.list_signals()
         near_dups = annotate_near_duplicates(records, existing)
         review = assess_batch(records, existing, channel="webhook")
-        result = signal_store.import_signals(records)
+        result = signal_store.import_signals(records).model_copy(update={"dropped_rows": dropped})
         telemetry_store.record(
             "signals_imported",
             metadata={
                 "source": "webhook",
                 "imported": result.imported,
                 "skipped": result.skipped_duplicates,
+                "dropped_rows": dropped,
                 "near_duplicates": near_dups,
                 **{f"authenticity_{k}": v for k, v in review.summary().items()},
             },

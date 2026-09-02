@@ -503,6 +503,25 @@ def test_theme_measurement_waits_for_enrichment_of_new_inflow(monkeypatch: pytes
         assert client.get(f"/problems/{problem_id}/outcome").json()["loop_verdict"] == "loop_closed"
 
 
+def test_candidate_grouping_ignores_journey_casing() -> None:
+    """'Checkout/Payment' and 'checkout/payment' rows are one candidate: ids are
+    upper-cased, so two groups would collide on id and split the baseline."""
+    now = datetime.now(UTC)
+    rows = [
+        SignalRecord(signal_id="u", feedback_text="Card declined", journey="Checkout", journey_stage="Payment",
+                     timestamp=_iso(now - timedelta(days=2))),
+        SignalRecord(signal_id="l", feedback_text="Card declined again", journey="checkout", journey_stage="payment",
+                     timestamp=_iso(now - timedelta(days=1))),
+        SignalRecord(signal_id="s", feedback_text="Card declined thrice", journey=" checkout ", journey_stage="payment ",
+                     timestamp=_iso(now)),
+    ]
+    candidates = build_candidates(rows)
+    assert len(candidates) == 1
+    assert candidates[0].candidate_id == "CAND-CHECKOUT-PAYMENT"
+    assert candidates[0].signal_count == 3
+    assert candidates[0].journey == "Checkout"
+
+
 def test_unenriched_in_window_counts_only_the_window() -> None:
     now = datetime.now(UTC)
     inside = SignalRecord(signal_id="a", feedback_text="x", timestamp=_iso(now - timedelta(days=1)))

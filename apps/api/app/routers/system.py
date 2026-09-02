@@ -23,6 +23,7 @@ def build_router(
     connector_config_store,
     enrich_problem_for_response,
     readiness_check=None,
+    measurement_plan_store=None,
 ) -> APIRouter:
     router = APIRouter()
     read_dep = Depends(require_role(Role.viewer))
@@ -153,8 +154,14 @@ def build_router(
             "problems": lambda: exports.problems_csv(
                 [to_summary(enrich_problem_for_response(p)) for p in active_problem_store.list_problems()]
             ),
+            # With plans the board carries loop verdicts (measuring / loop_closed /
+            # fix_did_not_land); without them every row exported as not_measured.
             "outcomes": lambda: exports.outcomes_csv(
-                build_outcome_board(active_problem_store.list_problems(), workflow_store)
+                build_outcome_board(
+                    active_problem_store.list_problems(),
+                    workflow_store,
+                    plans=measurement_plan_store.list_plans() if measurement_plan_store else None,
+                )
             ),
             "telemetry": lambda: exports.telemetry_csv(telemetry_store.list_events(limit=1000)),
         }

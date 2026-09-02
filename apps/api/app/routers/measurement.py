@@ -80,7 +80,11 @@ def build_router(
 
         digest_text = build_digest(
             emerging=build_emerging_problem_report(current_candidates(), signal_store.list_signals()),
-            outcome_board=build_outcome_board(active_problem_store.list_problems(), workflow_store),
+            outcome_board=build_outcome_board(
+                active_problem_store.list_problems(),
+                workflow_store,
+                plans=measurement_plan_store.list_plans(),
+            ),
             measurement_plans=measurement_plan_store.list_plans(),
         )
 

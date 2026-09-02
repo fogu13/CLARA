@@ -640,6 +640,10 @@ class ApprovalRecord(ApprovalDecision):
     # hashes proves whether the pack the approver saw has since changed.
     # ponytail: hash-only tamper evidence; full frozen pack copies if audits demand.
     evidence_pack_hash: str | None = None
+    # The execution this decision completed, when it did (four-eyes holds the
+    # first of two approvals). Set on the approval response so the router acts
+    # on exactly that record instead of re-deriving it from a shared list.
+    execution_id: str | None = None
 
 
 class ExecutionRecord(BaseModel):
@@ -985,6 +989,9 @@ class SignalImportResult(BaseModel):
     imported: int
     skipped_duplicates: int
     total_signals: int
+    # Rows the intake could not turn into a signal (not an object, or no
+    # feedback text). Reported, never silently swallowed.
+    dropped_rows: int = 0
 
 
 class CandidateReviewStatus(str, Enum):

@@ -98,6 +98,10 @@ git push -u origin main
      telemetry on window/follow-up checkpoints. The API self-heals the two tables and their
      RLS on boot; the function replacement only lives in this file, so apply it or theme
      contracts measure 0 signals under pg_cron. Safe to re-run.
+   - `apps/api/migrations/015_api_key_lookup_and_indexes.sql` — API keys minted by any
+     workspace authenticate (the key row names its workspace; the isolation policy admits
+     the one exact-hash lookup inside `verify`), plus indexes for the signal ordering,
+     workflow snapshot, plan dedup and alert dedup queries. Safe to re-run.
    - `apps/api/migrations/012_embedding_dim_1024.sql` — **only if `AI_EMBED_MODEL` is
      1024-dim (e.g. `mistral-embed`)**. 003 pins `taxonomy_nodes.embedding` to
      `vector(768)`; this retargets it. ⚠️ **It clears every stored embedding** — vectors

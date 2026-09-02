@@ -474,7 +474,10 @@ class PostgresConnectionMixin:
                 cursor.execute(
                     """
                     CREATE POLICY clara_api_keys_workspace_isolation ON clara_api_keys
-                    USING (workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint)
+                    USING (
+                      workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint
+                      OR current_setting('app.api_key_lookup', true) = 'on'
+                    )
                     WITH CHECK (workspace_id = COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint)
                     """
                 )
@@ -1729,9 +1732,15 @@ class PostgresApiKeyStore(PostgresConnectionMixin):
 
         if not plaintext.startswith(KEY_PREFIX):
             return None
-        with self._connect() as conn:
+        with self._connect() as conn:  # one pooled checkout == one transaction
+            # An X-Api-Key request carries no tenant yet — the key row itself
+            # names the workspace. The isolation policy (migration 015) admits
+            # a SELECT by exact hash only while this transaction-local flag is
+            # on; writes keep the strict WITH CHECK, and the flag dies with the
+            # transaction. Without it every key outside workspace 1 was a 401.
+            conn.execute("SELECT set_config('app.api_key_lookup', 'on', true)")
             row = conn.execute(
-                "SELECT id, name, role FROM clara_api_keys"
+                "SELECT id, name, role, workspace_id FROM clara_api_keys"
                 " WHERE key_hash = %s AND revoked_at IS NULL",
                 (_hash(plaintext),),
             ).fetchone()

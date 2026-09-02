@@ -659,13 +659,16 @@ def build_router(
                 except Exception:  # noqa: BLE001 — contract upgrade is best-effort
                     logger.exception("Contract proposal failed for %s", problem_id)
 
-            execution = next(
-                (
-                    e
-                    for e in reversed(workflow_store.list_executions())
-                    if e.problem_id == problem_id and e.action_id == decision.action_id
-                ),
-                None,
+            # The store names the execution this decision completed; scanning
+            # the shared list for "latest with this action" raced with cache
+            # refreshes and could push (or schedule) the wrong record, or none.
+            execution = (
+                next(
+                    (e for e in workflow_store.list_executions() if e.execution_id == record.execution_id),
+                    None,
+                )
+                if record.execution_id
+                else None
             )
             if execution is not None:
                 try:

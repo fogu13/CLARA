@@ -927,6 +927,7 @@ def create_app(
             connector_config_store=connector_config_store,
             enrich_problem_for_response=enrich_problem_for_response,
             readiness_check=_readiness,
+            measurement_plan_store=measurement_plan_store,
         )
     )
     api.include_router(

@@ -153,7 +153,7 @@ export const essentialSignalCsvField: SignalCsvField = "feedback_text";
 // detected from the text (a German review used to be stamped "en"), the
 // timestamp falls back to import time WITH an audit flag, and journey/stage/
 // source take the canonical unknown values the candidate grouping understands.
-function defaultSignalValue(field: SignalCsvField, rowIndex: number, batchId: string, _now: string): string {
+function defaultSignalValue(field: SignalCsvField, rowIndex: number, batchId: string): string {
   switch (field) {
     case "signal_id":
       return `csv-${batchId}-${rowIndex}`;
@@ -171,7 +171,6 @@ export function toCanonicalSignalCsvWithDefaults(
   batchId: string,
   sourceHeaders: string[] = []
 ): string {
-  const now = new Date().toISOString();
   const usedHeaders = new Set(Object.values(mapping).filter(Boolean));
   const knownFields = new Set<string>(signalCsvFields);
   // Columns the user didn't map and that don't collide with a canonical name -> metadata.
@@ -185,7 +184,7 @@ export function toCanonicalSignalCsvWithDefaults(
     const canonical = signalCsvFields.map((field) => {
       const mappedHeader = mapping[field];
       const raw = mappedHeader ? (row[mappedHeader] ?? "").trim() : "";
-      return escapeCsvCell(raw || defaultSignalValue(field, rowNumber, batchId, now));
+      return escapeCsvCell(raw || defaultSignalValue(field, rowNumber, batchId));
     });
     const extras = extraHeaders.map((header) => escapeCsvCell((row[header] ?? "").trim()));
     return [...canonical, ...extras].join(",");

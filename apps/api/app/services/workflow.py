@@ -625,6 +625,8 @@ class WorkflowStore:
                         created_at=record.created_at,
                     )
                 )
+            record = record.model_copy(update={"execution_id": execution.execution_id})
+            self._approvals[-1] = record
 
         return record
 
@@ -1196,6 +1198,7 @@ class SQLiteWorkflowStore:
 
         # Four-eyes: the first of two approvals records the decision but holds
         # execution until a different reviewer confirms (completes_approval).
+        execution_id: str | None = None
         if completes_approval:
             execution_cursor = self._connection.execute(
                 """
@@ -1217,8 +1220,8 @@ class SQLiteWorkflowStore:
                     created_at,
                 ),
             )
+            execution_id = f"EXE-{execution_cursor.lastrowid:04d}"
             if action.destination == "jira":
-                execution_id = f"EXE-{execution_cursor.lastrowid:04d}"
                 draft = build_jira_issue_draft(
                     draft_id="JIRA-DRAFT-PENDING",
                     problem=problem,
@@ -1261,7 +1264,10 @@ class SQLiteWorkflowStore:
 
         self._connection.commit()
         row = self._connection.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,)).fetchone()
-        return self._approval_from_row(row)
+        record = self._approval_from_row(row)
+        if execution_id is not None:
+            record = record.model_copy(update={"execution_id": execution_id})
+        return record
 
     def record_outcome(
         self,
