@@ -154,12 +154,13 @@ def mcnemar_sensitivity() -> None:
         cell = paired[task]["ml_vs_llm"]
         b, c = cell["b_first_only_correct"], cell["c_second_only_correct"]
         print(f"  {task}: reported p = {cell['p_exact_two_sided']:.4f} (b = {b}, c = {c})")
-        for flips in (0, 1, 2, 3):
-            bb, cc = b + flips, c - flips
-            if cc < 0:
-                break
-            print(f"    {flips} contextual-correct item(s) flipped: b = {bb}, c = {cc}, "
-                  f"p = {mcnemar_exact(bb, cc):.4f}")
+        # A single item can flip in two ways: a contextual-only-correct pair becomes
+        # both-wrong (c - 1), or a both-correct pair becomes learned-only-correct (b + 1).
+        scenarios = [("one flip, c-1", b, c - 1), ("one flip, b+1", b + 1, c),
+                     ("two flips, c-2", b, c - 2), ("two flips, b+1 c-1", b + 1, c - 1),
+                     ("two flips, b+2", b + 2, c)]
+        for label, bb, cc in scenarios:
+            print(f"    {label:20s}: b = {bb}, c = {cc}, p = {mcnemar_exact(bb, cc):.4f}")
 
 
 def corpus_composition() -> None:
@@ -182,9 +183,50 @@ def corpus_composition() -> None:
             print(f"    {key}: n = {cell['n']}")
 
 
+def _invert(matrix: list[list[float]]) -> list[list[float]]:
+    n = len(matrix)
+    aug = [row[:] + [1.0 if i == j else 0.0 for j in range(n)] for i, row in enumerate(matrix)]
+    for col in range(n):
+        pivot = max(range(col, n), key=lambda r: abs(aug[r][col]))
+        aug[col], aug[pivot] = aug[pivot], aug[col]
+        factor = aug[col][col]
+        aug[col] = [v / factor for v in aug[col]]
+        for r in range(n):
+            if r != col:
+                g = aug[r][col]
+                aug[r] = [a - g * b for a, b in zip(aug[r], aug[col])]
+    return [row[n:] for row in aug]
+
+
+def its_detectability(n_pre: int = 28, n_post: int = 30) -> None:
+    """The detectability note in 3.5.5 uses a two-sample Poisson bound, but the readout
+    is the segmented-regression endpoint b2 + h*b3, whose variance is far larger. This
+    builds the design matrix the estimator uses (pre-days, then post-days, execution
+    day excluded) and compares the two variance factors at the end of the window; the
+    break-even is the daily rate below which a 50% reduction cannot be detected at 80%
+    power (relative MDE = 2.8 * sqrt(factor / rate))."""
+    print("\n== Detectability: two-sample bound vs the ITS estimator (addendum B1) ==")
+    rows = []
+    for t in range(n_pre + n_post):
+        post = 1.0 if t >= n_pre else 0.0
+        rows.append([1.0, float(t), post, (t - n_pre) * post])
+    xtx = [[sum(r[i] * r[j] for r in rows) for j in range(4)] for i in range(4)]
+    inv = _invert(xtx)
+    h = n_post - 1
+    factor_its = inv[2][2] + h * h * inv[3][3] + 2 * h * inv[2][3]
+    factor_two = 1 / n_pre + 1 / n_post
+    print(f"  two-sample variance factor (1/{n_pre} + 1/{n_post}): {factor_two:.3f}")
+    print(f"  ITS endpoint variance factor (h = {h}):               {factor_its:.3f}  "
+          f"({factor_its / factor_two:.1f} times larger)")
+    for name, f in (("two-sample bound", factor_two), ("ITS estimator", factor_its)):
+        print(f"  break-even rate for a 50% target at 80% power, {name}: "
+              f"{2.8 ** 2 * f / 0.25:.1f} signals/day")
+
+
 if __name__ == "__main__":
     restricted_macro_f1()
     golden_set_intervals()
     escalation_tests()
     mcnemar_sensitivity()
     corpus_composition()
+    its_detectability()
