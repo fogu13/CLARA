@@ -116,6 +116,18 @@ cat thesis/evaluation/results/predictions_llm_production.meta.json # model, exem
 cd thesis/evaluation && python run_eval.py > /tmp/run_eval2.log
 ```
 
+Status (5 Sep): the Mistral Small 4 run (`mistral-small-2603`, batch 25, temperature 0) completed 188/188 into `results_mistral-small-2603/` and is scored; the GLM-5.2 run had to be repeated with `AI_TIMEOUT_S=600 --batch-size 10` after the first attempt lost 75 signals to read timeouts. Once both folders hold a full file, run the cross-folder pairs (run_eval.py pairs only within one folder):
+
+```bash
+python thesis/evaluation/compare_runs.py --out-dir thesis/evaluation/results \
+    floor ml=thesis/evaluation/results/predictions_ml.json \
+    glm_generic=thesis/evaluation/results/predictions_llm.json \
+    glm_production=thesis/evaluation/results/predictions_llm_production.json \
+    mistral_production=thesis/evaluation/results_mistral-small-2603/predictions_llm_production.json
+```
+
+`glm_generic_vs_glm_production` is the pipeline effect, `glm_production_vs_mistral_production` the model effect; the CSVs land in `results/compare_runs_*.csv` and §5A.2 reads them.
+
 New keys in `summary.json`: `sentiment_llm_production` (accuracy with Wilson interval), `sentiment_llm_production_excluding_mixed` (the sensitivity variant), `sentiment_llm_production_raw_label_counts`, `risk_llm_production`, `risk_llm_production_binary_escalation`, the `recall_llm_production` columns in `escalation_recall_by_language.csv`, and `llm_vs_llm_production` pairs in `mcnemar_paired.csv`. Then:
 
 1. Fill the placeholder in §5A.2 item 3 (`05_evaluation_results.md`, the "Contextual LLM path" item) with the production row's n, sentiment accuracy and interval, and the mixed-label count.
