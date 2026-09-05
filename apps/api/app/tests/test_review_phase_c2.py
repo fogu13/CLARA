@@ -18,6 +18,36 @@ class TestEvidenceGrade:
         assert evidence_grade(comparison_method="before_after", measurement_source="instrumented") == "D"
         assert evidence_grade(comparison_method="pre_post_signal_rate", measurement_source="instrumented") == "D"
 
+    def test_its_contract_that_fell_back_to_a_plain_delta_is_grade_d(self) -> None:
+        # The contract promised segmented regression, but the series was too
+        # sparse and the engine returned the labelled plain delta: the readout
+        # that exists is an uncontrolled before/after, so it is graded D.
+        assert (
+            evidence_grade(
+                comparison_method="its_segmented_regression",
+                measurement_source="instrumented",
+                realised_method="delta_insufficient_data",
+            )
+            == "D"
+        )
+        assert (
+            evidence_grade(
+                comparison_method="its_segmented_regression",
+                measurement_source="instrumented",
+                realised_method="its",
+            )
+            == "C"
+        )
+        # Manual/unmeasured stays E whatever the fit says.
+        assert (
+            evidence_grade(
+                comparison_method="its_segmented_regression",
+                measurement_source="manual",
+                realised_method="its",
+            )
+            == "E"
+        )
+
 
 def _candidate(*, score: float, sources: list[str], customer_count: int) -> ProblemCandidate:
     return ProblemCandidate(

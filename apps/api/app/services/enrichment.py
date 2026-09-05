@@ -15,6 +15,7 @@ import os
 from copy import deepcopy
 from typing import Any
 
+from app.domain.models import redact_common_pii
 from app.services.ai import AIProviderError, call_tool
 from app.services.exemplar_store import format_fewshot
 
@@ -235,7 +236,15 @@ def enrich_signals(
 
     for i in range(0, len(signals), batch_size):
         batch = signals[i : i + batch_size]
-        items = [{"id": s["id"], "text": s["text"]} for s in batch]
+        # Data minimisation at the model boundary: common direct identifiers
+        # (e-mail, phone, IP, account IDs, street addresses) are redacted from
+        # the customer text before it leaves the platform. The stored signal is
+        # untouched; only the provider payload is minimised. Sentiment, urgency
+        # and theme tags do not depend on who wrote the item.
+        items = [
+            {"id": s["id"], "text": redact_common_pii(str(s["text"])) or ""}
+            for s in batch
+        ]
         allowed_ids = {str(s["id"]) for s in batch}
 
         try:

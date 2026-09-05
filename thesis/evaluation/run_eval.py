@@ -2,17 +2,24 @@
 
 Outputs (in evaluation/results/):
   corpus_stats.csv            descriptive stats of the real corpus
-  sentiment_*.csv             lexicon sentiment vs star-rating gold (overall/by-language/by-sector/per-class)
-  sentiment_confusion.csv     + .png heatmap
-  risk_*.csv                  keyword risk vs risk_seed gold (TR + Henkel)
-  risk_confusion.csv          + .png heatmap
+  sentiment_*.csv             lexicon sentiment vs star-rating gold (overall/by-language/by-sector/by-source/per-class)
+  sentiment_confusion.csv     + .png heatmap (also *_ml_* and *_llm_* variants per predictor)
+  risk_*.csv                  keyword risk vs risk_seed gold (TR + Henkel), same per-predictor variants
   f1_breakdown.png            F1 by slice
   predictions_ml.json         per-item TF-IDF+LR out-of-fold predictions (paired-test input)
-  escalation_recall_by_language.csv   equal-opportunity table, all three predictors
+  escalation_recall_by_language.csv   equal-opportunity table, every predictor, Wilson intervals
+  escalation_recall_fisher.csv        two-sided Fisher exact tests between language strata
+  composition.csv             language x sector / language x source counts (the confound table)
+  mcnemar_paired.csv          paired exact McNemar tests, with the one-flip fragility p
   summary.json                headline numbers Chapter 5 §5A reads back
 
-If evaluation/results/predictions_llm.json exists (written by predict_llm.py with an
-API key), the LLM path is scored alongside the baseline. Otherwise only the baseline runs.
+Every accuracy carries a 95% Wilson interval (accuracy_ci_low/high).
+
+Two optional LLM prediction files are scored when present:
+  predictions_llm.json             generic 3-class prompt (predict_llm.py)        -> keys *_llm
+  predictions_llm_production.json  CLARA's production enrich_signals path
+                                   (predict_llm_production.py)                     -> keys *_llm_production
+Otherwise only the deterministic baselines run.
 """
 from __future__ import annotations
 import csv
@@ -67,6 +74,55 @@ def _heatmap(csv_name, png_name, title):
     plt.close(fig)
 
 
+MIN_SLICE = 5  # harness-wide minimum n for any reported slice
+LLM_RUNS = (
+    # (summary key, predictions file, label in summary/paths)
+    ("llm", "predictions_llm.json",
+     "generic 3-class prompt — predict_llm.py; NOT the artifact's enrichment stage"),
+    ("llm_production", "predictions_llm_production.json",
+     "CLARA's production enrich_signals path — predict_llm_production.py"),
+)
+
+
+def _compact(r):
+    """The columns a slice table carries: n, accuracy + Wilson interval, macro-F1."""
+    return {"n": r["n"], "accuracy": r["accuracy"],
+            "accuracy_ci_low": r["accuracy_ci_low"],
+            "accuracy_ci_high": r["accuracy_ci_high"],
+            "f1_macro": r["f1_macro"]}
+
+
+def _slices(items, y_true, y_pred, attr, labels=None):
+    """Score every value of `attr` carrying >= MIN_SLICE items."""
+    out = {}
+    for val in sorted({getattr(s, attr) for s in items}):
+        sub = [(t, p) for t, p, s in zip(y_true, y_pred, items) if getattr(s, attr) == val]
+        if len(sub) >= MIN_SLICE:
+            out[val] = _compact(M.score([a for a, _ in sub], [b for _, b in sub], labels))
+    return out
+
+
+def _cross_slices(items, y_true, y_pred, labels=None):
+    """language x sector cells with >= MIN_SLICE items (the composition check)."""
+    out = {}
+    for sec in sorted({s.sector for s in items}):
+        for lang in sorted({s.language for s in items}):
+            sub = [(t, p) for t, p, s in zip(y_true, y_pred, items)
+                   if s.sector == sec and s.language == lang]
+            if len(sub) >= MIN_SLICE:
+                out[f"{lang}|{sec}"] = _compact(
+                    M.score([a for a, _ in sub], [b for _, b in sub], labels))
+    return out
+
+
+def _per_class_and_confusion(y_true, y_pred, labels, stem, title):
+    present = [lab for lab in labels if lab in set(y_true) | set(y_pred)]
+    _w(f"{stem}_perclass.csv", M.per_class(y_true, y_pred, present),
+       ["label", "precision", "recall", "f1", "support"])
+    M.write_confusion(y_true, y_pred, present, os.path.join(RESULTS, f"{stem}_confusion.csv"))
+    _heatmap(f"{stem}_confusion.csv", f"{stem}_confusion.png", title)
+
+
 def corpus_stats(sigs):
     rows = []
     for key in ["sector", "language", "source"]:
@@ -89,37 +145,22 @@ def eval_sentiment(sigs, summary):
     rated = [s for s in sigs if s.star_rating is not None and s.text]
     y_true = [bl.gold_sentiment_from_stars(s.star_rating) for s in rated]
     y_pred = [bl.predict_sentiment(s.text) for s in rated]
-    overall = M.score(y_true, y_true and y_pred)
+    overall = M.score(y_true, y_pred)
     _w("sentiment_overall.csv", [overall], list(overall.keys()))
-    _w("sentiment_perclass.csv", M.per_class(y_true, y_pred, SENT_LABELS),
-       ["label", "precision", "recall", "f1", "support"])
-    M.write_confusion(y_true, y_pred, SENT_LABELS, os.path.join(RESULTS, "sentiment_confusion.csv"))
-    _heatmap("sentiment_confusion.csv", "sentiment_confusion.png",
-             "Sentiment (lexicon) vs star-rating gold")
-    # slices
-    by_lang, by_sector = [], []
-    for lang in sorted({s.language for s in rated}):
-        sub = [(bl.gold_sentiment_from_stars(s.star_rating), bl.predict_sentiment(s.text))
-               for s in rated if s.language == lang]
-        if len(sub) >= 5:
-            r = M.score([a for a, _ in sub], [b for _, b in sub]); r["slice"] = lang
-            by_lang.append(r)
-    for sec in sorted({s.sector for s in rated}):
-        sub = [(bl.gold_sentiment_from_stars(s.star_rating), bl.predict_sentiment(s.text))
-               for s in rated if s.sector == sec]
-        if len(sub) >= 5:
-            r = M.score([a for a, _ in sub], [b for _, b in sub]); r["slice"] = sec
-            by_sector.append(r)
-    cols = ["slice"] + [k for k in overall.keys()]
-    _w("sentiment_by_language.csv", by_lang, cols)
-    _w("sentiment_by_sector.csv", by_sector, cols)
+    _per_class_and_confusion(y_true, y_pred, SENT_LABELS, "sentiment",
+                             "Sentiment (lexicon) vs star-rating gold")
+    # slices: language, sector, source (source = review platform / channel)
+    by = {attr: _slices(rated, y_true, y_pred, attr) for attr in ("language", "sector", "source")}
+    cols = ["slice"] + list(_compact(overall).keys())
+    for attr, table in by.items():
+        _w(f"sentiment_by_{attr}.csv", [{"slice": k, **v} for k, v in table.items()], cols)
     summary["sentiment_baseline"] = overall
     # Both metrics, never macro-F1 alone: on small slices with sparse minority
     # classes macro-F1 swings wildly and can invert the accuracy story.
-    _pair = lambda r: {"n": r["n"], "accuracy": r["accuracy"], "f1_macro": r["f1_macro"]}
-    summary["sentiment_by_language"] = {r["slice"]: _pair(r) for r in by_lang}
-    summary["sentiment_by_sector"] = {r["slice"]: _pair(r) for r in by_sector}
-    return by_sector
+    summary["sentiment_by_language"] = by["language"]
+    summary["sentiment_by_sector"] = by["sector"]
+    summary["sentiment_by_source"] = by["source"]
+    return [{"slice": k, **v} for k, v in by["sector"].items()]
 
 
 def eval_risk(sigs, summary):
@@ -174,7 +215,11 @@ def score_taxonomy(sigs, summary):
         # a 51-class macro-F1 dominated by singletons reports noise.
         supported = sorted({v for v, n in collections.Counter(y_true).items() if n >= 5})
         idx = [i for i, t in enumerate(y_true) if t in supported]
-        sup = M.score([y_true[i] for i in idx], [y_pred[i] for i in idx]) if idx else {}
+        # labels=supported: the macro average must run over the supported
+        # classes only; averaging over every label that appears in y_pred as
+        # well silently re-admits the singleton classes the restriction excluded.
+        sup = (M.score([y_true[i] for i in idx], [y_pred[i] for i in idx], labels=supported)
+               if idx else {})
         _w(f"{field}_perclass.csv",
            M.per_class(y_true, y_pred, sorted(vocab)),
            ["label", "precision", "recall", "f1", "support"])
@@ -195,8 +240,9 @@ def score_taxonomy(sigs, summary):
     summary["taxonomy_path"] = "scored from the constrained run (inventory supplied)"
 
 
-def equity_slices(sigs, summary, preds=None, ml_risk=None):
-    """Per-language escalation recall, and the language x sector composition.
+def equity_slices(sigs, summary, llm_maps=None, ml_risk=None):
+    """Per-language escalation recall (with Wilson intervals and Fisher tests),
+    and the composition tables that any per-language claim has to be read against.
 
     NB: `language` records the SOURCE review's language; the paraphrased texts
     themselves are English (§3.5.1), so these are source-language strata, not
@@ -205,54 +251,108 @@ def equity_slices(sigs, summary, preds=None, ml_risk=None):
     Escalation recall (TPR on gold-escalate) is the equal-opportunity metric:
     it conditions on the gold label, so the very different base rates across
     language strata do not distort it the way a raw escalation *rate* would.
+    Each recall carries a 95% Wilson interval, and every pair of language
+    strata gets a two-sided Fisher exact test per predictor, so a gap is
+    reported with its uncertainty rather than as two bare proportions.
 
-    The composition table is reported alongside because language is confounded
-    with dataset on this corpus (German is largely the B2B stratum, English
-    largely fintech). Any per-language claim has to be read against it, so the
-    harness emits it rather than leaving it to prose.
+    The composition tables are written because language is confounded with
+    dataset on this corpus (German is largely the B2B stratum, English largely
+    fintech). Any per-language claim has to be read against them, so the
+    harness emits them rather than leaving it to prose.
     """
     esc = lambda x: x in ("high", "critical")
     have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
-    rows = {}
+    llm_maps = llm_maps or {}
+    predictors = {"floor": lambda s: esc(bl.predict_risk(s.text))}
+    if ml_risk:
+        predictors["ml"] = lambda s, m=ml_risk: (s.id in m) and esc(m[s.id])
+        scored_by = {"ml": lambda s, m=ml_risk: s.id in m}
+    else:
+        scored_by = {}
+    for key, preds in llm_maps.items():
+        predictors[key] = lambda s, m=preds: (s.id in m) and esc(m[s.id].get("risk", "low"))
+        scored_by[key] = lambda s, m=preds: s.id in m
+
+    rows, hits = {}, {}
     for lang in sorted({s.language for s in have}):
         gold = [s for s in have if s.language == lang and esc(s.risk)]
-        if len(gold) < 5:  # too small to report; counted in composition instead
+        if len(gold) < MIN_SLICE:  # too small to report; counted in composition instead
             continue
-        row = {
-            "n_signals": len([s for s in have if s.language == lang]),
-            "n_gold_escalate": len(gold),
-            "base_rate": round(len(gold) / len([s for s in have if s.language == lang]), 4),
-            "recall_floor": round(
-                sum(1 for s in gold if esc(bl.predict_risk(s.text))) / len(gold), 4),
-        }
-        if ml_risk:
-            scored_ml = [s for s in gold if s.id in ml_risk]
-            if scored_ml:
-                row["recall_ml"] = round(
-                    sum(1 for s in scored_ml if esc(ml_risk[s.id])) / len(scored_ml), 4)
-                row["n_gold_escalate_ml"] = len(scored_ml)
-        if preds:
-            scored = [s for s in gold if s.id in preds]
-            if scored:
-                row["recall_llm"] = round(
-                    sum(1 for s in scored if esc(preds[s.id].get("risk", "low")))
-                    / len(scored), 4)
-                row["n_gold_escalate_llm"] = len(scored)
+        n_lang = len([s for s in have if s.language == lang])
+        row = {"n_signals": n_lang, "n_gold_escalate": len(gold),
+               "base_rate": round(len(gold) / n_lang, 4)}
+        for name, fn in predictors.items():
+            scored = [s for s in gold if name not in scored_by or scored_by[name](s)]
+            if not scored:
+                continue
+            k = sum(1 for s in scored if fn(s))
+            lo, hi = M.wilson_interval(k, len(scored))
+            row[f"n_gold_escalate_{name}"] = len(scored)
+            row[f"recall_{name}"] = round(k / len(scored), 4)
+            row[f"recall_{name}_ci_low"], row[f"recall_{name}_ci_high"] = lo, hi
+            hits[(name, lang)] = (k, len(scored) - k)
         rows[lang] = row
     summary["escalation_recall_by_language"] = rows
     if rows:
+        # Column order: the stratum's totals, then per predictor n / recall /
+        # interval, in the floor -> ml -> llm order the chapter reads them.
+        lead = ["n_signals", "n_gold_escalate", "base_rate"]
+        per_pred = [
+            col for name in predictors
+            for col in (f"n_gold_escalate_{name}", f"recall_{name}",
+                        f"recall_{name}_ci_low", f"recall_{name}_ci_high")]
+        seen = {c for r in rows.values() for c in r}
+        cols = [c for c in lead + per_pred if c in seen]
         _w("escalation_recall_by_language.csv",
            [{"language": lang, **r} for lang, r in sorted(rows.items())],
-           ["language", "n_signals", "n_gold_escalate", "base_rate",
-            "recall_floor", "n_gold_escalate_ml", "recall_ml",
-            "n_gold_escalate_llm", "recall_llm"])
+           ["language"] + cols)
 
-    comp = {}
-    for s in sigs:
-        if s.star_rating is None and s.risk not in RISK_LABELS:
-            continue
-        comp[f"{s.language}|{s.sector}"] = comp.get(f"{s.language}|{s.sector}", 0) + 1
-    summary["language_sector_composition"] = dict(sorted(comp.items()))
+    # Fisher exact test on hits/misses between every pair of reported strata.
+    fisher = []
+    langs = sorted(rows)
+    for name in predictors:
+        for i, la in enumerate(langs):
+            for lb in langs[i + 1:]:
+                if (name, la) not in hits or (name, lb) not in hits:
+                    continue
+                a, b = hits[(name, la)]
+                c, d = hits[(name, lb)]
+                fisher.append({
+                    "predictor": name, "language_a": la, "language_b": lb,
+                    "hits_a": a, "misses_a": b, "hits_b": c, "misses_b": d,
+                    "recall_a": round(a / (a + b), 4), "recall_b": round(c / (c + d), 4),
+                    "p_fisher_two_sided": round(M.fisher_exact(a, b, c, d), 6),
+                })
+    summary["escalation_recall_fisher"] = fisher
+    if fisher:
+        _w("escalation_recall_fisher.csv", fisher, list(fisher[0].keys()))
+
+    # Composition: every labelled item, by language x sector and language x source,
+    # with the risk-labelled and gold-escalate counts that the recall table draws on.
+    comp_rows = []
+    for other in ("sector", "source"):
+        cells = collections.defaultdict(lambda: [0, 0, 0])
+        for s in sigs:
+            if s.star_rating is None and s.risk not in RISK_LABELS:
+                continue
+            cell = cells[(s.language, getattr(s, other))]
+            cell[0] += 1
+            if s.risk in RISK_LABELS:
+                cell[1] += 1
+                if esc(s.risk):
+                    cell[2] += 1
+        for (lang, val), (n_all, n_risk, n_esc) in sorted(cells.items()):
+            comp_rows.append({"language": lang, "dimension": other, "value": val,
+                              "n_labelled": n_all, "n_risk_labelled": n_risk,
+                              "n_gold_escalate": n_esc})
+    _w("composition.csv", comp_rows,
+       ["language", "dimension", "value", "n_labelled", "n_risk_labelled", "n_gold_escalate"])
+    summary["language_sector_composition"] = {
+        f"{r['language']}|{r['value']}": r["n_labelled"]
+        for r in comp_rows if r["dimension"] == "sector"}
+    summary["language_source_composition"] = {
+        f"{r['language']}|{r['value']}": r["n_labelled"]
+        for r in comp_rows if r["dimension"] == "source"}
 
 
 def f1_breakdown(by_sector):
@@ -288,6 +388,11 @@ def eval_ml(sigs, summary):
     ml_preds["sentiment"] = {rated[i].id: p for i, p in zip(idx, y_pred)}
     r = M.score(y_true, y_pred); r["cv_folds"] = k
     _w("sentiment_ml.csv", [r], list(r.keys()))
+    _per_class_and_confusion(y_true, y_pred, SENT_LABELS, "sentiment_ml",
+                             "Sentiment (TF-IDF+LR, out-of-fold) vs star-rating gold")
+    kept = [rated[i] for i in idx]
+    summary["sentiment_ml_by_language"] = _slices(kept, y_true, y_pred, "language")
+    summary["sentiment_ml_by_source"] = _slices(kept, y_true, y_pred, "source")
     summary["sentiment_ml_tfidf_lr"] = r
     # risk vs risk_seed gold (TR + Henkel)
     have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
@@ -295,56 +400,68 @@ def eval_ml(sigs, summary):
     ml_preds["risk"] = {have[i].id: p for i, p in zip(idx2, yp)}
     r2 = M.score(yt, yp); r2["cv_folds"] = k2
     _w("risk_ml.csv", [r2], list(r2.keys()))
+    _per_class_and_confusion(yt, yp, RISK_LABELS, "risk_ml",
+                             "Risk (TF-IDF+LR, out-of-fold) vs risk_seed gold")
     summary["risk_ml_tfidf_lr"] = r2
     with open(os.path.join(RESULTS, "predictions_ml.json"), "w") as fh:
         json.dump(ml_preds, fh, indent=2)
     return ml_preds
 
 
-def score_llm(sigs, summary):
-    cache = os.path.join(RESULTS, "predictions_llm.json")
-    if not os.path.exists(cache):
-        summary["llm_path"] = "not run (no predictions_llm.json; set AI_API_KEY and run predict_llm.py)"
-        return
-    preds = {p["id"]: p for p in json.load(open(cache))}
+def score_llm(sigs, summary, *, key="llm", cache="predictions_llm.json", label=""):
+    """Score one LLM prediction file under summary keys `*_{key}`; return its map.
+
+    Two files are supported (see LLM_RUNS): the generic-prompt run and the
+    production-path run. A production file carries `sentiment_raw` (the
+    4-class production label) next to the pre-registered 3-class mapping
+    (mixed -> neutral); when present, a sensitivity score that drops the
+    mixed items is reported next to the primary one, so the reader can see
+    how much of the result rests on the mapping rule.
+    """
+    path = os.path.join(RESULTS, cache)
+    if not os.path.exists(path):
+        summary[f"{key}_path"] = f"not run (no {cache}; {label})"
+        return None
+    preds = {p["id"]: p for p in json.load(open(path))}
     rated = [s for s in sigs if s.star_rating is not None and s.id in preds and s.text]
     y_true = [bl.gold_sentiment_from_stars(s.star_rating) for s in rated]
-    y_pred = [preds[s.id].get("sentiment", "neutral") for s in rated]
-    summary["sentiment_llm"] = M.score(y_true, y_pred)
-    # Same slices as the lexicon floor (same >=5 minimum), so §5A.5 compares
-    # like with like instead of a floor-only breakdown.
-    for attr in ("language", "sector"):
-        out = {}
-        for val in sorted({getattr(s, attr) for s in rated}):
-            sub = [(t, p) for t, p, s in zip(y_true, y_pred, rated)
-                   if getattr(s, attr) == val]
-            if len(sub) >= 5:
-                r = M.score([a for a, _ in sub], [b for _, b in sub])
-                out[val] = {"n": r["n"], "accuracy": r["accuracy"], "f1_macro": r["f1_macro"]}
-        summary[f"sentiment_llm_by_{attr}"] = out
-
+    y_pred = [preds[s.id].get("sentiment") or "neutral" for s in rated]
+    summary[f"sentiment_{key}"] = M.score(y_true, y_pred)
+    _per_class_and_confusion(y_true, y_pred, SENT_LABELS, f"sentiment_{key}",
+                             f"Sentiment ({key}) vs star-rating gold")
+    # Same slices as the lexicon floor (same >= MIN_SLICE minimum), so §5A.5
+    # compares like with like instead of a floor-only breakdown.
+    for attr in ("language", "sector", "source"):
+        summary[f"sentiment_{key}_by_{attr}"] = _slices(rated, y_true, y_pred, attr)
     # Language x sector, because language is confounded with sector here: any
     # aggregate per-language gap may be a composition effect. Only a sector
     # carrying both languages supports a within-sector language claim.
-    cross = {}
-    for sec in sorted({s.sector for s in rated}):
-        for lang in sorted({s.language for s in rated}):
-            sub = [(t, p) for t, p, s in zip(y_true, y_pred, rated)
-                   if s.sector == sec and s.language == lang]
-            if len(sub) >= 5:
-                r = M.score([a for a, _ in sub], [b for _, b in sub])
-                cross[f"{lang}|{sec}"] = {
-                    "n": r["n"], "accuracy": r["accuracy"], "f1_macro": r["f1_macro"]}
-    summary["sentiment_llm_by_language_sector"] = cross
+    summary[f"sentiment_{key}_by_language_sector"] = _cross_slices(rated, y_true, y_pred)
+    if any("sentiment_raw" in p for p in preds.values()):
+        raw = collections.Counter(preds[s.id].get("sentiment_raw") for s in rated)
+        keep = [i for i, s in enumerate(rated) if preds[s.id].get("sentiment_raw") != "mixed"]
+        summary[f"sentiment_{key}_raw_label_counts"] = dict(raw)
+        summary[f"sentiment_{key}_excluding_mixed"] = {
+            "rule": "sensitivity: items the production model labelled mixed are dropped;"
+                    " the primary score maps mixed -> neutral (pre-registered)",
+            "n_dropped": len(rated) - len(keep),
+            **M.score([y_true[i] for i in keep], [y_pred[i] for i in keep]),
+        }
     have = [s for s in sigs if s.risk in RISK_LABELS and s.id in preds and s.text]
     if have:
-        summary["risk_llm"] = M.score([s.risk for s in have],
-                                      [preds[s.id].get("risk", "low") for s in have])
-    summary["llm_path"] = f"scored {len(rated)} sentiment / {len(have)} risk predictions"
+        rt = [s.risk for s in have]
+        rp = [preds[s.id].get("risk") or "low" for s in have]
+        summary[f"risk_{key}"] = M.score(rt, rp)
+        _per_class_and_confusion(rt, rp, RISK_LABELS, f"risk_{key}",
+                                 f"Risk ({key}) vs risk_seed gold")
+        esc = lambda x: "escalate" if x in ("high", "critical") else "routine"
+        summary[f"risk_{key}_binary_escalation"] = M.score([esc(v) for v in rt], [esc(v) for v in rp])
+    summary[f"{key}_path"] = f"scored {len(rated)} sentiment / {len(have)} risk predictions ({label})"
+    return preds
 
 
-def significance(sigs, summary, ml_preds, llm_preds):
-    """Paired exact McNemar tests between the three predictors (§3.5.3, §5A.6).
+def significance(sigs, summary, ml_preds, llm_maps=None):
+    """Paired exact McNemar tests between every pair of predictors (§3.5.3, §5A.6).
 
     §5A reports the floor -> learned -> contextual ordering; this makes each
     pairwise step carry its own test instead of an eyeballed gap. Convention
@@ -353,9 +470,14 @@ def significance(sigs, summary, ml_preds, llm_preds):
     binomial(b + c, 0.5). Each entry is computed on the intersection of items
     both predictors scored, and reports both accuracies on exactly that paired
     subset, so the tested gap is visible next to its p-value.
+
+    `p_if_one_pair_flipped` is the fragility check: the p-value after moving a
+    single discordant pair toward the null. On a corpus this size several
+    "significant" gaps rest on one item; the table has to show that.
     """
     rated = [s for s in sigs if s.star_rating is not None and s.text]
     have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
+    llm_maps = llm_maps or {}
     tasks = {
         "sentiment": (rated,
                       lambda s: bl.gold_sentiment_from_stars(s.star_rating),
@@ -366,54 +488,66 @@ def significance(sigs, summary, ml_preds, llm_preds):
                  lambda s: bl.predict_risk(s.text),
                  (ml_preds or {}).get("risk", {}), "risk", "low"),
     }
-    out = {}
+    order = ["floor", "ml"] + [key for key, _, _ in LLM_RUNS]
+    out, csv_rows = {}, []
     for task, (items, gold_fn, floor_fn, ml_map, fld, default) in tasks.items():
         correct = {"floor": {s.id: floor_fn(s) == gold_fn(s) for s in items}}
         if ml_map:
             correct["ml"] = {s.id: ml_map[s.id] == gold_fn(s)
                              for s in items if s.id in ml_map}
-        if llm_preds:
-            correct["llm"] = {s.id: llm_preds[s.id].get(fld, default) == gold_fn(s)
-                              for s in items if s.id in llm_preds}
+        for key, preds in llm_maps.items():
+            correct[key] = {s.id: (preds[s.id].get(fld) or default) == gold_fn(s)
+                            for s in items if s.id in preds}
+        present = [name for name in order if name in correct]
         res = {}
-        for a, b_name in (("floor", "ml"), ("floor", "llm"), ("ml", "llm")):
-            if a not in correct or b_name not in correct:
-                continue
-            ids = sorted(set(correct[a]) & set(correct[b_name]))
-            if not ids:
-                continue
-            av = [correct[a][i] for i in ids]
-            bv = [correct[b_name][i] for i in ids]
-            b, c, p = M.mcnemar_exact(av, bv)
-            res[f"{a}_vs_{b_name}"] = {
-                "n_pairs": len(ids),
-                f"acc_{a}": round(sum(av) / len(ids), 4),
-                f"acc_{b_name}": round(sum(bv) / len(ids), 4),
-                "b_first_only_correct": b,
-                "c_second_only_correct": c,
-                "p_exact_two_sided": round(p, 6),
-            }
+        for i, a in enumerate(present):
+            for b_name in present[i + 1:]:
+                ids = sorted(set(correct[a]) & set(correct[b_name]))
+                if not ids:
+                    continue
+                av = [correct[a][x] for x in ids]
+                bv = [correct[b_name][x] for x in ids]
+                b, c, p = M.mcnemar_exact(av, bv)
+                entry = {
+                    "n_pairs": len(ids),
+                    f"acc_{a}": round(sum(av) / len(ids), 4),
+                    f"acc_{b_name}": round(sum(bv) / len(ids), 4),
+                    "b_first_only_correct": b,
+                    "c_second_only_correct": c,
+                    "p_exact_two_sided": round(p, 6),
+                    "p_if_one_pair_flipped": round(M.mcnemar_one_flip_p(b, c), 6),
+                }
+                res[f"{a}_vs_{b_name}"] = entry
+                csv_rows.append({"task": task, "pair": f"{a}_vs_{b_name}",
+                                 "n_pairs": len(ids), "acc_first": entry[f"acc_{a}"],
+                                 "acc_second": entry[f"acc_{b_name}"],
+                                 "b_first_only_correct": b, "c_second_only_correct": c,
+                                 "p_exact_two_sided": entry["p_exact_two_sided"],
+                                 "p_if_one_pair_flipped": entry["p_if_one_pair_flipped"]})
         out[task] = res
     summary["mcnemar_paired"] = out
+    if csv_rows:
+        _w("mcnemar_paired.csv", csv_rows, list(csv_rows[0].keys()))
 
 
 def main():
     sigs = load()
     summary = {"corpus_n": len(sigs),
-               "datasets": sorted({s.dataset for s in sigs})}
+               "datasets": sorted({s.dataset for s in sigs}),
+               "ci_method": "accuracy/recall intervals are 95% Wilson score intervals"}
     corpus_stats(sigs)
     by_sector = eval_sentiment(sigs, summary)
     eval_risk(sigs, summary)
     ml_preds = eval_ml(sigs, summary)
     f1_breakdown(by_sector)
-    score_llm(sigs, summary)
+    llm_maps = {}
+    for key, cache, label in LLM_RUNS:
+        preds = score_llm(sigs, summary, key=key, cache=cache, label=label)
+        if preds:
+            llm_maps[key] = preds
     score_taxonomy(sigs, summary)
-    cache = os.path.join(RESULTS, "predictions_llm.json")
-    llm_preds = ({p["id"]: p for p in json.load(open(cache))}
-                 if os.path.exists(cache) else None)
-    equity_slices(sigs, summary, llm_preds,
-                  ml_preds.get("risk") if ml_preds else None)
-    significance(sigs, summary, ml_preds, llm_preds)
+    equity_slices(sigs, summary, llm_maps, ml_preds.get("risk") if ml_preds else None)
+    significance(sigs, summary, ml_preds, llm_maps)
     with open(os.path.join(RESULTS, "summary.json"), "w") as fh:
         json.dump(summary, fh, indent=2)
     print(json.dumps(summary, indent=2))

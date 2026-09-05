@@ -189,3 +189,50 @@ class TestMergeEnrichment:
         assert "audit" in merged
         assert merged["audit"]["source"] == "llm_enrichment"
         assert merged["audit"]["model"] == "test-model"
+
+
+class TestModelBoundaryRedaction:
+    """Direct identifiers never leave the platform inside the enrichment prompt."""
+
+    def test_pii_is_redacted_before_the_provider_call(
+        self, _mock_ai_env: None, httpx_mock: Any
+    ) -> None:
+        from app.services.enrichment import enrich_signals
+
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "tool_calls": [
+                                {
+                                    "function": {
+                                        "name": "submit_enrichments",
+                                        "arguments": json.dumps(
+                                            _enrichment_response([{"id": "sig-pii"}])
+                                        ),
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "usage": {},
+            },
+        )
+        text = (
+            "Checkout failed twice. Reach me at jo.doe@example.com or +49 170 1234567,"
+            " my account is CUST-8812 and I live at 12 Baker Street."
+        )
+
+        result = enrich_signals([{"id": "sig-pii", "text": text}])
+
+        assert len(result) == 1 and result[0]["id"] == "sig-pii"
+        sent = httpx_mock.get_requests()[-1].read().decode()
+        for identifier in ("jo.doe@example.com", "170 1234567", "CUST-8812", "12 Baker Street"):
+            assert identifier not in sent
+        assert "[EMAIL REDACTED]" in sent
+        # The substantive complaint still reaches the model.
+        assert "Checkout failed twice" in sent

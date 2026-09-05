@@ -167,6 +167,14 @@ def test_ai_themes_become_candidates_and_the_loop_closes(monkeypatch: pytest.Mon
         snapshot = client.get(f"/problems/{problem_id}/outcome").json()
         assert snapshot["status"] == "not_measured"
         assert snapshot["loop_verdict"] == "measuring"
+        # The owner upgrades the contract to segmented regression (the
+        # promotion-default path does this on approval; theme problems keep
+        # the plain pre/post method unless edited).
+        patched = client.patch(
+            f"/problems/{problem_id}/outcome-contract",
+            json={"comparison_method": "its_segmented_regression"},
+        )
+        assert patched.status_code == 200, patched.text
 
         # Keep listening: one tagged complaint arrives after the fix; at the
         # window checkpoint inflow has dropped from 4/day to ~0.03/day.
@@ -197,6 +205,14 @@ def test_ai_themes_become_candidates_and_the_loop_closes(monkeypatch: pytest.Mon
         assert snapshot["measurement_source"] == "instrumented"
         assert snapshot["loop_verdict"] == "loop_closed"
         assert snapshot["latest_value"] == pytest.approx(1 / 40, abs=1e-4)
+        # The contract promises segmented regression, but four pre-signals over
+        # three hours cannot support it: the engine returned the labelled plain
+        # delta, and the evidence grade follows the fit obtained (D), not the
+        # design that was planned (C). The board, which does not run the ITS,
+        # still shows the contracted design grade.
+        assert snapshot["comparison_method"] == "its_segmented_regression"
+        assert snapshot["its"]["method"] == "delta_insufficient_data"
+        assert snapshot["evidence_grade"] == "D"
 
         board = client.get("/outcome-board").json()
         assert board["loop_closed"] == 1
