@@ -29,8 +29,8 @@ The aim of this thesis is to **design, build, and evaluate a software artifact t
 
 This aim is pursued through four research questions:
 
-- **RQ1 (core).** How can a software artifact operationalise the full feedback-to-action loop such that actions are not merely *recommended* but *governed, executed, and verified to have closed*, with reusable organisational learning captured along the way?
-- **RQ2 (governance).** What design principles enable *governed* action-taking (conditional automation behind a mandatory human approval gate, rule conflict resolution, and an audit trail) that aligns with the EU AI Act and GDPR, and how do practitioners experience the friction that governance imposes?
+- **RQ1 (core).** How can a software artifact operationalise the full feedback-to-action loop such that actions are not merely *recommended* but *governed, executed, and designed so that their closure is measured*, with reusable organisational learning captured along the way?
+- **RQ2 (governance).** What design principles enable *governed* action-taking (every action a draft behind a mandatory human approval gate, authority graduated by consequence class, and an audit trail) that aligns with the EU AI Act and GDPR, and how do practitioners experience the friction that governance imposes?
 - **RQ3a (accuracy).** How accurately does the artifact's AI enrichment pipeline reproduce human-assigned sentiment, risk/severity, journey-stage and owner labels on real-world customer feedback, and how does accuracy vary across sectors?
 - **RQ3b (equity).** Does the choice of triage method change *whose* problems get escalated? That is, does escalation of genuinely critical signals differ systematically across language strata, defined in this corpus by the source review's language (§3.7)?
 - **RQ4 (qualitative).** How do practitioners assess the artifact's usefulness, usability, and trustworthiness for closing the feedback-to-action gap?
@@ -39,7 +39,7 @@ RQ1 and RQ2 are answered through the design and demonstration of the artifact (C
 
 The scope of RQ3a is deliberately narrower than the pipeline as a whole. The pipeline also assigns theme and a recommended action. Those fields carry gold labels but are **not** scored, because the semantic-agreement procedure they require (§3.5.2) was not executed. Journey stage and owner *are* scored, but only under a supplied taxonomy rather than in the production free-form configuration (§5A.4.1), which makes those figures an upper bound on production routing accuracy. Extending the evaluation to them is stated as future work (§6.5), and no accuracy claim is made about them anywhere.
 
-These questions subsume the eight working hypotheses that guided the early project (H1, the insight-action gap, and H2, signal fragmentation, as primary; H3–H8 as secondary, descriptive propositions on signal types, journey-stage impact, routing, ownership, stakeholder confidence, and outcome measurement). The mapping of H1–H8 to the research questions is given in Chapter 3 and revisited against findings in Chapter 5.
+Eight working hypotheses guided the early project; they are subsumed by these questions and are retained only as coding labels in the practitioner instruments and in the traceability matrix (Appendix D), which also records what each claim's evidence status is.
 
 ## 1.4 The Artifact in Brief
 
@@ -58,18 +58,33 @@ The thesis adopts **Design Science Research** (DSR), the paradigm appropriate to
 This thesis makes four contributions:
 
 1. **A working artifact** that closes the customer feedback-to-action loop end-to-end, from signal to *measured* outcome and *reusable* learning, under explicit governance. It demonstrates that the gap identified in the literature is addressable by design.
-2. **Transferable design principles**, derived from non-trivial design decisions that the literature does not resolve: graduated rule conflict resolution, perishable organisational memory via confidence decay, set-based (cross-signal) severity, confidence-weighted past-learnings retrieval, and per-industry adaptation by configuration rather than retraining (Chapter 4; synthesised as six principles, each with its cost, in Chapter 6).
+2. **Transferable design principles**, derived from non-trivial design decisions that the literature does not resolve: closure as a contracted, graded measurement that refuses when underpowered; perishable organisational memory via confidence decay; authority graduated by consequence class with every action a draft; a bounded model inside a deterministic loop; and the decision to measure, publish and not ship a capability whose errors fall unevenly on the people served (Chapter 4; synthesised as five principles and two implementation decisions, each with its cost, in Chapter 6).
 3. **A real-data evaluation** of LLM-based feedback enrichment and routing against human-curated labels across three sectors (fintech, B2B industrial, food delivery), with signals drawn from English- and German-language sources and scored as English paraphrases (§3.7), quantifying where automated triage is reliable and where it is not (Chapter 5, §5A).
 4. **An account of integral Responsible-AI design**: how human oversight, auditability, and EU AI Act / GDPR alignment can be built into an action-taking AI system as durable design commitments rather than compliance afterthoughts, with reflections on the tensions this surfaces (Chapters 4 and 6).
 
-## 1.7 Scope and Delimitations
+## 1.7 What Is Measured, What Is Demonstrated, and What Is Argued
+
+A reader should know before Chapter 2 what kind of evidence stands behind each claim. The table below is the short form of the traceability matrix (Appendix D); the status vocabulary is *measured* (quantified against data), *demonstrated* (built, shown running, regression-tested), *exploratory* (practitioner evidence collected at whatever n the study reaches), and *not evaluated*.
+
+| Claim | Status | Where |
+|---|---|---|
+| Triage accuracy is method-dependent; a contextual model clears the accuracy bar the loop requires (RQ3a) | Measured, on 188 signals with a generic prompt on the artifact's model; the production stage's figure on the same corpus is pending | §5A.3–5A.4 |
+| Method choice changes whose problems are escalated (RQ3b) | Measured, on a German-source stratum of eight signals; the learned model's gap is significant, the contextual path's is not detectable | §5A.5 |
+| The loop closes by design: contracted, graded, refusing measurement (RQ1; DP1) | Demonstrated and regression-tested; no live outcome contract on real data yet | §3.5.5, §4.4 |
+| Retrieved learnings steer recommendations (DP2) | Retrieval influence measured on simulated outcomes; perishability not measured | §5A.7 |
+| Every action is a draft; authority graduated by consequence class (RQ2; DP4) | Demonstrated, running in production; practitioner perception exploratory | §4.3.1, §5B |
+| Responsible-AI alignment with the EU AI Act and GDPR (RQ2) | Argued, as a design walkthrough labelled obligation versus commitment | Appendix B |
+| Practitioner usefulness, usability and trust (RQ4) | Exploratory; the fallback protocol states what is reported at the n reached | §5B |
+| Per-industry weight profiles (DP6); the adaptive taxonomy's behaviour over time | Not evaluated | §6.4 |
+
+## 1.8 Scope and Delimitations
 
 The thesis scope is the *governed loop-closure* stretch of the chain. It is explicitly **not** a survey-collection tool, a full customer data platform, a campaign-delivery engine, or a product-management suite. These are treated as systems to integrate with, not to rebuild. The quantitative evaluation assesses the enrichment and routing pipeline against human labels on a corpus of real public feedback; it does not claim production-scale benchmarking. The qualitative study evaluates *perceived* utility, usability, and trust through practitioner interviews and task sessions; it does not measure long-run business outcomes such as retention lift, which would require a longitudinal field deployment beyond the thesis timeframe. The platform pushes approved actions to real external systems (Jira, Slack) and pulls feedback through official-API connectors (Zendesk, Trustpilot, the Apple App Store, Google Play, Google Business Profile) alongside CSV import and a signed webhook; CRM-side integrations remain future work, judged unnecessary for evaluating the design concept (Chapter 4, §4.7).
 
-## 1.8 Responsible AI Positioning
+## 1.9 Responsible AI Positioning
 
 As an MSc Responsible AI thesis, this work treats Responsible AI as an **integral, evaluated design dimension** rather than the headline contribution. The headline is the governed closing of the loop. The Responsible-AI commitment is what makes that closing *defensible* when the system can recommend and execute consequential actions. Concretely, this means human oversight aligned with EU AI Act Article 14, transparency and logging consistent with Articles 50 and 12, GDPR data-governance principles, and honest trust calibration in the interface (Lee & See, 2004). Fairness is treated as an *evaluated* property rather than an implemented control: the evaluation measures whether triage escalates critical signals evenly across languages (§5A.5, RQ3b), while automated routing-fairness enforcement is design-forward and not built (§6.4), and standing fairness monitoring is stated as future work (§6.5) (Mehrabi et al., 2021). An earlier framing of the project as an ethics-governance "guardian" for marketing journeys was deliberately set aside, on the supervisor's guidance, in favour of the orchestration-and-closure framing adopted here. The Responsible-AI substance of that earlier direction is retained as a cross-cutting design concern.
 
-## 1.9 Structure of the Thesis
+## 1.10 Structure of the Thesis
 
 **Chapter 2** reviews the literature underpinning the artifact: VoC and feedback loops, sentiment analysis and NLP, business-intelligence pipelines, anomaly detection, decision support and automation, experimentation, churn, data integration, visualisation, workflow management, and organisational learning, together with the Design Science Research methodology, the Responsible-AI literature, and recent (2023–2026) developments in LLM agents, agentic feedback platforms, and EU AI Act implementation. **Chapter 3** sets out the research methodology: the DSR paradigm and its activities, the mixed-methods evaluation design, the datasets, and the research ethics. **Chapter 4** documents the artifact, its architecture, the five design decisions that constitute the design contribution, and its Responsible-AI controls. **Chapter 5** presents the evaluation: the quantitative gold-set results (§5A) and the qualitative practitioner study protocol and findings (§5B). **Chapter 6** discusses the design principles, the Responsible-AI tensions, limitations, and future work, and positions the artifact against the competitive landscape. **Chapter 7** concludes.

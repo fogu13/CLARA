@@ -22,7 +22,7 @@ Interview participants are research participants, not prospects. Concretely:
 - The same person never appears in both the §5B sample and the sales pipeline during the study window.
 - The disclosure in Part B ("Researcher's interest") is read or shown **before** consent is taken.
 
-This is the operational counterpart of the thesis's conflict-of-interest statement (§3.12); cite it
+This is the operational counterpart of the thesis's conflict-of-interest statement (§3.10); cite it
 there and in §3.9.
 
 ---

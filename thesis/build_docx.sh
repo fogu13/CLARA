@@ -30,6 +30,9 @@ tail -n +2 manuscript/appendices/C_dpia.md >> "$OUT"
 printf '\n\n---\n\n# Appendix D: Traceability Matrix\n\n' >> "$OUT"
 tail -n +2 manuscript/appendices/D_traceability_matrix.md >> "$OUT"
 
+printf '\n\n---\n\n# Appendix F: External-Review Episode (July 2026)\n\n' >> "$OUT"
+tail -n +2 manuscript/appendices/F_external_review_episode.md >> "$OUT"
+
 if [ -f diagrams/schema.sql ]; then
   printf '\n\n---\n\n# Appendix E: Data Model DDL (schema.sql)\n\n```sql\n' >> "$OUT"
   cat diagrams/schema.sql >> "$OUT"

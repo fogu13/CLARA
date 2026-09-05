@@ -1,8 +1,6 @@
 # Chapter 2: Literature Review
 
-## The Platform: A Feedback Loop and Insights Management Platform
-
-This chapter reviews the academic literature on capturing, analysing, and acting on customer signals, in order to establish what prior work has settled, what it leaves open, and which of those open questions a design-science artifact can answer. The review is organised around eleven thematic areas (with the design-science methodology, Responsible-AI foundations, and recent 2023–2026 developments treated in §2.14–§2.16): voice of the customer programs, sentiment analysis, business intelligence pipelines, anomaly detection, decision support and automation, experimental design, churn prediction, data integration, information visualization, workflow management, and organizational learning.
+This chapter reviews the academic literature on capturing, analysing, and acting on customer signals, in order to establish what prior work has settled, what it leaves open, and which of those open questions a design-science artifact can answer. The review is organised around eight thematic areas, followed by the industry evidence, a synthesis, and three foundations treated at greater length (the design-science methodology, Responsible-AI and EU law, and developments of 2023–2026): voice of the customer programmes, sentiment analysis, business intelligence pipelines, decision support and automation, experimental design, data integration, workflow management, and organisational learning. Three areas an earlier draft reviewed at length (anomaly detection, churn prediction, dashboard design) are not used by the artifact or the evaluation and are omitted; what the artifact takes from anomaly detection, a corroboration floor and a false-discovery gate before a burst can grade "act now", is stated where it is used (§4.3.3).
 
 ---
 
@@ -96,11 +94,7 @@ The conceptual foundation for transforming raw data into actionable understandin
 
 Applied to customer feedback, the hierarchy names the transformations a pipeline must perform: raw signals are data; aggregated and contextualised signals become information; insights carrying severity and a stated confidence represent knowledge; and a routed, owned recommendation approaches wisdom. The hierarchy is descriptive rather than prescriptive. It says which transformations exist, not that any given system performs them well, but it supplies the vocabulary Chapter 4 uses for the pipeline stages.
 
-### 2.3.3 Customer Intelligence and Competing on Analytics
-
-Davenport and Harris (2007), in *Competing on Analytics* (Harvard Business School Press), articulated the strategic imperative for organisations to derive competitive advantage from analytical capabilities applied to customer data. LaValle, Lesser, Shockley, Hopkins, and Kruschwitz (2011), publishing findings from an MIT Sloan Management Review and IBM survey, found that top-performing organisations were three times more likely to describe themselves as using analytics to guide future strategies rather than merely justify past decisions.
-
-### 2.3.4 Automated Insight Generation and the Insight-Action Gap
+### 2.3.3 Automated Insight Generation and the Insight-Action Gap
 
 The concept of augmented analytics, where machine learning automates pattern detection and insight generation, was explored by Wang, Kung, and Byrd (2018) in *Decision Support Systems*. Despite advances in analytical capability, the translation of insights into organisational action remains challenging. Ghasemaghaei, Hassanein, and Turel (2017), in *Decision Support Systems*, showed that analytics tools improve a firm's agility only when they fit the tasks they are used for and the people who use them, so capability alone does not guarantee better decisions. Prescriptive analytics, as defined by Lepenioti, Bousdekis, Apostolou, and Mentzas (2020) in *Journal of Industrial Information Integration*, extends beyond prediction to recommend specific actions.
 
@@ -108,217 +102,125 @@ The gap is therefore best read as an architectural problem rather than an analyt
 
 ---
 
-## 2.4 Anomaly Detection in Customer Metrics
+## 2.4 Decision Support Systems and Rule-Based Automation
 
-### 2.4.1 Foundations of Anomaly Detection
-
-The foundational survey by Chandola, Banerjee, and Kumar (2009) in *ACM Computing Surveys* established a widely adopted taxonomy of anomalies into three categories: point anomalies (individual data instances deviating from the norm), contextual anomalies (instances anomalous only within a specific context such as time or geography), and collective anomalies (collections of related instances that are jointly anomalous). Aggarwal (2017), in *Outlier Analysis* (Springer), extended this framework by formalising the distinction between supervised, semi-supervised, and unsupervised anomaly detection paradigms.
-
-### 2.4.2 Time-Series Anomaly Detection
-
-Customer metrics are inherently temporal. Classical approaches rooted in ARIMA modeling (Box, Jenkins, & Reinsel, 2015) detect anomalies as residuals exceeding expected confidence intervals. Taylor and Letham (2018), in *The American Statistician*, introduced Prophet, a decomposable time-series model that handles seasonality, trend changes, and holiday effects, making it particularly suited to business metric monitoring. Statistical process control methods, originating from Shewhart (1931) and refined by Montgomery (2019), provide control chart methodologies that remain widely used for detecting shifts in process means.
-
-### 2.4.3 Machine Learning Approaches
-
-Liu, Ting, and Zhou (2008) introduced isolation forests in *Proceedings of the Eighth IEEE International Conference on Data Mining*, providing an efficient tree-based method that isolates anomalies by exploiting their susceptibility to partitioning. Breunig et al. (2000) proposed the Local Outlier Factor in *Proceedings of the ACM SIGMOD Conference*. More recently, autoencoder-based approaches (Sakurada & Yairi, 2014) detect anomalies through reconstruction error, with deep variants showing particular promise for complex behavioral data.
-
-### 2.4.4 Real-Time Detection and Operational Considerations
-
-Ahmad et al. (2017) presented the Numenta Anomaly Benchmark in *Neurocomputing*, establishing evaluation criteria for streaming anomaly detectors. Bifet and Gavalda (2007) developed ADWIN, an adaptive windowing method for detecting distributional change in data streams. The translation of anomaly detection into actionable alerts requires careful severity calibration to address alert fatigue, a challenge for any system in which multiple correlated signals should be consolidated into one alert rather than each raising its own.
-
----
-
-## 2.5 Decision Support Systems and Rule-Based Automation
-
-### 2.5.1 Decision Support Systems
+### 2.4.1 Decision Support Systems
 
 The conceptual foundations of DSS were established by Gorry and Scott Morton (1971) and formalised by Keen and Scott Morton (1978). Sprague (1980) advanced the field by articulating a three-component DSS architecture comprising a database management subsystem, a model management subsystem, and a dialogue generation subsystem. The evolution from model-driven DSS toward data-driven and knowledge-driven variants has been well documented (Power, 2002; Arnott & Pervan, 2005). A rule engine driven by data-derived properties sits at exactly that intersection, combining structured conditional logic with inputs that are themselves inferred rather than entered.
 
-### 2.5.2 Rule-Based Expert Systems
+### 2.4.2 Rule-Based Expert Systems
 
 Rule-based expert systems emerged from AI research in the 1970s, most notably through the MYCIN system for bacterial infection diagnosis (Shortliffe, 1976; Buchanan & Shortliffe, 1984). The Rete algorithm (Forgy, 1982) provided efficient pattern matching for forward-chaining inference engines. Forward chaining is the natural fit for feedback triage: conditions are evaluated against incoming properties as they arrive, and satisfying a condition triggers the corresponding action.
 
-### 2.5.3 Business Rules Management
+### 2.4.3 Business Rules Management
 
 The business rules approach, articulated by Ross (2003), advocates externalising decision logic from procedural application code into declarative, human-readable rule statements. Business Rules Management Systems (BRMS) platforms operationalise these principles at enterprise scale (Boyer & Mili, 2011). The paradigm's attraction for feedback systems is that it puts routing policy in the hands of the people accountable for it: conditions and their consequent actions are declared across insight dimensions without changes to application code.
 
-### 2.5.4 Automated Decision-Making and Human-in-the-Loop
+### 2.4.4 Automated Decision-Making and Human-in-the-Loop
 
 Parasuraman, Sheridan, and Wickens (2000) proposed a ten-level taxonomy of automation. Lee and See (2004) demonstrated that trust in automation is calibrated through perceived reliability, predictability, and process transparency. The tension this creates is between throughput and warranted trust, and it is usually resolved by graduating authority rather than choosing a single level: routine, high-confidence decisions execute automatically while consequential ones wait for human clearance.
 
-### 2.5.5 Multi-Criteria Decision Analysis and Prescriptive Analytics
+### 2.4.5 Multi-Criteria Decision Analysis and Prescriptive Analytics
 
 Saaty's (1980) Analytic Hierarchy Process introduced pairwise comparison for deriving criterion weights. Prescriptive analytics extends beyond the descriptive and predictive tiers to recommend specific actions (Delen & Demirkan, 2013; Bertsimas & Kallus, 2020; Lepenioti et al., 2020). A rule layer over inferred insight properties is prescriptive in exactly this sense: it moves from describing what happened to naming what should be done about it.
 
 ---
 
-## 2.6 A/B Testing, Experimental Design, and Organizational Learning from Experiments
-
-### 2.6.1 Online Controlled Experiments
+## 2.5 A/B Testing, Experimental Design, and Organizational Learning from Experiments
 
 The foundation of modern A/B testing was formalised by Kohavi, Longbotham, Sommerfield, and Henne (2009) in *Data Mining and Knowledge Discovery*. Kohavi, Tang, and Xu (2020) consolidated two decades of practice in *Trustworthy Online Controlled Experiments* (Cambridge University Press), documenting lessons from running experiments at Microsoft, Google, and Amazon. Their work emphasises that even small measured effects, when applied at scale, can yield substantial business value, which is why an accumulated record of measured lift is worth more than any single result in it.
 
-### 2.6.2 Statistical Foundations
+## 2.6 Multi-Source Data Integration and Fusion
 
-The statistical underpinnings rest on the Neyman-Pearson hypothesis testing framework. Deng, Xu, Kohavi, and Walker (2013) advanced variance reduction techniques that improved statistical power without increasing sample size. Cohen (1988), in *Statistical Power Analysis for the Behavioral Sciences*, established the canonical framework for effect size measurement and power analysis. Retaining the confidence level and sample size alongside each recorded learning is what makes these concepts operational rather than decorative: without the denominator, a stored result cannot later be weighed against a competing one.
-
-### 2.6.3 Meta-Analysis and Practical Challenges
-
-When organisations accumulate dozens of experiments, meta-analysis becomes applicable. Borenstein, Hedges, Higgins, and Rothstein (2009) formalised methods for combining effect sizes across independent studies. Practitioners face numerous pitfalls: Johari, Koomen, Pekelis, and Walsh (2017) demonstrated how continuous monitoring inflates false positive rates. Simpson's paradox, multiple comparisons problems, and novelty effects all require careful management.
-
-### 2.6.4 Learning from Experiments
-
-Thomke (2003), in *Experimentation Matters* (Harvard Business School Press), argued that organisations capable of rapid experimentation develop superior innovation capabilities. The concept of a "learning repository", retaining both the winning and the losing variant rather than merely the conclusion, aligns with what Argote (2013) described as the encoding of experiential knowledge into organisational memory.
-
-### 2.6.5 Digital Marketing Experimentation
-
-Email marketing experimentation has substantial applied literature. Sahni, Wheeler, and Chintagunta (2018), in *Marketing Science*, demonstrated that personalised subject lines significantly increase open rates. Bleier and Eisenbeiss (2015), in the *Journal of Marketing*, found that deep personalisation can increase click-through rates but may trigger reactance when perceived as intrusive. Subject lines, call-to-action text, send time and personalisation recur across this applied literature as the domains where digital experimentation yields the most actionable learnings.
-
----
-
-## 2.7 Customer Churn Prediction and Prevention
-
-### 2.7.1 Churn Prediction Models
-
-The foundational work on customer defection detection was established by Neslin et al. (2006), who organised a large-scale churn prediction tournament demonstrating that variable selection matters more than technique choice. Logistic regression serves as an interpretable baseline (Lariviere & Van den Poel, 2005), while ensemble methods consistently outperform single classifiers (Verbeke et al., 2012). Survival analysis offers complementary time-to-event framing (Lu, 2002).
-
-### 2.7.2 Deep Learning and Early Warning Systems
-
-Recurrent architectures such as LSTM networks have proven effective for modeling sequential customer behavior (Jeyakumar et al., 2020). The concept of early warning systems draws on the principle that defection is preceded by observable behavioral shifts. Risselada et al. (2010) found that changes in usage intensity served as reliable leading indicators weeks before formal cancellation. Gattermann-Itschert and Thonemann (2021) demonstrated that proactive early detection systems can reduce churn rates by 10–15%.
-
-### 2.7.3 Customer Lifetime Value
-
-Fader and Hardie's (2005) BG/NBD and Pareto/NBD models established probabilistic methods for estimating future customer value. Gupta et al. (2006) demonstrated that CLV-based segmentation substantially outperforms traditional RFM approaches. The design implication is that prioritisation among at-risk customers should weigh the revenue impact of losing each one, not merely the probability that they leave.
-
-### 2.7.4 Feedback-Based Churn Indicators
-
-De Haan et al. (2015) found that declining CSAT trajectories were more predictive than absolute scores, emphasising trend detection. Luo and Homburg (2007) demonstrated that complaint intensity and resolution failure are strong negative predictors of retention. Both findings favour synthesising attitudinal signals alongside behavioural ones: trajectories, sentiment shifts and escalation patterns rather than point-in-time scores.
-
-### 2.7.5 Intervention Strategies and Multi-Signal Detection
-
-Ascarza (2018) argued that targeting customers with the highest churn probability can be counterproductive if those customers are unresponsive to intervention, advocating for targeting "persuadable" segments. Uplift modeling has emerged as the methodologically preferred approach (Devriendt et al., 2018). Verbeke et al. (2012) demonstrated that feature engineering across multiple data domains improved model performance beyond any single-source approach, a multi-signal philosophy that the industry evidence in §2.12 independently arrives at.
-
----
-
-## 2.8 Multi-Source Data Integration and Fusion
-
-### 2.8.1 Data Integration Foundations
+### 2.6.1 Data Integration Foundations
 
 Lenzerini (2002) established the distinction between Global-as-View and Local-as-View approaches in data integration. Schema matching was comprehensively surveyed by Rahm and Bernstein (2001) in the *VLDB Journal*. The Extract-Transform-Load paradigm remains dominant (Vassiliadis et al., 2002), though modern platforms increasingly adopt ELT variants (Kimball & Ross, 2013). Normalising qualitative feedback and quantitative metrics into one common signal schema is a practical instance of mediated schema integration, with the mediated schema doing the work of reconciling sources that were never designed to agree.
 
-### 2.8.2 Data Fusion and Customer Data Platforms
+### 2.6.2 Data Fusion and Customer Data Platforms
 
 Bleiholder and Naumann (2008) provided a comprehensive taxonomy of fusion strategies in *ACM Computing Surveys*. Dong and Srivastava (2015) advanced truth discovery methods in *Big Data Integration*. The concept of a 360-degree customer view has evolved from early CRM research through modern Customer Data Platforms (Eckerson & White, 2019). Identity resolution remains a core technical challenge (Christen, 2012).
 
-### 2.8.3 API-Based and Event-Driven Integration
+### 2.6.3 API-Based and Event-Driven Integration
 
 Fielding (2000) established REST as the dominant architectural style. Hohpe and Woolf (2003), in *Enterprise Integration Patterns*, catalogued messaging patterns that underpin webhook and event-driven architectures. Feedback ingestion is characteristically hybrid in this respect: some sources push (webhooks), others must be pulled (API polling), and a system spanning both inherits the delivery guarantees of neither alone.
 
-### 2.8.4 Data Quality and Governance
+### 2.6.4 Data Quality and Governance
 
 Batini et al. (2009) provided a comprehensive survey of data quality dimensions in *ACM Computing Surveys*. Abraham, Schneider, and vom Brocke (2019) surveyed data governance frameworks. For multi-tenant feedback systems the governing requirement is tenant isolation enforced below the application layer, consistent with the principle of least privilege and with the record-keeping expectations of GDPR Article 30.
 
 ---
 
-## 2.9 Dashboard Design and Information Visualization
+## 2.7 Workflow Automation and Business Process Management
 
-### 2.9.1 Dashboard Design Principles
-
-Few (2006) established foundational principles for information dashboard design, emphasising that effective dashboards must reduce cognitive load by presenting data in compact, meaningful visual forms. Tufte (1983, 2001) contributed the influential concepts of data-ink ratio and chartjunk minimisation. These principles align with cognitive load theory (Sweller, 1988). Few's recommendation, key information in isolated, scannable units rather than dense composite displays, is the operative one for feedback dashboards, where the reader is usually scanning for what changed rather than studying a figure.
-
-### 2.9.2 Information Visualization Theory
-
-Shneiderman's (1996) visual information seeking mantra, "overview first, zoom and filter, then details-on-demand", remains the dominant interaction paradigm. Card, Mackinlay, and Shneiderman (1999) formalised the reference model for visualization. Munzner (2014) proposed a nested model for visualization design and validation. The progression from raw signals through derived insights to actionable workflows is the same multi-level abstraction applied to data rather than to its display.
-
-### 2.9.3 Color Encoding and Accessibility
-
-Ware (2004, 2012) detailed the perceptual basis of color encoding. Harrower and Brewer (2003) developed ColorBrewer, providing empirically validated color palettes. Severity and sentiment are both natural candidates for semantic colour mapping, and both are cases where the mapping carries meaning a reader may act on. Machado et al. (2009) demonstrated that approximately 8% of males experience color vision deficiency, underscoring the need for redundant encoding alongside color.
-
-### 2.9.4 Funnel and Kanban Visualization
-
-Anderson (2010) formalised Kanban as a method for knowledge work management, emphasising visualization of workflow states and limitation of work in progress. Tracking feedback through explicit states from new to resolved applies the same conversion-funnel logic (Kohavi et al., 2009) to feedback management, and makes the points where items stall visible rather than inferred.
-
-### 2.9.5 Chart Type Selection
-
-Cleveland and McGill (1984) established a hierarchy of graphical perception accuracy. For temporal data, area charts effectively communicate cumulative trends (Heer et al., 2009). Sarikaya and Gleicher (2018) argued that chart type selection should be task-dependent rather than dogmatic, which argues against applying any single charting rule uniformly across a dashboard.
-
----
-
-## 2.10 Workflow Automation and Business Process Management
-
-### 2.10.1 BPM Foundations
+### 2.7.1 BPM Foundations
 
 Van der Aalst (2013) defines BPM as the convergence of process modeling, workflow management, and process mining into a unified lifecycle. Van der Aalst, ter Hofstede, Kiepuszewski, and Barros (2003) catalogued twenty fundamental workflow patterns in *Distributed and Parallel Databases*. Feedback lifecycles draw on several of these patterns, notably sequential routing with deferred choice, the point at which an item's next step depends on a judgement not yet made.
 
-### 2.10.2 Workflow Management and State Machines
+### 2.7.2 Workflow Management and State Machines
 
 The WfMC Reference Model (Hollingsworth, 1995) defined five interfaces for interoperable workflow systems. Harel's (1987) statecharts provide the theoretical basis for modelling an insight lifecycle as an explicit finite state machine rather than an implicit convention. Reichert and Weber (2012) extended this thinking to adaptive workflows that accommodate runtime changes.
 
-### 2.10.3 Process Automation
+### 2.7.3 Process Automation
 
 Early RPA, as surveyed by van der Aalst, Bichler, and Heinzl (2018) in *Business & Information Systems Engineering*, focused on automating structured, rule-based tasks. A condition-action rule carrying an explicit flag for whether it may fire unattended is a direct expression of that paradigm, with the flag marking the boundary of delegated authority. More recent intelligent process automation extends RPA with machine learning capabilities (Syed et al., 2020, *Computers in Industry*).
 
-### 2.10.4 Human-in-the-Loop and Compliance
+### 2.7.4 Human-in-the-Loop and Compliance
 
 Russell, van der Aalst, ter Hofstede, and Edmond (2005) identified resource patterns including delegation, escalation, and approval. Dellermann, Ebel, Sollner, and Leimeister (2019) argue that effective systems must balance algorithmic efficiency with human judgment. Accorsi (2009) provided a formal framework for business process auditing emphasising completeness, tamper-evidence, and temporal ordering, properties an execution log must satisfy if it is to serve as evidence rather than merely as telemetry.
 
-### 2.10.5 Team Routing and Process Mining
+### 2.7.5 Team Routing and Process Mining
 
 Kumar, van der Aalst, and Verbeek (2002) formalised work distribution as an optimisation problem involving role-based and skill-based assignment. Van der Aalst's (2016) *Process Mining* established methods for reconstructing actual process behavior from event logs. Timestamped action logs combined with status transitions are precisely the event data such analysis requires, which makes an auditable execution record useful for process improvement as well as for accountability.
 
 ---
 
-## 2.11 Knowledge Management and Organizational Learning
+## 2.8 Knowledge Management and Organizational Learning
 
-### 2.11.1 Knowledge Management Foundations
+### 2.8.1 Knowledge Management Foundations
 
 Nonaka and Takeuchi (1995), in *The Knowledge-Creating Company*, established the SECI model describing four modes of knowledge conversion: Socialization, Externalization, Combination, and Internalization. Polanyi's (1966) distinction between tacit and explicit knowledge provides the epistemological basis. Alavi and Leidner (2001, *MIS Quarterly*) emphasised that knowledge management systems succeed when they support both storage and contextual retrieval.
 
 The Externalization phase is where feedback systems have the clearest purchase. When the outcome of a trial is codified as an explicit record of what worked and what did not, tacit practitioner intuition becomes retrievable organisational knowledge rather than remaining with the individual who acquired it.
 
-### 2.11.2 Organizational Learning Theory
+### 2.8.2 Organizational Learning Theory
 
 Argyris and Schon (1978) distinguished between single-loop and double-loop learning. Senge (1990) articulated the "learning organization" concept. March (1991, *Organization Science*) introduced the exploration-exploitation tension. A feedback lifecycle has to hold both sides of that tension at once: exploitation when a validated pattern is reapplied to a recurring problem, exploration when new signals indicate a trend no stored pattern covers. Which of the two a system favours is a design choice, and rarely an explicit one.
 
-### 2.11.3 Evidence-Based Management
+### 2.8.3 Evidence-Based Management
 
 Pfeffer and Sutton (2006) advocated for evidence-based management. Rousseau (2006, *Academy of Management Review*) formalised the concept drawing parallels to evidence-based medicine. A closed loop in which signals generate insights, insights drive actions, and action outcomes return as new signals is the evidence-accumulation cycle rendered as an architecture, provided the outcome step is genuinely measured rather than assumed, which is the condition most implementations fail.
 
-### 2.11.4 Learning from Failure
+### 2.8.4 Learning from Failure
 
 Edmondson (1999, *Administrative Science Quarterly*) demonstrated that psychological safety enables teams to report and learn from failures. Cannon and Edmondson (2005) argued that organisations systematically under-invest in failure analysis. Retaining the losing variant alongside the winning one institutionalises the documentation of what did not work, reflecting McGrath's (1999) argument that failed experiments carry information at least as valuable as successes. It is also the cheapest available counter to the under-investment Cannon and Edmondson describe.
 
-### 2.11.5 Collective Intelligence and Cross-Functional Learning
+### 2.8.5 Collective Intelligence and Cross-Functional Learning
 
 Woolley et al. (2010, *Science*) established that collective intelligence emerges from group composition and interaction patterns. Carlile (2004, *Organization Science*) examined knowledge boundaries across functional domains. Carlile's boundary problem is the one feedback systems meet most directly: an insight is typically produced in one function and actionable only in another, so routing across that boundary is where the value is either realised or lost.
 
-### 2.11.6 Feedback Loops and Continuous Improvement
+### 2.8.6 Feedback Loops and Continuous Improvement
 
 Sterman (2000) demonstrated that feedback loops are the fundamental mechanism through which organisations learn and adapt. Deming's (1986) Plan-Do-Study-Act cycle remains the canonical model for continuous improvement. A signal-to-insight-to-action-to-learning pipeline is these principles expressed as a system: the Study step of Plan-Do-Study-Act is the measurement of the outcome, and omitting it leaves a loop that is closed in name only.
 
 ---
 
-## 2.12 Industry Practitioner Evidence: Analyst and Vendor Perspectives on Feedback Loop Pain Points
+## 2.9 Industry Practitioner Evidence: Analyst and Vendor Perspectives on Feedback Loop Pain Points
 
 The academic literature reviewed in sections 2.1–2.11 is strongly corroborated by recent industry research from major analyst firms and technology vendors. This section synthesises practitioner-facing evidence bearing on the same core problems, from sources with no stake in the academic account.
 
-### 2.12.1 Gartner: The VoC Platform Market and the Action Gap
+### 2.9.1 Gartner: The VoC Platform Market and the Action Gap
 
 Gartner's 2026 Magic Quadrant for Voice of the Customer Platforms (published March 2026) evaluates 12 vendors and identifies a market undergoing fundamental transformation. Gartner notes that AI is moving VoC platforms from structured feedback collection toward proactive, autonomous action, predicting that the next wave will be "AI Experience Agents capable of autonomously assessing customer records and acting on them before a problem escalates" (CXM World, March 2026). Qualtrics holds the top Leader position for the fifth consecutive year, followed by Medallia and Sprinklr. Gartner defines the core VoC platform function as collecting feedback from multiple sources, analysing it with AI, and turning it into actionable insights, then guiding customer-facing teams with recommendations and prescriptive actions. That Gartner names "prescriptive action" a defining capability shows where the market has moved: the analytical half of the problem is treated as settled, and the contested ground is now what the system does once it has an insight.
 
-Critically, Gartner's Critical Capabilities report evaluated platforms across five use cases, with Qualtrics ranking first across all five. Qualtrics' "Experience Agents", which close feedback loops and execute customer recovery workflows automatically, are the industry's answer to the same insight-action gap the academic literature documents. The convergence is worth noting for what it does *not* settle: vendors claim autonomous action, but neither the analyst reports nor the vendor material evidences that the actions taken are subsequently measured for effect, which is the distinction §2.17 turns on.
+Critically, Gartner's Critical Capabilities report evaluated platforms across five use cases, with Qualtrics ranking first across all five. Qualtrics' "Experience Agents", which close feedback loops and execute customer recovery workflows automatically, are the industry's answer to the same insight-action gap the academic literature documents. The convergence is worth noting for what it does *not* settle: vendors claim autonomous action, but neither the analyst reports nor the vendor material evidences that the actions taken are subsequently measured for effect, which is the distinction §2.14 turns on.
 
-Source: CX Today, "Gartner Magic Quadrant for VoC Platforms 2026," March 13, 2026; CXM World, "Gartner's 2026 VoC Magic Quadrant," March 17, 2026.
-
-### 2.12.2 Forrester: CX Quality at an All-Time Low
+### 2.9.2 Forrester: CX Quality at an All-Time Low
 
 Forrester's Customer Experience Index (CX Index) 2025, based on analysis of over 275,000 customers' perceptions of 469 brands across 12 industries and 13 countries, reveals that US and Canadian consumer perceptions of CX quality have dropped for a fourth consecutive year to an all-time low. In the US, 25% of brands evaluated had statistically significant losses while only 7% improved. Contributing factors include "a decreased focus on customer obsession" and "the persistent gap" between what organisations promise and what they deliver, what Forrester characterises as the gap between insight collection and operational action.
 
 Forrester's separate 2025 State of Feedback Management (VoC) and CX Measurement report (August 2025) is even more directly relevant. Based on a global survey of VoC and CX practitioners, it found that "most programs still struggle with getting stakeholders to act on CX insights and suffer from a lack of stakeholder confidence." The report identifies weaknesses in core practices: collecting feedback, tracking metrics, and effectively analysing different types of data. The finding independently corroborates the two propositions this thesis treats as highest priority, the insight-action gap (H1) and signal fragmentation (H2), from practitioner survey data rather than from the academic literature that first identified them.
 
-Source: Forrester, "Customer Experience Quality In The US Falls To An(other) All-Time Low," 2025; Forrester, "Summary: The State Of Feedback Management (VoC) And CX Measurement, 2025," RES185113, August 8, 2025.
-
-### 2.12.3 Qualtrics: "CX Has an Action Problem"
+### 2.9.3 Qualtrics: "CX Has an Action Problem"
 
 At the Qualtrics X4 Summit (March 2026), the dominant theme was explicitly framed as "CX has an action problem" (CMSWire, March 23, 2026). The conference revealed a decisive industry shift from collecting feedback to acting on it, where "AI, speed, and frontline execution now define CX success." Qualtrics announced new capabilities to "turn customer feedback into actionable outcomes that drive loyalty and growth, positioning itself as more than a survey platform" (Futurum Group, March 20, 2026).
 
@@ -326,9 +228,7 @@ Qualtrics' XM Institute 2025 State of Customer Experience Management study, surv
 
 Qualtrics' response, launching "AI Agents that close the loop in real time" (CX Today, 2026), is described in the public material as condition-triggered automated action; whether it carries an approval gate or measures outcomes is not documented there. The Qualtrics XM Institute's "four action loops" framework (immediate response, proactive improvement, strategic change, cultural transformation) is a useful conceptual model precisely because it separates loops by time horizon: the first is triage, the last is organisational learning, and systems that conflate them tend to serve only the first.
 
-Source: CMSWire, "Insight Is Cheap. Execution Is Everything. What Qualtrics X4 Made Clear," March 23, 2026; Futurum Group, "Can Qualtrics Help Customers Move From Listening to Insights to Driving Action?," March 20, 2026; CX Today, "Qualtrics Launches AI Agents That Close the Loop in Real Time," 2026; Qualtrics XM Institute, "The State of Customer Experience Management, 2025."
-
-### 2.12.4 Medallia: Closed-Loop Programs Failing to Deliver
+### 2.9.4 Medallia: Closed-Loop Programs Failing to Deliver
 
 Medallia, named a Leader in the Gartner Magic Quadrant for VoC for the fifth consecutive year, published research in August 2025 explicitly titled "Is Your Closed-Loop Feedback Program Falling Flat?" The article identifies a critical disconnect: "Many CX leaders launch closed-loop feedback (CLF) programs with a goal of driving action, only to later discover that their programs aren't delivering the expected insights or impact." Medallia attributes this failure to companies' inability to define clear objectives, track the right data, and connect feedback to operational workflows, findings that corroborate the case for treating signal, insight and action as one connected pathway rather than three tools.
 
@@ -336,63 +236,35 @@ Medallia's 2025 CX Trends predictions emphasise that AI will move from analysing
 
 Medallia's 2025 customer loyalty statistics further underscore the urgency: loyalty is declining as customers become less tolerant of gaps between expectation and execution, making real-time closed-loop feedback more critical than ever.
 
-Source: Medallia, "Is Your Closed-Loop Feedback Program Falling Flat? Try This Framework," August 21, 2025; Medallia, "Our Top 8 Predictions for Customer Experience Trends in 2025," December 18, 2024; Medallia, "Top 2025 Customer Loyalty Statistics CX Professionals Need to Know," 2025.
-
-### 2.12.5 Bain & Company: The Economics of Closing the Loop
+### 2.9.5 Bain & Company: The Economics of Closing the Loop
 
 Bain & Company, the creators of the Net Promoter System, have published extensively on the business case for closed-loop customer feedback. Their research demonstrates that most survey responses "disappear into a black hole", with companies failing to acknowledge, analyse, or act on individual customer feedback. Bain's closed-loop model requires that feedback reaches frontline employees who then follow up with individual customers, creating a direct connection between customer voice and organisational response.
 
 Bain documents that companies implementing closed-loop NPS programs achieve significantly higher customer retention and can "turn around a decline in market share" through systematic feedback-to-action processes. The key insight from Bain's work is that the value of customer feedback lies not in the measurement itself but in the operational response it triggers, a principle that has to be embedded in the pathway itself, since a response triggered outside it is a response nobody can audit.
 
-Source: Bain & Company, "Closing the Customer Feedback Loop" (Harvard Business Online, December 2009); Bain & Company, "Closing the Loop, Loyalty Insights #6."
-
-### 2.12.6 Salesforce: Trust Declining, Expectations Rising
+### 2.9.6 Salesforce: Trust Declining, Expectations Rising
 
 Salesforce's "State of the AI Connected Customer" (7th edition), surveying 16,585 consumers and business buyers worldwide, found that customer trust in businesses using AI ethically has dropped from 58% in 2023 to 42%. Despite this trust decline, customer expectations for personalised, connected experiences continue to rise. The report documents that customers expect businesses to act on their feedback faster and more transparently, creating the paradox of increasing expectations amid decreasing trust.
 
 The implication for design is that automation of this kind earns trust through reviewability: an auditable record of what was executed, and an explicit human clearance step before consequential actions fire, rather than accuracy claims alone.
 
-Source: Salesforce, "State of the AI Connected Customer," 7th Edition, 2025.
-
-### 2.12.7 Zendesk: The Cost of Inaction
+### 2.9.7 Zendesk: The Cost of Inaction
 
 Zendesk's CX Trends 2026 report, based on global surveys of consumers and CX managers, provides critical statistics: 52% of customers will switch to a competitor after a single negative experience; 85% of CX managers state that customers will stop using brands if problems are not resolved upon first contact; and 81% of CX executives say that easy access to internal knowledge significantly improves decision-making.
 
 The report identifies five trends reshaping CX in 2026: contextual intelligence (AI that understands context, not just keywords), multimodal interactions, transparency and governance, memory-rich AI for personalisation, and first-contact resolution. The emphasis on first-contact resolution and contextual intelligence aligns with severity-based prioritisation and with enriching each signal from more than one context.
 
-Source: Zendesk, "CX Trends 2026"; Zendesk, "35 Customer Experience Statistics to Know for 2026," updated March 5, 2026; Leafworks, "Zendesk CX Trends 2026," November 2025.
+## 2.10 Synthesis and Theoretical Positioning
 
-### 2.12.8 Cross-Industry Statistics Summary
+The problem this thesis takes up sits at the intersection of multiple academic disciplines, each of which has addressed part of it in isolation: Voice of the Customer methodologies (Griffin & Hauser, 1993), sentiment analysis and NLP (Liu, 2012; Devlin et al., 2019), business intelligence frameworks (Ackoff, 1989; Davenport & Harris, 2007), decision support systems (Sprague, 1980; Lee & See, 2004), experimental design (Kohavi et al., 2020), data integration (Lenzerini, 2002), business process management (van der Aalst, 2013), and knowledge management (Nonaka & Takeuchi, 1995).
 
-The following statistics, drawn from the industry sources above, quantify the pain points identified in the academic literature:
+The industry practitioner evidence reviewed in §2.9 provides powerful corroboration. Forrester's 2025 State of Feedback Management survey found that most VoC programs struggle with getting stakeholders to act on insights; Qualtrics' X4 2026 summit was explicitly themed around the declaration that "CX has an action problem"; Medallia documented that closed-loop feedback programs frequently fail to deliver expected impact; and Gartner's 2026 Magic Quadrant for VoC Platforms identifies autonomous action execution as the defining capability of next-generation platforms. These convergent findings, from the leading analyst firms and the two largest VoC vendors, corroborate the academic account of the problem from an entirely independent evidence base. That matters because the academic sources are the older of the two, and the industry sources are the ones with commercial incentive to claim the problem is solved.
 
-| Statistic | Source |
-|-----------|--------|
-| CX quality in the US has fallen for 4 consecutive years to an all-time low | Forrester CX Index 2025 |
-| 25% of US brands showed statistically significant CX declines; only 7% improved | Forrester CX Index 2025 |
-| Most VoC programs struggle with getting stakeholders to act on insights | Forrester State of Feedback Management 2025 |
-| Customer trust in ethical AI use dropped from 58% (2023) to 42% | Salesforce State of AI Connected Customer 2025 |
-| 52% of customers switch to a competitor after a single negative experience | Zendesk CX Trends 2026 |
-| 85% of CX managers say customers leave if problems aren't resolved on first contact | Zendesk CX Trends 2026 |
-| 99% of consumers say customer service influences buying decisions | The Futurum Group / Webex 2025 |
-| 70% of customers abandon a brand after just two bad experiences | Emplifi / Webex 2025 |
-| Gartner predicts AI Experience Agents will autonomously act on customer records | Gartner MQ for VoC 2026 |
-| Closed-loop feedback programs often fail to deliver expected insights or impact | Medallia 2025 |
-| "CX has an action problem": the dominant theme at Qualtrics X4 2026 | CMSWire / Qualtrics X4 2026 |
+What no strand supplies on its own is their integration into a single feedback-management lifecycle. The literature treats the components separately (surveying, analysis, routing, experimentation, retention of what was learned), and so does the tooling that has grown up around it, with a survey instrument in one place, a dashboard in another, and a ticketing system in a third. The complete signal-to-insight-to-action-to-learning pipeline is identified as necessary by both bodies of work and instantiated as a whole by neither. It is that unmet integration, spanning the feedback-action gap that Forrester's 2025 survey series documents (Forrester, 2025b, 2025c), the tool–task–people fit that Ghasemaghaei et al. (2017) show analytics needs before it changes decisions, the stakeholder action failure measured by Forrester (2025), and the organisational-learning imperatives of Argyris and Schon (1978) and March (1991), that Chapters 4 to 6 take up. The gap is stated more precisely, and narrowed against the closest prior art, in §2.14.
 
 ---
 
-## 2.13 Synthesis and Theoretical Positioning
-
-The problem this thesis takes up sits at the intersection of multiple academic disciplines, each of which has addressed part of it in isolation: Voice of the Customer methodologies (Griffin & Hauser, 1993), sentiment analysis and NLP (Liu, 2012; Devlin et al., 2019), business intelligence frameworks (Ackoff, 1989; Davenport & Harris, 2007), anomaly detection (Chandola et al., 2009), decision support systems (Sprague, 1980; Lee & See, 2004), experimental design (Kohavi et al., 2020), churn prediction (Neslin et al., 2006), data integration (Lenzerini, 2002), information visualization (Few, 2006; Munzner, 2014), business process management (van der Aalst, 2013), and knowledge management (Nonaka & Takeuchi, 1995).
-
-The industry practitioner evidence reviewed in section 2.12 provides powerful corroboration. Forrester's 2025 State of Feedback Management survey found that most VoC programs struggle with getting stakeholders to act on insights; Qualtrics' X4 2026 summit was explicitly themed around the declaration that "CX has an action problem"; Medallia documented that closed-loop feedback programs frequently fail to deliver expected impact; and Gartner's 2026 Magic Quadrant for VoC Platforms identifies autonomous action execution as the defining capability of next-generation platforms. These convergent findings, from the leading analyst firms and the two largest VoC vendors, corroborate the academic account of the problem from an entirely independent evidence base. That matters because the academic sources are the older of the two, and the industry sources are the ones with commercial incentive to claim the problem is solved.
-
-What no strand supplies on its own is their integration into a single feedback-management lifecycle. The literature treats the components separately (surveying, analysis, routing, experimentation, retention of what was learned), and so does the tooling that has grown up around it, with a survey instrument in one place, a dashboard in another, and a ticketing system in a third. The complete signal-to-insight-to-action-to-learning pipeline is identified as necessary by both bodies of work and instantiated as a whole by neither. It is that unmet integration, spanning the feedback-action gap that Forrester's 2025 survey series documents (Forrester, 2025b, 2025c), the tool–task–people fit that Ghasemaghaei et al. (2017) show analytics needs before it changes decisions, the stakeholder action failure measured by Forrester (2025), and the organisational-learning imperatives of Argyris and Schon (1978) and March (1991), that Chapters 4 to 6 take up. The gap is stated more precisely, and narrowed against the closest prior art, in §2.17.
-
----
-
-## 2.14 Design Science Research as Methodological Foundation
+## 2.11 Design Science Research as Methodological Foundation
 
 The methodological grounding for this thesis derives from Design Science Research (DSR), a paradigm distinct from both positivist and interpretivist traditions in information systems research. Where behavioural science seeks to develop and verify theories that explain or predict human and organisational phenomena, design science seeks to extend human and organisational capabilities by creating purposeful artifacts (Hevner, March, Park, & Ram, 2004). For a thesis whose central contribution is a working platform intended to address the feedback-action gap documented throughout sections 2.1–2.13, DSR is the appropriate paradigm: it treats the artifact itself as a legitimate research output and requires its evaluation against articulated problem criteria.
 
@@ -404,11 +276,11 @@ Hevner (2007) later articulated the Three Cycle View of DSR: the Relevance Cycle
 
 DSR has been widely adopted in information systems thesis research and has developed associated evaluation frameworks. Prat, Comyn-Wattiau, and Akoka (2015) provide a taxonomy of DSR evaluation criteria organised into five dimensions (goal, environment, structure, activity, and evolution) and across evaluation methods including observational, analytical, experimental, testing, and descriptive approaches. This thesis draws on their framework in selecting usefulness, ease of use, efficacy, and organisational fit as primary evaluation constructs, operationalised through semi-structured interviews and the System Usability Scale (Brooke, 1996).
 
-The alignment between DSR and this thesis is strong on multiple dimensions. First, the research problem is irreducibly design-oriented: the feedback-action gap cannot be closed by observation alone but requires an artifact that changes the practitioner's workflow. Second, the contribution structure is inherently dual, both practical (a working platform marketers can use) and theoretical (design principles abstracted from the artifact). Third, DSR's insistence on problem relevance aligns with the industry evidence reviewed in section 2.12, which establishes the gap's practical importance independently of academic framing. DSR thus functions here not as a methodological veneer but as a genuine fit between research question and research paradigm.
+The alignment between DSR and this thesis is strong on multiple dimensions. First, the research problem is irreducibly design-oriented: the feedback-action gap cannot be closed by observation alone but requires an artifact that changes the practitioner's workflow. Second, the contribution structure is inherently dual, both practical (a working platform marketers can use) and theoretical (design principles abstracted from the artifact). Third, DSR's insistence on problem relevance aligns with the industry evidence reviewed in §2.9, which establishes the gap's practical importance independently of academic framing. DSR thus functions here not as a methodological veneer but as a genuine fit between research question and research paradigm.
 
 ---
 
-## 2.15 Responsible AI and Ethical Considerations in Automated Marketing
+## 2.12 Responsible AI, Ethics and EU Law for Feedback-to-Action Systems
 
 As an MSc Responsible AI thesis, this work carries an obligation to examine its artifact through an ethical and governance lens that extends beyond functional performance. Automated feedback-to-action systems occupy a space where algorithmic decisions (routing a complaint to a specific team, triggering an outreach email, flagging a customer for retention intervention) have meaningful consequences for both customers and internal stakeholders. Responsible AI scholarship provides the conceptual resources for designing such systems accountably.
 
@@ -418,7 +290,7 @@ Human-in-the-loop (HITL) design is a central Responsible AI consideration for an
 
 Explainability requirements for automated decisions are heightened in regulated jurisdictions. The European Union's General Data Protection Regulation (GDPR), particularly Article 22, grants data subjects rights with respect to decisions based solely on automated processing that produce legal or similarly significant effects (European Parliament and Council of the European Union, 2016). While most marketing automation decisions fall below this legal threshold, the normative direction is clear: automated decisions affecting individuals should be contestable, reviewable, and explicable. An action log functions as an explainability mechanism in exactly this sense when it records, for every automated action, the triggering rule, the input signal, the outcome and the responsible party.
 
-The EU AI Act (Regulation 2024/1689), enacted in 2024, establishes a risk-based regulatory framework for AI systems placed on the EU market. Though the Act's highest obligations target high-risk and prohibited applications (biometric categorisation, social scoring, and predictive policing among the latter), its transparency requirements extend more broadly to systems interacting with natural persons or generating content. Marketing feedback automation is unlikely to qualify as high-risk under Annex III, but the Act's emphasis on documentation, traceability, human oversight, and data governance informs best-practice design even for lower-risk applications. Crucially, Article 5 prohibits AI systems that use "subliminal techniques beyond a person's consciousness" or "exploit vulnerabilities" to materially distort behaviour in ways likely to cause harm, a constraint that is relevant to automated outreach and retention tactics, particularly when applied to churn-risk customer segments. The regulatory baseline moved during this thesis's timeframe. The Commission's Digital Omnibus on AI, agreed politically on 7 May 2026, was adopted as Regulation (EU) 2026/1744, published in the Official Journal on 24 July 2026 and in force from 27 July 2026 (European Parliament and Council of the European Union, 2026); its timeline effects are set out once, in §2.16. Two of its changes bear on this thesis. It softened Article 4, the AI-literacy duty on providers and deployers, from ensuring "to their best extent" a sufficient level of AI literacy to taking measures to *support the development* of AI literacy, an obligation of effort rather than of result, which is the wording the artifact's literacy module is now described against (§4.4; Appendix B). And it left the Article 5 prohibitions and the Article 50 transparency duties in place, which, together with the amended Article 4, are the provisions that bind a non-high-risk system of this kind; the Chapter III obligations it postponed never bound the artifact (§4.9). The design stance follows: governance controls (human oversight, audit trails, transparency) are treated as durable design commitments rather than as compliance triggered by any deadline.
+The EU AI Act (Regulation 2024/1689), enacted in 2024, establishes a risk-based regulatory framework for AI systems placed on the EU market. Though the Act's highest obligations target high-risk and prohibited applications (biometric categorisation, social scoring, and predictive policing among the latter), its transparency requirements extend more broadly to systems interacting with natural persons or generating content. Marketing feedback automation is unlikely to qualify as high-risk under Annex III, but the Act's emphasis on documentation, traceability, human oversight, and data governance informs best-practice design even for lower-risk applications. Crucially, Article 5 prohibits AI systems that use "subliminal techniques beyond a person's consciousness" or "exploit vulnerabilities" to materially distort behaviour in ways likely to cause harm, a constraint that is relevant to automated outreach and retention tactics, particularly when applied to churn-risk customer segments. The regulatory baseline moved during this thesis's timeframe. The Commission's Digital Omnibus on AI, agreed politically on 7 May 2026, was adopted as Regulation (EU) 2026/1744, published in the Official Journal on 24 July 2026 and in force from 27 July 2026 (European Parliament and Council of the European Union, 2026); its timeline effects are set out once, in §2.13. Two of its changes bear on this thesis. It softened Article 4, the AI-literacy duty on providers and deployers, from ensuring "to their best extent" a sufficient level of AI literacy to taking measures to *support the development* of AI literacy, an obligation of effort rather than of result, which is the wording the artifact's literacy module is now described against (§4.4; Appendix B). And it left the Article 5 prohibitions and the Article 50 transparency duties in place, which, together with the amended Article 4, are the provisions that bind a non-high-risk system of this kind; the Chapter III obligations it postponed never bound the artifact (§4.9). The design stance follows: governance controls (human oversight, audit trails, transparency) are treated as durable design commitments rather than as compliance triggered by any deadline.
 
 The literature on algorithmic fairness offers additional design guidance. Mehrabi et al. (2021) survey bias and fairness in machine learning, documenting representation, measurement, aggregation, and evaluation biases that can emerge in classification and ranking systems. For a feedback prioritisation system, fairness concerns include whether signals from certain customer segments (by language, geography, verbosity, or channel) receive systematically different triage outcomes. Rule-based routing logic is more inspectable than an opaque classifier but not thereby fair: the fairness-by-design requirement, auditing routing distributions across segments, applies to both, and Chapter 5 reports what happens to that requirement when the triage layer itself varies in reliability by language.
 
@@ -436,11 +308,11 @@ Taken together, the Responsible AI literature defines a design space in which te
 
 ---
 
-## 2.16 Recent Developments (2023–2026)
+## 2.13 Recent Developments (2023–2026)
 
 The foundational literature reviewed above is augmented here with developments contemporary to this thesis, which both sharpen the problem and supply the closest precedents for the artifact's design.
 
-**The action gap, confirmed at scale.** Forrester's 2025 evidence quantifies the persistence of the feedback-to-action gap a decade after Bone et al. (2017): in the United States, customer-experience quality reached an all-time low, with 25% of brands' CX rankings declining versus only 7% improving for the second consecutive year (Forrester, 2025a; CX Dive, 2025). Forrester's 2025 Voice-of-the-Customer and CX-measurement survey isolates the mechanism: most CX teams cannot get stakeholders to act on insights, only 27% communicate insights in a timely way, and only about half can link CX metrics to business outcomes (Forrester, 2025b). This is independent, current corroboration that the binding constraint is operationalisation, not collection. The market context is a Voice-of-the-Customer software segment that analysts size in the high-single-digit-to-double-digit billions of US dollars with mid-teens compound annual growth, increasingly AI-mediated (Custom Market Insights, 2025; QKS Group, 2025).
+**The action gap, confirmed at scale.** The analyst evidence reviewed in §2.9 (Forrester's 2025 CX Index and feedback-management survey series, Qualtrics X4, Medallia, Gartner) is the current corroboration that the binding constraint is operationalisation, not collection; it is not repeated here. The market context is a Voice-of-the-Customer software segment that analysts size in the high-single-digit-to-double-digit billions of US dollars with mid-teens compound annual growth, increasingly AI-mediated (Custom Market Insights, 2025; QKS Group, 2025).
 
 **Agentic feedback platforms.** The competitive frontier has shifted from analysis to action. Gartner's 2026 Magic Quadrant for Voice-of-the-Customer platforms positions "AI Experience Agents", agents that autonomously assess customer records and execute personalised actions, as the next wave (Gartner, 2026; CX Today, 2026), and Enterpret launched what it markets as the "first agentic customer feedback platform" in October 2025, with real-time Action Agents over a Customer Knowledge Graph (Enterpret, 2025). Critically for this thesis (Chapter 6), these systems detect, route, and notify, but they do not, on the public evidence, bind actions to an outcome contract and verify resolution, nor maintain a decaying repository of which actions resolved which problems, which are the artifact's distinguishing commitments.
 
@@ -458,9 +330,11 @@ The foundational literature reviewed above is augmented here with developments c
 
 **The EU AI Act, in motion.** The Act's timeline is consolidating through this thesis's window. The Commission's simplification ("Digital Omnibus") package, agreed by the Council and Parliament on 7 May 2026 and adopted as Regulation (EU) 2026/1744 (in force from 27 July 2026), postponed the Annex III high-risk obligations from 2 August 2026 to 2 December 2027 and the Annex I obligations to 2 August 2028, while the Article 50 transparency obligations remain on their 2 August 2026 schedule. The only Article 50 deferral is a four-month grace period, to 2 December 2026, for the Article 50(2) machine-readable marking ("watermarking") obligation on systems already on the market (Council of the European Union, 2026; Gibson Dunn, 2026; Latham & Watkins, 2026). This moving baseline reinforces the thesis's design stance: treat human oversight, logging, and transparency as durable commitments rather than deadline-triggered features.
 
+**Four strands this review under-represents.** ‹Author note, to be resolved before submission: the following literatures bear directly on the artifact's claims and are thin or absent above. Each candidate source is from memory and must be verified against the primary text before it is cited.› (1) Service recovery and complaint handling, the loop-closure literature proper, currently represented only by Halperin et al. (2022): the justice-based account of recovery (Tax, Brown & Chandrashekaran, 1998), the recovery-paradox evidence (Smith, Bolton & Wagner, 1999) and complaint-management-to-performance work (Homburg & Fürst, 2005). (2) Knowledge depreciation empirics that would ground the half-life parameter of DP2 rather than leave it a guess: the learning-curve depreciation studies of Argote, Beckman and Epple (1990) and Darr, Argote and Epple (1995). (3) Automation bias and algorithm aversion, which the approval gate has to contend with: Parasuraman and Manzey (2010) on complacency and bias, and Dietvorst, Simmons and Massey (2015) on aversion after seeing an algorithm err. (4) Language models as annotators, which situates the LLM-versus-learned-model comparison of §5A: Gilardi, Alizadeh and Kubli (2023) and Törnberg (2023).
+
 ---
 
-## 2.17 The Research Gap and Positioning
+## 2.14 The Research Gap and Positioning
 
 The literature converges on a gap that is precise and, so far, unfilled. Each adjacent field supplies one link of the chain but not the chain itself. **Voice-of-the-Customer** research documents the feedback-action gap but stops at diagnosis, offering no operational artifact to close it (Forrester, 2025b, 2025c; Wirtz et al., 2010; Bone et al., 2017). **Prescriptive analytics** advances from prediction to recommendation, yet stops at *recommending* an action and does not govern, execute, or verify it (Lepenioti et al., 2020; Bertsimas & Kallus, 2020). **Decision-support and automation** theory supplies levels and types of automation authority, but as a general framework, not a situated artifact in the feedback domain (Parasuraman et al., 2000; Lee & See, 2004). **Online experimentation** measures whether a change moved a metric, but treats experiments as isolated, not as the closure step of a feedback-routing loop (Kohavi et al., 2020). **Organisational-learning** theory establishes that knowledge depreciates and that memory matters (Argote, 2013; Walsh & Ungson, 1991; March, 1991); recent LLM systems do operationalise decaying memory for *conversational recall* (MemoryBank; Zhong et al., 2024), but none encodes perishable, governed memory of *organisational action outcomes*, which remedies worked and in which contexts, retrieved into future action decisions.
 
