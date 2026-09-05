@@ -150,7 +150,7 @@ Twelve to fifteen practitioners (marketing / product / CX, 2+ years, companies o
 
 ### 5B.3 Analysis plan
 
-Transcripts are analysed by reflexive thematic analysis (Braun & Clarke, 2006) against the codebook in Appendix A, with a double-coded subset and an inter-rater reliability check. SUS is scored 0–100; TAM/trust subscales are summarised descriptively. Findings are mapped to the research questions, with the hypothesis codes of Appendix D used as coding labels.
+Transcripts are analysed by thematic analysis (Braun & Clarke, 2006), following the reflexive approach (Braun & Clarke, 2019), against the codebook in Appendix A, with a double-coded subset and an inter-rater reliability check. SUS is scored 0–100; TAM/trust subscales are summarised descriptively. Findings are mapped to the research questions, with the hypothesis codes of Appendix D used as coding labels.
 
 ### 5B.4 Results
 
