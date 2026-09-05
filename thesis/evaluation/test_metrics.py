@@ -87,6 +87,17 @@ def test_production_mapping():
     none_row = P.map_enrichment({"id": "TR-002", "sentiment": None, "urgency": "medium", "tags": []})
     assert none_row["sentiment"] is None  # a rejected label is a miss, never coerced
 
+def test_mcnemar_sensitivity():
+    # the thesis headline: b=7, c=19 -> p=0.029; one item moved each way
+    sens = M.mcnemar_sensitivity(7, 19)
+    assert abs(sens["p_observed"] - 0.028959) < 1e-5, sens
+    assert abs(sens["p_majority_loses_one"] - 0.043285) < 1e-5, sens   # (7, 18)
+    assert abs(sens["p_minority_gains_one"] - 0.052239) < 1e-5, sens   # (8, 19)
+    assert abs(sens["p_one_pair_swaps"] - 0.075519) < 1e-5, sens       # (8, 18)
+    # symmetric input: the perturbations are taken from the minority side
+    assert M.mcnemar_sensitivity(19, 7)["p_majority_loses_one"] == sens["p_majority_loses_one"]
+
+
 if __name__ == "__main__":
     test_perfect_and_known()
     test_baseline_polarity()

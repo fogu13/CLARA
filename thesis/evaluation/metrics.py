@@ -138,6 +138,28 @@ def mcnemar_one_flip_p(b: int, c: int) -> float:
     return mcnemar_p_from_counts(b + 1, c - 1)
 
 
+def mcnemar_sensitivity(b: int, c: int) -> dict:
+    """Three single-item perturbations of a paired result, each as an exact p.
+
+    With c > b (the second predictor ahead):
+      minority_gains_one  one both-wrong or both-right item becomes first-only
+                          correct: (b + 1, c)       -> p
+      majority_loses_one  one second-only-correct item becomes both-wrong or
+                          both-right: (b, c - 1)    -> p
+      one_pair_swaps      one discordant pair changes sides: (b + 1, c - 1) -> p
+    The three are reported together because they answer the question an
+    examiner asks, "what if one label were different?", in its three forms;
+    quoting only the mildest would understate the fragility.
+    """
+    lo, hi = (b, c) if b <= c else (c, b)
+    return {
+        "p_observed": round(mcnemar_p_from_counts(b, c), 6),
+        "p_minority_gains_one": round(mcnemar_p_from_counts(lo + 1, hi), 6),
+        "p_majority_loses_one": round(mcnemar_p_from_counts(lo, max(hi - 1, 0)), 6),
+        "p_one_pair_swaps": round(mcnemar_one_flip_p(b, c), 6),
+    }
+
+
 def fisher_exact(a: int, b: int, c: int, d: int) -> float:
     """Two-sided Fisher exact p for the 2x2 table [[a, b], [c, d]] (stdlib only).
 

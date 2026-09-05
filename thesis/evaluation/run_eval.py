@@ -471,9 +471,10 @@ def significance(sigs, summary, ml_preds, llm_maps=None):
     both predictors scored, and reports both accuracies on exactly that paired
     subset, so the tested gap is visible next to its p-value.
 
-    `p_if_one_pair_flipped` is the fragility check: the p-value after moving a
-    single discordant pair toward the null. On a corpus this size several
-    "significant" gaps rest on one item; the table has to show that.
+    The three `p_*_one*` columns are the fragility check: the p-value after a
+    single item's correctness changes, in each of the three ways it can. On a
+    corpus this size several "significant" gaps rest on one item; the table has
+    to show that rather than leave it to a reader's arithmetic.
     """
     rated = [s for s in sigs if s.star_rating is not None and s.text]
     have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
@@ -515,15 +516,18 @@ def significance(sigs, summary, ml_preds, llm_maps=None):
                     "b_first_only_correct": b,
                     "c_second_only_correct": c,
                     "p_exact_two_sided": round(p, 6),
-                    "p_if_one_pair_flipped": round(M.mcnemar_one_flip_p(b, c), 6),
                 }
+                sens = M.mcnemar_sensitivity(b, c)
+                entry.update({k: v for k, v in sens.items() if k != "p_observed"})
                 res[f"{a}_vs_{b_name}"] = entry
                 csv_rows.append({"task": task, "pair": f"{a}_vs_{b_name}",
                                  "n_pairs": len(ids), "acc_first": entry[f"acc_{a}"],
                                  "acc_second": entry[f"acc_{b_name}"],
                                  "b_first_only_correct": b, "c_second_only_correct": c,
                                  "p_exact_two_sided": entry["p_exact_two_sided"],
-                                 "p_if_one_pair_flipped": entry["p_if_one_pair_flipped"]})
+                                 "p_minority_gains_one": sens["p_minority_gains_one"],
+                                 "p_majority_loses_one": sens["p_majority_loses_one"],
+                                 "p_one_pair_swaps": sens["p_one_pair_swaps"]})
         out[task] = res
     summary["mcnemar_paired"] = out
     if csv_rows:
