@@ -54,6 +54,10 @@ Run these in order; each feeds the next. Every place in the manuscript that wait
 
 Time estimates are for a laptop with the datasets in `~/Documents/Thesis_ChatGPT` and the API keys in `apps/api/.env`. Every command is run from the repository root unless a `cd` says otherwise.
 
+### Where to run
+
+On the machine that has (a) the datasets folder (`~/Documents/Thesis_ChatGPT`), (b) the earlier evaluation ledger (`apps/api/app/evals/history.jsonl`, gitignored) and (c) the model API key. Nothing here needs a GPU, the database or the production server; the model runs are a few hundred short API calls. Steps 9–12 (reference checks, editorial, build, merge) run anywhere with the repository checked out.
+
 ### Step 0. Get the branch and the tools (20 min)
 
 ```bash
@@ -95,9 +99,12 @@ Commit `thesis/evaluation/results/` together with any sentence you changed.
 
 Run it first with the **same model and gateway as the 4 August run** (GLM-5.2), so that the only thing that differs from the §5A predictor is the pipeline; then, optionally, once more with the configured production model.
 
+Do **not** source the whole `apps/api/.env` for this run: the residency gate switches itself on whenever `DATABASE_URL` is set (or `CLARA_AI_REQUIRE_EU=true`), and it refuses the GLM-5.2 gateway at import time as "unknown". Export only the model variables, and switch the gate off explicitly for the comparison run:
+
 ```bash
-set -a; source apps/api/.env; set +a                  # AI_BASE_URL, AI_API_KEY, AI_MODEL (and ENRICH_FEWSHOT if set)
-export AI_MODEL=glm-5.2                               # and AI_BASE_URL to the gateway used on 4 August
+export AI_BASE_URL=<the gateway used on 4 August>   # e.g. https://opencode.ai/zen/v1
+export AI_API_KEY=<key> AI_MODEL=glm-5.2
+export CLARA_AI_REQUIRE_EU=0                          # comparison run only; the Mistral run below passes the gate
 export THESIS_DATA_DIR=~/Documents/Thesis_ChatGPT
 python thesis/evaluation/predict_llm_production.py --limit 10      # smoke test: 10 signals, one batch
 python thesis/evaluation/predict_llm_production.py                 # full run; --exemplars auto = production default
@@ -129,9 +136,11 @@ Report the range of (b, c, p) across the three runs in §5A.6 next to the one-fl
 
 ```bash
 cd apps/api
-set -a; source .env; set +a
+export AI_BASE_URL=<gateway> AI_API_KEY=<key> AI_MODEL=glm-5.2 CLARA_AI_REQUIRE_EU=0   # same caveat as Step 2
 python -m app.evals.run_live --publish
 ```
+
+Run this on the machine that holds the earlier run ledger (`app/evals/history.jsonl` and `app/evals/reports/`, both gitignored): the run appends to it, and Step 6 reads the July entries from it.
 
 `app/evals/published_metrics.json` now carries `by_split` (`optimization`, `held_out`) and Wilson intervals, and the model card serves it. Paste the held-out sentiment and urgency accuracies (n = 30) into the §5A.7 placeholder and Appendix D's reading paragraph; if the pooled figures changed, update §5A.7's table row, Appendix B's Article 15 row and Chapter 7. Then, if you have the time, run without `--publish` once with `AI_MODEL=mistral-small-latest` and once with a self-hosted model; take `enrich_latency_ms` from the report and token counts from Langfuse, and add the three-row accuracy/cost/latency table to §5A.7 with a sentence in §6.4 item 2.
 
