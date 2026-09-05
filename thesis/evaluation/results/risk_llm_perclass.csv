@@ -1,0 +1,5 @@
+label,precision,recall,f1,support
+low,0.9,1.0,0.9474,36
+medium,0.7,0.7,0.7,20
+high,0.4571,0.6957,0.5517,23
+critical,0.9091,0.3704,0.5263,27

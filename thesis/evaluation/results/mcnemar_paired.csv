@@ -1,0 +1,7 @@
+task,pair,n_pairs,acc_first,acc_second,b_first_only_correct,c_second_only_correct,p_exact_two_sided,p_if_one_pair_flipped
+sentiment,floor_vs_ml,153,0.3725,0.7843,15,78,0.0,0.0
+sentiment,floor_vs_llm,153,0.3725,0.8627,6,81,0.0,0.0
+sentiment,ml_vs_llm,153,0.7843,0.8627,7,19,0.028959,0.075519
+risk,floor_vs_ml,106,0.4057,0.6792,8,37,1.5e-05,6.6e-05
+risk,floor_vs_llm,106,0.4057,0.717,3,36,0.0,0.0
+risk,ml_vs_llm,106,0.6792,0.717,19,23,0.643969,0.877614

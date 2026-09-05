@@ -1,3 +1,3 @@
-slice,n,accuracy,precision_macro,recall_macro,f1_macro,precision_weighted,recall_weighted,f1_weighted
-de,81,0.4198,0.64,0.4983,0.4216,0.8388,0.4198,0.513
-en,70,0.3143,0.4417,0.1964,0.2667,0.8243,0.3143,0.4514
+slice,n,accuracy,accuracy_ci_low,accuracy_ci_high,f1_macro
+de,81,0.4198,0.3183,0.5285,0.4216
+en,70,0.3143,0.2176,0.4303,0.2667

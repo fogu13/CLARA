@@ -5,9 +5,12 @@
     "lieferando",
     "trade_republic"
   ],
+  "ci_method": "accuracy/recall intervals are 95% Wilson score intervals",
   "sentiment_baseline": {
     "n": 153,
     "accuracy": 0.3725,
+    "accuracy_ci_low": 0.2999,
+    "accuracy_ci_high": 0.4514,
     "precision_macro": 0.5788,
     "recall_macro": 0.432,
     "f1_macro": 0.3728,
@@ -19,11 +22,15 @@
     "de": {
       "n": 81,
       "accuracy": 0.4198,
+      "accuracy_ci_low": 0.3183,
+      "accuracy_ci_high": 0.5285,
       "f1_macro": 0.4216
     },
     "en": {
       "n": 70,
       "accuracy": 0.3143,
+      "accuracy_ci_low": 0.2176,
+      "accuracy_ci_high": 0.4303,
       "f1_macro": 0.2667
     }
   },
@@ -31,22 +38,74 @@
     "b2b_industrial": {
       "n": 37,
       "accuracy": 0.4865,
+      "accuracy_ci_low": 0.3345,
+      "accuracy_ci_high": 0.6411,
       "f1_macro": 0.4483
     },
     "fintech": {
       "n": 45,
       "accuracy": 0.2889,
+      "accuracy_ci_low": 0.1773,
+      "accuracy_ci_high": 0.4337,
       "f1_macro": 0.2849
     },
     "food_delivery": {
       "n": 71,
       "accuracy": 0.3662,
+      "accuracy_ci_low": 0.2637,
+      "accuracy_ci_high": 0.4824,
       "f1_macro": 0.3392
+    }
+  },
+  "sentiment_by_source": {
+    "amazon": {
+      "n": 26,
+      "accuracy": 0.5,
+      "accuracy_ci_low": 0.3206,
+      "accuracy_ci_high": 0.6794,
+      "f1_macro": 0.3501
+    },
+    "apple_app_store": {
+      "n": 38,
+      "accuracy": 0.2895,
+      "accuracy_ci_low": 0.17,
+      "accuracy_ci_high": 0.4476,
+      "f1_macro": 0.2712
+    },
+    "google_play": {
+      "n": 10,
+      "accuracy": 0.5,
+      "accuracy_ci_low": 0.2366,
+      "accuracy_ci_high": 0.7634,
+      "f1_macro": 0.2381
+    },
+    "hornbach": {
+      "n": 6,
+      "accuracy": 0.6667,
+      "accuracy_ci_low": 0.3,
+      "accuracy_ci_high": 0.9032,
+      "f1_macro": 0.5833
+    },
+    "obi": {
+      "n": 5,
+      "accuracy": 0.2,
+      "accuracy_ci_low": 0.0362,
+      "accuracy_ci_high": 0.6245,
+      "f1_macro": 0.1667
+    },
+    "trustpilot": {
+      "n": 68,
+      "accuracy": 0.3382,
+      "accuracy_ci_low": 0.2371,
+      "accuracy_ci_high": 0.4566,
+      "f1_macro": 0.3243
     }
   },
   "risk_baseline": {
     "n": 106,
     "accuracy": 0.4057,
+    "accuracy_ci_low": 0.3171,
+    "accuracy_ci_high": 0.5008,
     "precision_macro": 0.4714,
     "recall_macro": 0.3229,
     "f1_macro": 0.2623,
@@ -57,6 +116,8 @@
   "risk_binary_escalation": {
     "n": 106,
     "accuracy": 0.5943,
+    "accuracy_ci_low": 0.4992,
+    "accuracy_ci_high": 0.6829,
     "precision_macro": 0.7279,
     "recall_macro": 0.5711,
     "f1_macro": 0.4951,
@@ -68,9 +129,71 @@
     "henkel",
     "trade_republic"
   ],
+  "sentiment_ml_by_language": {
+    "de": {
+      "n": 81,
+      "accuracy": 0.7284,
+      "accuracy_ci_low": 0.6228,
+      "accuracy_ci_high": 0.8133,
+      "f1_macro": 0.5066
+    },
+    "en": {
+      "n": 70,
+      "accuracy": 0.8429,
+      "accuracy_ci_low": 0.7401,
+      "accuracy_ci_high": 0.9099,
+      "f1_macro": 0.5231
+    }
+  },
+  "sentiment_ml_by_source": {
+    "amazon": {
+      "n": 26,
+      "accuracy": 0.7308,
+      "accuracy_ci_low": 0.5392,
+      "accuracy_ci_high": 0.863,
+      "f1_macro": 0.5029
+    },
+    "apple_app_store": {
+      "n": 38,
+      "accuracy": 0.7105,
+      "accuracy_ci_low": 0.5524,
+      "accuracy_ci_high": 0.83,
+      "f1_macro": 0.3944
+    },
+    "google_play": {
+      "n": 10,
+      "accuracy": 0.9,
+      "accuracy_ci_low": 0.5958,
+      "accuracy_ci_high": 0.9821,
+      "f1_macro": 0.4737
+    },
+    "hornbach": {
+      "n": 6,
+      "accuracy": 0.5,
+      "accuracy_ci_low": 0.1876,
+      "accuracy_ci_high": 0.8124,
+      "f1_macro": 0.2222
+    },
+    "obi": {
+      "n": 5,
+      "accuracy": 1.0,
+      "accuracy_ci_low": 0.5655,
+      "accuracy_ci_high": 1.0,
+      "f1_macro": 1.0
+    },
+    "trustpilot": {
+      "n": 68,
+      "accuracy": 0.8382,
+      "accuracy_ci_low": 0.7331,
+      "accuracy_ci_high": 0.9072,
+      "f1_macro": 0.7589
+    }
+  },
   "sentiment_ml_tfidf_lr": {
     "n": 153,
     "accuracy": 0.7843,
+    "accuracy_ci_low": 0.7126,
+    "accuracy_ci_high": 0.8421,
     "precision_macro": 0.5155,
     "recall_macro": 0.5348,
     "f1_macro": 0.5243,
@@ -82,6 +205,8 @@
   "risk_ml_tfidf_lr": {
     "n": 106,
     "accuracy": 0.6792,
+    "accuracy_ci_low": 0.5855,
+    "accuracy_ci_high": 0.7605,
     "precision_macro": 0.6586,
     "recall_macro": 0.6552,
     "f1_macro": 0.6534,
@@ -93,6 +218,8 @@
   "sentiment_llm": {
     "n": 153,
     "accuracy": 0.8627,
+    "accuracy_ci_low": 0.7993,
+    "accuracy_ci_high": 0.9084,
     "precision_macro": 0.6971,
     "recall_macro": 0.6505,
     "f1_macro": 0.6661,
@@ -104,11 +231,15 @@
     "de": {
       "n": 81,
       "accuracy": 0.8148,
+      "accuracy_ci_low": 0.7167,
+      "accuracy_ci_high": 0.8844,
       "f1_macro": 0.6745
     },
     "en": {
       "n": 70,
       "accuracy": 0.9143,
+      "accuracy_ci_low": 0.8253,
+      "accuracy_ci_high": 0.9601,
       "f1_macro": 0.6074
     }
   },
@@ -116,49 +247,111 @@
     "b2b_industrial": {
       "n": 37,
       "accuracy": 0.7838,
+      "accuracy_ci_low": 0.628,
+      "accuracy_ci_high": 0.8861,
       "f1_macro": 0.6305
     },
     "fintech": {
       "n": 45,
       "accuracy": 0.8222,
+      "accuracy_ci_low": 0.6867,
+      "accuracy_ci_high": 0.9071,
       "f1_macro": 0.5829
     },
     "food_delivery": {
       "n": 71,
       "accuracy": 0.9296,
+      "accuracy_ci_low": 0.8455,
+      "accuracy_ci_high": 0.9695,
       "f1_macro": 0.528
+    }
+  },
+  "sentiment_llm_by_source": {
+    "amazon": {
+      "n": 26,
+      "accuracy": 0.7308,
+      "accuracy_ci_low": 0.5392,
+      "accuracy_ci_high": 0.863,
+      "f1_macro": 0.6216
+    },
+    "apple_app_store": {
+      "n": 38,
+      "accuracy": 0.7895,
+      "accuracy_ci_low": 0.6365,
+      "accuracy_ci_high": 0.8893,
+      "f1_macro": 0.4132
+    },
+    "google_play": {
+      "n": 10,
+      "accuracy": 0.9,
+      "accuracy_ci_low": 0.5958,
+      "accuracy_ci_high": 0.9821,
+      "f1_macro": 0.4737
+    },
+    "hornbach": {
+      "n": 6,
+      "accuracy": 0.8333,
+      "accuracy_ci_low": 0.4365,
+      "accuracy_ci_high": 0.9699,
+      "f1_macro": 0.5556
+    },
+    "obi": {
+      "n": 5,
+      "accuracy": 1.0,
+      "accuracy_ci_low": 0.5655,
+      "accuracy_ci_high": 1.0,
+      "f1_macro": 1.0
+    },
+    "trustpilot": {
+      "n": 68,
+      "accuracy": 0.9412,
+      "accuracy_ci_low": 0.8583,
+      "accuracy_ci_high": 0.9769,
+      "f1_macro": 0.6158
     }
   },
   "sentiment_llm_by_language_sector": {
     "de|b2b_industrial": {
       "n": 37,
       "accuracy": 0.7838,
+      "accuracy_ci_low": 0.628,
+      "accuracy_ci_high": 0.8861,
       "f1_macro": 0.6305
     },
     "de|fintech": {
       "n": 7,
       "accuracy": 0.4286,
+      "accuracy_ci_low": 0.1582,
+      "accuracy_ci_high": 0.7495,
       "f1_macro": 0.3556
     },
     "en|fintech": {
       "n": 36,
       "accuracy": 0.8889,
+      "accuracy_ci_low": 0.7469,
+      "accuracy_ci_high": 0.9559,
       "f1_macro": 0.6287
     },
     "de|food_delivery": {
       "n": 37,
       "accuracy": 0.9189,
+      "accuracy_ci_low": 0.787,
+      "accuracy_ci_high": 0.972,
       "f1_macro": 0.8398
     },
     "en|food_delivery": {
       "n": 34,
       "accuracy": 0.9412,
+      "accuracy_ci_low": 0.8091,
+      "accuracy_ci_high": 0.9837,
       "f1_macro": 0.3282
     }
   },
   "risk_llm": {
     "n": 106,
     "accuracy": 0.717,
+    "accuracy_ci_low": 0.6248,
+    "accuracy_ci_high": 0.794,
     "precision_macro": 0.7416,
     "recall_macro": 0.6915,
     "f1_macro": 0.6814,
@@ -166,7 +359,20 @@
     "recall_weighted": 0.717,
     "f1_weighted": 0.7076
   },
-  "llm_path": "scored 153 sentiment / 106 risk predictions",
+  "risk_llm_binary_escalation": {
+    "n": 106,
+    "accuracy": 0.9245,
+    "accuracy_ci_low": 0.8581,
+    "accuracy_ci_high": 0.9613,
+    "precision_macro": 0.9283,
+    "recall_macro": 0.9221,
+    "f1_macro": 0.9239,
+    "precision_weighted": 0.9267,
+    "recall_weighted": 0.9245,
+    "f1_weighted": 0.9243
+  },
+  "llm_path": "scored 153 sentiment / 106 risk predictions (generic 3-class prompt \u2014 predict_llm.py; NOT the artifact's enrichment stage)",
+  "llm_production_path": "not run (no predictions_llm_production.json; CLARA's production enrich_signals path \u2014 predict_llm_production.py)",
   "journey_stage_llm_closed_set": {
     "n": 182,
     "n_classes": 27,
@@ -178,7 +384,7 @@
     "classes_with_support_5plus": 9,
     "coverage_of_those_classes": 0.7802,
     "accuracy_on_supported": 0.5775,
-    "f1_macro_on_supported": 0.2774
+    "f1_macro_on_supported": 0.5548
   },
   "owner_llm_closed_set": {
     "n": 182,
@@ -191,7 +397,7 @@
     "classes_with_support_5plus": 8,
     "coverage_of_those_classes": 0.5769,
     "accuracy_on_supported": 0.4381,
-    "f1_macro_on_supported": 0.176
+    "f1_macro_on_supported": 0.4181
   },
   "taxonomy_path": "scored from the constrained run (inventory supplied)",
   "escalation_recall_by_language": {
@@ -199,23 +405,75 @@
       "n_signals": 45,
       "n_gold_escalate": 8,
       "base_rate": 0.1778,
+      "n_gold_escalate_floor": 8,
       "recall_floor": 0.0,
-      "recall_ml": 0.625,
+      "recall_floor_ci_low": 0.0,
+      "recall_floor_ci_high": 0.3244,
       "n_gold_escalate_ml": 8,
+      "recall_ml": 0.625,
+      "recall_ml_ci_low": 0.3057,
+      "recall_ml_ci_high": 0.8632,
+      "n_gold_escalate_llm": 8,
       "recall_llm": 0.875,
-      "n_gold_escalate_llm": 8
+      "recall_llm_ci_low": 0.5291,
+      "recall_llm_ci_high": 0.9776
     },
     "en": {
       "n_signals": 59,
       "n_gold_escalate": 41,
       "base_rate": 0.6949,
+      "n_gold_escalate_floor": 41,
       "recall_floor": 0.1951,
-      "recall_ml": 0.9512,
+      "recall_floor_ci_low": 0.1023,
+      "recall_floor_ci_high": 0.3401,
       "n_gold_escalate_ml": 41,
+      "recall_ml": 0.9512,
+      "recall_ml_ci_low": 0.8386,
+      "recall_ml_ci_high": 0.9865,
+      "n_gold_escalate_llm": 41,
       "recall_llm": 0.878,
-      "n_gold_escalate_llm": 41
+      "recall_llm_ci_low": 0.7446,
+      "recall_llm_ci_high": 0.9468
     }
   },
+  "escalation_recall_fisher": [
+    {
+      "predictor": "floor",
+      "language_a": "de",
+      "language_b": "en",
+      "hits_a": 0,
+      "misses_a": 8,
+      "hits_b": 8,
+      "misses_b": 33,
+      "recall_a": 0.0,
+      "recall_b": 0.1951,
+      "p_fisher_two_sided": 0.322019
+    },
+    {
+      "predictor": "ml",
+      "language_a": "de",
+      "language_b": "en",
+      "hits_a": 5,
+      "misses_a": 3,
+      "hits_b": 39,
+      "misses_b": 2,
+      "recall_a": 0.625,
+      "recall_b": 0.9512,
+      "p_fisher_two_sided": 0.025616
+    },
+    {
+      "predictor": "llm",
+      "language_a": "de",
+      "language_b": "en",
+      "hits_a": 7,
+      "misses_a": 1,
+      "hits_b": 36,
+      "misses_b": 5,
+      "recall_a": 0.875,
+      "recall_b": 0.878,
+      "p_fisher_two_sided": 1.0
+    }
+  ],
   "language_sector_composition": {
     "de|b2b_industrial": 38,
     "de|fintech": 7,
@@ -226,6 +484,20 @@
     "es|fintech": 1,
     "nl|fintech": 1
   },
+  "language_source_composition": {
+    "de|amazon": 26,
+    "de|apple_app_store": 9,
+    "de|google_play": 4,
+    "de|hornbach": 6,
+    "de|obi": 5,
+    "de|trustpilot": 32,
+    "en|apple_app_store": 29,
+    "en|google_play": 5,
+    "en|reddit": 22,
+    "en|trustpilot": 37,
+    "es|google_play": 1,
+    "nl|trustpilot": 1
+  },
   "mcnemar_paired": {
     "sentiment": {
       "floor_vs_ml": {
@@ -234,7 +506,8 @@
         "acc_ml": 0.7843,
         "b_first_only_correct": 15,
         "c_second_only_correct": 78,
-        "p_exact_two_sided": 0.0
+        "p_exact_two_sided": 0.0,
+        "p_if_one_pair_flipped": 0.0
       },
       "floor_vs_llm": {
         "n_pairs": 153,
@@ -242,7 +515,8 @@
         "acc_llm": 0.8627,
         "b_first_only_correct": 6,
         "c_second_only_correct": 81,
-        "p_exact_two_sided": 0.0
+        "p_exact_two_sided": 0.0,
+        "p_if_one_pair_flipped": 0.0
       },
       "ml_vs_llm": {
         "n_pairs": 153,
@@ -250,7 +524,8 @@
         "acc_llm": 0.8627,
         "b_first_only_correct": 7,
         "c_second_only_correct": 19,
-        "p_exact_two_sided": 0.028959
+        "p_exact_two_sided": 0.028959,
+        "p_if_one_pair_flipped": 0.075519
       }
     },
     "risk": {
@@ -260,7 +535,8 @@
         "acc_ml": 0.6792,
         "b_first_only_correct": 8,
         "c_second_only_correct": 37,
-        "p_exact_two_sided": 1.5e-05
+        "p_exact_two_sided": 1.5e-05,
+        "p_if_one_pair_flipped": 6.6e-05
       },
       "floor_vs_llm": {
         "n_pairs": 106,
@@ -268,7 +544,8 @@
         "acc_llm": 0.717,
         "b_first_only_correct": 3,
         "c_second_only_correct": 36,
-        "p_exact_two_sided": 0.0
+        "p_exact_two_sided": 0.0,
+        "p_if_one_pair_flipped": 0.0
       },
       "ml_vs_llm": {
         "n_pairs": 106,
@@ -276,7 +553,8 @@
         "acc_llm": 0.717,
         "b_first_only_correct": 19,
         "c_second_only_correct": 23,
-        "p_exact_two_sided": 0.643969
+        "p_exact_two_sided": 0.643969,
+        "p_if_one_pair_flipped": 0.877614
       }
     }
   }
