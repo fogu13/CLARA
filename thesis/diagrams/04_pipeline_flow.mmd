@@ -1,22 +1,25 @@
 %% Data pipeline — Signal → Insight → Action → Learning, with governance control points. Edit freely.
 flowchart TD
-    A["Raw signal<br/>(qualitative or quantitative)"] --> B["Enrich<br/>sentiment · theme · urgency · evidence<br/>+ PII masking"]
-    B --> C["Map to taxonomy<br/>category → theme → subtheme"]
-    C --> D["Synthesise insight<br/>cluster signals · composite cross-signal severity"]
-    D --> E["Match rules<br/>priority → specificity → action-type dedupe"]
-    E --> F{"Risk gate<br/>auto_execute?"}
-    F -->|"true (low risk)"| H["Execute action"]
-    F -->|"false (needs oversight)"| G["Approval queue<br/>human-in-the-loop · Art 14"]
-    G -->|approve| H
-    G -->|reject| X["Logged · no action"]
-    H --> I["Write audit record<br/>params · executor · result · Art 12"]
-    I --> J["Measure outcome<br/>vs contract · operational/customer/outcome closure"]
-    J --> K{"Resolved?"}
-    K -->|yes| L["Codify learning<br/>confidence + half-life"]
-    K -->|no| E
-    L -->|"decayed-confidence retrieval"| E
+    A["Raw signal<br/>(feedback text + source, journey, language)"] --> B["Enrich<br/>sentiment · urgency · theme tags<br/>identifiers redacted before the model call<br/>journey-stage routing: closed set, may abstain (flag)"]
+    B --> C["Classify<br/>map to the workspace taxonomy catalog"]
+    C --> D["Synthesise insight<br/>cluster by theme · composite cross-signal severity<br/>+ retrieved past learnings"]
+    D --> E["Problem candidates<br/>journey/stage groups · AI themes"]
+    E --> F{"Human accepts<br/>candidate?"}
+    F -->|reject| X0["Logged · no problem"]
+    F -->|accept| G["Problem record<br/>outcome contract proposed at approval<br/>action proposals with risk level · policy checks"]
+    G --> H{"Human approves<br/>the action?<br/>(blocking policy check withholds it)"}
+    H -->|reject| X["Logged · no action"]
+    H -->|approve| I["Execute<br/>Jira / Slack push, draft fallback"]
+    I --> J["Audit record<br/>reviewer · executor · connector result<br/>evidence pack hashed at decision time"]
+    J --> K["Measure<br/>t7 · window · follow-up checkpoints<br/>ITS readout · evidence grade A–E"]
+    K --> L{"Loop verdict"}
+    L -->|"loop closed"| M["Reviewer records learning conclusion<br/>worked · partially · did not work · inconclusive"]
+    L -->|"fix did not land"| M
+    L -->|"measuring"| K
+    M --> N["Learning memory<br/>base confidence · half-life · reviewer"]
+    N -->|"decayed-confidence retrieval"| D
 
     classDef gov fill:#fde2e2,stroke:#c0392b,color:#7b1f1f;
     classDef llm fill:#e2ecfd,stroke:#3b6ea5,color:#1f3b5b;
-    class G,I gov;
+    class F,H,J,M gov;
     class B,D llm;

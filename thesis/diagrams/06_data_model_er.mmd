@@ -1,97 +1,93 @@
-%% Data model (ER). Edit freely. The runnable schema is in schema.sql.
+%% Data model (ER) of the DEPLOYED build. Edit freely. The runnable DDL is in schema.sql,
+%% extracted from apps/api/migrations and the API's boot-time DDL (services/postgres.py).
+%% Convention: aggregates are JSONB documents keyed per workspace; the pydantic model
+%% named in the attribute comment is the schema of the payload.
 erDiagram
-    WORKSPACES ||--o{ SIGNALS : owns
+    WORKSPACES ||--o{ PROFILES : "has users"
+    WORKSPACES ||--o{ USER_ROLES : "grants viewer | editor | admin"
+    WORKSPACES ||--o{ CLARA_SIGNALS : owns
+    WORKSPACES ||--o{ CLARA_THEME_INSIGHTS : owns
+    WORKSPACES ||--o{ CLARA_PROBLEMS : owns
+    WORKSPACES ||--o{ CLARA_LEARNINGS : owns
     WORKSPACES ||--o{ TAXONOMY_NODES : owns
-    WORKSPACES ||--o{ FEEDBACK_RULES : owns
-    WORKSPACES ||--o{ INSIGHTS : owns
-    WORKSPACES ||--o{ EVENTS : logs
+    WORKSPACES ||--o{ CLARA_TELEMETRY : logs
 
-    TAXONOMY_NODES ||--o{ TAXONOMY_NODES : "parent of"
-    SIGNALS }o--o{ TAXONOMY_NODES : "mapped via SIGNAL_NODE_MAP"
-    SIGNALS }o--o{ INSIGHTS : "clustered via INSIGHT_SIGNALS"
+    CLARA_SIGNALS }o--o{ TAXONOMY_NODES : "SIGNAL_NODE_MAP"
+    TAXONOMY_NODES ||--o{ TAXONOMY_NODES : "parent of (3 levels)"
+    CLARA_SIGNALS }o--o{ CLARA_THEME_INSIGHTS : "clustered by tag (evidence ids)"
+    CLARA_THEME_INSIGHTS |o--o| CLARA_PROBLEMS : "accepted candidate becomes"
+    CLARA_PROBLEMS ||--o{ CLARA_WORKFLOW_RECORDS : "approval · execution · outcome · guardrail · closure · learning_conclusion"
+    CLARA_PROBLEMS ||--o{ CLARA_MEASUREMENT_PLANS : "t7 · window · followup"
+    CLARA_WORKFLOW_RECORDS ||--o| CLARA_LEARNINGS : "reviewed conclusion copied into memory"
+    CLARA_LEARNINGS }o..o{ CLARA_THEME_INSIGHTS : "retrieved into synthesis (decayed confidence)"
 
-    INSIGHTS ||--o{ ACTIONS_LOG : triggers
-    FEEDBACK_RULES ||--o{ ACTIONS_LOG : fires
-    ACTIONS_LOG ||--|| OUTCOME_CONTRACTS : "binds at creation"
-    OUTCOME_CONTRACTS ||--o{ OUTCOME_MEASUREMENTS : "measured by"
-    INSIGHTS ||--o{ AB_LEARNINGS : "produces / informs"
-
-    SIGNALS {
-        uuid id PK
-        uuid workspace_id FK
-        text signal_type
-        text source
-        text category
-        text text_content
-        text original_language
-        text metric_name
-        numeric metric_value
-        text sentiment
-        text urgency
-        timestamptz recorded_at
+    CLARA_SIGNALS {
+        bigint workspace_id PK
+        text signal_id PK
+        jsonb payload "SignalRecord: feedback_text, source, journey, journey_stage, language, timestamp, sentiment, urgency, tags, enriched"
     }
-    INSIGHTS {
-        uuid id PK
-        uuid workspace_id FK
-        text title
-        text severity_band
-        numeric severity_score
+    CLARA_THEME_INSIGHTS {
+        bigint workspace_id PK
+        text theme_tag PK
+        jsonb payload "insight: title, summary, cross-signal severity, evidence signal ids, suggested actions"
+    }
+    CLARA_PROBLEMS {
+        bigint workspace_id PK
+        text problem_id PK
+        jsonb payload "ProblemRecord: outcome_contract (DP1), action_proposals[risk_level, approval state], governance_checks, evidence, origin, due_at"
+    }
+    CLARA_WORKFLOW_RECORDS {
+        text tenant_id PK
+        text record_type PK
+        text record_id PK
+        text problem_id FK
+        jsonb payload "ApprovalDecision | ExecutionRecord | OutcomeMeasurement(measurement_source) | GuardrailMeasurement | ClosureRecord | LearningConclusionRecord"
+        timestamptz retention_expires_at
+    }
+    CLARA_MEASUREMENT_PLANS {
+        bigint id PK
+        bigint workspace_id FK
+        text problem_id FK
+        text execution_id
+        text kind "t7 | window | followup"
+        text due_at
         text status
     }
-    FEEDBACK_RULES {
-        uuid id PK
-        uuid workspace_id FK
-        int priority
-        jsonb conditions
-        text action_type
-        bool auto_execute
-    }
-    ACTIONS_LOG {
-        uuid id PK
-        uuid insight_id FK
-        uuid rule_id FK
-        text status
-        text executor
-        jsonb params
-        jsonb result
-        timestamptz created_at
-    }
-    OUTCOME_CONTRACTS {
-        uuid id PK
-        uuid action_id FK
-        text metric
-        numeric baseline
-        int window_days
-        timestamptz measurement_due_at
-    }
-    OUTCOME_MEASUREMENTS {
-        uuid id PK
-        uuid contract_id FK
-        numeric value
-        numeric resolution_score
-        text closure_level
-    }
-    AB_LEARNINGS {
-        uuid id PK
-        uuid workspace_id FK
-        text conclusion
-        numeric base_confidence
-        timestamptz last_validated_at
-        int half_life_days
+    CLARA_LEARNINGS {
+        bigint workspace_id PK
+        text conclusion_id PK
+        text topic
+        jsonb payload "learning_status, summary, limitations, reviewer, base_confidence, half_life_days, last_validated_at (DP2, decay computed on read)"
     }
     TAXONOMY_NODES {
         uuid id PK
-        uuid workspace_id FK
+        int workspace_id FK
         uuid parent_id FK
         int level
-        text label
+        text name
+        text status "active | candidate | merged | archived"
         numeric confidence
-        int half_life_days
+        vector embedding "1024 dims"
     }
-    EVENTS {
-        uuid id PK
-        uuid workspace_id FK
-        text type
-        jsonb payload
+    CLARA_TELEMETRY {
+        bigint id PK
+        bigint workspace_id FK
+        text event_type
+        jsonb metadata
         timestamptz created_at
+    }
+    WORKSPACES {
+        int id PK
+        text slug
+        jsonb settings
+    }
+    PROFILES {
+        uuid user_id PK
+        int workspace_id FK
+        text email
+    }
+    USER_ROLES {
+        uuid user_id PK
+        int workspace_id FK
+        text role
     }
