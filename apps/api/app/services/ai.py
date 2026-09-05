@@ -503,13 +503,29 @@ def _post_with_retry(
     ) from last_exc
 
 
+def chat_timeout_seconds(default: float = 120.0) -> float:
+    """Per-request timeout for chat calls; AI_TIMEOUT_S overrides the default.
+
+    A slow gateway or a large model can take longer than two minutes on a
+    25-item enrichment batch (the thesis harness measured 168 s for ten items
+    on one hosted model); without an override every such batch is skipped as
+    "provider unreachable". Unset keeps the production default.
+    """
+    raw = (os.getenv("AI_TIMEOUT_S") or "").strip()
+    try:
+        return float(raw) if raw else default
+    except ValueError:
+        logger.warning("Ignoring non-numeric AI_TIMEOUT_S=%r", raw)
+        return default
+
+
 def call_tool(
     *,
     system: str,
     user: str,
     tool: dict[str, Any],
     tool_name: str,
-    timeout: float = 120.0,
+    timeout: float | None = None,
     trace_name: str | None = None,
 ) -> dict[str, Any]:
     """Single-tool structured call against an OpenAI-compatible endpoint.
@@ -550,7 +566,9 @@ def call_tool(
         )
 
     try:
-        resp = _post_with_retry("/chat/completions", body, timeout, endpoint="chat")
+        resp = _post_with_retry(
+            "/chat/completions", body, chat_timeout_seconds() if timeout is None else timeout, endpoint="chat"
+        )
     except AIProviderError as err:
         if obs is not None:
             obs.end(level="ERROR", status_message=str(err), usage_details={})

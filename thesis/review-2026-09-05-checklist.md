@@ -108,6 +108,7 @@ export AI_BASE_URL=<the gateway used on 4 August>   # e.g. https://opencode.ai/z
 export AI_API_KEY=<key> AI_MODEL=glm-5.2
 export CLARA_AI_REQUIRE_EU=0                          # comparison run only; the Mistral run below passes the gate
 export AI_TEMPERATURE=0                               # the production call pins sampling only when this is set; the 4 August run used 0
+export AI_TIMEOUT_S=600                               # a 25-item batch on GLM-5.2 through the gateway exceeds the 120 s default; use --batch-size 10 as well
 export THESIS_DATA_DIR=~/Documents/Thesis_ChatGPT
 python thesis/evaluation/predict_llm_production.py --limit 10      # smoke test: 10 signals, one batch
 python thesis/evaluation/predict_llm_production.py                 # full run; --exemplars auto = production default
