@@ -69,7 +69,7 @@ The quantitative evaluation is reproducible: the harness (`evaluation/`) runs fr
 
 ## Table of Contents · List of Figures · List of Tables
 
-*(Generated on compilation to `.docx`.)*
+*(The table of contents is generated on compilation to `.docx`; the lists of figures and tables are inserted in Word from the captions before submission.)*
 
 1. Introduction
 2. Literature Review

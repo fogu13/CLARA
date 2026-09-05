@@ -6,6 +6,8 @@ Method: a citation-verification sweep over all 193 in-text citations (reported s
 
 Of the 72 lens findings, **66 were confirmed** (58 by both skeptics; 8 by the evidence skeptic alone, where the text skeptic found the manuscript as quoted and deferred to the code or data), **5 were narrowed** (one skeptic disputed the framing while the other confirmed the underlying facts) **and 1 was refuted**, with a smaller defect surviving. The narrowed and refuted ones are reported below with what survives, because a review that only reports its hits is not a review. Three of my own 2 September conclusions and one from the first draft of this addendum were also wrong; they are corrected in Part C.
 
+> **Implemented, 5 September 2026.** The plan in Part E was executed under decisions 2a = A, 2b = A, 2c = B; what was done and what still needs the author is in `review-2026-09-05-checklist.md`.
+
 ## What changed since 2 September
 
 The first review understated the problem in three places.

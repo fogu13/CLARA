@@ -6,15 +6,15 @@ The artifact of this thesis is a working web platform that instantiates the comp
 
 The system is implemented as **CLARA** (a backronym: *Capture, Listen, Analyze, Respond, Adapt*): a Next.js / TypeScript front end (shadcn/ui + Tailwind) on a Python **FastAPI** backend (≈89 REST endpoints across seven routers) with **LangGraph** orchestrating the language-model stages, Postgres for storage (with **pgvector** on the taxonomy nodes; Appendix E), and **Langfuse** for LLM tracing/observability. The pipeline's human-approval step is a LangGraph *interrupt* node; model routing is provider-agnostic (`ai.py`). The configured production default is a hosted European model (`mistral-small-latest`); every accuracy figure in Chapter 5 was produced on a different model (GLM-5.2, via a gateway), a gap §6.4 records. In production (since July 2026) the front end runs on Vercel and the API in Docker on a European VPS behind a TLS-terminating reverse proxy, with the database in an EU (Frankfurt) region.
 
-![Figure 4.2: Implementation architecture: CLARA (Next.js + FastAPI + LangGraph, with a human-approval interrupt node).](../diagrams/rendered/03_architecture_clara.png)
+![Figure 4.1: Implementation architecture: CLARA (Next.js + FastAPI + LangGraph, with a human-approval interrupt node).](../diagrams/rendered/03_architecture_clara.png)
 
 The platform is deliberately *not* a feedback dashboard. Its claim to contribution is the governed path from a raw customer signal to a *measured* outcome and a *codified* learning, the stretch of the chain where the literature locates the feedback-action gap (Bone et al., 2017) and organisational knowledge loss (Walsh & Ungson, 1991; Argote, 2013).
 
 ## 4.2 Architecture
 
-The platform is organised as a pipeline of bounded stages, each with a clear interface (Figure 4.1):
+The platform is organised as a pipeline of bounded stages, each with a clear interface (Figure 4.2):
 
-![Figure 4.1: Logical, build-agnostic architecture: governed loop with cross-cutting Responsible-AI controls.](../diagrams/rendered/01_architecture_logical.png)
+![Figure 4.2: Logical, build-agnostic architecture: governed loop with cross-cutting Responsible-AI controls.](../diagrams/rendered/01_architecture_logical.png)
 
 | Stage | Responsibility | Mechanism |
 |-------|----------------|-----------|
