@@ -19,7 +19,7 @@
 ## 2. Task-based prototype session (10–12 min) → RQ4, H4, H6, H7
 Share the prototype. Ask the participant to think aloud. Capture task success + time-to-action (facilitator + `events` telemetry).
 - **T1 (Triage):** here's a batch of signals; find the most urgent problem and explain why.
-- **T2 (Govern an action):** create a rule that routes this theme to the right owner; decide whether it should auto-execute or need approval. *(probe: would you trust it to auto-fire? why/why not?)* → H6, H7
+- **T2 (Govern an action):** decide who should own this theme and whether its actions need one approver or two (four-eyes). *(probe: is there any action here you would let run without a person approving it? why/why not?)* → H6, H7
 - **T3 (Approve):** an action is waiting in the approval queue; decide and act. *(probe: is the audit trail enough to be accountable?)* → H7
 - **T4 (Closure & memory):** find whether a past action actually resolved its problem, and what was learned. → H8
 
@@ -27,6 +27,7 @@ Share the prototype. Ask the participant to think aloud. Capture task success + 
 - What would make you trust this enough to use it on real customers?
 - What's missing or would block adoption?
 - (If relevant) How do the human-approval and audit features change your comfort with automation? → H6, H7
+- Roughly how much of your week would the approval and audit steps cost, and is that a price you would pay? → RQ2 (friction)
 
 ## 4. Close (1 min)
 - SUS + TAM forms (Appendix A). Anyone you'd introduce me to? Thank you; findings will be shared.

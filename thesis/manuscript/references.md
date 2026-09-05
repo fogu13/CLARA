@@ -50,7 +50,7 @@ Bernal, J. L., Cummins, S., & Gasparrini, A. (2017). Interrupted time series reg
 
 Bleiholder, J., & Naumann, F. (2008). Data fusion. *ACM Computing Surveys*, 41(1), 1–41.
 
-Bone, S. A., et al. (2017). Mere measurement plus. *Journal of Marketing Research*, 54(1), 156–170.
+Bone, S. A., Lemon, K. N., Voorhees, C. M., Liljenquist, K. A., Fombelle, P. W., DeTienne, K. B., & Money, R. B. (2017). "Mere measurement plus": How solicitation of open-ended positive feedback influences customer purchase behavior. *Journal of Marketing Research*, 54(1), 156–170. https://doi.org/10.1509/jmr.14.0232
 
 Borenstein, M., Hedges, L. V., Higgins, J. P., & Rothstein, H. R. (2009). *Introduction to Meta-Analysis*. Wiley.
 
@@ -116,7 +116,7 @@ Fornell, C., Johnson, M. D., Anderson, E. W., Cha, J., & Bryant, B. E. (1996). T
 
 Gattermann-Itschert, T., & Thonemann, U. W. (2021). How training on multiple time slices improves churn prediction. *European Journal of Operational Research*, 295(2), 664–674.
 
-Ghasemaghaei, M., Hassanein, K., & Turel, O. (2017). Increasing firm agility through the use of data analytics. *International Journal of Information Management*, 37(1), 1–11.
+Ghasemaghaei, M., Hassanein, K., & Turel, O. (2017). Increasing firm agility through the use of data analytics: The role of fit. *Decision Support Systems*, 101, 95–105. https://doi.org/10.1016/j.dss.2017.06.004
 
 Glikson, E., & Woolley, A. W. (2020). Human trust in artificial intelligence: Review of empirical research on human–AI interaction. *Academy of Management Annals, 14*(2), 627–660.
 
@@ -304,7 +304,7 @@ Wedel, M., & Kannan, P. K. (2016). Marketing analytics for data-rich environment
 
 Wilson, T., Wiebe, J., & Hoffmann, P. (2005). Recognizing contextual polarity. *Proceedings of HLT-EMNLP*.
 
-Wirtz, J., Tambyah, S. K., & Mattila, A. S. (2010). Organizational learning from customer feedback. *Journal of Service Research*.
+Wirtz, J., Tambyah, S. K., & Mattila, A. S. (2010). Organizational learning from customer feedback received by service employees: A social capital perspective. *Journal of Service Management*, 21(3), 363–387. https://doi.org/10.1108/09564231011050805
 
 Woolley, A. W., et al. (2010). Evidence for a collective intelligence factor. *Science*, 330(6004), 686–688.
 
@@ -341,6 +341,8 @@ Enterpret. (2025, October 27). *Enterpret launches the first agentic customer fe
 Forrester. (2025a). *Forrester's 2025 Global Customer Experience Index rankings: 21% of brands declined, 6% improved, and 73% remained unchanged* [Press release]. https://www.forrester.com/press-newsroom/forrester-global-customer-experience-index-2025-rankings/
 
 Forrester. (2025b). *Six gaps hold feedback management and CX measurement programs back: Forrester's 2025 VoC and CX measurement survey results*. https://www.forrester.com/blogs/feedback-and-cx-measurement-programs-must-boost-their-impact-according-to-forresters-2025-survey/
+
+Forrester. (2025c). *Close-the-loop practices show promise, but could be more effective* (Report RES185117; part of *The State of Feedback Management (VoC) and CX Measurement, 2025* data overview). Forrester Research. ‹verify the report title and number against forrester.com before submission›
 
 Forrester. (2026). *Introducing the new Customer Feedback Management and Analytics Solutions landscape*. Forrester Blogs. https://www.forrester.com/blogs/introducing-the-new-customer-feedback-management-and-analytics-solutions-landscape/
 
@@ -383,3 +385,11 @@ Zendesk. (2026). *CX Trends 2026*. Zendesk. https://cxtrends.zendesk.com/
 Zhong, W., Guo, L., Gao, Q., Ye, H., & Wang, Y. (2024). MemoryBank: Enhancing large language models with long-term memory. *Proceedings of the AAAI Conference on Artificial Intelligence*, 38. arXiv:2305.10250.
 
 xinzhel. (2025). *LLM-Agent-Survey: A survey on LLM agents* (CoLing 2025) [Software/repository]. GitHub. https://github.com/xinzhel/LLM-Agent-Survey
+
+## Legislation
+
+European Parliament and Council of the European Union. (2016). Regulation (EU) 2016/679 of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation). *Official Journal of the European Union*, L 119, 1–88. http://data.europa.eu/eli/reg/2016/679/oj
+
+European Parliament and Council of the European Union. (2024). Regulation (EU) 2024/1689 of 13 June 2024 laying down harmonised rules on artificial intelligence (Artificial Intelligence Act). *Official Journal of the European Union*, L, 2024/1689, 12 July 2024. http://data.europa.eu/eli/reg/2024/1689/oj
+
+European Parliament and Council of the European Union. (2026). Regulation (EU) 2026/1744 amending Regulation (EU) 2024/1689 as regards the timing of certain obligations and the simplification of certain requirements (Digital Omnibus on AI). *Official Journal of the European Union*, 24 July 2026. ‹verify the full title, OJ issue and ELI against the Official Journal; the proxy blocked eur-lex during the review›
