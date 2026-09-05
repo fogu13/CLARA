@@ -107,6 +107,7 @@ Do **not** source the whole `apps/api/.env` for this run: the residency gate swi
 export AI_BASE_URL=<the gateway used on 4 August>   # e.g. https://opencode.ai/zen/v1
 export AI_API_KEY=<key> AI_MODEL=glm-5.2
 export CLARA_AI_REQUIRE_EU=0                          # comparison run only; the Mistral run below passes the gate
+export AI_TEMPERATURE=0                               # the production call pins sampling only when this is set; the 4 August run used 0
 export THESIS_DATA_DIR=~/Documents/Thesis_ChatGPT
 python thesis/evaluation/predict_llm_production.py --limit 10      # smoke test: 10 signals, one batch
 python thesis/evaluation/predict_llm_production.py                 # full run; --exemplars auto = production default
@@ -138,7 +139,7 @@ Report the range of (b, c, p) across the three runs in §5A.6 next to the one-fl
 
 ```bash
 cd apps/api
-export AI_BASE_URL=<gateway> AI_API_KEY=<key> AI_MODEL=glm-5.2 CLARA_AI_REQUIRE_EU=0   # same caveat as Step 2
+export AI_BASE_URL=<gateway> AI_API_KEY=<key> AI_MODEL=glm-5.2 CLARA_AI_REQUIRE_EU=0 AI_TEMPERATURE=0   # same caveats as Step 2
 python -m app.evals.run_live --publish
 ```
 
