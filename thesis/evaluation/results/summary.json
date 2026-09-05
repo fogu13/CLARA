@@ -507,7 +507,9 @@
         "b_first_only_correct": 15,
         "c_second_only_correct": 78,
         "p_exact_two_sided": 0.0,
-        "p_if_one_pair_flipped": 0.0
+        "p_minority_gains_one": 0.0,
+        "p_majority_loses_one": 0.0,
+        "p_one_pair_swaps": 0.0
       },
       "floor_vs_llm": {
         "n_pairs": 153,
@@ -516,7 +518,9 @@
         "b_first_only_correct": 6,
         "c_second_only_correct": 81,
         "p_exact_two_sided": 0.0,
-        "p_if_one_pair_flipped": 0.0
+        "p_minority_gains_one": 0.0,
+        "p_majority_loses_one": 0.0,
+        "p_one_pair_swaps": 0.0
       },
       "ml_vs_llm": {
         "n_pairs": 153,
@@ -525,7 +529,9 @@
         "b_first_only_correct": 7,
         "c_second_only_correct": 19,
         "p_exact_two_sided": 0.028959,
-        "p_if_one_pair_flipped": 0.075519
+        "p_minority_gains_one": 0.052239,
+        "p_majority_loses_one": 0.043285,
+        "p_one_pair_swaps": 0.075519
       }
     },
     "risk": {
@@ -536,7 +542,9 @@
         "b_first_only_correct": 8,
         "c_second_only_correct": 37,
         "p_exact_two_sided": 1.5e-05,
-        "p_if_one_pair_flipped": 6.6e-05
+        "p_minority_gains_one": 4.1e-05,
+        "p_majority_loses_one": 2.5e-05,
+        "p_one_pair_swaps": 6.6e-05
       },
       "floor_vs_llm": {
         "n_pairs": 106,
@@ -545,7 +553,9 @@
         "b_first_only_correct": 3,
         "c_second_only_correct": 36,
         "p_exact_two_sided": 0.0,
-        "p_if_one_pair_flipped": 0.0
+        "p_minority_gains_one": 0.0,
+        "p_majority_loses_one": 0.0,
+        "p_one_pair_swaps": 0.0
       },
       "ml_vs_llm": {
         "n_pairs": 106,
@@ -554,7 +564,9 @@
         "b_first_only_correct": 19,
         "c_second_only_correct": 23,
         "p_exact_two_sided": 0.643969,
-        "p_if_one_pair_flipped": 0.877614
+        "p_minority_gains_one": 0.760792,
+        "p_majority_loses_one": 0.755229,
+        "p_one_pair_swaps": 0.877614
       }
     }
   }
