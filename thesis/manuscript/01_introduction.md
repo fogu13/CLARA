@@ -68,7 +68,7 @@ A reader should know before Chapter 2 what kind of evidence stands behind each c
 
 | Claim | Status | Where |
 |---|---|---|
-| Triage accuracy is method-dependent; a contextual model clears the accuracy bar the loop requires (RQ3a) | Measured, on 188 signals with a generic prompt on the artifact's model; the production stage's figure on the same corpus is pending | §5A.3–5A.4 |
+| Triage accuracy is method-dependent; a contextual model clears the accuracy bar the loop requires (RQ3a) | Measured, on 188 signals, for a generic prompt on the artifact's model and for the production enrichment stage itself on two models: it matches the prompt on sentiment and labels one urgency level below the seed risk labels (§5A.4.2) | §5A.3–5A.4 |
 | Method choice changes whose problems are escalated (RQ3b) | Measured, on a German-source stratum of eight signals; the learned model's gap is significant, the contextual path's is not detectable | §5A.5 |
 | The loop closes by design: contracted, graded, refusing measurement (RQ1; DP1) | Demonstrated and regression-tested; no live outcome contract on real data yet | §3.5.5, §4.4 |
 | Retrieved learnings steer recommendations (DP2) | Retrieval influence measured on simulated outcomes; perishability not measured | §5A.7 |
