@@ -1,0 +1,7 @@
+task,pair,n_pairs,acc_first,acc_second,b_first_only_correct,c_second_only_correct,p_exact_two_sided,p_minority_gains_one,p_majority_loses_one,p_one_pair_swaps
+sentiment,floor_vs_ml,153,0.3725,0.7843,15,78,0.0,0.0,0.0,0.0
+sentiment,floor_vs_llm_production,153,0.3725,0.8497,6,79,0.0,0.0,0.0,0.0
+sentiment,ml_vs_llm_production,153,0.7843,0.8497,9,19,0.087159,0.136046,0.122078,0.184933
+risk,floor_vs_ml,106,0.4057,0.6792,8,37,1.5e-05,4.1e-05,2.5e-05,6.6e-05
+risk,floor_vs_llm_production,106,0.4057,0.6038,4,25,0.000104,0.000325,0.00018,0.000546
+risk,ml_vs_llm_production,106,0.6792,0.6038,27,19,0.301996,0.381693,0.371298,0.461391

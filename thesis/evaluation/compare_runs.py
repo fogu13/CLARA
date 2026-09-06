@@ -29,7 +29,10 @@ run did not score are excluded from that run and from its pairs; b = first run
 right and second wrong, c = the reverse, p = exact two-sided binomial(b + c).
 
 Writes compare_runs_accuracy.csv (one row per run and task, with Wilson 95 %
-intervals) and compare_runs_pairs.csv (one row per pair and task).
+intervals), compare_runs_pairs.csv (one row per pair and task) and
+compare_runs_agreement.csv (per pair and task: the share of jointly scored
+items given the identical label, which is the run-to-run stability figure
+when the runs are repeats of one configuration).
 """
 from __future__ import annotations
 
@@ -96,9 +99,10 @@ def compare(sigs, runs: dict[str, dict[str, dict[str, str]]]):
         "sentiment": (rated, lambda s: bl.gold_sentiment_from_stars(s.star_rating), SENT_LABELS),
         "risk": (have, lambda s: s.risk, RISK_LABELS),
     }
-    acc_rows, pair_rows = [], []
+    acc_rows, pair_rows, agree_rows = [], [], []
     for task, (items, gold_fn, labels) in tasks.items():
         correct: dict[str, dict[str, bool]] = {}
+        labelled: dict[str, dict[str, str]] = {}
         for name, run in runs.items():
             preds = run.get(task) or {}
             scored = [s for s in items if s.id in preds]
@@ -106,6 +110,7 @@ def compare(sigs, runs: dict[str, dict[str, dict[str, str]]]):
                 continue
             y_true = [gold_fn(s) for s in scored]
             y_pred = [preds[s.id] or DEFAULTS[task] for s in scored]
+            labelled[name] = {s.id: p for s, p in zip(scored, y_pred)}
             sc = M.score(y_true, y_pred, labels)
             acc_rows.append({"task": task, "run": name, "n": sc["n"],
                              "accuracy": sc["accuracy"],
@@ -123,6 +128,11 @@ def compare(sigs, runs: dict[str, dict[str, dict[str, str]]]):
                 bv = [correct[b_name][x] for x in ids]
                 b, c, p = M.mcnemar_exact(av, bv)
                 sens = M.mcnemar_sensitivity(b, c)
+                same = sum(labelled[a][x] == labelled[b_name][x] for x in ids)
+                lo, hi = M.wilson_interval(same, len(ids))
+                agree_rows.append({"task": task, "pair": f"{a}_vs_{b_name}", "n_pairs": len(ids),
+                                   "n_same_label": same, "agreement": round(same / len(ids), 4),
+                                   "agreement_ci_low": lo, "agreement_ci_high": hi})
                 pair_rows.append({
                     "task": task, "pair": f"{a}_vs_{b_name}", "n_pairs": len(ids),
                     "acc_first": round(sum(av) / len(ids), 4),
@@ -133,7 +143,7 @@ def compare(sigs, runs: dict[str, dict[str, dict[str, str]]]):
                     "p_majority_loses_one": sens["p_majority_loses_one"],
                     "p_one_pair_swaps": sens["p_one_pair_swaps"],
                 })
-    return acc_rows, pair_rows
+    return acc_rows, pair_rows, agree_rows
 
 
 def _write(path: str, rows: list[dict]) -> None:
@@ -162,16 +172,19 @@ def main(argv: list[str] | None = None) -> int:
     ns = ap.parse_args(argv)
     sigs = load()
     runs = parse_runs(ns.runs, sigs)
-    acc_rows, pair_rows = compare(sigs, runs)
+    acc_rows, pair_rows, agree_rows = compare(sigs, runs)
     os.makedirs(ns.out_dir, exist_ok=True)
     _write(os.path.join(ns.out_dir, "compare_runs_accuracy.csv"), acc_rows)
     _write(os.path.join(ns.out_dir, "compare_runs_pairs.csv"), pair_rows)
+    _write(os.path.join(ns.out_dir, "compare_runs_agreement.csv"), agree_rows)
     print(f"corpus: {len(sigs)} signals; runs: {', '.join(runs)}")
     print("\n== accuracy (95 % Wilson) ==")
     _print(acc_rows)
     print("\n== paired exact McNemar ==")
     _print(pair_rows)
-    print(f"\nwrote compare_runs_accuracy.csv and compare_runs_pairs.csv -> {ns.out_dir}")
+    print("\n== label agreement between runs (95 % Wilson) ==")
+    _print(agree_rows)
+    print(f"\nwrote compare_runs_accuracy.csv, compare_runs_pairs.csv and compare_runs_agreement.csv -> {ns.out_dir}")
     return 0
 
 

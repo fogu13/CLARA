@@ -19,7 +19,7 @@ MSc Responsible AI capstone (RAI-9001, 30 ECTS, OPIT). This folder is the **sing
 | `manuscript/references.md` | Consolidated APA-7 bibliography |
 | `manuscript/appendices/` | EU AI Act/GDPR mapping (obligation vs commitment), DPIA (provider-prepared), traceability matrix (incl. ITS design→code map), external-review episode (Appendix F) |
 | `instruments/` | Participant information and consent (bound), interview guide, survey, SUS, TAM + friction items, codebook template; `recruitment_outreach.md` is working material and is not bound |
-| `evaluation/` | Python harness over the **real** public datasets (Trade Republic, Henkel, Lieferando); `predict_llm.py` (generic prompt) and `predict_llm_production.py` (the artifact's own `enrich_signals` path, pre-registered rules); `survey_analysis.py` |
+| `evaluation/` | Python harness over the **real** public datasets (Trade Republic, Henkel, Lieferando); `predict_llm.py` (generic prompt) and `predict_llm_production.py` (the artifact's own `enrich_signals` path, pre-registered rules); `compare_runs.py` (paired tests across results folders); `survey_analysis.py`. Outputs: `results/` (GLM-5.2 runs) and `results_mistral-small-2603/` (the production default through the production path) |
 | `research/` | Deep-research source log + OPIT citation sourcebook |
 | `diagrams/` | Mermaid sources of the deployed build + `render.py` (mermaid-cli locally, mermaid.ink as fallback) + `rendered/` PNG/SVG + UI screenshots (seeded demo data) + `schema.sql` (extracted from the migrations) |
 | `defense/` | `defense_deck.pptx` + `make_deck.js` generator |

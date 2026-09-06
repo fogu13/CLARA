@@ -49,3 +49,6 @@ thesis/**/short-draft-*.docx
 thesis/**/short-draft-*.epub
 thesis/short-draft-*.docx
 thesis/short-draft-*.epub
+
+# Repeat-run folders of the thesis harness: keep predictions, summaries and CSVs; the heatmaps are regenerable
+thesis/evaluation/results_*_run*/*.png
