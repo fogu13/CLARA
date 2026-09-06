@@ -100,7 +100,7 @@ title(s, "Research questions and method", "Design science research, so the artif
 const rqs = [
   ["RQ1. Core", "How can an artifact make actions governed, executed and verified to have closed, and turn what worked into learning that is reused?"],
   ["RQ2. Governance", "What design lets automated action meet the EU AI Act and GDPR without slowing practitioners more than the risk warrants?"],
-  ["RQ3a. Accuracy", "How accurately does AI enrichment and routing reproduce reference labels (star ratings, assistant-drafted seeds) on real feedback, across sectors? Answered: three predictors on one gold standard."],
+  ["RQ3a. Accuracy", "How accurately does AI enrichment and routing reproduce reference labels on real feedback, across sectors? Answered: three predictors on one gold standard."],
   ["RQ3b. Equity", "Is triage reliability equal across language strata, defined here by the source review's language? Answered, and tightly bounded."],
 ];
 rqs.forEach((r, i) => card(s, 0.6 + (i % 2) * 6.15, 1.55 + Math.floor(i / 2) * 1.42, 5.95, 1.28, r[0], r[1], { size: 13 }));
@@ -197,26 +197,28 @@ table(s, [
   ["Predictor", "Sentiment accuracy (n = 153)", "Severity macro-F1 (n = 106)"],
   ["Keyword and lexicon floor", "0.37", "0.26"],
   ["TF-IDF and logistic regression", "0.78", "0.65"],
-  [{ text: "Contextual model path", options: { bold: true } }, { text: "0.86", options: { bold: true } }, { text: "0.68", options: { bold: true } }],
+  [{ text: "Contextual model path (generic prompt)", options: { bold: true } }, { text: "0.86", options: { bold: true } }, { text: "0.68", options: { bold: true } }],
+  ["Production enrichment stage, same model", "0.83", "0.41"],
+  ["Production enrichment stage, production default", "0.84", "0.53"],
 ], { x: 0.6, y: 1.6, w: 7.4, colW: [3.4, 2.0, 2.0] });
 card(s, 0.6, 3.62, 7.4, 1.3, "Paired McNemar on the same items, testing accuracy",
-  "Both learned methods beat the floor on both tasks (p < 0.0001). The contextual path beats the learned model on sentiment (p = 0.029) and does not separate from it on severity accuracy, 0.68 against 0.72 (p = 0.644).", { size: 13.5 });
-s.addText("Contextual reasoning buys a great deal on sentiment and nothing I can demonstrate on severity, because severity is carried by lexical markers that character n-grams already learn. So the loop's precondition can be met by more than one method, and a deployer weighing cost, latency and model sovereignty has a choice to make rather than an instruction to follow.",
+  "Both learned methods beat the floor (p < 0.0001). The contextual path beats the learned model on sentiment in all four runs (p = 0.019 to 0.029) and ties it on severity; the production stage matches it on sentiment and sits one severity level below the seeds.", { size: 11.5 });
+s.addText("Contextual reasoning buys a great deal on sentiment and nothing demonstrable on severity, which lexical markers already carry. The production stage's severity shift is partly the seed labels' own calibration: a blind second rater put seven of ten seed-critical items at high (kappa 0.55, weighted 0.70). The precondition can be met by more than one method; a deployer has a choice, not an instruction.",
   { ...BODY, x: 0.6, y: 5.1, w: 7.4, h: 1.5, fontSize: 14 });
 s.addImage({ path: `${T}/evaluation/results/risk_confusion.png`, x: 8.35, y: 1.6, w: 4.3, h: 3.82 });
 card(s, 8.35, 5.42, 4.3, 1.5, "How this is scored",
-  "188 real public signals, paraphrased and de-identified, with seed labels authored independently of the artifact. Sentiment is scored against the 1 to 5 star rating, which is independent of the text the classifier reads.", { size: 12 });
-s.addNotes("2 minutes. Walk the three rungs, then go to the paired tests, which are new since she last saw this. The honest headline is that the contextual path is not measurably better than a TF-IDF model on severity at this sample size. The confusion matrix shows how the floor fails: it calls 19 of the 27 critical signals low and gets only 4 of them right, a recall of 0.15. Two caveats to have ready. The severity numbers come from Trade Republic and Henkel only, because Lieferando ships no risk label, so food delivery is absent from every n = 106 figure. And the learned model is five-fold cross-validated while the contextual path was run once at temperature 0. If she asks whether 0.86 or the 0.97 on the in-repo set is the real number: different gold standards, curated sets select for label clarity, and the thesis quotes 0.86.");
+  "188 real public signals, paraphrased and de-identified; seed labels drafted by a language-model assistant, used as delivered. Sentiment is scored against the star rating, the one human-origin reference.", { size: 11 });
+s.addNotes("2 minutes. Walk the three rungs, then go to the paired tests, which are new since she last saw this. The honest headline is that the contextual path is not measurably better than a TF-IDF model on severity at this sample size. The confusion matrix shows how the floor fails: it calls 19 of the 27 critical signals low and gets only 4 of them right, a recall of 0.15. Two caveats to have ready. The severity numbers come from Trade Republic and Henkel only, because Lieferando ships no risk label, so food delivery is absent from every n = 106 figure. And the learned model is five-fold cross-validated while the contextual path was run once at temperature 0. If she asks whether 0.86 or the 0.97 on the in-repo set is the real number: different gold standards, curated sets select for label clarity, and the thesis quotes the star-proxy figures (0.86 for the prompt, 0.83 and 0.84 for the production stage). New since August: the production stage was run on the corpus on both models, the generic prompt four times, and the production default is close to deterministic at temperature 0.");
 
 // ---------- 10. Result 2: equity ----------
 s = slide();
 title(s, "Whose problems reach a human at all", "Equal opportunity, meaning recall on the signals whose gold label warrants escalation");
 table(s, [
-  ["Escalation recall", "n", "Keyword floor", "TF-IDF and LR", "Contextual path"],
-  ["German-source", "8", { text: "0.0%", options: { bold: true, color: WARN } }, { text: "62.5%", options: { color: WARN } }, "87.5%"],
-  ["English-source", "41", "19.5%", "95.1%", "87.8%"],
-], { x: 0.6, y: 1.6, w: 7.7, colW: [2.6, 0.6, 1.7, 1.7, 1.1] });
-s.addText("On the same eight critical German-source signals: the floor escalates none of them, the learned model five, the contextual path seven. The learned model does not separate from the contextual path on aggregate severity accuracy (p = 0.644) and very distinguishable in whom it escalates: 32.6 points between the strata.",
+  ["Escalation recall", "n", "Keyword floor", "TF-IDF and LR", "Contextual path", "Production stage"],
+  ["German-source", "8", { text: "0.0%", options: { bold: true, color: WARN } }, { text: "62.5%", options: { color: WARN } }, "87.5%", "62.5%"],
+  ["English-source", "41", "19.5%", "95.1%", "87.8%", "53.7%"],
+], { x: 0.6, y: 1.6, w: 7.7, colW: [2.2, 0.5, 1.4, 1.4, 1.2, 1.0] });
+s.addText("On the same eight critical German-source signals: the floor escalates none, the learned model five, the contextual path seven (six in each repeat, 78 to 81% on the English side). The learned model ties the contextual path on severity accuracy and differs in whom it escalates: 32.6 points between strata. The production stage escalates fewer in both, with no detectable gap.",
   { ...BODY, x: 0.6, y: 3.2, w: 7.7, h: 1.3, fontSize: 14 });
 card(s, 8.6, 1.6, 4.1, 3.5, "What bounds this",
   "The German-source escalate stratum is eight signals. A 95% interval on 7 of 8 runs from roughly 47% to 100%, and on 5 of 8 from roughly 25% to 92%.\n\nLanguage is confounded with sector on this corpus.\n\nThe texts are English paraphrases throughout, so the mechanism cannot be German-language processing. What differs is what German-language customers wrote about, and how they phrased it.\n\nThe aggregate cross-language accuracy comparison was retracted for the same reason.", { size: 11.5 });
@@ -287,9 +289,9 @@ title(s, "What is proven, what is demonstrated, what is pending", "The traceabil
 table(s, [
   ["Claim", "Status", "Evidence"],
   ["Triage accuracy (RQ3a)", "Measured", "three predictors on one gold standard, with pairwise McNemar tests"],
-  ["Escalation equity (RQ3b)", "Measured, bounded", "floor 0.0, learned 62.5, contextual 87.5 against 87.8; stratum n = 8"],
+  ["Escalation equity (RQ3b)", "Measured, bounded", "floor 0.0, learned 62.5, contextual 87.5 vs 87.8, production 62.5 vs 53.7; n = 8"],
   ["Routing fields", "Measured, bounded", "scored with the inventory supplied, which is an upper bound"],
-  ["Perishable memory (DP2)", "Partially measured", "remedy adoption 21% to 71%; the outcomes behind it are simulated"],
+  ["Perishable memory (DP2)", "Partially measured", "remedy adoption 21% to 71%; replicated on GLM-5.2, not on the production default; simulated outcomes"],
   ["Outcome contracts (DP1)", "Demonstrated", "designed, built and instrumented; one live contract still pending"],
   ["Method hardening", "Shipped, partly measured", "calibration and the refusal harness measured; the rest covered by unit tests"],
   ["Inter-annotator agreement", "Pending", "export and scoring tooling shipped; no second annotator, no kappa"],
