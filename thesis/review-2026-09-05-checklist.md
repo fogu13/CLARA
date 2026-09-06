@@ -166,7 +166,7 @@ python thesis/evaluation/compare_runs.py --out-dir $M \
 
 Each `predict_llm_production.py` call must end with `wrote 188/188`. `run0` is the reported 5 September run.
 
-**Part B: the generic prompt on GLM-5.2, three repeats (one call per signal through the gateway; expect 20–45 minutes per repeat, so run them detached and sequentially).**
+**Part B: the generic prompt on GLM-5.2, three repeats (one call per signal through the gateway; observed 43–72 s per call, so 2–4 hours per repeat; run them detached and sequentially). Done 6 September 2026:** sentiment agreement 97.4–99.3%, accuracy 0.863–0.869, p against the learned model 0.019–0.029 in every run; risk accuracy 0.651–0.660 in the repeats against 0.717 on 4 August (agreement 85.8–86.8% August-to-September, 93.4–94.3% among September runs), p = 0.77–0.88 against the learned model; escalation recall 75.0% DE / 78.0–80.5% EN. Written into §5A.3, §5A.4, §5A.4.2, §5A.5, §5A.6, §6.4 item 3, Chapter 7 and Appendix D. Note: the OpenCode Zen balance ran out after the production run and needed a top-up first.
 
 ```bash
 ( set -a; source apps/api/.env.glm.local; set +a
