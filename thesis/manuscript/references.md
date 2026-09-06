@@ -20,25 +20,23 @@ Accorsi, R. (2009). Safe-keeping digital evidence with secure logging protocols:
 
 Ackoff, R. L. (1989). From data to wisdom. *Journal of Applied Systems Analysis*, 16, 3–9.
 
-
-
 Alavi, M., & Leidner, D. E. (2001). Knowledge management and knowledge management systems. *MIS Quarterly*, 25(1), 107–136.
 
 Alpar, P., & Schulz, M. (2016). Self-service business intelligence. *Business & Information Systems Engineering*, 58(2), 151–155.
 
 Amershi, S., Weld, D., Vorvoreanu, M., Fourney, A., Nushi, B., Collisson, P., ... & Horvitz, E. (2019). Guidelines for human-AI interaction. *Proceedings of the 2019 CHI Conference on Human Factors in Computing Systems*, Paper 3.
 
-
 Anderson, E. W., Fornell, C., & Lehmann, D. R. (1994). Customer satisfaction, market share, and profitability. *Journal of Marketing*, 58(3), 53–66.
 
 Argote, L. (2013). *Organizational Learning* (2nd ed.). Springer.
+
+Argote, L., Beckman, S. L., & Epple, D. (1990). The persistence and transfer of learning in industrial settings. *Management Science, 36*(2), 140–154. https://doi.org/10.1287/mnsc.36.2.140
 
 Argyris, C., & Schon, D. A. (1978). *Organizational Learning: A Theory of Action Perspective*. Addison-Wesley.
 
 Arkhangelsky, D., Athey, S., Hirshberg, D. A., Imbens, G. W., & Wager, S. (2021). Synthetic difference-in-differences. *American Economic Review*, 111(12), 4088–4118.
 
 Arnott, D., & Pervan, G. (2005). A critical analysis of decision support systems research. *Journal of Information Technology*, 20(2), 67–87.
-
 
 Bangor, A., Kortum, P., & Miller, J. (2009). Determining what individual SUS scores mean: Adding an adjective rating scale. *Journal of Usability Studies*, 4(3), 114–123.
 
@@ -52,28 +50,23 @@ Bernal, J. L., Cummins, S., & Gasparrini, A. (2017). Interrupted time series reg
 
 Bertsimas, D., & Kallus, N. (2020). From predictive to prescriptive analytics. *Management Science*, 66(3), 1025–1044.
 
-
 Blazevic, V., et al. (2013). Beyond traditional word-of-mouth. *Journal of Service Management*, 24(3), 294–313.
 
 Blei, D. M., Ng, A. Y., & Jordan, M. I. (2003). Latent Dirichlet Allocation. *Journal of Machine Learning Research*, 3, 993–1022.
-
 
 Bleiholder, J., & Naumann, F. (2008). Data fusion. *ACM Computing Surveys*, 41(1), 1–41.
 
 Bone, S. A., Lemon, K. N., Voorhees, C. M., Liljenquist, K. A., Fombelle, P. W., DeTienne, K. B., & Money, R. B. (2017). "Mere measurement plus": How solicitation of open-ended positive feedback influences customer purchase behavior. *Journal of Marketing Research*, 54(1), 156–170. https://doi.org/10.1509/jmr.14.0232
 
-
 Boyer, J., & Mili, H. (2011). *Agile Business Rule Development*. Springer.
 
 Braun, V., & Clarke, V. (2019). Reflecting on reflexive thematic analysis. *Qualitative Research in Sport, Exercise and Health*, 11(4), 589–597. https://doi.org/10.1080/2159676X.2019.1628806
-
 
 Brown, T. B., et al. (2020). Language models are few-shot learners. *Proceedings of NeurIPS*.
 
 Buchanan, B. G., & Shortliffe, E. H. (1984). *Rule-Based Expert Systems: The MYCIN Experiments*. Addison-Wesley.
 
 Cannon, M. D., & Edmondson, A. C. (2005). Failing to learn and learning to fail (intelligently): How great organizations put failure to work to innovate and improve. *Long Range Planning*, 38(3), 299–319. https://doi.org/10.1016/j.lrp.2005.04.005
-
 
 Carlile, P. R. (2004). Transferring, translating, and transforming. *Organization Science*, 15(5), 555–568.
 
@@ -85,10 +78,11 @@ Chen, H., Chiang, R. H. L., & Storey, V. C. (2012). Business intelligence and an
 
 Christen, P. (2012). *Data Matching*. Springer.
 
-
 Cohen, J. (1988). *Statistical Power Analysis for the Behavioral Sciences*. Lawrence Erlbaum.
 
 Cronin, J. J., & Taylor, S. A. (1992). Measuring service quality. *Journal of Marketing*, 56(3), 55–68.
+
+Darr, E. D., Argote, L., & Epple, D. (1995). The acquisition, transfer, and depreciation of knowledge in service organizations: Productivity in franchises. *Management Science, 41*(11), 1750–1762. https://doi.org/10.1287/mnsc.41.11.1750
 
 Davenport, T. H., & Harris, J. G. (2007). *Competing on Analytics*. Harvard Business School Press.
 
@@ -100,17 +94,15 @@ Deming, W. E. (1986). *Out of the Crisis*. MIT Press.
 
 Deming, W. E. (1993). *The New Economics for Industry, Government, Education*. MIT Center for Advanced Engineering Study.
 
-
 Devlin, J., Chang, M.-W., Lee, K., & Toutanova, K. (2019). BERT: Pre-training of deep bidirectional transformers for language understanding. *Proceedings of NAACL-HLT 2019*, 4171–4186. https://doi.org/10.18653/v1/N19-1423
 
+Dietvorst, B. J., Simmons, J. P., & Massey, C. (2015). Algorithm aversion: People erroneously avoid algorithms after seeing them err. *Journal of Experimental Psychology: General, 144*(1), 114–126. https://doi.org/10.1037/xge0000033
 
 Dixon, M., Freeman, K., & Toman, N. (2010). Stop trying to delight your customers. *Harvard Business Review*, 88(7/8), 116–122.
 
 Dong, X. L., & Srivastava, D. (2015). *Big data integration*. Synthesis Lectures on Data Management. Morgan & Claypool. https://doi.org/10.2200/S00578ED1V01Y201404DTM040
 
 Edmondson, A. C. (1999). Psychological safety and learning behavior in work teams. *Administrative Science Quarterly*, 44(2), 350–383.
-
-
 
 Fielding, R. T. (2000). *Architectural Styles and the Design of Network-Based Software Architectures*. Doctoral dissertation, UC Irvine.
 
@@ -122,8 +114,9 @@ Fornell, C., Johnson, M. D., Anderson, E. W., Cha, J., & Bryant, B. E. (1996). T
 
 Gaskin, S. P., Griffin, A., Hauser, J. R., Katz, G. M., & Klein, R. L. (2010). Voice of the customer. In *Wiley International Encyclopedia of Marketing* (Vol. 5). John Wiley & Sons. https://doi.org/10.1002/9781444316568.wiem05020
 
-
 Ghasemaghaei, M., Hassanein, K., & Turel, O. (2017). Increasing firm agility through the use of data analytics: The role of fit. *Decision Support Systems*, 101, 95–105. https://doi.org/10.1016/j.dss.2017.06.004
+
+Gilardi, F., Alizadeh, M., & Kubli, M. (2023). ChatGPT outperforms crowd workers for text-annotation tasks. *Proceedings of the National Academy of Sciences, 120*(30), Article e2305016120. https://doi.org/10.1073/pnas.2305016120
 
 Glikson, E., & Woolley, A. W. (2020). Human trust in artificial intelligence: Review of empirical research on human–AI interaction. *Academy of Management Annals, 14*(2), 627–660.
 
@@ -139,7 +132,6 @@ Gu, J., Jiang, X., Shi, Z., Tan, H., Zhai, X., Xu, C., ... & Wang, J. (2025). *A
 
 Guo, C., Pleiss, G., Sun, Y., & Weinberger, K. Q. (2017). On calibration of modern neural networks. *Proceedings of ICML*.
 
-
 De Haan, E., Verhoef, P. C., & Wiesel, T. (2015). The predictive ability of different customer feedback metrics for retention. *International Journal of Research in Marketing*, 32(2), 195–206. https://doi.org/10.1016/j.ijresmar.2015.02.002
 
 Halperin, B., Ho, B., List, J. A., & Muir, I. (2022). Toward an understanding of the economics of apologies: Evidence from a large-scale natural field experiment. *The Economic Journal*, 132(641), 273–298.
@@ -150,9 +142,7 @@ Hardt, M., Price, E., & Srebro, N. (2016). Equality of opportunity in supervised
 
 Harel, D. (1987). Statecharts. *Science of Computer Programming*, 8(3), 231–274.
 
-
 Hatalis, K., Christou, D., & Kondapalli, V. (2025). *Review of case-based reasoning for LLM agents: Theoretical foundations, architectural components, and cognitive integration*. arXiv:2504.06943. https://doi.org/10.48550/arXiv.2504.06943
-
 
 Hevner, A. R. (2007). A three-cycle view of design science research. *Scandinavian Journal of Information Systems, 19*(2), 87–92.
 
@@ -163,6 +153,8 @@ Hill, C., Dahil, A., Simpson, G., Hardisty, D., Keast, J., Pinn, C. K., & Dambha
 Hohpe, G., & Woolf, B. (2003). *Enterprise Integration Patterns*. Addison-Wesley.
 
 Hollingsworth, D. (1995). *The Workflow Reference Model*. WfMC-TC-1003.
+
+Homburg, C., & Fürst, A. (2005). How organizational complaint handling drives customer loyalty: An analysis of the mechanistic and the organic approach. *Journal of Marketing, 69*(3), 95–114. https://doi.org/10.1509/jmkg.69.3.95.66367
 
 Homburg, C., Jozić, D., & Kuehnl, C. (2017). Customer experience management: Toward implementing an evolving marketing concept. *Journal of the Academy of Marketing Science*, 45(3), 377–401. https://doi.org/10.1007/s11747-015-0460-7
 
@@ -188,9 +180,7 @@ Kumar, A., van der Aalst, W. M. P., & Verbeek, E. M. W. (2002). Dynamic work dis
 
 Kumar, V., Pozza, I. D., & Ganesh, J. (2013). Revisiting the satisfaction-loyalty relationship. *Journal of Retailing*, 89(3), 246–262.
 
-
 Laux, J., & Ruschemeier, H. (2025). Automation bias in the AI Act: On the legal implications of attempting to de-bias human oversight of AI. *European Journal of Risk Regulation*, 16, 1519–1534. arXiv:2502.10036.
-
 
 Lee, J. D., & See, K. A. (2004). Trust in automation. *Human Factors*, 46(1), 50–80.
 
@@ -206,8 +196,6 @@ Li, X. (2025). A review of prominent paradigms for LLM-based agents: Tool use (i
 
 Liu, B. (2012). *Sentiment Analysis and Opinion Mining*. Morgan & Claypool.
 
-
-
 March, J. G. (1991). Exploration and exploitation in organizational learning. *Organization Science*, 2(1), 71–87.
 
 Markus, M. L. (2001). Toward a theory of knowledge reuse. *Journal of Management Information Systems, 18*(1), 57–93.
@@ -218,9 +206,7 @@ McGrath, R. G. (1999). Falling forward: Real options reasoning and entrepreneuri
 
 Mehrabi, N., Morstatter, F., Saxena, N., Lerman, K., & Galstyan, A. (2021). A survey on bias and fairness in machine learning. *ACM Computing Surveys, 54*(6), 1–35.
 
-
 Morgan, N. A., & Rego, L. L. (2006). The value of different customer satisfaction metrics. *Marketing Science*, 25(5), 426–439.
-
 
 Neslin, S. A., Grewal, D., Leghorn, R., Shankar, V., Teerling, M. L., Thomas, J. S., & Verhoef, P. C. (2006). Challenges and opportunities in multichannel customer management. *Journal of Service Research*, 9(2), 95–112. https://doi.org/10.1177/1094670506293559
 
@@ -231,6 +217,8 @@ Pang, B., & Lee, L. (2008). Opinion mining and sentiment analysis. *Foundations 
 Pang, B., Lee, L., & Vaithyanathan, S. (2002). Thumbs up? Sentiment classification using machine learning. *Proceedings of EMNLP*.
 
 Parasuraman, A., Zeithaml, V. A., & Berry, L. L. (1988). SERVQUAL. *Journal of Retailing*, 64(1), 12–40.
+
+Parasuraman, R., & Manzey, D. H. (2010). Complacency and bias in human use of automation: An attentional integration. *Human Factors, 52*(3), 381–410. https://doi.org/10.1177/0018720810376055
 
 Parasuraman, R., Sheridan, T. B., & Wickens, C. D. (2000). A model for types and levels of human interaction with automation. *IEEE Transactions on SMC*, 30(3), 286–297.
 
@@ -272,16 +260,11 @@ Saaty, T. L. (1980). *The Analytic Hierarchy Process*. McGraw-Hill.
 
 Sahay, B. S., & Ranjan, J. (2008). Real-time business intelligence. *Information Management & Computer Security*, 16(1), 28–48.
 
-
-
 Salton, G., & McGill, M. J. (1983). *Introduction to Modern Information Retrieval*. McGraw-Hill.
-
 
 Sauro, J., & Lewis, J. R. (2016). *Quantifying the User Experience: Practical Statistics for User Research* (2nd ed.). Morgan Kaufmann.
 
 Senge, P. M. (1990). *The Fifth Discipline*. Doubleday.
-
-
 
 Shneiderman, B. (2020). Human-centered artificial intelligence: Reliable, safe & trustworthy. *International Journal of Human–Computer Interaction*, 36(6), 495–504.
 
@@ -289,12 +272,15 @@ Shortliffe, E. H. (1976). *Computer-Based Medical Consultations: MYCIN*. Elsevie
 
 Siebert, L. C., Lupetti, M. L., Aizenberg, E., Beckers, N., Zgonnikov, A., Veluwenkamp, H., ... & Lagendijk, R. L. (2023). Meaningful human control: Actionable properties for AI system development. *AI and Ethics*, 3(1), 241–255.
 
+Smith, A. K., & Bolton, R. N. (1998). An experimental investigation of customer reactions to service failure and recovery encounters: Paradox or peril? *Journal of Service Research, 1*(1), 65–81. https://doi.org/10.1177/109467059800100106
+
+Smith, A. K., Bolton, R. N., & Wagner, J. (1999). A model of customer satisfaction with service encounters involving failure and recovery. *Journal of Marketing Research, 36*(3), 356–372. https://doi.org/10.1177/002224379903600305
+
 Sprague, R. H. (1980). A framework for the development of decision support systems. *MIS Quarterly*, 4(4), 1–26.
 
 Sterman, J. D. (2000). *Business Dynamics*. Irwin/McGraw-Hill.
 
 Sun, C., Huang, L., & Qiu, X. (2019). Utilizing BERT for aspect-based sentiment analysis via constructing auxiliary sentence. *Proceedings of NAACL-HLT 2019*, 380–385. https://doi.org/10.18653/v1/N19-1035
-
 
 Syed, R., et al. (2020). Robotic process automation: Contemporary themes and challenges. *Computers in Industry*, 115, 103162.
 
@@ -302,15 +288,15 @@ Taboada, M., Brooke, J., Tofiloski, M., Voll, K., & Stede, M. (2011). Lexicon-ba
 
 Takerngsaksiri, W., Pasuksmit, J., Thongtanunam, P., Tantithamthavorn, C., Zhang, R., Jiang, F., ... & Han, J. (2024). *Human-in-the-loop software development agents*. arXiv:2411.12924.
 
-
+Tax, S. S., Brown, S. W., & Chandrashekaran, M. (1998). Customer evaluations of service complaint experiences: Implications for relationship marketing. *Journal of Marketing, 62*(2), 60–76. https://doi.org/10.1177/002224299806200205
 
 Tirunillai, S., & Tellis, G. J. (2014). Mining marketing meaning from online chatter: Strategic brand analysis of big data using latent Dirichlet allocation. *Journal of Marketing Research*, 51(4), 463–479. https://doi.org/10.1509/jmr.12.0106
 
+Törnberg, P. (2023). *ChatGPT-4 outperforms experts and crowd workers in annotating political Twitter messages with zero-shot learning* [Working paper]. arXiv. https://doi.org/10.48550/arXiv.2304.06588
 
 Vassiliadis, P., Simitsis, A., & Skiadopoulos, S. (2002). Conceptual modeling for ETL processes. In *Proceedings of the 5th ACM International Workshop on Data Warehousing and OLAP (DOLAP '02)* (pp. 14–21). ACM. https://doi.org/10.1145/583890.583893
 
 Vaswani, A., et al. (2017). Attention is all you need. *Proceedings of NeurIPS*.
-
 
 Verhoef, P. C., Kannan, P. K., & Inman, J. J. (2015). From multi-channel retailing to omni-channel retailing: Introduction to the special issue on multi-channel retailing. *Journal of Retailing*, 91(2), 174–181. https://doi.org/10.1016/j.jretai.2015.02.005
 
@@ -319,8 +305,6 @@ Wagner, A. K., Soumerai, S. B., Zhang, F., & Ross-Degnan, D. (2002). Segmented r
 Walsh, J. P., & Ungson, G. R. (1991). Organizational memory. *Academy of Management Review, 16*(1), 57–91.
 
 Wang, Y., Huang, M., Zhu, X., & Zhao, L. (2016). Attention-based LSTM for aspect-level sentiment classification. *Proceedings of EMNLP*.
-
-
 
 Wilson, T., Wiebe, J., & Hoffmann, P. (2005). Recognizing contextual polarity in phrase-level sentiment analysis. *Proceedings of HLT/EMNLP 2005*, 347–354. https://doi.org/10.3115/1220575.1220619
 
@@ -386,7 +370,7 @@ QKS Group. (2025). *Voice of Customer (VoC) market: Riding a high-growth wave th
 
 Qualtrics. (2026a). *Qualtrics named a Leader in the 2026 Gartner Magic Quadrant for Voice of the Customer Platforms* [Press release]. PR Newswire. https://www.prnewswire.com/news-releases/qualtrics-named-a-leader-in-2026-gartner-magic-quadrant-for-voice-of-the-customer-platforms-302712691.html
 
-Qualtrics. (2026b, May 18). *Qualtrics acquires healthcare experience leader Press Ganey Forsta for $6.75 billion* [Press release]. Qualtrics. ‹confirm the release URL›
+Qualtrics. (2026b, May 18). *Qualtrics acquires healthcare experience leader Press Ganey Forsta for $6.75 billion* [Press release]. Qualtrics. https://www.qualtrics.com/news/qualtrics-acquires-press-ganey-forsta/
 
 Zendesk. (2026). *CX Trends 2026*. Zendesk. https://cxtrends.zendesk.com/
 

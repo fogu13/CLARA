@@ -257,6 +257,8 @@ Ask the supervisor for the RAI-9001 ethics route and a reference. Insert it in �
 
 ### Step 9. Reference entries marked ‹verify› (2 h at a library terminal)
 
+**Done 6 September 2026:** the eight verify marks resolved against the sources (two entries re-authored to Fazio & Evelson, one to Fazio et al., one to Mitchell & Quaadgras, the survey to Zou et al., the Official Journal citation corrected); the unfound Gupta et al. (2020) sentence deleted; the Qualtrics 2026b URL added; Appendix B's dates and Article 4 wording checked against the enacted text and cited by article point; the four under-represented literature strands written into §2.13 with ten verified entries. No ‹verify› marks remain.
+
 Search `references.md` for `‹`: Regulation (EU) 2026/1744 (title, OJ issue, ELI, and whether the Article 50(2) grace period is four months, also in Appendix B); Forrester (2025c) RES185117; Fazio (2025) and Forrester (2026) posts; Qualtrics XM Institute (2025); Qualtrics (2026b) URL; Latham & Watkins (2026); Li (2025) COLING pages; Hatalis et al. (2025) arXiv authors; the anonymous "Human–agent collaboration" survey (authors or delete); Gupta et al. (2020) in §2.2.6 (identify or delete the sentence); the four literature-gap sources in §2.13 (verify before citing, then write them into §2.1.2, §2.8 and §2.12 as short paragraphs). Then sample 12–15 "supported" citations whose sentence carries a number or a mechanism and check them against the primary text.
 
 ### Step 10. Editorial pass (half a day)
