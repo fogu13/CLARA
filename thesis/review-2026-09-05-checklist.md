@@ -166,7 +166,7 @@ python thesis/evaluation/compare_runs.py --out-dir $M \
 
 Each `predict_llm_production.py` call must end with `wrote 188/188`. `run0` is the reported 5 September run.
 
-**Part B: the generic prompt on GLM-5.2, three repeats (one call per signal through the gateway; expect 20–45 minutes per repeat, so run them detached and sequentially).**
+**Part B: the generic prompt on GLM-5.2, three repeats (one call per signal through the gateway; observed 43–72 s per call, so 2–4 hours per repeat; run them detached and sequentially). Done 6 September 2026:** sentiment agreement 97.4–99.3%, accuracy 0.863–0.869, p against the learned model 0.019–0.029 in every run; risk accuracy 0.651–0.660 in the repeats against 0.717 on 4 August (agreement 85.8–86.8% August-to-September, 93.4–94.3% among September runs), p = 0.77–0.88 against the learned model; escalation recall 75.0% DE / 78.0–80.5% EN. Written into §5A.3, §5A.4, §5A.4.2, §5A.5, §5A.6, §6.4 item 3, Chapter 7 and Appendix D. Note: the OpenCode Zen balance ran out after the production run and needed a top-up first.
 
 ```bash
 ( set -a; source apps/api/.env.glm.local; set +a
@@ -207,6 +207,8 @@ git push -u origin claude/thesis-review-critique-afwkm7
 
 ### Step 4. The in-repo evaluation on the held-out split (30 min per model)
 
+**Done 6 September 2026** on GLM-5.2 (`--publish`: pooled 99% / 91%, held-out 96.7% / 93.3%, exemplar urgency effect 78% → 91%, p < 0.001) and on the production default (95% / 82%, held-out 90% / 80%, no urgency effect, tag effect p = 0.001; not published). The July ledger was not in the archive; the 3 July row and the learning-probe figures are marked as contemporaneous-record-only in §5A.7, and the real-data run was re-executed on the production default into `thesis/evaluation/results/real_data_2026-09-06_mistral-small-2603.json` (disclosure (iv)). Written into §5A.7, §6.4 items 2–3, Chapter 7, Appendix B (Art 15) and Appendix D. Commands kept below for a re-run.
+
 ```bash
 cd apps/api
 export AI_BASE_URL=<gateway> AI_API_KEY=<key> AI_MODEL=glm-5.2 CLARA_AI_REQUIRE_EU=0 AI_TEMPERATURE=0   # same caveats as Step 2
@@ -234,7 +236,7 @@ Put κ (unweighted and linear-weighted), the exact agreement and the escalate ag
 - §3.7 (`03_methodology.md`, the provenance placeholder): who wrote the paraphrases and the seed labels for the three thesis datasets, whether a language model drafted either, what review they received, and the κ result from Step 5.
 - §5A.7 second paragraph and §6.4 item 3: who authored the English golden-set items (ids `eval-001`–`060` and `081`–`100`), stated the way the German stratum's authorship is.
 - Appendix F: reconcile the tally (the text says 43 claims; the outcomes sum to 43; the earlier text said 45) against your verification log.
-- §5A.7 disclosure (iv): the n and date of the cross-industry ≈90% run from your local `history.jsonl`, or delete the figure.
+- §5A.7 disclosure (iv): done 6 September (re-run on the production default, committed record; the July ledger was not preserved).
 
 ### Step 7. Ethics (email today; insert when confirmed)
 

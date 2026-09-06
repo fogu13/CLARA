@@ -1,48 +1,81 @@
 {
- "published_at": "2026-07-18T14:28:31.929768+00:00",
- "model": "glm-5.2",
- "dataset": {
-  "total_items": 100,
-  "note": "Curated golden set; DE stratum authored + adversarially verified. Production config (few-shot exemplars on). Hallucination heuristic covers EN items only."
- },
- "overall": {
-  "sentiment_accuracy": 0.97,
-  "sentiment_ci95": [
-   0.93,
-   1.0
-  ],
-  "urgency_accuracy": 0.9,
-  "urgency_ci95": [
-   0.84,
-   0.95
-  ],
-  "tag_f1_fuzzy": 0.8274320241691844
- },
- "by_language": {
-  "de": {
-   "n": 28,
-   "sentiment_accuracy": 0.9643,
-   "urgency_accuracy": 0.8929,
-   "tag_exact_accuracy": 0.2143,
-   "sentiment_ci": [
-    0.8928571428571429,
-    1.0
-   ]
+  "published_at": "2026-09-06T12:01:29.864963+00:00",
+  "model": "glm-5.2",
+  "dataset": {
+    "total_items": 100,
+    "note": "Curated golden set; DE stratum authored + adversarially verified. Production config (few-shot exemplars on). Hallucination heuristic covers EN items only. Intervals are 95% Wilson score intervals. 'overall' pools the optimisation and held-out strata; by_split.held_out is the locked guardrail figure."
   },
-  "en": {
-   "n": 72,
-   "sentiment_accuracy": 0.9722,
-   "urgency_accuracy": 0.9028,
-   "tag_exact_accuracy": 0.2778,
-   "sentiment_ci": [
-    0.9305555555555556,
-    1.0
-   ]
+  "overall": {
+    "sentiment_accuracy": 0.99,
+    "sentiment_ci95": [
+      0.9455,
+      0.9982
+    ],
+    "urgency_accuracy": 0.91,
+    "urgency_ci95": [
+      0.8377,
+      0.9519
+    ],
+    "tag_f1_fuzzy": 0.7874920634920635
+  },
+  "by_language": {
+    "de": {
+      "n": 28,
+      "sentiment_accuracy": 0.9643,
+      "urgency_accuracy": 0.8571,
+      "tag_exact_accuracy": 0.3929,
+      "sentiment_ci": [
+        0.8229,
+        0.9937
+      ],
+      "urgency_ci": [
+        0.6851,
+        0.943
+      ]
+    },
+    "en": {
+      "n": 72,
+      "sentiment_accuracy": 1.0,
+      "urgency_accuracy": 0.9306,
+      "tag_exact_accuracy": 0.1944,
+      "sentiment_ci": [
+        0.9493,
+        1.0
+      ],
+      "urgency_ci": [
+        0.8475,
+        0.97
+      ]
+    }
+  },
+  "by_split": {
+    "held_out": {
+      "n": 30,
+      "sentiment_accuracy": 0.9667,
+      "urgency_accuracy": 0.9333,
+      "tag_exact_accuracy": 0.2333,
+      "sentiment_ci": [
+        0.8333,
+        0.9941
+      ],
+      "urgency_ci": [
+        0.7868,
+        0.9815
+      ]
+    },
+    "optimization": {
+      "n": 70,
+      "sentiment_accuracy": 1.0,
+      "urgency_accuracy": 0.9,
+      "tag_exact_accuracy": 0.2571,
+      "sentiment_ci": [
+        0.948,
+        1.0
+      ],
+      "urgency_ci": [
+        0.8077,
+        0.9507
+      ]
+    }
   }
- },
- "notes": [
-  "2026-07-18 (2nd revision): 15 DE gold items completed to the two-tag rubric (13 additive second tags + 2 auditor corrections; adversarially audited, 11/13 confirmed + 2 improved). Several added tags name themes the model already predicted correctly against under-labeled gold, so DE tag metrics improve partly by construction — that is the fix, disclosed.",
-  "Urgency exemplar effect significant for the third consecutive run: 83%->90%, in-run paired McNemar p=0.039 (n=100; first significant at 2026-07-18T12:25Z after the churn-musing calibration exemplar; was p=0.219 at n=80).",
-  "Sentiment run-to-run band 96-99% on mixed-vs-polar boundary items (three same-day runs); reported as measured, never re-rolled. Tag metrics not comparable to the 2026-07-17 n=80 snapshot (new adversarial items + completed DE gold)."
- ]
 }
