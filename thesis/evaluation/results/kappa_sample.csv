@@ -1,0 +1,41 @@
+public_signal_id,text,blind_risk
+HAT-dd9c89b65bd1,Initial grab is strong enough to hold wooden strips after only brief pressure.,low
+TR-6b4b7dd3a141,"Funding through Apple Pay or Google Pay may not establish a valid reference bank account, creating withdrawal friction.",medium
+TR-bc723f5f0dab,"Banking, interest and Saveback are appreciated, but the available ETF selection is considered too narrow.",medium
+HAT-48ff97459fe9,Some buyers question the amount of plastic compared with the adhesive content.,low
+HAT-c51fb3bbe7bb,"The adhesive is easy to process, dries transparent and works across mixed indoor and outdoor materials.",low
+TR-3fe6bfbe096f,"Support sent a standard answer that did not address a fee question, and no follow-up arrived after the customer challenged it.",high
+TR-2f331316b217,"Email redirects customers back to an unanswered in-app chat, leaving no effective alternative support channel.",high
+TR-0b0583caf6d1,"Customers use the account for salary, recurring costs, interest, Round Up and ETF investing, indicating strong everyday-account value.",low
+TR-40423478647c,"The app is considered simple, safe and suitable for beginners, with ongoing product improvements.",low
+HAT-f17526e0a627,"Users report successful sealing of sunroofs, caravans and demanding outdoor applications.",low
+HAT-c98b0caed1c3,Users report strong adhesion in wet bathroom environments.,low
+TR-2539fc09edb8,"After an update, the app immediately crashed on an older supported iPhone and compatibility information was not clear.",high
+TR-4c936f8673fb,Trading and banking transactions are described as easy and fast.,low
+TR-04f8076a163e,No live support channel is available to resolve a blocked registration journey.,high
+TR-2b1bc0b5e261,The selection of financial instruments is considered too limited for more advanced investors.,medium
+TR-b7436731800d,A portfolio transfer reportedly took about a year and required repeated unresolved contact with support.,high
+TR-4224290adebd,The interface and pricing are perceived as clear and transparent.,low
+HAT-40726b53b2a5,"The gel bonds well without dripping, though the small tube is considered costly.",medium
+TR-057a0140a3a5,Customers value the low-cost interface but report that support is difficult to reach when corporate actions or investment issues occur.,high
+TR-9a33fe051224,The savings interest is regarded as fair and transparent.,low
+TR-0da9450dda0e,"The app has recurring operational problems, and support cases are escalated to specialist queues without visible follow-up.",high
+TR-8b4833a5d3c5,"The broker is easy to use and relatively inexpensive, but some in-app financial data is reported as inaccurate or stale.",medium
+HAT-da0da696adfc,The UK company profile has very low review volume and is unsuitable as a primary Adhesive Technologies dataset.,low
+HAT-202f0b3c3f28,A customer reports receiving expired material with conflicting date labels.,high
+TR-06fb497dbaf6,"Charts lack candlesticks, trend lines and richer analysis features available from competitors.",low
+HAT-1c1af49736f5,The removable mounting concept is attractive for lighter indoor installation tasks.,low
+TR-26187063f626,"Transaction history cannot be exported to CSV or Excel, limiting independent analysis and recordkeeping.",medium
+HAT-8b6b8a9c1c42,"Bonding is good, but the product is very liquid, forms strings and is difficult to dose cleanly.",medium
+HAT-47a5e5ad6071,Customers describe the sealant as dependable for indoor and outdoor sealing.,low
+TR-6374868ab18f,"After an adjustment period, the app is considered clear, beginner-friendly and attractive for trading and interest-bearing cash.",low
+TR-bacee7e2078b,"An investment did not appear in transaction history, and the user reported that support was not resolving the discrepancy.",high
+TR-263b52b3ebbf,The combination of banking and investing in one app is positively valued.,low
+TR-d7519e9fd10a,"Registration enters a repeated document-verification loop, preventing account creation even after reinstalling and updating the device.",high
+TR-9229846d3b79,"The app experience is strong, but support responses can take weeks, rely on templates and fail to answer the actual question.",high
+TR-4e752d93b6df,An account-closure notice required the customer to sell or transfer securities within a deadline without a clear explanation.,critical
+TR-d96bc7b2833f,An ATM problem abroad led to repeated chatbot loops with no effective human resolution.,high
+HAT-52f0b032ae89,"The stick applies evenly without clumping, avoids wrinkling paper and washes from fingers easily.",low
+HAT-70e181a44697,"Application is straightforward and wood stays in place quickly, though a noticeable sealant-like smell remains.",medium
+HAT-39ad5490086b,"Customers praise very strong bonding, rapid curing and dependable durability across small repairs.",low
+TR-a9b616ff684e,"Support response time reportedly stretched from late June to mid-August, causing the customer to move available cash elsewhere.",critical

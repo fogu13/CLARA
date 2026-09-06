@@ -221,6 +221,8 @@ Run this on the machine that holds the earlier run ledger (`app/evals/history.js
 
 ### Step 5. The κ double-labelling sample (one afternoon, two people)
 
+**Done 6 September 2026:** κ = 0.554 unweighted (bootstrap 95% 0.38–0.72), 0.696 linear-weighted (0.56–0.81), exact agreement 27/40, escalate agreement 38/40; seven of ten seed-critical items rated high. Written into §3.7, §5A.4.2, §6.4 item 1 and Appendix D. Open: who the rater was (person or model) decides the "human check" wording; re-run `kappa_sample.py score` once so `kappa_risk.json` carries the bootstrap intervals the manuscript quotes.
+
 ```bash
 cd thesis/evaluation
 python kappa_sample.py draw               # results/kappa_sample.csv: 40 risk-labelled signals, seed labels withheld
@@ -242,6 +244,8 @@ Put κ (unweighted and linear-weighted), the exact agreement and the escalate ag
 
 ### Step 7. Ethics (email today; insert when confirmed)
 
+**Done:** coverage under the RAI-9001 route was confirmed by the University's programme contact in August 2026, no reference number issued; recorded in §3.7 and the consent form. Step 5's rater was a second person (recorded in §3.7).
+
 Ask the supervisor for the RAI-9001 ethics route and a reference. Insert it in §3.9 (`03_methodology.md`), Appendix C §0, and `instruments/consent_and_recruitment.md` (the note at the top of Part B). Confirm the two durations the consent form now states: withdrawal within two weeks, retention six months after completion.
 
 ### Step 8. Survey and interviews (the critical path)
@@ -253,9 +257,13 @@ Ask the supervisor for the RAI-9001 ethics route and a reference. Insert it in �
 
 ### Step 9. Reference entries marked ‹verify› (2 h at a library terminal)
 
+**Done 6 September 2026:** the eight verify marks resolved against the sources (two entries re-authored to Fazio & Evelson, one to Fazio et al., one to Mitchell & Quaadgras, the survey to Zou et al., the Official Journal citation corrected); the unfound Gupta et al. (2020) sentence deleted; the Qualtrics 2026b URL added; Appendix B's dates and Article 4 wording checked against the enacted text and cited by article point; the four under-represented literature strands written into §2.13 with ten verified entries. No ‹verify› marks remain.
+
 Search `references.md` for `‹`: Regulation (EU) 2026/1744 (title, OJ issue, ELI, and whether the Article 50(2) grace period is four months, also in Appendix B); Forrester (2025c) RES185117; Fazio (2025) and Forrester (2026) posts; Qualtrics XM Institute (2025); Qualtrics (2026b) URL; Latham & Watkins (2026); Li (2025) COLING pages; Hatalis et al. (2025) arXiv authors; the anonymous "Human–agent collaboration" survey (authors or delete); Gupta et al. (2020) in §2.2.6 (identify or delete the sentence); the four literature-gap sources in §2.13 (verify before citing, then write them into §2.1.2, §2.8 and §2.12 as short paragraphs). Then sample 12–15 "supported" citations whose sentence carries a number or a mechanism and check them against the primary text.
 
 ### Step 10. Editorial pass (half a day)
+
+**Done 6 September 2026 (first pass):** abstract 406 → 317 words and rewritten to the Step 2–5 results; the eight-signal and English-paraphrase caveats trimmed to one statement per chapter; §1.7 and Appendix D checked (the remaining "pending" rows are the §5B perception claims); deck slides 9, 10 and 15 carry the production rows, the repeat ranges and κ, and pass the overflow check. Open: the four placeholders outside §5B (Gupta et al. 2020; the Qualtrics 2026b URL; the OJ dates in Appendix B; the four under-represented literature strands in §2, whose candidate sources need verifying before they are cited) and the acknowledgements.
 
 Trim the repeated caveats (counts in the section above), bring the abstract to about 280 words, re-read §1.7's table and Appendix D together so every "pending" has become a status, and align the defence deck's results and equity slides with the revised §5A.5 (the one-flip p and the Fisher tests).
 

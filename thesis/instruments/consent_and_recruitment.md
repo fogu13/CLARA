@@ -29,7 +29,7 @@ there and in §3.9.
 
 ## B. Participant information and consent
 
-> Ethics route and reference: ‹OPIT RAI-9001 ethics reference to be inserted once confirmed with the supervisor (§3.9)›.
+> Ethics route: the OPIT RAI-9001 programme route, which the University's programme contact confirmed in August 2026 covers this study; no separate reference number was issued.
 
 **Study:** *Closing the Loop, Building the Memory*: how teams act on customer feedback (MSc thesis).
 **Researcher:** Elvis Shehi (MSc Responsible AI, OPIT) · elvisshehi@gmail.com · Supervisor: Zorina Alliata.
