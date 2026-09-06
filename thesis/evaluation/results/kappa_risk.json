@@ -29,5 +29,14 @@
       "high": 7,
       "critical": 1
     }
-  }
+  },
+  "within_one_level": 38,
+  "kappa_unweighted_ci95": [
+    0.3755,
+    0.7246
+  ],
+  "kappa_linear_weighted_ci95": [
+    0.5644,
+    0.8182
+  ]
 }
