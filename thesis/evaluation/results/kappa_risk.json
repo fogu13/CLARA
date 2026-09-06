@@ -1,0 +1,33 @@
+{
+  "n": 40,
+  "kappa_unweighted": 0.554,
+  "kappa_linear_weighted": 0.6957,
+  "exact_agreement": 0.675,
+  "escalate_agreement": 0.95,
+  "confusion_seed_rows_blind_cols": {
+    "low": {
+      "low": 15,
+      "medium": 0,
+      "high": 0,
+      "critical": 0
+    },
+    "medium": {
+      "low": 3,
+      "medium": 6,
+      "high": 0,
+      "critical": 0
+    },
+    "high": {
+      "low": 0,
+      "medium": 0,
+      "high": 5,
+      "critical": 1
+    },
+    "critical": {
+      "low": 0,
+      "medium": 2,
+      "high": 7,
+      "critical": 1
+    }
+  }
+}
