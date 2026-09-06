@@ -207,6 +207,8 @@ git push -u origin claude/thesis-review-critique-afwkm7
 
 ### Step 4. The in-repo evaluation on the held-out split (30 min per model)
 
+**Done 6 September 2026** on GLM-5.2 (`--publish`: pooled 99% / 91%, held-out 96.7% / 93.3%, exemplar urgency effect 78% → 91%, p < 0.001) and on the production default (95% / 82%, held-out 90% / 80%, no urgency effect, tag effect p = 0.001; not published). The July ledger was not in the archive; the 3 July row and the learning-probe figures are marked as contemporaneous-record-only in §5A.7, and the real-data run was re-executed on the production default into `thesis/evaluation/results/real_data_2026-09-06_mistral-small-2603.json` (disclosure (iv)). Written into §5A.7, §6.4 items 2–3, Chapter 7, Appendix B (Art 15) and Appendix D. Commands kept below for a re-run.
+
 ```bash
 cd apps/api
 export AI_BASE_URL=<gateway> AI_API_KEY=<key> AI_MODEL=glm-5.2 CLARA_AI_REQUIRE_EU=0 AI_TEMPERATURE=0   # same caveats as Step 2
@@ -234,7 +236,7 @@ Put κ (unweighted and linear-weighted), the exact agreement and the escalate ag
 - §3.7 (`03_methodology.md`, the provenance placeholder): who wrote the paraphrases and the seed labels for the three thesis datasets, whether a language model drafted either, what review they received, and the κ result from Step 5.
 - §5A.7 second paragraph and §6.4 item 3: who authored the English golden-set items (ids `eval-001`–`060` and `081`–`100`), stated the way the German stratum's authorship is.
 - Appendix F: reconcile the tally (the text says 43 claims; the outcomes sum to 43; the earlier text said 45) against your verification log.
-- §5A.7 disclosure (iv): the n and date of the cross-industry ≈90% run from your local `history.jsonl`, or delete the figure.
+- §5A.7 disclosure (iv): done 6 September (re-run on the production default, committed record; the July ledger was not preserved).
 
 ### Step 7. Ethics (email today; insert when confirmed)
 
