@@ -1,0 +1,11 @@
+task,run,n,accuracy,accuracy_ci_low,accuracy_ci_high,f1_macro
+sentiment,ml,153,0.7843,0.7126,0.8421,0.5243
+sentiment,mistral_run0,153,0.8431,0.7772,0.8923,0.6441
+sentiment,mistral_run1,153,0.8431,0.7772,0.8923,0.6441
+sentiment,mistral_run2,153,0.8497,0.7845,0.8977,0.6702
+sentiment,mistral_run3,153,0.8431,0.7772,0.8923,0.6441
+risk,ml,106,0.6792,0.5855,0.7605,0.6534
+risk,mistral_run0,106,0.5943,0.4992,0.6829,0.5293
+risk,mistral_run1,106,0.5943,0.4992,0.6829,0.5293
+risk,mistral_run2,106,0.6038,0.5086,0.6917,0.5385
+risk,mistral_run3,106,0.5849,0.4897,0.6741,0.5161
