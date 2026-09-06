@@ -1,0 +1,1506 @@
+[
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "escalation_followup_gaps",
+    "journey_stage": "support",
+    "owner": "support_ops",
+    "id": "TR-0da9450dda0e"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "account_satisfaction",
+    "journey_stage": "active_usage",
+    "owner": "product_team",
+    "id": "TR-2ce79bbb878f"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "support_unavailable",
+    "journey_stage": "support",
+    "owner": "customer_support",
+    "id": "TR-65d2c56a6b4c"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "chatbot_escalation_failure",
+    "journey_stage": "customer_support",
+    "owner": "support_automation",
+    "id": "TR-d96bc7b2833f"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "savings_interest_transparency",
+    "journey_stage": "product_usage",
+    "owner": "savings_product",
+    "id": "TR-9a33fe051224"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "fast_easy_transactions",
+    "journey_stage": "transaction_execution",
+    "owner": "trading_platform",
+    "id": "TR-4c936f8673fb"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "unified_banking_investing",
+    "journey_stage": "product_experience",
+    "owner": "product_team",
+    "id": "TR-263b52b3ebbf"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "clarity_transparency",
+    "journey_stage": "evaluation",
+    "owner": "product",
+    "id": "TR-4224290adebd"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "ease_of_use",
+    "journey_stage": "onboarding",
+    "owner": "product",
+    "id": "TR-ac5165fbe8d2"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "security_trust",
+    "journey_stage": "product_experience",
+    "owner": "security_team",
+    "id": "TR-d6cd5babf3b8"
+  },
+  {
+    "sentiment": "neutral",
+    "risk": "medium",
+    "theme": "narrow_etf_selection",
+    "journey_stage": "engagement",
+    "owner": "investments",
+    "id": "TR-bc723f5f0dab"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "account_update_blocked",
+    "journey_stage": "account_management",
+    "owner": "product_team",
+    "id": "TR-1d791648fdca"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "onboarding_usability",
+    "journey_stage": "onboarding",
+    "owner": "product_design",
+    "id": "TR-6374868ab18f"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "ease_of_use",
+    "journey_stage": "onboarding",
+    "owner": "product_team",
+    "id": "TR-40423478647c"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "platform_versatility",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "TR-0841350d2634"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "support_quality",
+    "journey_stage": "support",
+    "owner": "customer_support",
+    "id": "TR-9229846d3b79"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "transfer_delay",
+    "journey_stage": "account_transfer",
+    "owner": "transfers_ops",
+    "id": "TR-b7436731800d"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "navigation_usability",
+    "journey_stage": "onboarding",
+    "owner": "ux_design",
+    "id": "TR-5ef2e711403c"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "regulatory_escalation",
+    "journey_stage": "service_recovery",
+    "owner": "compliance",
+    "id": "TR-52aadf50ed92"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "server_overload",
+    "journey_stage": "transaction",
+    "owner": "platform_infra",
+    "id": "TR-ac97506d9db0"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "interest_activation_visibility",
+    "journey_stage": "onboarding",
+    "owner": "product_ux",
+    "id": "TR-f86537a43493"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "charting_feature_gap",
+    "journey_stage": "engagement",
+    "owner": "product_team",
+    "id": "TR-06fb497dbaf6"
+  },
+  {
+    "sentiment": "neutral",
+    "risk": "medium",
+    "theme": "trading_hours_restriction",
+    "journey_stage": "order_execution",
+    "owner": "order_management",
+    "id": "TR-241d6b26feb9"
+  },
+  {
+    "sentiment": "neutral",
+    "risk": "medium",
+    "theme": "limited_stock_catalogue",
+    "journey_stage": "product_discovery",
+    "owner": "product",
+    "id": "TR-b3a1493c4e5c"
+  },
+  {
+    "sentiment": "neutral",
+    "risk": "low",
+    "theme": "advanced_charting",
+    "journey_stage": "engagement",
+    "owner": "product_design",
+    "id": "TR-410b63440a32"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "fixed_fee_pricing",
+    "journey_stage": "trade_execution",
+    "owner": "pricing_team",
+    "id": "TR-3994ebe7dff3"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "limited_instrument_selection",
+    "journey_stage": "portfolio_management",
+    "owner": "product",
+    "id": "TR-2b1bc0b5e261"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "data_accuracy",
+    "journey_stage": "active_usage",
+    "owner": "data_engineering",
+    "id": "TR-8b4833a5d3c5"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "support_accessibility",
+    "journey_stage": "issue_resolution",
+    "owner": "customer_support",
+    "id": "TR-057a0140a3a5"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "compatibility_crash",
+    "journey_stage": "post_update",
+    "owner": "mobile_engineering",
+    "id": "TR-2539fc09edb8"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "redesign_usability_regression",
+    "journey_stage": "engagement",
+    "owner": "product_design",
+    "id": "TR-c10ee9a0c678"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "card_access_outage",
+    "journey_stage": "service_usage",
+    "owner": "card_platform_eng",
+    "id": "TR-9dc4f572f5d6"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "support_quality",
+    "journey_stage": "post_purchase",
+    "owner": "customer_support",
+    "id": "TR-64f3f27b63ef"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "support_responsiveness",
+    "journey_stage": "post_purchase_support",
+    "owner": "customer_support",
+    "id": "TR-6051c5943975"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "wallet_funding_bank_link_gap",
+    "journey_stage": "withdrawal",
+    "owner": "payments_platform",
+    "id": "TR-6b4b7dd3a141"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "circular_support_info",
+    "journey_stage": "withdrawal_processing",
+    "owner": "support_operations",
+    "id": "TR-249a4b1aaf8a"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "fee_and_account_clarity",
+    "journey_stage": "post_onboarding",
+    "owner": "product_team",
+    "id": "TR-ca48501df52f"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "document_verification_loop",
+    "journey_stage": "registration",
+    "owner": "identity_verification",
+    "id": "TR-d7519e9fd10a"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "support_availability",
+    "journey_stage": "registration",
+    "owner": "customer_support",
+    "id": "TR-04f8076a163e"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "missing_incoming_transfer",
+    "journey_stage": "receiving_funds",
+    "owner": "payments_ops",
+    "id": "TR-9ecd1d386658"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "circular_support_redirection",
+    "journey_stage": "customer_support",
+    "owner": "support_ops",
+    "id": "TR-2f331316b217"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "unrecognized_withdrawal_iban",
+    "journey_stage": "withdrawal_setup",
+    "owner": "payments_team",
+    "id": "TR-88ad7b6f3f12"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "data_export_limitation",
+    "journey_stage": "product_usage",
+    "owner": "reporting_team",
+    "id": "TR-26187063f626"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "login_failure",
+    "journey_stage": "app_access",
+    "owner": "auth_engineering",
+    "id": "TR-d14748b8664c"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "support_responsiveness",
+    "journey_stage": "post_purchase_support",
+    "owner": "customer_support",
+    "id": "TR-30740e7ef1cc"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "blocked_withdrawal",
+    "journey_stage": "withdrawal_processing",
+    "owner": "payments_team",
+    "id": "TR-939ad7c41369"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "withdrawal_failure",
+    "journey_stage": "cash_out",
+    "owner": "payments",
+    "id": "TR-cb697d36082d"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "payout_blocked",
+    "journey_stage": "payout_processing",
+    "owner": "payments_team",
+    "id": "TR-1ab2818d4a66"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "missing_transactions",
+    "journey_stage": "transaction_processing",
+    "owner": "payments_ops",
+    "id": "TR-50519d9e0c52"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "slow_support_response",
+    "journey_stage": "post_purchase_support",
+    "owner": "support_ops",
+    "id": "TR-a9b616ff684e"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "missing_transaction_record",
+    "journey_stage": "support_resolution",
+    "owner": "payments_ops",
+    "id": "TR-bacee7e2078b"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "unresponsive_support",
+    "journey_stage": "post_purchase_support",
+    "owner": "customer_support",
+    "id": "TR-afc521d7c9ba"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "portfolio_transfer_failure",
+    "journey_stage": "asset_transfer",
+    "owner": "transfers_eng",
+    "id": "TR-e9f0d0def766"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "insecure_document_request",
+    "journey_stage": "support_interaction",
+    "owner": "support_ops",
+    "id": "TR-b0599243552a"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "account_closure_communication",
+    "journey_stage": "offboarding",
+    "owner": "account_services",
+    "id": "TR-4e752d93b6df"
+  },
+  {
+    "sentiment": "neutral",
+    "risk": "medium",
+    "theme": "long_term_reliability",
+    "journey_stage": "ongoing_investment",
+    "owner": "platform_eng",
+    "id": "TR-4a99ccfe42b1"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "low",
+    "theme": "custody_clarity",
+    "journey_stage": "onboarding",
+    "owner": "product_education",
+    "id": "TR-860cfe928ebf"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "activation_friction",
+    "journey_stage": "activation",
+    "owner": "product_team",
+    "id": "TR-da3ba9fba00a"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "saveback_rewards",
+    "journey_stage": "active_usage",
+    "owner": "card_product",
+    "id": "TR-4e1ef69e2747"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "product_satisfaction",
+    "journey_stage": "active_usage",
+    "owner": "product_team",
+    "id": "TR-7b8dd1d06627"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "everyday_account_value",
+    "journey_stage": "active_usage",
+    "owner": "everyday_banking",
+    "id": "TR-0b0583caf6d1"
+  },
+  {
+    "sentiment": "neutral",
+    "risk": "medium",
+    "theme": "trust_transparency",
+    "journey_stage": "evaluation",
+    "owner": "product_marketing",
+    "id": "TR-fdf4d78d47f2"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "low_cost_fees",
+    "journey_stage": "value_realization",
+    "owner": "pricing",
+    "id": "TR-a1bb6f9ce2fa"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "tax_notification_clarity",
+    "journey_stage": "tax_reporting",
+    "owner": "tax_ops",
+    "id": "TR-c90c966d3fd4"
+  },
+  {
+    "sentiment": "neutral",
+    "risk": "medium",
+    "theme": "tax_data_migration",
+    "journey_stage": "migration",
+    "owner": "tax_product_team",
+    "id": "TR-b2304cd480b5"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "unresolved_fee_question",
+    "journey_stage": "customer_support",
+    "owner": "support_ops",
+    "id": "TR-3fe6bfbe096f"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "geo_restricted_account_access",
+    "journey_stage": "account_management",
+    "owner": "account_services",
+    "id": "TR-f49a5a45d1bd"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "product_performance",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-39ad5490086b"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "price_value_mismatch",
+    "journey_stage": "post_purchase",
+    "owner": "pricing_team",
+    "id": "HAT-8414a7b70760"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "product_satisfaction",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-f0c010b5feb0"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "application_usability",
+    "journey_stage": "product_usage",
+    "owner": "product_formulation",
+    "id": "HAT-58480240c812"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "value_for_money",
+    "journey_stage": "usage",
+    "owner": "pricing_team",
+    "id": "HAT-d5e9c24a73d7"
+  },
+  {
+    "sentiment": "neutral",
+    "risk": "low",
+    "theme": "value_for_money",
+    "journey_stage": "product_usage",
+    "owner": "pricing_team",
+    "id": "HAT-40726b53b2a5"
+  },
+  {
+    "sentiment": "neutral",
+    "risk": "medium",
+    "theme": "applicator_usability",
+    "journey_stage": "product_usage",
+    "owner": "packaging_design",
+    "id": "HAT-640292038b73"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "adhesive_performance",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-c51fb3bbe7bb"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "initial_grab_strength",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-dd9c89b65bd1"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "product_performance",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-6f37de06e9e1"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "drill_free_mounting",
+    "journey_stage": "installation",
+    "owner": "product_management",
+    "id": "HAT-ea36a7fdd82a"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "product_odor",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-70e181a44697"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "product_quality",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-e98539265fc2"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "product_performance",
+    "journey_stage": "product_usage",
+    "owner": "r_and_d",
+    "id": "HAT-d7fa84b2e217"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "product_reliability",
+    "journey_stage": "retention",
+    "owner": "product_team",
+    "id": "HAT-21f89833d3e0"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "viscosity_dosing",
+    "journey_stage": "product_usage",
+    "owner": "product_formulation",
+    "id": "HAT-8b6b8a9c1c42"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "wet_environment_adhesion",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-c98b0caed1c3"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "removable_mounting",
+    "journey_stage": "installation",
+    "owner": "product_design",
+    "id": "HAT-1c1af49736f5"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "product_quality",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-ca3f725e9c2d"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "product_performance",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-52f0b032ae89"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "low",
+    "theme": "product_quantity_vs_packaging",
+    "journey_stage": "usage",
+    "owner": "product_team",
+    "id": "HAT-dbf814c916ee"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "product_quality_variety",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-6999c32f811b"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "bulk_pack_value",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-5b62d89e4ebc"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "child_friendly_design",
+    "journey_stage": "product_experience",
+    "owner": "product_team",
+    "id": "HAT-ef8c95acb5c3"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "plastic_to_adhesive_ratio",
+    "journey_stage": "post_purchase",
+    "owner": "packaging_team",
+    "id": "HAT-48ff97459fe9"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "product_performance",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-58793a8b99e6"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "sealing_performance",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-f17526e0a627"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "expired_product",
+    "journey_stage": "post_purchase",
+    "owner": "fulfillment_ops",
+    "id": "HAT-97b13fb27d22"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "damaged_on_arrival",
+    "journey_stage": "delivery",
+    "owner": "logistics_team",
+    "id": "HAT-10210c78f39c"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "product_reliability",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-47a5e5ad6071"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "bonding_strength",
+    "journey_stage": "product_usage",
+    "owner": "product_engineering",
+    "id": "HAT-a1a80eb82cd1"
+  },
+  {
+    "sentiment": "neutral",
+    "risk": "medium",
+    "theme": "product_durability",
+    "journey_stage": "long_term_use",
+    "owner": "product_engineering",
+    "id": "HAT-e9f138c26af0"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "water_ingress_resolution",
+    "journey_stage": "product_usage",
+    "owner": "product_engineering",
+    "id": "HAT-d00b35e45d4d"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "removal_difficulty",
+    "journey_stage": "product_usage",
+    "owner": "product_team",
+    "id": "HAT-507b6bc2dae5"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "expired_material",
+    "journey_stage": "delivery",
+    "owner": "quality_assurance",
+    "id": "HAT-202f0b3c3f28"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "technique_dependent_performance",
+    "journey_stage": "usage",
+    "owner": "customer_education",
+    "id": "HAT-26dc5fdf59c4"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "product_quality",
+    "journey_stage": "product_experience",
+    "owner": "product_team",
+    "id": "HAT-e75c7b0753b6"
+  },
+  {
+    "sentiment": "neutral",
+    "risk": "low",
+    "theme": "data_source_coverage",
+    "journey_stage": "data_collection",
+    "owner": "research_team",
+    "id": "HAT-6eeb28532b69"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "insufficient_data",
+    "journey_stage": "data_collection",
+    "owner": "data_team",
+    "id": "HAT-da0da696adfc"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "order_cancellation_after_payment",
+    "journey_stage": "order_fulfillment",
+    "owner": "payments_team",
+    "id": "LIE-f48d140b80be"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "order_not_delivered",
+    "journey_stage": "delivery",
+    "owner": "logistics",
+    "id": "LIE-bfe455eb4adf"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "support_inaccessible",
+    "journey_stage": "post_purchase_support",
+    "owner": "support_ops",
+    "id": "LIE-0c3a168a320c"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "delivery_failure",
+    "journey_stage": "service_recovery",
+    "owner": "customer_support",
+    "id": "LIE-d0de497b43a5"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "value_degradation",
+    "journey_stage": "product_usage",
+    "owner": "product",
+    "id": "LIE-70120972b891"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "missing_order_refund_denied",
+    "journey_stage": "post_delivery_support",
+    "owner": "support_operations",
+    "id": "LIE-2b0dd6641236"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "order_dispatch_delay",
+    "journey_stage": "order_fulfillment",
+    "owner": "dispatch_ops",
+    "id": "LIE-77db754fafa8"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "refund_delay",
+    "journey_stage": "post_order_support",
+    "owner": "payments_team",
+    "id": "LIE-43c7e7e06b38"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "wrong_order_delivered",
+    "journey_stage": "delivery",
+    "owner": "delivery_ops",
+    "id": "LIE-5211214e777a"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "fast_reliable_delivery",
+    "journey_stage": "delivery",
+    "owner": "logistics",
+    "id": "LIE-70828fd07f20"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "delivery_quality",
+    "journey_stage": "delivery",
+    "owner": "delivery_ops",
+    "id": "LIE-5efe010918be"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "order_not_delivered",
+    "journey_stage": "delivery",
+    "owner": "delivery_ops",
+    "id": "LIE-3c623d55e42c"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "delivery_estimate_accuracy",
+    "journey_stage": "delivery",
+    "owner": "logistics_ops",
+    "id": "LIE-ad4c2785d31b"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "order_not_delivered",
+    "journey_stage": "delivery",
+    "owner": "logistics",
+    "id": "LIE-0fd7130ebe58"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "trust_loss_after_refund",
+    "journey_stage": "dispute_resolution",
+    "owner": "customer_success",
+    "id": "LIE-7e3aaa8849bc"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "slow_delivery",
+    "journey_stage": "delivery",
+    "owner": "logistics",
+    "id": "LIE-c2e11f1f45d4"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "support_reliability",
+    "journey_stage": "post_purchase",
+    "owner": "customer_support",
+    "id": "LIE-6c8013310b4d"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "delivery_failure",
+    "journey_stage": "delivery",
+    "owner": "delivery_ops",
+    "id": "LIE-594d2ec8767b"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "delivery_failure",
+    "journey_stage": "delivery",
+    "owner": "logistics",
+    "id": "LIE-748da258da32"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "service_excellence",
+    "journey_stage": "post_purchase",
+    "owner": "customer_success",
+    "id": "LIE-69ef671f5729"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "gift_card_delivery_failure",
+    "journey_stage": "post_purchase_support",
+    "owner": "customer_support",
+    "id": "LIE-98d9ff39c6c2"
+  },
+  {
+    "sentiment": "neutral",
+    "risk": "medium",
+    "theme": "delivery_tracking_accuracy",
+    "journey_stage": "delivery",
+    "owner": "logistics",
+    "id": "LIE-dd38ba407805"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "late_delivery",
+    "journey_stage": "delivery",
+    "owner": "logistics",
+    "id": "LIE-55100873767f"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "unrecognized_charge",
+    "journey_stage": "post_purchase_support",
+    "owner": "billing_team",
+    "id": "LIE-dc432cfa4572"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "marketing_consent",
+    "journey_stage": "account_creation",
+    "owner": "growth_team",
+    "id": "LIE-a9a5ccc24a02"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "delivery_delay",
+    "journey_stage": "delivery",
+    "owner": "delivery_ops",
+    "id": "LIE-3c1168a1cc5f"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "undelivered_refund_denied",
+    "journey_stage": "issue_resolution",
+    "owner": "support_ops",
+    "id": "LIE-ab3a65847d53"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "misleading_delivery_time",
+    "journey_stage": "post_purchase",
+    "owner": "logistics",
+    "id": "LIE-e757929cf91c"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "undelivered_order",
+    "journey_stage": "delivery",
+    "owner": "fulfillment_ops",
+    "id": "LIE-61888f49f889"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "refund_failure",
+    "journey_stage": "post_purchase_support",
+    "owner": "payments_ops",
+    "id": "LIE-f9ac1ba6dcd5"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "order_not_delivered",
+    "journey_stage": "delivery",
+    "owner": "delivery_ops",
+    "id": "LIE-90dd5d10e62c"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "order_not_delivered",
+    "journey_stage": "delivery",
+    "owner": "logistics",
+    "id": "LIE-13f5ecfc04bf"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "chatbot_loop_no_escalation",
+    "journey_stage": "customer_support",
+    "owner": "support_ops",
+    "id": "LIE-7fbf97ae9030"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "account_security",
+    "journey_stage": "account_verification",
+    "owner": "security_team",
+    "id": "LIE-645707ed4229"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "order_not_delivered",
+    "journey_stage": "post_order",
+    "owner": "support",
+    "id": "LIE-51ebe96b1c39"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "minimum_order_value",
+    "journey_stage": "checkout",
+    "owner": "pricing_team",
+    "id": "LIE-a8b3fb1ea98d"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "lost_delivery",
+    "journey_stage": "delivery",
+    "owner": "logistics",
+    "id": "LIE-27de2f4d7906"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "false_delivery_status",
+    "journey_stage": "delivery",
+    "owner": "logistics_ops",
+    "id": "LIE-480acc246a62"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "delivery_delay",
+    "journey_stage": "fulfillment",
+    "owner": "logistics",
+    "id": "LIE-98a3364fc19e"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "special_instructions_not_delivered",
+    "journey_stage": "order_fulfillment",
+    "owner": "integrations_team",
+    "id": "LIE-dba616bc3c11"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "late_delivery",
+    "journey_stage": "delivery",
+    "owner": "delivery_ops",
+    "id": "LIE-e775166d5ae8"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "undelivered_no_refund",
+    "journey_stage": "post_purchase",
+    "owner": "payments",
+    "id": "LIE-4fb7bde24036"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "food_safety",
+    "journey_stage": "post_delivery",
+    "owner": "vendor_quality",
+    "id": "LIE-fa44434b5f65"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "review_transparency_loss",
+    "journey_stage": "evaluation",
+    "owner": "reviews_product",
+    "id": "LIE-cd3ee79bca25"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "generic_responses",
+    "journey_stage": "support",
+    "owner": "support_team",
+    "id": "LIE-031821cde257"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "non_delivery",
+    "journey_stage": "delivery",
+    "owner": "logistics_ops",
+    "id": "LIE-87e07e8d103c"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "voucher_payment_failure",
+    "journey_stage": "checkout",
+    "owner": "growth_engineering",
+    "id": "LIE-918620a80a33"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "delivery_failure",
+    "journey_stage": "delivery",
+    "owner": "logistics",
+    "id": "LIE-2464fe6d5f3b"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "late_delivery_no_recourse",
+    "journey_stage": "delivery",
+    "owner": "logistics",
+    "id": "LIE-438aea07c61f"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "delivery_delay",
+    "journey_stage": "delivery",
+    "owner": "logistics",
+    "id": "LIE-be71e3f3bb3a"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "delivery_issue_handling",
+    "journey_stage": "delivery",
+    "owner": "customer_support",
+    "id": "LIE-0e7619c7e159"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "premium_delivery_delay",
+    "journey_stage": "delivery",
+    "owner": "delivery_ops",
+    "id": "LIE-b7093d620c60"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "missing_items_unresolved",
+    "journey_stage": "post_purchase_support",
+    "owner": "fulfillment_ops",
+    "id": "LIE-b2725d265bb1"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "delivery_estimate_accuracy",
+    "journey_stage": "delivery",
+    "owner": "delivery_ops",
+    "id": "LIE-22dcba8f749d"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "minimum_order_value",
+    "journey_stage": "ordering",
+    "owner": "business_ops",
+    "id": "LIE-370bbff5f9cc"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "state_persistence_failure",
+    "journey_stage": "payment_setup",
+    "owner": "mobile_engineering",
+    "id": "LIE-87ae4039e85c"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "cart_state_loss",
+    "journey_stage": "cart_building",
+    "owner": "mobile_engineering",
+    "id": "LIE-07b7424e93db"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "missing_item",
+    "journey_stage": "delivery",
+    "owner": "fulfillment_ops",
+    "id": "LIE-cf2aa79d0ed3"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "no_cancellation_or_support",
+    "journey_stage": "issue_resolution",
+    "owner": "customer_support",
+    "id": "LIE-88539ba66cba"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "voucher_state_lock",
+    "journey_stage": "checkout",
+    "owner": "payments_team",
+    "id": "LIE-02d0252f9d9f"
+  },
+  {
+    "sentiment": "positive",
+    "risk": "low",
+    "theme": "ui_usability",
+    "journey_stage": "active_use",
+    "owner": "product_design",
+    "id": "LIE-3028974223bb"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "web_accessibility",
+    "journey_stage": "review_submission",
+    "owner": "web_team",
+    "id": "LIE-279206e2860d"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "claims_reimbursement_gap",
+    "journey_stage": "issue_resolution",
+    "owner": "product",
+    "id": "LIE-4242711d0dca"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "support_failure",
+    "journey_stage": "issue_resolution",
+    "owner": "customer_support",
+    "id": "LIE-a98606b2597e"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "cancellation_not_honored",
+    "journey_stage": "order_fulfillment",
+    "owner": "support_ops",
+    "id": "LIE-0c3632a4c3d7"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "undelivered_order_refund_denied",
+    "journey_stage": "post_order_support",
+    "owner": "refunds_team",
+    "id": "LIE-4097a0d32329"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "delivery_verification_failure",
+    "journey_stage": "post_purchase_support",
+    "owner": "logistics_ops",
+    "id": "LIE-a21a75212d55"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "order_cancellation",
+    "journey_stage": "order_fulfillment",
+    "owner": "order_operations",
+    "id": "LIE-167c12615c20"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "chatbot_no_escalation",
+    "journey_stage": "post_purchase_support",
+    "owner": "cx_tech",
+    "id": "LIE-73635d811275"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "refund_refusal",
+    "journey_stage": "post_order_support",
+    "owner": "refunds_team",
+    "id": "LIE-922c46fcf981"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "duplicate_billing",
+    "journey_stage": "post_purchase_support",
+    "owner": "billing_team",
+    "id": "LIE-0476f9a5a8df"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "undelivered_order_refund_denied",
+    "journey_stage": "post_delivery_support",
+    "owner": "support_operations",
+    "id": "LIE-0150994350dd"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "support_escalation_gap",
+    "journey_stage": "post_purchase_support",
+    "owner": "customer_support",
+    "id": "LIE-cc586d024fb1"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "tip_transparency",
+    "journey_stage": "checkout",
+    "owner": "product",
+    "id": "LIE-4b28c8eb0c46"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "review_comments_missing",
+    "journey_stage": "evaluation",
+    "owner": "reviews_team",
+    "id": "LIE-dd607f999234"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "critical",
+    "theme": "order_fulfillment_failure",
+    "journey_stage": "delivery",
+    "owner": "fulfillment_ops",
+    "id": "LIE-c05d668ecae3"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "unexpected_fees",
+    "journey_stage": "billing",
+    "owner": "membership_team",
+    "id": "LIE-987fa2e3968c"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "refund_denial",
+    "journey_stage": "issue_resolution",
+    "owner": "support_ops",
+    "id": "LIE-4480945b2c09"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "order_status_mismatch",
+    "journey_stage": "delivery_dispatch",
+    "owner": "order_platform",
+    "id": "LIE-4f8e78d7b3d4"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "order_cancellation",
+    "journey_stage": "order_fulfillment",
+    "owner": "fulfillment_team",
+    "id": "LIE-d280c88b240b"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "high",
+    "theme": "fulfillment_billing_mismatch",
+    "journey_stage": "post_delivery",
+    "owner": "fulfillment_ops",
+    "id": "LIE-1ce6c4f8d70f"
+  },
+  {
+    "sentiment": "negative",
+    "risk": "medium",
+    "theme": "delivery_failure_refund",
+    "journey_stage": "post_purchase",
+    "owner": "customer_support",
+    "id": "LIE-29d869416863"
+  }
+]

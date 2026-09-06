@@ -1,0 +1,4 @@
+predictor,language_a,language_b,hits_a,misses_a,hits_b,misses_b,recall_a,recall_b,p_fisher_two_sided
+floor,de,en,0,8,8,33,0.0,0.1951,0.322019
+ml,de,en,5,3,39,2,0.625,0.9512,0.025616
+llm,de,en,6,2,32,9,0.75,0.7805,1.0
