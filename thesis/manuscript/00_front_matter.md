@@ -41,7 +41,7 @@ The artifact studied here is also the basis of a commercial venture in which I h
 
 ## Reproducibility and Data Availability
 
-The quantitative evaluation is reproducible: the harness (`evaluation/`) runs from the public datasets and writes every metric in the results tables from data (`evaluation/results/`); the few prose figures assembled from those tables are marked where they appear. The datasets used are public, paraphrased, and de-identified. The artifact source, the evaluation code, and the diagram sources are maintained in the project repository. *‹Add repository URL / DOI before submission.›*
+The quantitative evaluation is reproducible: the harness (`evaluation/`) runs from the public datasets and writes every metric in the results tables from data (`evaluation/results/`); the few prose figures assembled from those tables are marked where they appear. The datasets used are public, paraphrased, and de-identified. The artifact source, the evaluation code, and the diagram sources are maintained in the project repository (`github.com/fogu13/CLARA`), which is private; read access for examination is granted on request.
 
 ---
 

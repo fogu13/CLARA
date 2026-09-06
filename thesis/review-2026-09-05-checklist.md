@@ -233,6 +233,8 @@ Put κ (unweighted and linear-weighted), the exact agreement and the escalate ag
 
 ### Step 6. Provenance and authorship facts (1 h of writing)
 
+**Done 6 September 2026, with one material finding.** The dataset READMEs (created 21 June 2026) say the seed labels are "included for testing only" and "should not be treated as validated gold-standard annotations"; the author confirmed the datasets came from a ChatGPT research session and were used as delivered. The manuscript had called them human-curated judgements in §1.3, §1.6, §3.2, §3.5.1, §3.5.4, §3.7, §5A (intro, Figure 5.1, §5A.6), Appendix D and Chapter 7; every such phrase now reads "reference labels" with the provenance stated in §3.7 (star rating human-origin; seed labels assistant-drafted, unedited; the golden set authored with the coding assistant; the 40-signal blind risk sample the only human check). The English golden-set items are described from the repository record (written in the July coding sessions, no audit recorded). Appendix F tally settled at 43. Front matter: repository private, access on request; acknowledgements still open. Remaining: the κ result once the sample is labelled.
+
 - §3.7 (`03_methodology.md`, the provenance placeholder): who wrote the paraphrases and the seed labels for the three thesis datasets, whether a language model drafted either, what review they received, and the κ result from Step 5.
 - §5A.7 second paragraph and §6.4 item 3: who authored the English golden-set items (ids `eval-001`–`060` and `081`–`100`), stated the way the German stratum's authorship is.
 - Appendix F: reconcile the tally (the text says 43 claims; the outcomes sum to 43; the earlier text said 45) against your verification log.

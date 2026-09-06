@@ -1,7 +1,9 @@
 """Load the three REAL public feedback datasets into one labelled corpus.
 
 Source of truth: each dataset's `04_*_detailed_research_table.csv`, which carries the
-human-curated gold ("seed") labels. Synthetic datasets are intentionally NOT loaded.
+seed labels drafted with the datasets by a language-model research assistant on
+21 June 2026 and used as delivered (manuscript §3.7); the star rating is the
+independent human-origin reference. Synthetic datasets are intentionally NOT loaded.
 
 A record has: id, sector, source, language, star_rating (int|None), text,
 and gold labels: theme, journey_stage, owner, action, risk (risk may be None

@@ -10,7 +10,9 @@ Step 2 (score):
     python kappa_sample.py score results/kappa_sample.csv
     -> Cohen's kappa (unweighted and linear-weighted) between the blind labels
        and risk_seed, the 4x4 confusion table, and the binary escalate agreement,
-       written to results/kappa_risk.json and printed.
+       written to results/kappa_risk.json and printed (a rating file named
+       kappa_sample_<tag>.csv writes kappa_risk_<tag>.json instead). The rubric the
+       labeller works from is results/kappa_labelling_instructions.md.
 
 The sample is fixed by seed so the draw is reproducible (n = 40 from the 106
 risk-labelled Trade Republic + Henkel signals). The seed labels never enter the
@@ -54,8 +56,12 @@ def score(path: str) -> None:
              for r in rows if r["public_signal_id"] in gold and r["blind_risk"].strip().lower() in RISK]
     if len(pairs) < 10:
         sys.exit(f"only {len(pairs)} usable rows; fill blind_risk with one of {RISK}")
-    a = [g for g, _ in pairs]; b = [x for _, x in pairs]
-    esc = lambda v: v in ("high", "critical")
+    a = [g for g, _ in pairs]
+    b = [x for _, x in pairs]
+
+    def esc(v: str) -> bool:
+        return v in ("high", "critical")
+
     out = {
         "n": len(pairs),
         "kappa_unweighted": round(cohen_kappa_score(a, b), 4),
@@ -68,7 +74,12 @@ def score(path: str) -> None:
         },
     }
     os.makedirs(RESULTS, exist_ok=True)
-    with open(os.path.join(RESULTS, "kappa_risk.json"), "w") as fh:
+    # Output name follows the input name, so a second rating file (for example
+    # kappa_sample_llm.csv, a model rating reported as cross-model agreement)
+    # never overwrites the human result in kappa_risk.json.
+    stem = os.path.splitext(os.path.basename(path))[0]
+    out_name = "kappa_risk" + stem.replace("kappa_sample", "") + ".json"
+    with open(os.path.join(RESULTS, out_name), "w") as fh:
         json.dump(out, fh, indent=2)
     print(json.dumps(out, indent=2))
 
@@ -79,4 +90,5 @@ if __name__ == "__main__":
     elif len(sys.argv) >= 3 and sys.argv[1] == "score":
         score(sys.argv[2])
     else:
-        print(__doc__); sys.exit(1)
+        print(__doc__)
+        sys.exit(1)
