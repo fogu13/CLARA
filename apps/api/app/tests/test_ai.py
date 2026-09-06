@@ -608,3 +608,16 @@ class TestLangfuseGracefulDegradation:
 
         result =             _call(ai)
         assert result == {"ok": True}
+
+
+class TestChatTimeout:
+    def test_default_and_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from app.services.ai import chat_timeout_seconds
+
+        monkeypatch.delenv("AI_TIMEOUT_S", raising=False)
+        assert chat_timeout_seconds() == 120.0
+        monkeypatch.setenv("AI_TIMEOUT_S", "600")
+        assert chat_timeout_seconds() == 600.0
+        monkeypatch.setenv("AI_TIMEOUT_S", "soon")
+        assert chat_timeout_seconds() == 120.0
+

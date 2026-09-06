@@ -23,6 +23,7 @@ import os
 from collections import Counter, defaultdict
 from typing import Any
 
+from app.domain.models import redact_common_pii
 from app.services.ai import AIProviderError, call_tool, effective_model
 from app.services.learning_engine import rank_learnings
 
@@ -400,8 +401,11 @@ def synthesize_cluster(
     worked and avoids ones that did not — Reflexion grounded in measured
     outcomes. Closes the outcome -> learning -> retrieval loop.
     """
+    # Same data-minimisation boundary as enrichment: direct identifiers are
+    # redacted from the evidence texts before they reach the model. The
+    # insight is about the pattern across signals, never about a person.
     evidence = [
-        s.get("text", s.get("feedback_text", ""))
+        redact_common_pii(str(s.get("text") or s.get("feedback_text") or "")) or ""
         for s in signals
         if s.get("text") or s.get("feedback_text")
     ]

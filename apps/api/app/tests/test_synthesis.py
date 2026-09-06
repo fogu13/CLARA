@@ -648,3 +648,43 @@ class TestReachHonesty:
         cluster[1]["metadata"] = {"near_duplicate_of": "not-in-this-cluster"}
         insights = synthesis.synthesize_insights(cluster, min_cluster_size=2)
         assert insights[0]["affected_contacts"] == 3
+
+
+class TestModelBoundaryRedaction:
+    """Evidence texts are minimised before they reach the synthesis model."""
+
+    def test_pii_is_redacted_from_cluster_evidence(
+        self, _mock_ai_env: None, httpx_mock: Any
+    ) -> None:
+        from app.services.synthesis import synthesize_cluster
+
+        tag = "checkout_failure"
+        httpx_mock.add_response(
+            url="http://test-ai.local/v1/chat/completions",
+            method="POST",
+            json={
+                "choices": [{
+                    "message": {
+                        "tool_calls": [{
+                            "function": {
+                                "name": "submit_insight",
+                                "arguments": json.dumps(_synth_response(tag)),
+                            }
+                        }]
+                    }
+                }],
+                "usage": {},
+            },
+        )
+        signals = [
+            {"id": "s1", "text": "Checkout crashed, write to jo.doe@example.com", "source": "zendesk"},
+            {"id": "s2", "feedback_text": "Card declined, call +49 170 1234567", "source": "email"},
+        ]
+
+        insight = synthesize_cluster(tag, signals)
+
+        assert insight is not None
+        sent = httpx_mock.get_requests()[-1].read().decode()
+        assert "jo.doe@example.com" not in sent
+        assert "170 1234567" not in sent
+        assert "Checkout crashed" in sent and "Card declined" in sent

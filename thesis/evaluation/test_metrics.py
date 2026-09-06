@@ -46,9 +46,65 @@ def test_mcnemar_exact():
     assert (b, c) == (1, 9) and abs(p - 22 / 1024) < 1e-12, (b, c, p)
 
 
+
+
+def test_wilson_and_fisher():
+    lo, hi = M.wilson_interval(66, 100)
+    assert 0.56 < lo < 0.57 and 0.74 < hi < 0.75, (lo, hi)
+    assert M.wilson_interval(10, 10) == (0.7225, 1.0)   # never a degenerate [1, 1]
+    assert M.wilson_interval(0, 0) == (0.0, 0.0)
+    # Fisher: checked against scipy.stats.fisher_exact on the same tables
+    assert abs(M.fisher_exact(4, 6, 15, 3) - 0.034626) < 1e-5
+    assert abs(M.fisher_exact(0, 5, 5, 0) - 0.007937) < 1e-5
+    assert M.fisher_exact(7, 7, 7, 7) == 1.0
+    assert M.fisher_exact(0, 0, 0, 0) == 1.0
+
+
+def test_score_labels_restrict_the_macro_average():
+    # A stray predicted label ("z") outside the restriction must not enter the macro.
+    y_true = ["a", "a", "b", "b"]
+    y_pred = ["a", "z", "b", "b"]
+    unrestricted = M.score(y_true, y_pred)
+    restricted = M.score(y_true, y_pred, labels=["a", "b"])
+    assert restricted["f1_macro"] > unrestricted["f1_macro"], (restricted, unrestricted)
+    assert restricted["accuracy"] == unrestricted["accuracy"] == 0.75
+    assert restricted["accuracy_ci_low"] < 0.75 < restricted["accuracy_ci_high"]
+
+
+def test_mcnemar_one_flip():
+    # b=3, c=12 is significant; one pair moved toward the null is not.
+    assert M.mcnemar_p_from_counts(3, 12) < 0.05 < M.mcnemar_one_flip_p(3, 12)
+    assert M.mcnemar_one_flip_p(5, 5) == M.mcnemar_p_from_counts(5, 5) == 1.0
+    assert M.mcnemar_one_flip_p(12, 3) == M.mcnemar_one_flip_p(3, 12)
+
+
+def test_production_mapping():
+    import predict_llm_production as P
+    row = P.map_enrichment({"id": "TR-001", "sentiment": "mixed", "sentiment_score": 0.1,
+                            "urgency": "high", "tags": ["checkout_failure"]})
+    assert row["sentiment"] == "neutral" and row["sentiment_raw"] == "mixed"
+    assert row["risk"] == "high" and row["urgency_raw"] == "high"
+    none_row = P.map_enrichment({"id": "TR-002", "sentiment": None, "urgency": "medium", "tags": []})
+    assert none_row["sentiment"] is None  # a rejected label is a miss, never coerced
+
+def test_mcnemar_sensitivity():
+    # the thesis headline: b=7, c=19 -> p=0.029; one item moved each way
+    sens = M.mcnemar_sensitivity(7, 19)
+    assert abs(sens["p_observed"] - 0.028959) < 1e-5, sens
+    assert abs(sens["p_majority_loses_one"] - 0.043285) < 1e-5, sens   # (7, 18)
+    assert abs(sens["p_minority_gains_one"] - 0.052239) < 1e-5, sens   # (8, 19)
+    assert abs(sens["p_one_pair_swaps"] - 0.075519) < 1e-5, sens       # (8, 18)
+    # symmetric input: the perturbations are taken from the minority side
+    assert M.mcnemar_sensitivity(19, 7)["p_majority_loses_one"] == sens["p_majority_loses_one"]
+
+
 if __name__ == "__main__":
     test_perfect_and_known()
     test_baseline_polarity()
     test_baseline_risk_and_stars()
     test_mcnemar_exact()
+    test_wilson_and_fisher()
+    test_score_labels_restrict_the_macro_average()
+    test_mcnemar_one_flip()
+    test_production_mapping()
     print("OK: all metric/baseline self-checks passed")

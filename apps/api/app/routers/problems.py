@@ -58,6 +58,7 @@ from app.services.measurement_scheduler import schedule_measurements
 from app.services.outcome_engine import (
     ITS_COMPARISON_METHOD,
     detectability_note,
+    evidence_grade,
     its_outcome_for_problem,
     loop_verdict,
     propose_outcome_contract,
@@ -977,6 +978,15 @@ def build_router(
                 executed_at=executed_at,
                 now=utc_now(),
             )
+            if snapshot.its is not None:
+                # Re-grade on the fit actually obtained: an ITS contract whose
+                # series was too sparse for segmented regression is a plain
+                # before/after delta (grade D), not an ITS (grade C).
+                snapshot.evidence_grade = evidence_grade(
+                    comparison_method=snapshot.comparison_method,
+                    measurement_source=snapshot.measurement_source,
+                    realised_method=snapshot.its.get("method"),
+                )
         plans = [
             plan
             for plan in measurement_plan_store.list_plans()

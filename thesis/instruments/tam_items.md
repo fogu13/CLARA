@@ -14,10 +14,16 @@ Adapted from Davis (1989). Rated 1 = *Strongly disagree* … 7 = *Strongly agree
 7. My interaction with the system would be clear and understandable.
 8. Overall, I would find this system easy to use.
 
-## Trust, Oversight & Auditability (RAI items → H6, H7)
+## Trust, Oversight & Auditability (author-written items → H6, H7)
 9. I would trust the system's triage of which problems matter most.
 10. The human-approval step makes me more comfortable letting the system take action.
 11. The audit trail gives me enough to be accountable for automated actions.
 12. I can tell *why* the system recommended a given action.
 
-**Reporting.** Summarise PU, PEOU, and Trust subscales descriptively (mean, SD per item and subscale). Triangulate with the SUS and with interview themes on trust and oversight.
+## Friction of governance (author-written, reverse-keyed → RQ2)
+13. (R) The approval step would slow my team down more than it is worth.
+14. (R) Keeping the audit trail complete would add work my team does not have time for.
+
+**Keying and provenance.** Items 1–8 are adapted from the standard PU and PEOU subscales (Davis, 1989). Items 9–14 are author-written for this study and are not a validated scale: 9–12 are positively keyed, 13–14 reverse-keyed, so that agreement bias cannot inflate the trust picture without also inflating the friction picture. Reverse-keyed items are reflected (8 − rating) before summarising.
+
+**Reporting.** Summarise PU, PEOU, Trust and Friction descriptively (mean, SD and a t-based 95% interval per item and subscale). Triangulate with the SUS, with the interview probe on the time cost of approval and audit, and with interview themes on trust and oversight.

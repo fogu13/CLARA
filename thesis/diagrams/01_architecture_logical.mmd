@@ -3,47 +3,51 @@
 flowchart LR
     subgraph SRC["Feedback sources (integrate, not rebuild)"]
         S1["Surveys<br/>NPS / CSAT / CES"]
-        S2["Support<br/>Zendesk / Intercom"]
-        S3["Reviews and social"]
-        S4["Product analytics"]
+        S2["Support<br/>Zendesk"]
+        S3["Reviews<br/>App Store · Google Play · Trustpilot · Google Business"]
+        S4["CSV / JSON import"]
     end
 
     subgraph ING["Ingestion"]
-        I1["CSV / Webhook / Connectors"]
+        I1["Validation · language detection<br/>authenticity flags (annotated, not enforced)"]
     end
 
     subgraph CORE["Governed loop · Signal to Insight to Action to Learning"]
-        E["Enrichment<br/>sentiment · theme · urgency"]
-        SY["Synthesis<br/>cross-signal severity"]
-        R["Action engine<br/>rules · conflict resolution"]
-        AP{"Human approval?"}
-        EX["Execute action"]
-        M["Measurement<br/>outcome contract · closure"]
-        L["Learning store<br/>confidence decay"]
+        E["Enrichment<br/>sentiment · urgency · theme tags<br/>(identifiers redacted before the model call)"]
+        SY["Synthesis<br/>theme clusters · cross-signal severity"]
+        C["Problem candidates<br/>journey/stage groups · AI themes"]
+        H1{"Human accepts<br/>candidate?"}
+        P["Problem + outcome contract<br/>action proposals · policy checks"]
+        AP{"Human approves<br/>each action?"}
+        EX["Execute<br/>Jira / Slack push · draft fallback"]
+        M["Measurement<br/>t7 · window · follow-up checkpoints<br/>ITS readout · evidence grade · loop verdict"]
+        L["Learning memory<br/>reviewed conclusions · confidence decay"]
     end
 
     subgraph OUT["Execution targets (integrate)"]
-        O1["Jira / Zendesk / CRM"]
+        O1["Jira / Slack"]
     end
 
     subgraph GOV["Responsible-AI governance (cross-cutting)"]
-        G1["Audit · Art 12"]
-        G2["Transparency · Art 50"]
-        G3["Compliance checker"]
-        G4["Model sovereignty"]
+        G1["Audit trail · evidence-pack hash · CSV export"]
+        G2["Provenance labels · Article 50 status"]
+        G3["Policy rules · works-council mode"]
+        G4["Model sovereignty · EU residency gate"]
     end
 
     S1 --> I1
     S2 --> I1
     S3 --> I1
     S4 --> I1
-    I1 --> E --> SY --> R --> AP
-    AP -->|"approved or auto"| EX
-    AP -->|"queued"| EX
+    I1 --> E --> SY --> C --> H1
+    H1 -->|"accepted"| P --> AP
+    H1 -->|"rejected"| X1["Logged · no problem"]
+    AP -->|"approved"| EX
+    AP -->|"rejected"| X2["Logged · no action"]
     EX --> O1
     EX --> M --> L
-    L -.->|"informs"| R
+    L -.->|"retrieved into synthesis"| SY
     G1 -.-> EX
     G2 -.-> E
-    G3 -.-> R
+    G3 -.-> AP
     G4 -.-> E

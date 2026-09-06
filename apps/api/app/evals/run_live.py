@@ -39,8 +39,8 @@ os.environ.setdefault("AI_TEMPERATURE", "0")
 
 from app.evals.harness import (  # noqa: E402
     EvalHarness,
-    bootstrap_ci,
     load_golden_set,
+    wilson_interval,
     mcnemar_exact,
 )
 from app.services.ai import AI_MODEL, AIProviderError  # noqa: E402
@@ -142,22 +142,32 @@ def _score_enrichment(*, exemplars: list[dict] | None) -> dict[str, Any]:
         # Aligned with the vectors: golden-item language per position, so the
         # caller can report per-language (DE vs EN) accuracy with denominators.
         "languages": [g.get("language", "en") for g in golden],
+        # Aligned likewise: the item's split, so the held-out guardrail stratum
+        # can be reported separately from the pooled figure.
+        "splits": [g.get("split") or "unsplit" for g in golden],
     }
 
 
-def _by_language(vectors: dict[str, list[int]], languages: list[str]) -> dict[str, Any]:
-    """Per-language accuracy breakdown with explicit denominators (n)."""
+def _by_stratum(vectors: dict[str, list[int]], strata: list[str]) -> dict[str, Any]:
+    """Per-stratum accuracy breakdown with explicit denominators (n) and
+    95% Wilson intervals for sentiment and urgency."""
     out: dict[str, Any] = {}
-    for lang in sorted(set(languages)):
-        idx = [i for i, item_lang in enumerate(languages) if item_lang == lang]
+    for stratum in sorted(set(strata)):
+        idx = [i for i, item_stratum in enumerate(strata) if item_stratum == stratum]
         n = len(idx)
         entry: dict[str, Any] = {"n": n}
         for metric, vec in vectors.items():
             entry[f"{metric}_accuracy"] = round(sum(vec[i] for i in idx) / n, 4) if n else None
-        ci_vec = [vectors["sentiment"][i] for i in idx]
-        entry["sentiment_ci"] = list(bootstrap_ci(ci_vec)) if n >= 5 else None
-        out[lang] = entry
+        for metric in ("sentiment", "urgency"):
+            hits = sum(vectors[metric][i] for i in idx)
+            entry[f"{metric}_ci"] = list(wilson_interval(hits, n)) if n >= 5 else None
+        out[stratum] = entry
     return out
+
+
+def _by_language(vectors: dict[str, list[int]], languages: list[str]) -> dict[str, Any]:
+    """Per-language accuracy breakdown (DE vs EN)."""
+    return _by_stratum(vectors, languages)
 
 
 def _mcnemar_ab(off_vec: list[int], on_vec: list[int]) -> dict[str, Any]:
@@ -442,9 +452,14 @@ def main() -> int:
         "enrichment_on": enrichment_on,
         "enrichment_off": enrichment_off,
         "enrichment_ab": enrichment_ab,
-        "ci": {"sentiment": list(bootstrap_ci(on_vec["sentiment"])),
-               "urgency": list(bootstrap_ci(on_vec["urgency"]))},
+        "ci_method": "wilson_score_95",
+        "ci": {"sentiment": list(wilson_interval(sum(on_vec["sentiment"]), len(on_vec["sentiment"]))),
+               "urgency": list(wilson_interval(sum(on_vec["urgency"]), len(on_vec["urgency"])))},
         "by_language": _by_language(on_vec, scored_on["languages"]),
+        # The golden set is split into an optimisation stratum (the loop may
+        # tune on it) and a locked held-out stratum. The pooled figure above
+        # mixes both; the held-out row is the guardrail number.
+        "by_split": _by_stratum(on_vec, scored_on["splits"]),
         "synthesis": synthesis,
         "learning_influence": influence,
         "failures": scored_on["failures"],
@@ -467,7 +482,10 @@ def main() -> int:
                 "note": (
                     "Curated golden set; DE stratum authored + adversarially "
                     "verified. Production config (few-shot exemplars on). "
-                    "Hallucination heuristic covers EN items only."
+                    "Hallucination heuristic covers EN items only. Intervals "
+                    "are 95% Wilson score intervals. 'overall' pools the "
+                    "optimisation and held-out strata; by_split.held_out is "
+                    "the locked guardrail figure."
                 ),
             },
             "overall": {
@@ -478,6 +496,7 @@ def main() -> int:
                 "tag_f1_fuzzy": enrichment_on["tag_f1"],
             },
             "by_language": report["by_language"],
+            "by_split": report["by_split"],
         }
         (EVALS_DIR / "published_metrics.json").write_text(json.dumps(published, indent=2) + "\n")
         print(f"published model-card metrics -> {EVALS_DIR / 'published_metrics.json'}")

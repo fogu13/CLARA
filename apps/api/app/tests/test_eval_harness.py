@@ -237,3 +237,19 @@ class TestEvalHarness:
         harness = EvalHarness(golden_set=[])
         result = harness.run_enrichment_eval()
         assert result.total_signals == 0
+
+
+class TestWilsonInterval:
+    def test_perfect_stratum_is_not_degenerate(self) -> None:
+        from app.evals.harness import wilson_interval
+
+        lo, hi = wilson_interval(10, 10)
+        assert lo < 1.0 and hi == 1.0  # the bootstrap would report [1.0, 1.0]
+
+    def test_brackets_the_proportion_and_stays_in_unit_interval(self) -> None:
+        from app.evals.harness import wilson_interval
+
+        lo, hi = wilson_interval(66, 100)
+        assert 0.56 < lo < 0.66 < hi < 0.75
+        assert wilson_interval(0, 0) == (0.0, 0.0)
+        assert wilson_interval(0, 7)[0] == 0.0

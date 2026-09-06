@@ -17,11 +17,11 @@ MSc Responsible AI capstone (RAI-9001, 30 ECTS, OPIT). This folder is the **sing
 | `manuscript/06_discussion.md` | Ch 6 — design principles, RAI reflections, limitations, future work |
 | `manuscript/07_conclusion.md` | Ch 7 — conclusion |
 | `manuscript/references.md` | Consolidated APA-7 bibliography |
-| `manuscript/appendices/` | EU AI Act/GDPR mapping, DPIA, traceability matrix (incl. ITS design→code map) |
-| `instruments/` | Interview guide, consent form, survey, SUS, TAM items, codebook template |
-| `evaluation/` | Python harness over the **real** public datasets (Trade Republic, Henkel, Lieferando) |
+| `manuscript/appendices/` | EU AI Act/GDPR mapping (obligation vs commitment), DPIA (provider-prepared), traceability matrix (incl. ITS design→code map), external-review episode (Appendix F) |
+| `instruments/` | Participant information and consent (bound), interview guide, survey, SUS, TAM + friction items, codebook template; `recruitment_outreach.md` is working material and is not bound |
+| `evaluation/` | Python harness over the **real** public datasets (Trade Republic, Henkel, Lieferando); `predict_llm.py` (generic prompt) and `predict_llm_production.py` (the artifact's own `enrich_signals` path, pre-registered rules); `survey_analysis.py` |
 | `research/` | Deep-research source log + OPIT citation sourcebook |
-| `diagrams/` | Mermaid sources + `render.py` + `rendered/` PNG/SVG + UI screenshots + `schema.sql` |
+| `diagrams/` | Mermaid sources of the deployed build + `render.py` (mermaid-cli locally, mermaid.ink as fallback) + `rendered/` PNG/SVG + UI screenshots (seeded demo data) + `schema.sql` (extracted from the migrations) |
 | `defense/` | `defense_deck.pptx` + `make_deck.js` generator |
 | `correspondence/` | Supervisor email drafts (July 2026) |
 | `build/` | Compiled `thesis.docx` + concatenated `thesis_combined.md` |
@@ -35,7 +35,7 @@ The manuscript previously described **one system with two implementations** (Odr
 
 APA 7, author–date in text, consolidated in `manuscript/references.md`. Compile with the `docx` skill (chapters concatenated in numeric order → `build/thesis.docx`, with heading hierarchy, ToC, and figures).
 
-`build/thesis.docx` and `build/thesis_combined.md` were rebuilt **20 Aug 2026** via `bash build_docx.sh` (pandoc 3.9 via pypandoc-binary). This build follows a full manuscript line edit (20 Aug 2026): plainer authorial voice, zero em dashes anywhere in the compiled document (manuscript, appendices, instruments, schema comment), with content, claims and numbers unchanged and verified per file against git HEAD (numbers, section refs, links, code spans and headings all preserved by an automated check). The §3.5.5 display math (`$$…$$`) renders as native Word equations (13 `<m:oMath>` elements, no raw TeX leaking as literal text). Rebuild again after any manuscript edit before circulating.
+`build/thesis.docx` and `build/thesis_combined.md` are rebuilt with `bash build_docx.sh` (pandoc 3.9 via `pip install pypandoc-binary`, which the script finds in `.venv` or on `PATH`). The 5 Sep 2026 revision (see `review-2026-09-05-checklist.md`) changed content substantially; rebuild before circulating. This build follows a full manuscript line edit (20 Aug 2026): plainer authorial voice, zero em dashes anywhere in the compiled document (manuscript, appendices, instruments, schema comment), with content, claims and numbers unchanged and verified per file against git HEAD (numbers, section refs, links, code spans and headings all preserved by an automated check). The §3.5.5 display math (`$$…$$`) renders as native Word equations (13 `<m:oMath>` elements, no raw TeX leaking as literal text). Rebuild again after any manuscript edit before circulating.
 
 ## Evaluation data
 
@@ -44,6 +44,8 @@ The quantitative evaluation uses **only the real, publicly-sourced** brand datas
 Related but separate: `apps/api/app/evals/` is the platform's own committed LLM evaluation (100-case bilingual golden set + `published_metrics.json`; the `history.jsonl` run ledger stays local, excluded by `evals/.gitignore`) — reported in the manuscript as convergent evidence (§5A.7), never merged into the §5A tables (different gold standards).
 
 ## Author TODOs (pre-submission)
+
+The full list of items that need the author after the 5 September 2026 revision is in `review-2026-09-05-checklist.md`; the items below are the pre-existing list.
 
 - [x] ~~Rebuild `build/thesis.docx`~~ — done 7 Aug 2026; all diagram renders verified current against their `.mmd` sources
 - [x] ~~Rebuild `defense/defense_deck.pptx`~~ — rebuilt 7 Aug 2026, 20 slides (`node defense/make_deck.js`)

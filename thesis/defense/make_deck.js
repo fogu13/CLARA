@@ -81,7 +81,7 @@ s.addText("A design science study of a governed platform that turns customer fee
 s.addText("Elvis Shehi  ·  MSc Responsible Artificial Intelligence  ·  OPIT  ·  Supervisor: Prof. Zorina Alliata",
   { fontFace: "Calibri", color: ICE, x: 0.9, y: 6.35, w: 11.5, h: 0.35, fontSize: 14.5 });
 s.addText("Progress review, 22 August 2026", { fontFace: "Calibri", color: ACCENT, x: 0.9, y: 6.74, w: 11.5, h: 0.35, fontSize: 14.5, bold: true });
-s.addNotes("40 seconds. Thanks for the time. Frame it in one line: organisations collect more feedback than ever and fewer than a third close the loop, and this thesis builds and evaluates a platform where the loop is governed and measured and where what worked is kept. Then say straight away that today is a progress review and that the second slide is the whole meeting, so she can steer from there.");
+s.addNotes("40 seconds. Thanks for the time. Frame it in one line: organisations collect more feedback than ever and rarely verify that acting on it resolved anything, and this thesis builds and evaluates a platform where the loop is governed and measured and where what worked is kept. Then say straight away that today is a progress review and that the second slide is the whole meeting, so she can steer from there.");
 
 // ---------- 2. Executive summary ----------
 s = slide();
@@ -135,17 +135,17 @@ s.addText("The loop bar. Signals, problems, decisions, actions, outcomes, each o
 s.addText("The decision queue. What is waiting on a human, with the evidence behind it.",
   { ...BODY, x: 6.75, y: 4.68, w: 5.95, h: 0.52, fontSize: 13, color: MUTE });
 card(s, 0.6, 5.25, 12.1, 1.5, "The design argument, one layer up from the thesis",
-  "Every count on this page comes from one shared status function, so the numbers reconcile by construction rather than by discipline. That is the same commitment the thesis makes about closure: an outcome contract is a foreign key at creation, not a status flag someone remembers to set. The manuscript figures still show the 16 July build, since this redesign landed on 13 August.", { size: 13.5 });
-s.addNotes("45 seconds. This is the first time the deck shows the artifact rather than a diagram of it, and the loop bar renders the thesis's five stages as software you can click. If she asks to see it live I can, but flag first that the figures in Chapter 4 are the July build.");
+  "Every count on this page comes from one shared status function, so the numbers reconcile by construction rather than by discipline. That is the same commitment the thesis makes about closure: an outcome contract is a foreign key at creation, not a status flag someone remembers to set. The Chapter 4 diagrams were re-rendered in September from the deployed build; the screenshots are from the 16 July build, before this redesign landed on 13 August.", { size: 13.5 });
+s.addNotes("45 seconds. This is the first time the deck shows the artifact rather than a diagram of it, and the loop bar renders the thesis's five stages as software you can click. If she asks to see it live I can, but flag first that the Chapter 4 screenshots are the July build.");
 
 // ---------- 6. Governance ----------
 s = slide();
 title(s, "Responsible AI as a property of the loop", "The loop itself is the control surface, so governance is not a separate module");
 const gov = [
-  ["Human approval, Article 14 and past it", "A rule with auto_execute false makes the graph interrupt and wait. The interrupt is the gate, so no code path reaches an external effect without it. Designed past the Article requirement, because awareness alone does not de-bias an overseer (Laux and Ruschemeier, 2025; Siebert et al., 2023)."],
+  ["Human approval, Article 14 and past it", "Every consequential action is a draft until a person approves it: the graph's approval node is a LangGraph interrupt, and no code path reaches an external effect without a recorded approval. Authority is graduated by consequence class, from draft to single approval to four-eyes. Designed past the Article requirement, because awareness alone does not de-bias an overseer (Laux and Ruschemeier, 2025; Siebert et al., 2023)."],
   ["Audit trail, Article 12", "Every action records the rule, the parameters, the executor and the result. The evidence pack is hashed at decision time, so evidence that changed afterwards is provable rather than arguable. Four-eyes approval is available for consequential actions."],
   ["Transparency, Article 50", "AI output carries its provenance, and human editorial review is the exemption mechanism, which makes the approval gate itself the compliance artefact. The 2026 Digital Omnibus moved the Annex III high-risk duties to December 2027 and left Article 50 on its August 2026 schedule."],
-  ["Sovereignty and GDPR", "The model layer is provider agnostic, so it runs hosted, behind an EU gateway, or self-hosted. PII masking, retention limits and workspace isolation enforced in Postgres below the application. Sentiment on text is not emotion recognition under Article 3(39), which is biometric."],
+  ["Sovereignty and GDPR", "The model layer is provider agnostic, so it runs hosted, behind an EU gateway, or self-hosted. Direct identifiers are redacted before any text reaches a model; retention limits and workspace isolation are enforced in Postgres below the application. Sentiment on text is not emotion recognition under Article 3(39), which is biometric."],
 ];
 gov.forEach((g, i) => card(s, 0.6 + (i % 2) * 6.15, 1.55 + Math.floor(i / 2) * 2.28, 5.95, 2.08, g[0], g[1], { size: 13 }));
 s.addText("Closure has three levels. The ticket is done, the reporter is told, the metric moved. Closed means the third.",
@@ -351,7 +351,7 @@ s.addNotes("Do not present these. They exist so that any question has a slide be
 // B1. The problem
 s = slide();
 title(s, "Feedback is collected, and then it stops", "Three failures the design has to answer");
-card(s, 0.6, 1.55, 3.93, 2.2, "Fewer than 30% close the loop", "Silos, unclear ownership and no workflow from feedback to the responsible team (Bone et al., 2017). Forrester found in 2025 that only 27% of CX teams communicate insights in time to act.");
+card(s, 0.6, 1.55, 3.93, 2.2, "Closing the loop is the weak link", "Forrester's 2025 feedback-management series finds close-the-loop practice promising but ineffective, and the communication of feedback too slow to drive action (Forrester, 2025). Bone et al. (2017) show that how feedback is solicited changes what customers then spend, so collection is not neutral either.");
 card(s, 4.68, 1.55, 3.93, 2.2, "Acting can make it worse", "A field experiment with about 1.5 million Uber customers. Apologies alone did not restore spending, and repeated apologies reduced it (Halperin et al., 2022). Action taken is not the same as problem solved.");
 card(s, 8.76, 1.55, 3.94, 2.2, "What is learned is forgotten", "Organisational memory depreciates (Argote, 2013; Walsh and Ungson, 1991). Teams relearn the same lessons because nothing keeps which remedy worked, or how long ago.");
 sub(s, "The four deficiencies the artifact targets", 0.6, 3.95, 12.1);
@@ -363,7 +363,7 @@ bullets(s, [
 ], { x: 0.8, y: 4.35, w: 6.0, h: 2.35 });
 panel(s, 6.95, 4.35, 5.75, 2.2, "The claim",
   "Closing the loop is a workflow and governance problem rather than an analytics problem. The two missing primitives are a measured outcome contract and a memory that expires.", { size: 15.5 });
-s.addNotes("45 seconds if summoned. Anchor on Bone for the gap and on the Uber experiment for why acting without measuring is not enough. The fragmentation line is about the buyer's world, not about what CLARA connects to.");
+s.addNotes("45 seconds if summoned. Anchor on the Forrester series for the gap, on Bone for why solicitation itself has effects, and on the Uber experiment for why acting without measuring is not enough. The fragmentation line is about the buyer's world, not about what CLARA connects to.");
 
 // B2. Evaluation design
 s = slide();
@@ -378,11 +378,11 @@ s.addNotes("60 seconds if summoned. The honesty features are the point: real dat
 // B3. System architecture
 s = slide();
 title(s, "Inside the build", "Next.js on Vercel, FastAPI and LangGraph in Docker on a Hetzner EU VPS behind Caddy, Supabase Postgres");
-card(s, 0.6, 1.55, 5.95, 2.1, "The runtime", "One typed LangGraph: enrich, synthesise, evaluate rules, interrupt for human approval, execute, measure, learn. The interrupt is the Article 14 gate, and there is no code path to an external effect that goes around it. About 84 REST endpoints across seven domain routers.");
+card(s, 0.6, 1.55, 5.95, 2.1, "The runtime", "One typed LangGraph: enrich, synthesise, evaluate rules, interrupt for human approval, execute, measure, learn. The interrupt is the Article 14 gate, and there is no code path to an external effect that goes around it. About 89 REST endpoints across seven domain routers.");
 card(s, 6.75, 1.55, 5.95, 2.1, "Deployment", "API in Docker on a Hetzner EU VPS behind Caddy. Frontend on Vercel. Supabase Postgres with pgvector and row-level tenant isolation. A live smoke test runs against production every 30 minutes and opens an issue after two consecutive failures.");
 card(s, 0.6, 3.85, 5.95, 2.1, "Model layer and observability", "A provider-agnostic layer speaking the OpenAI protocol, so the model can be hosted, behind an EU gateway, or self-hosted. Langfuse tracing on the model stages. Severity scoring stays in deterministic code.");
 card(s, 6.75, 3.85, 5.95, 2.1, "Connectors, stated precisely", "Five official API pull sources: Zendesk, Trustpilot, Apple App Store, Google Play, Google Business Profile. Two execution targets: Jira and Slack. Zendesk is ingest only. Everything else returns a draft.");
-s.addText("The rendered architecture figure still prints an older endpoint count and is queued for a re-render. The numbers above are the verified ones.",
+s.addText("Diagrams re-rendered from the September sources, which draw the deployed graph and tables. The numbers above are the verified ones.",
   { ...BODY, x: 0.6, y: 6.15, w: 12.1, h: 0.5, fontSize: 13, color: MUTE });
 s.addNotes("90 seconds if summoned. She is an architecture director, so this is the strongest reserve slide. The claim to make is that the approval step is a graph interrupt rather than a UI convention, and the provider-agnostic model layer is what makes EU sovereignty a configuration question instead of a rewrite.");
 
@@ -408,7 +408,7 @@ s.addNotes("60 seconds if summoned. For an architecture audience the schema is t
 s = slide();
 title(s, "Five design decisions the literature does not resolve", "Each one implemented, and each one stated with its cost");
 const dds = [
-  ["1. Rule conflict resolution", "Priority, then specificity, then action-type deduplication, with superseded rules logged. Cost: configuration debt. It entrenches a wrong rule as faithfully as a right one."],
+  ["1. Authority graduated by consequence class", "Every action is a draft; a person approves it, and consequential actions can require two. The first design cycle resolved rule conflicts by priority, specificity and de-duplication; the deployed build keeps rules as configuration and puts the decision with the reviewer. Cost: throughput is bounded by reviewer attention."],
   ["2. Confidence decay in learnings", "Memory as perishable: base times 0.5 to the power of age over half-life. MemoryBank decays chat memory; this decays action and outcome evidence. Cost: the half-life is a guess."],
   ["3. Cross-signal severity", "Severity comes from the corroborating set, using urgency, volume and sentiment, rather than from the loudest single voice. Cost: it can bury the rare catastrophic single signal, so it needs an override."],
   ["4. Past-learnings retrieval", "Decayed-confidence retrieval into new decisions, in the case-based reasoning lineage. Only human-validated conclusions are retrieval-eligible, so an unvalidated causal claim cannot launder itself into the next recommendation. Cost: retrieval quality gates usefulness."],

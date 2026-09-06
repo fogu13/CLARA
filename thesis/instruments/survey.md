@@ -43,7 +43,7 @@ That's **3 screeners + 1 matrix (7 rows) + 2 quick + 1 open + 1 opt-in**.
 
 ## B. Hypothesis → confirmation logic
 
-Score Likert as **top-2-box agreement** (Agree + Strongly agree). Rule of thumb: **≥60% = supported**, **40–59% = mixed/refine**, **<40% = not supported**. Report n, %, and median for every item.
+Score Likert as **top-2-box agreement** (Agree + Strongly agree). Support levels are descriptive, pre-registered in `evaluation/survey_analysis.py` before any data: **≥60% = supported**, **40–59% = mixed/refine**, **<40% = not supported**, and **no verdict below n = 10**. For H2 and H8 the corroborating item must hold as well (below); a Likert bar that is met without its corroboration is reported as mixed/refine. Report n, %, a 95% Wilson interval and the median for every item; a verdict whose interval straddles its threshold is marked fragile.
 
 | Hyp. | Evidence in survey | "Confirmed" when |
 |------|--------------------|------------------|
@@ -90,7 +90,7 @@ Use **Tally.so** (free, clean on mobile, anonymous by default) or **Google Forms
 ## D. Collection & analysis
 
 1. Responses auto-collect in Tally / the linked Google Sheet. Aim for **n ≈ 40–80** (a survey complements, not replaces, the interviews).
-2. Export **CSV**. Run `evaluation/survey_analysis.py` (template) → per-hypothesis top-2-box %, medians, and a confirmed/mixed/not-supported verdict, written to `evaluation/results/survey_*.csv`.
+2. Export **CSV**. Run `evaluation/survey_analysis.py` → per-hypothesis top-2-box % with Wilson intervals and a supported / mixed-refine / not-supported / insufficient-n verdict, written to `evaluation/results/survey_verdicts.csv`.
 3. Paste the verdicts into §5B and Appendix D; quote a few Q4 free-text lines (anonymised) as inductive themes.
 
 **Ethics fit:** anonymous, voluntary, consented, no special-category data, GDPR lawful basis = consent (matches Appendix C). Q5 (optional email) is the only identifier and is used solely to invite interviews; store it separately from survey answers and delete after recruitment.

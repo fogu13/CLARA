@@ -68,7 +68,12 @@ def detectability_note(
     )
 
 
-def evidence_grade(*, comparison_method: str, measurement_source: str | None) -> str:
+def evidence_grade(
+    *,
+    comparison_method: str,
+    measurement_source: str | None,
+    realised_method: str | None = None,
+) -> str:
     """A–E design grade for an outcome readout (external-review evidence scale).
 
     A  randomized holdout / control group, instrumented measurement
@@ -78,8 +83,13 @@ def evidence_grade(*, comparison_method: str, measurement_source: str | None) ->
     D  uncontrolled before/after, instrumented
     E  manual assertion or nothing measured yet (descriptive only)
 
-    Grades the *design*, from fields available on every snapshot — the same
-    inputs on the board and the problem detail, so grades never disagree.
+    Grades the design from fields available on every snapshot. The board
+    grades the contracted design; the problem detail, which runs the ITS,
+    also passes the fit it actually obtained (``realised_method``): when the
+    contract promised an ITS but the series was too sparse and the engine
+    fell back to a labelled plain delta, the readout IS an uncontrolled
+    before/after and is graded D, not C — the grade follows the evidence
+    that exists, not the evidence that was planned.
     """
     if measurement_source is None or measurement_source == "manual":
         return "E"
@@ -87,6 +97,8 @@ def evidence_grade(*, comparison_method: str, measurement_source: str | None) ->
     if "holdout" in method or "control" in method:
         return "A"
     if "its" in method:
+        if realised_method is not None and realised_method != "its":
+            return "D"
         return "C"
     return "D"
 

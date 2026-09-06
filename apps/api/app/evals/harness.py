@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import random
 import re
 from dataclasses import dataclass, field
@@ -263,6 +264,24 @@ def bootstrap_ci(
     lo_i = int((1 - ci) / 2 * n_resamples)
     hi_i = min(n_resamples - 1, int((1 + ci) / 2 * n_resamples))
     return (means[lo_i], means[hi_i])
+
+
+def wilson_interval(successes: int, n: int, *, z: float = 1.959964) -> tuple[float, float]:
+    """Wilson score interval for a proportion (95% two-sided by default).
+
+    The right interval for the 0/1 correctness vectors the eval reports: the
+    percentile bootstrap above collapses to a degenerate [1.0, 1.0] on a
+    perfect stratum and under-covers below ~30 items, which is exactly the
+    size of the per-language and held-out strata. Never leaves [0, 1].
+    """
+    if n <= 0:
+        return (0.0, 0.0)
+    p = successes / n
+    z2 = z * z
+    denom = 1.0 + z2 / n
+    centre = (p + z2 / (2 * n)) / denom
+    half = z * math.sqrt(p * (1 - p) / n + z2 / (4 * n * n)) / denom
+    return (round(max(0.0, centre - half), 4), round(min(1.0, centre + half), 4))
 
 
 def adjusted_rand_index(labels_a: list[int], labels_b: list[int]) -> float:

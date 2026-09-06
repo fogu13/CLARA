@@ -1,0 +1,19 @@
+{
+  "written_at": "2026-09-05T23:11:02.838032+00:00",
+  "model": "mistral-small-2603",
+  "exemplars": true,
+  "batch_size": 25,
+  "n_signals": 188,
+  "n_scored": 188,
+  "n_missing": 0,
+  "elapsed_s": 105.8,
+  "sentiment_rule": "primary: mixed -> neutral (pre-registered); sensitivity: drop mixed",
+  "risk_rule": "production urgency scored as risk, unchanged",
+  "raw_sentiment_counts": {
+    "positive": 40,
+    "neutral": 11,
+    "negative": 125,
+    "mixed": 12,
+    "null": 0
+  }
+}
