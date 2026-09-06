@@ -100,7 +100,7 @@ title(s, "Research questions and method", "Design science research, so the artif
 const rqs = [
   ["RQ1. Core", "How can an artifact make actions governed, executed and verified to have closed, and turn what worked into learning that is reused?"],
   ["RQ2. Governance", "What design lets automated action meet the EU AI Act and GDPR without slowing practitioners more than the risk warrants?"],
-  ["RQ3a. Accuracy", "How accurately does AI enrichment and routing reproduce human labels on real feedback, across sectors? Answered: three predictors on one gold standard."],
+  ["RQ3a. Accuracy", "How accurately does AI enrichment and routing reproduce reference labels (star ratings, assistant-drafted seeds) on real feedback, across sectors? Answered: three predictors on one gold standard."],
   ["RQ3b. Equity", "Is triage reliability equal across language strata, defined here by the source review's language? Answered, and tightly bounded."],
 ];
 rqs.forEach((r, i) => card(s, 0.6 + (i % 2) * 6.15, 1.55 + Math.floor(i / 2) * 1.42, 5.95, 1.28, r[0], r[1], { size: 13 }));
