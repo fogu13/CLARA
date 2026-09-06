@@ -5,6 +5,8 @@ product uses. Requires an OpenAI-compatible endpoint via env (as in CLARA's .env
     AI_BASE_URL, AI_API_KEY, AI_MODEL
 Writes evaluation/results/predictions_llm.json, which run_eval.py then scores beside the
 baseline. No key -> prints how to set one and exits cleanly (the baseline still runs).
+THESIS_RESULTS_DIR redirects the output folder (repeat runs must not overwrite the
+reported 4 August file); AI_TIMEOUT_S overrides the 60 s per-call read timeout.
 
 The corpus is public, paraphrased and de-identified, so sending it to a model endpoint
 raises no personal-data concern; cost is ~190 short calls.
@@ -18,7 +20,8 @@ import urllib.request
 
 from load_datasets import load
 
-RESULTS = os.path.join(os.path.dirname(__file__), "results")
+RESULTS = os.environ.get("THESIS_RESULTS_DIR") or os.path.join(os.path.dirname(__file__), "results")
+TIMEOUT_S = float(os.environ.get("AI_TIMEOUT_S") or 60)
 
 SYSTEM = (
     "You triage customer feedback for a feedback-to-action platform. "
@@ -64,7 +67,7 @@ def _call(base, key, model, text, system=SYSTEM, prefix=""):
             "User-Agent": "clara-thesis-eval/1.0",
         },
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
         data = json.load(resp)
     return json.loads(data["choices"][0]["message"]["content"])
 
@@ -117,7 +120,7 @@ def main():
     os.makedirs(RESULTS, exist_ok=True)
     with open(os.path.join(RESULTS, outfile), "w") as fh:
         json.dump(out, fh, indent=2)
-    print(f"wrote {len(out)}/{len(sigs)} LLM predictions -> results/{outfile}")
+    print(f"wrote {len(out)}/{len(sigs)} LLM predictions -> {os.path.join(RESULTS, outfile)}")
 
 
 if __name__ == "__main__":
