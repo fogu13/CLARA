@@ -151,7 +151,7 @@ Hardt, M., Price, E., & Srebro, N. (2016). Equality of opportunity in supervised
 Harel, D. (1987). Statecharts. *Science of Computer Programming*, 8(3), 231–274.
 
 
-Hatalis, K., Christou, D., & Kondapalli, V. (2025). *Review of case-based reasoning for LLM agents: Theoretical foundations, architectural components, and cognitive integration*. arXiv:2504.06943. ‹verify authors and title against the arXiv record›
+Hatalis, K., Christou, D., & Kondapalli, V. (2025). *Review of case-based reasoning for LLM agents: Theoretical foundations, architectural components, and cognitive integration*. arXiv:2504.06943. https://doi.org/10.48550/arXiv.2504.06943
 
 
 Hevner, A. R. (2007). A three-cycle view of design science research. *Scandinavian Journal of Information Systems, 19*(2), 87–92.
@@ -202,7 +202,7 @@ Lepenioti, K., Bousdekis, A., Apostolou, D., & Mentzas, G. (2020). Prescriptive 
 
 Li, D., Jiang, B., Huang, L., Beigi, A., Zhao, C., Tan, Z., ... & Liu, H. (2024). *From generation to judgment: Opportunities and challenges of LLM-as-a-judge*. arXiv:2411.16594.
 
-Li, X. (2025). A review of prominent paradigms for LLM-based agents: Tool use (including RAG), planning, and feedback learning. *Proceedings of the 31st International Conference on Computational Linguistics (COLING 2025)*. ‹verify pages›
+Li, X. (2025). A review of prominent paradigms for LLM-based agents: Tool use (including RAG), planning, and feedback learning. In O. Rambow, L. Wanner, M. Apidianaki, H. Al-Khalifa, B. Di Eugenio, & S. Schockaert (Eds.), *Proceedings of the 31st International Conference on Computational Linguistics (COLING 2025)* (pp. 9760–9779). Association for Computational Linguistics. https://aclanthology.org/2025.coling-main.652/
 
 Liu, B. (2012). *Sentiment Analysis and Opinion Mining*. Morgan & Claypool.
 
@@ -358,15 +358,15 @@ Dovetail. (2025, October 8). *AI agents* [Product page]. Retrieved July 12, 2026
 
 Enterpret. (2025, October 27). *Enterpret launches the first agentic customer feedback platform to unify, understand, and act on scattered customer signals* [Press release]. Business Wire. https://www.businesswire.com/news/home/20251027487140/en/
 
-Fazio, ‹initial›. (2025, December 4). *Introducing the new Customer Feedback Management and Analytics Solutions landscape* [Blog post]. Forrester. https://www.forrester.com/blogs/ ‹verify author, title and URL›
+Fazio, C., & Evelson, B. (2025, December 4). *Introducing the new customer feedback management and analytics solutions market category* [Blog post]. Forrester. https://www.forrester.com/blogs/introducing-the-new-customer-feedback-management-and-analytics-solutions-market/
+
+Fazio, C., & Evelson, B. (2026, April 2). *The new kids on the feedback block: Announcing the customer feedback management and analytics solutions landscape* [Blog post]. Forrester. https://www.forrester.com/blogs/the-new-kids-on-the-feedback-block-announcing-the-customer-feedback-management-and-analytics-landscape/
+
+Fazio, C., Schmidt, M., Castro, T., & Walsh, C. (2025). *Close-the-loop practices show promise, but could be more effective: Insights from Forrester's 2025 State of Feedback Management (VoC) and CX Measurement Practices Survey* (Report No. RES185117). Forrester Research. https://www.forrester.com/report/close-the-loop-practices-show-promise-but-could-be-more-effective/RES185117
 
 Forrester. (2025a). *Forrester's 2025 Global Customer Experience Index rankings: 21% of brands declined, 6% improved, and 73% remained unchanged* [Press release]. https://www.forrester.com/press-newsroom/forrester-global-customer-experience-index-2025-rankings/
 
 Forrester. (2025b). *Six gaps hold feedback management and CX measurement programs back: Forrester's 2025 VoC and CX measurement survey results*. https://www.forrester.com/blogs/feedback-and-cx-measurement-programs-must-boost-their-impact-according-to-forresters-2025-survey/
-
-Forrester. (2025c). *Close-the-loop practices show promise, but could be more effective* (Report RES185117; part of *The State of Feedback Management (VoC) and CX Measurement, 2025* data overview). Forrester Research. ‹verify the report title and number against forrester.com before submission›
-
-Forrester. (2026). *New kids on the block: Forrester's Customer Feedback Management and Analytics Solutions Landscape, Q1 2026* [Blog post]. Forrester. ‹verify the exact title and URL; the December 2025 announcement of the category is filed under Fazio (2025)›
 
 Gartner. (2025, June 25). *Gartner predicts over 40% of agentic AI projects will be canceled by end of 2027* [Press release]. https://www.gartner.com/en/newsroom/press-releases/2025-06-25-gartner-predicts-over-40-percent-of-agentic-ai-projects-will-be-canceled
 
@@ -374,17 +374,15 @@ Gartner. (2026). *Magic Quadrant for Voice of the Customer platforms*. Gartner, 
 
 Gibson Dunn. (2026). *EU AI Act Omnibus agreement – Postponed high-risk deadlines and other key changes*. https://www.gibsondunn.com/eu-ai-act-omnibus-agreement-postponed-high-risk-deadlines-and-other-key-changes/
 
-*Human–agent collaboration and interaction systems: A survey.* (2025). arXiv:2505.00753. ‹verify authorship; an anonymous survey entry is not citable as it stands›
-
 Latham & Watkins. (2026). *AI Act update: EU resolves to change rules and extend deadlines*. https://www.lw.com/en/insights/ai-act-update-eu-resolves-to-change-rules-and-extend-deadlines
 
 Medallia. (2025, August 21). *Is your closed-loop feedback program falling flat? Try this framework*. Medallia Blog. https://www.medallia.com/blog/closed-loop-feedback-program-try-this-framework/
 
 Medallia. (2026, January 21). *Medallia and Ada announce strategic partnership* [Press release]. https://www.medallia.com/press-release/medallia-and-ada-announce-strategic-partnership/
 
-QKS Group. (2025). *Voice of Customer (VoC) market: Riding a high-growth wave through 2030 at CAGR 16.66%* [Press release]. GlobeNewswire. https://www.globenewswire.com/news-release/2025/04/15/3061798/0/en/
+Mitchell, T., & Quaadgras, T. (2025). *The state of customer experience management, 2025: Practitioner research report*. Qualtrics XM Institute. https://www.qualtrics.com/research/state-CX-management-2025/
 
-Qualtrics XM Institute. (2025). *The State of Customer Experience Management, 2025*. Qualtrics XM Institute. ‹verify exact title and URL›
+QKS Group. (2025). *Voice of Customer (VoC) market: Riding a high-growth wave through 2030 at CAGR 16.66%* [Press release]. GlobeNewswire. https://www.globenewswire.com/news-release/2025/04/15/3061798/0/en/
 
 Qualtrics. (2026a). *Qualtrics named a Leader in the 2026 Gartner Magic Quadrant for Voice of the Customer Platforms* [Press release]. PR Newswire. https://www.prnewswire.com/news-releases/qualtrics-named-a-leader-in-2026-gartner-magic-quadrant-for-voice-of-the-customer-platforms-302712691.html
 
@@ -392,10 +390,12 @@ Qualtrics. (2026b, May 18). *Qualtrics acquires healthcare experience leader Pre
 
 Zendesk. (2026). *CX Trends 2026*. Zendesk. https://cxtrends.zendesk.com/
 
+Zou, H. P., Huang, W.-C., Wu, Y., Chen, Y., Miao, C., Nguyen, H., Zhou, Y., Zhang, W., Fang, L., He, L., Li, Y., Li, D., Jiang, R., Liu, X., & Yu, P. S. (2025). *LLM-based human-agent collaboration and interaction systems: A survey* (arXiv:2505.00753v4). arXiv. https://arxiv.org/abs/2505.00753v4
+
 ## Legislation
 
 European Parliament and Council of the European Union. (2016). Regulation (EU) 2016/679 of 27 April 2016 on the protection of natural persons with regard to the processing of personal data and on the free movement of such data (General Data Protection Regulation). *Official Journal of the European Union*, L 119, 1–88. http://data.europa.eu/eli/reg/2016/679/oj
 
 European Parliament and Council of the European Union. (2024). Regulation (EU) 2024/1689 of 13 June 2024 laying down harmonised rules on artificial intelligence (Artificial Intelligence Act). *Official Journal of the European Union*, L, 2024/1689, 12 July 2024. http://data.europa.eu/eli/reg/2024/1689/oj
 
-European Parliament and Council of the European Union. (2026). Regulation (EU) 2026/1744 amending Regulation (EU) 2024/1689 as regards the timing of certain obligations and the simplification of certain requirements (Digital Omnibus on AI). *Official Journal of the European Union*, 24 July 2026. ‹verify the full title, OJ issue and ELI against the Official Journal; the proxy blocked eur-lex during the review›
+European Parliament and Council of the European Union. (2026). Regulation (EU) 2026/1744 of 8 July 2026 amending Regulations (EU) 2024/1689, (EU) 2018/1139 and (EU) 2023/1230 as regards the simplification of the implementation of harmonised rules on artificial intelligence (Digital Omnibus on AI). *Official Journal of the European Union*, L, 2026/1744, 24 July 2026. https://eur-lex.europa.eu/eli/reg/2026/1744/oj/eng
