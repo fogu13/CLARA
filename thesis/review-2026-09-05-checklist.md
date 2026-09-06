@@ -221,6 +221,8 @@ Run this on the machine that holds the earlier run ledger (`app/evals/history.js
 
 ### Step 5. The κ double-labelling sample (one afternoon, two people)
 
+**Done 6 September 2026:** κ = 0.554 unweighted (bootstrap 95% 0.38–0.72), 0.696 linear-weighted (0.56–0.81), exact agreement 27/40, escalate agreement 38/40; seven of ten seed-critical items rated high. Written into §3.7, §5A.4.2, §6.4 item 1 and Appendix D. Open: who the rater was (person or model) decides the "human check" wording; re-run `kappa_sample.py score` once so `kappa_risk.json` carries the bootstrap intervals the manuscript quotes.
+
 ```bash
 cd thesis/evaluation
 python kappa_sample.py draw               # results/kappa_sample.csv: 40 risk-labelled signals, seed labels withheld

@@ -10,7 +10,8 @@ Step 2 (score):
     python kappa_sample.py score results/kappa_sample.csv
     -> Cohen's kappa (unweighted and linear-weighted) between the blind labels
        and risk_seed, the 4x4 confusion table, and the binary escalate agreement,
-       written to results/kappa_risk.json and printed (a rating file named
+       with percentile-bootstrap 95% intervals, written to results/kappa_risk.json
+       and printed (a rating file named
        kappa_sample_<tag>.csv writes kappa_risk_<tag>.json instead). The rubric the
        labeller works from is results/kappa_labelling_instructions.md.
 
@@ -72,7 +73,22 @@ def score(path: str) -> None:
             g: dict(zip(RISK, map(int, row)))
             for g, row in zip(RISK, confusion_matrix(a, b, labels=RISK))
         },
+        "within_one_level": sum(abs(RISK.index(g) - RISK.index(x)) <= 1 for g, x in pairs),
     }
+    # Percentile-bootstrap 95% intervals on the pairs (fixed seed, 4000 resamples):
+    # at n = 40 the point estimate alone overstates what the sample can carry.
+    rng = random.Random(SEED)
+    boot_u, boot_w = [], []
+    for _ in range(4000):
+        idx = [rng.randrange(len(pairs)) for _ in pairs]
+        aa = [a[i] for i in idx]
+        bb = [b[i] for i in idx]
+        boot_u.append(cohen_kappa_score(aa, bb, labels=RISK))
+        boot_w.append(cohen_kappa_score(aa, bb, labels=RISK, weights="linear"))
+    boot_u.sort()
+    boot_w.sort()
+    out["kappa_unweighted_ci95"] = [round(boot_u[100], 4), round(boot_u[3899], 4)]
+    out["kappa_linear_weighted_ci95"] = [round(boot_w[100], 4), round(boot_w[3899], 4)]
     os.makedirs(RESULTS, exist_ok=True)
     # Output name follows the input name, so a second rating file (for example
     # kappa_sample_llm.csv, a model rating reported as cross-model agreement)
