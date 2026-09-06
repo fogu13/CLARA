@@ -141,7 +141,7 @@ New keys in `summary.json`: `sentiment_llm_production` (accuracy with Wilson int
 
 **Why.** §5A.6 and §5A.4.2 say that each LLM run was executed once at temperature 0, so run-to-run variation on this corpus is uncharacterised. Two claims depend on it: the generic prompt's paired lead over the learned model (p = 0.029, one item from 0.052) and the production stage's figures, which are the deployed pipeline's. Three fresh repeats of each give the range of accuracy, the range of (b, c, p) against the learned model, and the label agreement between repeats. Repeats go to their own folders; the reported files (`results/predictions_llm.json` of 4 August, `results/predictions_llm_production.json` and `results_mistral-small-2603/predictions_llm_production.json` of 5 September) stay the quoted runs and are never overwritten (`predict_llm.py` now honours `THESIS_RESULTS_DIR` for exactly this reason).
 
-**Part A: the production stage on the production default, three repeats (about 2 minutes each).**
+**Part A: the production stage on the production default, three repeats (about 2 minutes each). Done 6 September 2026:** four runs agree on 99.3–100% of sentiment labels and 97.2–100% of urgency labels; accuracy 0.843–0.850 and 0.585–0.604; p against the learned model 0.087–0.122 (sentiment) and 0.17–0.30 (risk); written into §5A.4.2, §5A.6, §6.4 item 2 and Appendix D.
 
 ```bash
 cd /tank/projects/CLARA && source .venv/bin/activate && git pull
