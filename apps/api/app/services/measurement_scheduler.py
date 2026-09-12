@@ -1,7 +1,11 @@
 """Scheduled outcome re-measurement; closes the loop without a human remembering.
 
-When an action is approved, measurement checkpoints are scheduled at T+7 days
-and T+measurement_window_days. When a checkpoint comes due:
+Measurement checkpoints are scheduled at T+7 days, T+measurement_window_days
+and a keep-listening follow-up. T is the plan's *origin*: ``dispatch`` when the
+approved action really left CLARA (dispatched_at), ``implementation`` when a
+human recorded that the fix landed (implemented_at), and ``approval`` only when
+the draft itself is the deliverable (no connector for the destination). A
+failed push starts no clock. When a checkpoint comes due:
 
   - Contracts whose primary_metric is signal-derived (``signal_rate_per_day:
     {journey}/{journey_stage}`` — the auto-captured contract on promoted
@@ -43,6 +47,14 @@ THEME_JOURNEY = "theme"
 # closes, so a theme that comes back after a premature "target met" is caught.
 FOLLOWUP_GAP_DAYS = 30
 LOOP_CHECKPOINT_KINDS = frozenset({"window", "followup"})
+# Where a plan's clock starts (see module docstring). ``approval`` is the
+# legacy default for rows that predate the origin column.
+PLAN_ORIGINS = frozenset({"approval", "dispatch", "implementation"})
+DEFAULT_PLAN_ORIGIN = "approval"
+# Precedence between clocks: a later, more real origin replaces the plans of a
+# lower one (a real push moves the clock off the approval; an implementation
+# record moves it off both).
+ORIGIN_RANK = {"approval": 0, "dispatch": 1, "implementation": 2}
 
 
 def _parse_ts(value: str) -> datetime:
@@ -138,11 +150,26 @@ class SQLiteMeasurementPlanStore:
                 kind TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'pending',
                 note TEXT,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                origin TEXT NOT NULL DEFAULT 'approval',
+                contract_revision INTEGER
             )
             """
         )
+        # Databases created before the origin/revision columns existed.
+        self._ensure_column("origin", "TEXT NOT NULL DEFAULT 'approval'")
+        self._ensure_column("contract_revision", "INTEGER")
         self._connection.commit()
+
+    def _ensure_column(self, column: str, definition: str) -> None:
+        columns = {
+            row["name"]
+            for row in self._connection.execute("PRAGMA table_info(measurement_plans)").fetchall()
+        }
+        if column not in columns:
+            self._connection.execute(
+                f"ALTER TABLE measurement_plans ADD COLUMN {column} {definition}"
+            )
 
     def schedule(
         self,
@@ -152,6 +179,8 @@ class SQLiteMeasurementPlanStore:
         executed_at: str,
         due_at: str,
         kind: str,
+        origin: str = DEFAULT_PLAN_ORIGIN,
+        contract_revision: int | None = None,
     ) -> bool:
         """Insert one checkpoint; False when an equivalent pending plan exists.
 
@@ -167,12 +196,43 @@ class SQLiteMeasurementPlanStore:
             return False
         self._connection.execute(
             "INSERT INTO measurement_plans"
-            " (problem_id, execution_id, executed_at, due_at, kind, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
-            (problem_id, execution_id, executed_at, due_at, kind, utc_now()),
+            " (problem_id, execution_id, executed_at, due_at, kind, created_at,"
+            "  origin, contract_revision)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                problem_id,
+                execution_id,
+                executed_at,
+                due_at,
+                kind,
+                utc_now(),
+                origin,
+                contract_revision,
+            ),
         )
         self._connection.commit()
         return True
+
+    def supersede_pending(
+        self, problem_id: str, *, note: str, origins: set[str] | None = None
+    ) -> int:
+        """Mark a problem's LIVE plans (pending or manual_required — the ones
+        holding a checkpoint slot) as superseded, optionally only those whose
+        clock runs from one of ``origins``. Returns rows changed."""
+        sql = (
+            "UPDATE measurement_plans SET status = 'superseded', note = ?"
+            " WHERE problem_id = ? AND status IN ('pending', 'manual_required')"
+        )
+        params: list[Any] = [note, problem_id]
+        if origins is not None:
+            wanted = sorted(origins)
+            if not wanted:
+                return 0
+            sql += f" AND origin IN ({', '.join('?' for _ in wanted)})"
+            params.extend(wanted)
+        cursor = self._connection.execute(sql, params)
+        self._connection.commit()
+        return cursor.rowcount
 
     def list_plans(self) -> list[dict[str, Any]]:
         rows = self._connection.execute(
@@ -202,8 +262,31 @@ def schedule_measurements(
     problem: ProblemRecord,
     execution_id: str,
     executed_at: str,
+    origin: str,
+    contract_revision: int | None = None,
 ) -> list[str]:
-    """Schedule the T+7 and T+window checkpoints for an approved action."""
+    """Schedule the T+7, T+window and follow-up checkpoints for an action.
+
+    ``origin`` names what ``executed_at`` is: the dispatch instant of a real
+    push, the human-recorded implementation instant, or — only when the draft
+    is the deliverable — the approval. ``contract_revision`` records which
+    contract terms the checkpoints were scheduled under (defaults to the
+    problem's current revision).
+    """
+    if origin not in PLAN_ORIGINS:
+        raise ValueError(f"Unknown measurement origin: {origin!r}")
+    if contract_revision is None:
+        contract_revision = problem.outcome_contract.revision
+    # Origin precedence: live plans on a lower-ranked clock give way (a real
+    # push after a draft-only approval moves the clock to the dispatch); a
+    # same-or-higher clock keeps its plans and the insert below dedupes.
+    lower = {name for name, rank in ORIGIN_RANK.items() if rank < ORIGIN_RANK[origin]}
+    if lower:
+        plan_store.supersede_pending(
+            problem.problem_id,
+            note=f"superseded by {origin} clock ({execution_id})",
+            origins=lower,
+        )
     window_days = problem.outcome_contract.measurement_window_days
     executed = _parse_ts(executed_at)
     checkpoints = {"t7": 7}
@@ -222,6 +305,8 @@ def schedule_measurements(
             executed_at=executed_at,
             due_at=due_at,
             kind=kind,
+            origin=origin,
+            contract_revision=contract_revision,
         )
         # Stores return False when the checkpoint already exists (a second approved
         # action on the same problem); only report what was really scheduled so
@@ -231,11 +316,16 @@ def schedule_measurements(
     return scheduled
 
 
-def followup_window_start(executed_at: str, window_days: int) -> str:
-    """The keep-listening read covers the month AFTER the measurement window,
+def followup_window_start(due_at: str, gap_days: int = FOLLOWUP_GAP_DAYS) -> str:
+    """The keep-listening read covers the month BEFORE the follow-up came due —
+    i.e. the month after the measurement window the plan was scheduled with —
     not the cumulative span since execution: averaged over [executed, now] a
-    theme that fully returns in month two would still read as improved."""
-    start = _parse_ts(executed_at) + timedelta(days=window_days)
+    theme that fully returns in month two would still read as improved.
+
+    Derived from the plan's own ``due_at`` (fixed at scheduling as
+    executed + window + gap): a window amended after scheduling must not
+    rewrite what the follow-up reads."""
+    start = _parse_ts(due_at) - timedelta(days=gap_days)
     return start.isoformat().replace("+00:00", "Z")
 
 
@@ -420,12 +510,14 @@ def run_due_measurements(
 
         journey, _, stage = metric.removeprefix(SIGNAL_METRIC_PREFIX).partition("/")
         since = plan["executed_at"]
-        span_note = "since action execution"
+        origin = plan.get("origin") or DEFAULT_PLAN_ORIGIN
+        span_note = f"since {origin} ({str(plan['executed_at'])[:10]})"
         if plan["kind"] == "followup":
-            since = followup_window_start(
-                plan["executed_at"], problem.outcome_contract.measurement_window_days
+            since = followup_window_start(plan["due_at"])
+            span_note = (
+                "in the month after the measurement window closed (keep-listening read;"
+                f" clock from {origin} {str(plan['executed_at'])[:10]})"
             )
-            span_note = "in the month after the measurement window closed (keep-listening read)"
         if _norm_stage(journey) == THEME_JOURNEY:
             pending_enrichment = unenriched_in_window(signals, since=since, until=now)
             if pending_enrichment:
@@ -458,6 +550,18 @@ def run_due_measurements(
                 f"Auto-measured by the scheduler ({plan['kind']}): {sample} matching"
                 f" signals {span_note}. real_data_source=true"
             ),
+            # Bind the observation to the checkpoint that produced it and to
+            # the contract terms it was scored under (mirrored by the plpgsql
+            # tick in migration 016).
+            checkpoint_kind=plan["kind"],
+            plan_id=plan["id"],
+            execution_id=plan.get("execution_id"),
+            contract_revision=problem.outcome_contract.revision,
+            contract_snapshot=problem.outcome_contract,
+            # The clock this reading was taken on, so a later anchor (an
+            # implementation recorded afterwards) cannot relabel it.
+            clock_origin=origin,
+            clock_origin_at=plan["executed_at"],
         )
         try:
             workflow_store.record_outcome(problem=problem, measurement=measurement)

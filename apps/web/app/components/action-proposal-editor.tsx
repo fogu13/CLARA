@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { updateActionProposal } from "../../lib/client-api";
+import { useEffect, useState } from "react";
+import { getWorkflowState, updateActionProposal } from "../../lib/client-api";
+import { useI18n } from "../../lib/i18n";
 import type { ActionProposal, RiskLevel } from "../../lib/types";
 
 type EditorState = {
@@ -18,6 +19,7 @@ export function ActionProposalEditor({
   problemId: string;
   action: ActionProposal;
 }) {
+  const { t } = useI18n();
   const [proposal, setProposal] = useState(action.proposal);
   const [owner, setOwner] = useState(action.owner);
   const [destination, setDestination] = useState(action.destination);
@@ -29,9 +31,39 @@ export function ActionProposalEditor({
     status: "idle",
     message: "Action proposal can be refined before approval."
   });
+  // An approval signs one revision of the action; the API refuses edits while
+  // the latest decision is `approved` (409). Mirror that here so the editor is
+  // not offered at all — the decision panel is where a rejection is recorded.
+  const [approvedLatest, setApprovedLatest] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getWorkflowState(problemId)
+      .then((workflow) => {
+        if (cancelled) return;
+        const latest = workflow.approvals
+          .filter((approval) => approval.action_id === action.action_id)
+          .slice(-1)[0];
+        setApprovedLatest(latest?.decision === "approved");
+      })
+      .catch(() => {
+        // Unknown state: leave the editor available; the API still enforces the lock.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [problemId, action.action_id]);
 
   if (!problemId.startsWith("PRB-DRAFT-")) {
     return null;
+  }
+
+  if (approvedLatest) {
+    return (
+      <p className="action-editor-message action-editor-idle" aria-label={`Edit ${action.action_id}`}>
+        {t.detail.actionEditorLocked}
+      </p>
+    );
   }
 
   async function saveAction() {

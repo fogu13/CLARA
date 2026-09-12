@@ -678,8 +678,8 @@
               ]
             ]
           },
-          "lede": "Indistinguishable on severity accuracy. Very distinguishable in whom it escalates.",
-          "note": "Status: measured, bounded. German-source stratum n = 8."
+          "lede": "Tied on severity accuracy. Stratum recalls differ by 32.6 points for the learned model and 0.3 for the contextual path, descriptively.",
+          "note": "Status: measured, bounded. German-source stratum n = 8; within-predictor tests do not rank the predictors."
         },
         {
           "id": "r3",
@@ -713,8 +713,8 @@
           "w": 3060,
           "h": 350,
           "title": "What is still open",
-          "lede": "DP1 demonstrated. Hardening partly measured. No kappa. Zero interviews.",
-          "note": "The two pending rows are what the asks are about"
+          "lede": "DP1 demonstrated. Hardening partly measured. One kappa, on attestation. Zero interviews.",
+          "note": "Kappa 0.55 on 40 blind risk items; a second person on the owner's attestation, AI exposure unrecorded. The RQ4 row is what the asks are about"
         },
         {
           "id": "r5",

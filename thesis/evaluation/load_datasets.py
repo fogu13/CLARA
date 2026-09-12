@@ -12,6 +12,7 @@ for Lieferando, which ships company_response_pattern instead of risk_seed).
 from __future__ import annotations
 import csv
 import os
+import sys
 from dataclasses import dataclass, asdict
 from typing import Optional
 
@@ -82,13 +83,21 @@ def load() -> list[Signal]:
     else:
         chosen = DATASETS  # the frozen thesis corpus (188 signals)
     out: list[Signal] = []
+    n_empty_ids = 0
     for name, rel in chosen.items():
         path = os.path.join(THESIS_CHATGPT, rel)
         with open(path, encoding="utf-8-sig", newline="") as fh:
             for r in csv.DictReader(fh):
+                signal_id = (r.get("public_signal_id") or "").strip()
+                if not signal_id:
+                    # A gold record with no id can never be matched to a
+                    # prediction; it is dropped here, counted, and warned about
+                    # rather than entering every denominator as "".
+                    n_empty_ids += 1
+                    continue
                 out.append(
                     Signal(
-                        id=r.get("public_signal_id", "").strip(),
+                        id=signal_id,
                         dataset=name,
                         sector=SECTOR[name],
                         source=(r.get("source") or "").strip(),
@@ -102,6 +111,9 @@ def load() -> list[Signal]:
                         risk=(r.get("risk_seed") or "").strip() or None,
                     )
                 )
+    if n_empty_ids:
+        print(f"warning: dropped {n_empty_ids} gold record(s) with an empty public_signal_id",
+              file=sys.stderr)
     return out
 
 

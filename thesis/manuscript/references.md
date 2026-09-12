@@ -62,6 +62,10 @@ Boyer, J., & Mili, H. (2011). *Agile Business Rule Development*. Springer.
 
 Braun, V., & Clarke, V. (2019). Reflecting on reflexive thematic analysis. *Qualitative Research in Sport, Exercise and Health*, 11(4), 589–597. https://doi.org/10.1080/2159676X.2019.1628806
 
+Braun, V., & Clarke, V. (2021a). One size fits all? What counts as quality practice in (reflexive) thematic analysis? *Qualitative Research in Psychology*, 18(3), 328–352.
+
+Braun, V., & Clarke, V. (2021b). Can I use TA? Should I use TA? Should I not use TA? Comparing reflexive thematic analysis and other pattern-based qualitative analytic approaches. *Counselling and Psychotherapy Research*, 21(1), 37–47.
+
 Brown, T. B., et al. (2020). Language models are few-shot learners. *Proceedings of NeurIPS*.
 
 Buchanan, B. G., & Shortliffe, E. H. (1984). *Rule-Based Expert Systems: The MYCIN Experiments*. Addison-Wesley.
@@ -113,6 +117,8 @@ Forgy, C. L. (1982). Rete: A fast algorithm for the many pattern/many object pat
 Fornell, C., Johnson, M. D., Anderson, E. W., Cha, J., & Bryant, B. E. (1996). The American Customer Satisfaction Index: Nature, purpose, and findings. *Journal of Marketing*, 60(4), 7–18. https://doi.org/10.1177/002224299606000403
 
 Gaskin, S. P., Griffin, A., Hauser, J. R., Katz, G. M., & Klein, R. L. (2010). Voice of the customer. In *Wiley International Encyclopedia of Marketing* (Vol. 5). John Wiley & Sons. https://doi.org/10.1002/9781444316568.wiem05020
+
+Gelman, A., & Stern, H. (2006). The difference between "significant" and "not significant" is not itself statistically significant. *The American Statistician*, 60(4), 328–331.
 
 Ghasemaghaei, M., Hassanein, K., & Turel, O. (2017). Increasing firm agility through the use of data analytics: The role of fit. *Decision Support Systems*, 101, 95–105. https://doi.org/10.1016/j.dss.2017.06.004
 

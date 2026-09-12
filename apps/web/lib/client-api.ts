@@ -342,9 +342,13 @@ export type MeasurementPlan = {
   executed_at: string;
   due_at: string;
   kind: string;
+  // pending | done | manual_required | skipped | blocked | superseded
   status: string;
   note?: string | null;
   created_at: string;
+  // What executed_at is: approval (draft only) | dispatch | implementation.
+  origin?: "approval" | "dispatch" | "implementation" | null;
+  contract_revision?: number | null;
 };
 
 export type AskAnswer = {

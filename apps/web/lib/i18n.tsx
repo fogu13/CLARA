@@ -554,6 +554,10 @@ const en = {
     windowClose: "window close",
     due: "due",
     followUp: "follow-up (keep listening)",
+    originApproval: "since approval (draft only)",
+    originDispatch: "since dispatch",
+    originImplementation: "since implementation",
+    statusSuperseded: "superseded",
     memoryTitle: "Learning memory",
     memorySubtitle:
       "What was done for each theme and whether it measurably worked. Human-validated learnings feed the next triage run; confidence decays with age.",
@@ -853,7 +857,7 @@ const en = {
     evalHallucination: "Hallucination rate",
     evalPii: "PII leaks",
     evalCitation:
-      "Source: the published snapshot served on the model card (eval run 2026-07-18, model glm-5.2, golden set n=100, 72 EN / 28 DE, adversarially verified). Hallucination (EN-scope) and PII are from the 2026-07-17 run of the same harness.",
+      "Source: the published snapshot served on the model card (eval run 2026-07-18, model glm-5.2, golden set n=100, 72 EN / 28 DE, adversarially verified). Hallucination and PII are from the 2026-07-17 15:22 UTC run of the same harness (n=80, 60 EN / 20 DE): the hallucination heuristic scores English items only, so its rate is 2 flagged of the 60 eligible English items.",
     evalCaveat:
       "n=100 is still a modest sample and the DE stratum (n=28) carries wide confidence intervals: differences of a few points are not statistically significant. The hallucination heuristic covers EN items only. Growing the labelled set remains planned. We state this plainly because honest limits are part of the product.",
     s3Title: "When and how to override",
@@ -969,6 +973,8 @@ const en = {
     evidenceLine: "Evidence: {n} excerpts / model score {c} / {k} customers",
     dependencies: "Dependencies",
     noDependencies: "None - can be approved independently.",
+    actionEditorLocked:
+      "This action is approved; its text is locked. Record a rejection first, then edit and re-approve.",
     policyChecks: "Policy checks",
     notEvaluated: "not evaluated",
     blockingSuffix: " / blocking",
@@ -1022,6 +1028,12 @@ const en = {
     editContract: "Edit contract",
     editWindowLabel: "Measurement window (days)",
     editThresholdLabel: "Success threshold",
+    revision: "Contract v{n}",
+    amendedAfterMeasurement:
+      "The last reading was scored under contract v{n}; the amended terms apply from the next scheduled read.",
+    originApproval: "clock since approval (draft only)",
+    originDispatch: "clock since dispatch",
+    originImplementation: "clock since implementation",
   },
 } as const;
 
@@ -1574,6 +1586,10 @@ const de: Dict = {
     windowClose: "Fensterschluss",
     due: "fällig",
     followUp: "Nachkontrolle (weiter zuhören)",
+    originApproval: "seit Freigabe (nur Entwurf)",
+    originDispatch: "seit Versand",
+    originImplementation: "seit Umsetzung",
+    statusSuperseded: "ersetzt",
     memoryTitle: "Learning-Gedächtnis",
     memorySubtitle:
       "Was pro Thema getan wurde und ob es messbar gewirkt hat. Menschlich validierte Learnings fließen in die nächste Triage ein; das Vertrauen zerfällt mit der Zeit.",
@@ -1873,7 +1889,7 @@ const de: Dict = {
     evalHallucination: "Halluzinationsrate",
     evalPii: "PII-Lecks",
     evalCitation:
-      "Quelle: der veröffentlichte Snapshot auf der Modellkarte (Eval-Lauf 2026-07-18, Modell glm-5.2, Golden Set n=100, 72 EN / 28 DE, adversariell verifiziert). Halluzination (nur EN) und PII stammen aus dem Lauf 2026-07-17 desselben Harness.",
+      "Quelle: der veröffentlichte Snapshot auf der Modellkarte (Eval-Lauf 2026-07-18, Modell glm-5.2, Golden Set n=100, 72 EN / 28 DE, adversariell verifiziert). Halluzination und PII stammen aus dem Lauf 2026-07-17 15:22 UTC desselben Harness (n=80, 60 EN / 20 DE): Die Halluzinations-Heuristik bewertet nur englische Items, die Rate ist daher 2 markierte von 60 englischen Items.",
     evalCaveat:
       "n=100 ist weiterhin eine überschaubare Stichprobe, und das DE-Stratum (n=28) hat breite Konfidenzintervalle: Unterschiede von wenigen Punkten sind statistisch nicht signifikant. Die Halluzinations-Heuristik deckt nur EN-Items ab. Der weitere Ausbau des gelabelten Sets ist geplant. Wir sagen das offen, weil ehrliche Grenzen Teil des Produkts sind.",
     s3Title: "Wann und wie Sie eingreifen",
@@ -1989,6 +2005,8 @@ const de: Dict = {
     evidenceLine: "Evidenz: {n} Auszüge / Modell-Score {c} / {k} Kund:innen",
     dependencies: "Abhängigkeiten",
     noDependencies: "Keine. Kann unabhängig freigegeben werden.",
+    actionEditorLocked:
+      "Diese Maßnahme ist freigegeben; ihr Text ist gesperrt. Zuerst eine Ablehnung erfassen, dann bearbeiten und erneut freigeben.",
     policyChecks: "Richtlinienprüfungen",
     notEvaluated: "nicht geprüft",
     blockingSuffix: " / blockierend",
@@ -2042,6 +2060,12 @@ const de: Dict = {
     editContract: "Vertrag bearbeiten",
     editWindowLabel: "Messfenster (Tage)",
     editThresholdLabel: "Erfolgsschwelle",
+    revision: "Vertrag v{n}",
+    amendedAfterMeasurement:
+      "Die letzte Messung wurde unter Vertrag v{n} bewertet; die geänderten Bedingungen gelten ab der nächsten geplanten Messung.",
+    originApproval: "Uhr seit Freigabe (nur Entwurf)",
+    originDispatch: "Uhr seit Versand",
+    originImplementation: "Uhr seit Umsetzung",
   },
 };
 

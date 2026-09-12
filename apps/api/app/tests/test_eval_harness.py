@@ -253,3 +253,124 @@ class TestWilsonInterval:
         assert 0.56 < lo < 0.66 < hi < 0.75
         assert wilson_interval(0, 0) == (0.0, 0.0)
         assert wilson_interval(0, 7)[0] == 0.0
+
+
+class TestHallucinationDenominator:
+    """The heuristic is English-only, so its rate must be over ELIGIBLE (EN)
+    items, and 'no eligible items' must read as not evaluated, never 0.0."""
+
+    @staticmethod
+    def _item(idx: int, language: str, text: str) -> dict:
+        return {
+            "id": f"h-{idx}",
+            "text": text,
+            "language": language,
+            "expected": {"sentiment": "negative", "urgency": "low", "tags": ["checkout_failure"]},
+        }
+
+    def test_one_flagged_en_plus_one_excluded_de_is_rate_one(self) -> None:
+        golden = [
+            self._item(1, "en", "The checkout page crashes when I try to pay"),
+            self._item(2, "de", "Die Bezahlung bricht im Warenkorb ab"),
+        ]
+        # Both enrichments carry tags with no grounding in the text; only the
+        # EN item is eligible for the heuristic.
+        enrichments = [
+            {"id": "h-1", "sentiment": "negative", "urgency": "low", "tags": ["weather_anomaly"]},
+            {"id": "h-2", "sentiment": "negative", "urgency": "low", "tags": ["weather_anomaly"]},
+        ]
+        r = EvalHarness(golden_set=golden).run_enrichment_eval(enrichments=enrichments)
+        assert r.hallucination_eligible == 1
+        assert r.hallucination_excluded == 1
+        assert r.hallucination_rate == 1.0  # the old n=2 denominator reported 0.5
+        row = next(x for x in r.results if x.name == "hallucination_coverage")
+        assert "1 eligible" in row.detail and "1 excluded" in row.detail
+
+    def test_all_non_english_is_not_evaluated(self) -> None:
+        golden = [self._item(1, "de", "Die App ist langsam"), self._item(2, "de", "Alles gut")]
+        enrichments = [
+            {"id": "h-1", "sentiment": "negative", "urgency": "low", "tags": ["slow_app"]},
+            {"id": "h-2", "sentiment": "negative", "urgency": "low", "tags": ["fine"]},
+        ]
+        r = EvalHarness(golden_set=golden).run_enrichment_eval(enrichments=enrichments)
+        assert r.hallucination_rate is None
+        assert r.hallucination_eligible == 0
+        assert r.hallucination_excluded == 2
+        assert "not evaluated" in r.summary()
+        assert "not evaluated" in str(next(x for x in r.results if x.name == "hallucination_rate"))
+        assert EvalHarness(golden_set=golden).run_full_eval()["enrichment"]["hallucination_rate"] is None
+
+    def test_zero_numerator_keeps_zero_with_right_denominators(self) -> None:
+        golden = load_golden_set()
+        r = EvalHarness(golden_set=golden).run_enrichment_eval()  # self-comparison
+        n_en = sum(1 for g in golden if g.get("language", "en") == "en")
+        assert r.hallucination_rate == 0.0
+        assert r.hallucination_eligible == n_en
+        assert r.hallucination_excluded == len(golden) - n_en
+        assert r.hallucination_unassessed == 0
+        assert r.hallucination_eligible > 0
+
+    # ---- C18: an EN item the run returned nothing for (or tagged with
+    # nothing) is neither grounded nor fabricated: it is unassessed and
+    # leaves the eligible denominator.
+    def test_all_en_items_dropped_is_not_evaluated_and_counted_unassessed(self) -> None:
+        golden = [
+            self._item(1, "en", "The checkout page crashes when I try to pay"),
+            self._item(2, "en", "Support never answers my tickets"),
+            self._item(3, "de", "Die Bezahlung bricht im Warenkorb ab"),
+        ]
+        r = EvalHarness(golden_set=golden).run_enrichment_eval(enrichments=[])
+        assert r.hallucination_rate is None  # the old count read 0.0 over 2 "grounded" items
+        assert r.hallucination_eligible == 0
+        assert r.hallucination_unassessed == 2
+        assert r.hallucination_excluded == 1
+        assert "2 EN unassessed" in r.summary()
+        assert EvalHarness(golden_set=golden).run_full_eval()["enrichment"]["hallucination_unassessed"] == 0
+
+    def test_tagless_enrichment_is_unassessed_not_grounded(self) -> None:
+        golden = [
+            self._item(1, "en", "The checkout page crashes when I try to pay"),
+            self._item(2, "en", "Support never answers my tickets"),
+        ]
+        enrichments = [
+            {"id": "h-1", "sentiment": "negative", "urgency": "low", "tags": ["weather_anomaly"]},
+            {"id": "h-2", "sentiment": "negative", "urgency": "low", "tags": []},
+        ]
+        r = EvalHarness(golden_set=golden).run_enrichment_eval(enrichments=enrichments)
+        assert r.hallucination_eligible == 1 and r.hallucination_unassessed == 1
+        assert r.hallucination_rate == 1.0  # the old denominator of 2 read 0.5
+        row = next(x for x in r.results if x.name == "hallucination_coverage")
+        assert "1 unassessed" in row.detail
+
+    # ---- C7: eligibility is by normalised primary subtag, in one helper.
+    def test_language_normalisation_shared_by_check_and_counter(self) -> None:
+        from app.evals.harness import hallucination_eligible_language, language_primary_subtag
+
+        assert language_primary_subtag("EN") == "en"
+        assert language_primary_subtag("en-US") == "en"
+        assert language_primary_subtag("en_GB") == "en"
+        assert language_primary_subtag(" De ") == "de"
+        assert language_primary_subtag(None) is None
+        assert language_primary_subtag("") is None
+        assert language_primary_subtag(3) is None
+        assert hallucination_eligible_language("EN") and hallucination_eligible_language("en-US")
+        assert not hallucination_eligible_language(None) and not hallucination_eligible_language("de-DE")
+        ungrounded = {"tags": ["weather_anomaly"]}
+        text = "The checkout page crashes when I try to pay"
+        assert check_hallucination(ungrounded, text, language="EN") is True
+        assert check_hallucination(ungrounded, text, language="en-US") is True
+        assert check_hallucination(ungrounded, text, language="de-DE") is False
+        assert check_hallucination(ungrounded, text, language=None) is False
+
+        golden = [
+            self._item(1, "EN", text),
+            self._item(2, "en-US", text),
+            {"id": "h-3", "text": text,
+             "expected": {"sentiment": "negative", "urgency": "low", "tags": ["checkout_failure"]}},
+        ]
+        golden[2].pop("language", None)  # missing language: excluded, never assumed English
+        enrichments = [{"id": f"h-{i}", "sentiment": "negative", "urgency": "low",
+                        "tags": ["weather_anomaly"]} for i in (1, 2, 3)]
+        r = EvalHarness(golden_set=golden).run_enrichment_eval(enrichments=enrichments)
+        assert r.hallucination_eligible == 2 and r.hallucination_excluded == 1
+        assert r.hallucination_rate == 1.0  # both EN variants flagged, the None item excluded
