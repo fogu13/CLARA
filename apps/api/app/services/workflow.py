@@ -277,13 +277,41 @@ DISPATCH_SNAPSHOT_FIELDS = (
 
 @dataclass(frozen=True)
 class DispatchAuthorization:
-    """Result of binding a dispatch to the approval run that authorises it."""
+    """Result of binding a dispatch to the approval run that authorises it.
+
+    ``execution_ids`` names the executions the authorising run created; an
+    idempotent reuse of an earlier external record is only allowed for one of
+    them (a record created under a superseded run carries text nobody
+    approved for this revision).
+    """
 
     authorized: bool
     reason: str | None
     detail: str
     decision_ids: list[str] = dataclass_field(default_factory=list)
     changed_fields: list[str] = dataclass_field(default_factory=list)
+    execution_ids: list[str] = dataclass_field(default_factory=list)
+
+
+def decision_order(approval: ApprovalRecord) -> tuple[str, int, str]:
+    """Sort key for the append-only approvals: created_at, then the NUMERIC
+    decision suffix (as strings ``DEC-10000`` sorts before ``DEC-9999``)."""
+    _prefix, _, suffix = approval.decision_id.rpartition("-")
+    number = int(suffix) if suffix.isdigit() else -1
+    return (approval.created_at, number, approval.decision_id)
+
+
+def latest_decisions(
+    approvals: list[ApprovalRecord], problem_id: str
+) -> dict[str, ApprovalRecord]:
+    """Latest decision per action of a problem, in decision order."""
+    latest: dict[str, ApprovalRecord] = {}
+    for approval in sorted(
+        (approval for approval in approvals if approval.problem_id == problem_id),
+        key=decision_order,
+    ):
+        latest[approval.action_id] = approval
+    return latest
 
 
 def _dispatch_fields(snapshot: ActionProposalSnapshot) -> dict:
@@ -318,7 +346,7 @@ def authorize_dispatch(
     under the decision(s) still in force, for the execution those decisions
     created. Pure: no store access, no side effects. Rules are evaluated in
     order over the append-only approvals of this action, ordered by
-    created_at then decision_id:
+    created_at then the numeric decision suffix (``decision_order``):
 
     1. approval_missing              no decision at all
     2. approval_revoked              latest decision is not `approved`
@@ -340,7 +368,7 @@ def authorize_dispatch(
             if approval.problem_id == problem.problem_id
             and approval.action_id == action.action_id
         ),
-        key=lambda approval: (approval.created_at, approval.decision_id),
+        key=decision_order,
     )
     if not relevant:
         return _refused(
@@ -446,6 +474,7 @@ def authorize_dispatch(
         detail=f"Dispatch authorised by {', '.join(decision_ids)}.",
         decision_ids=decision_ids,
         changed_fields=[],
+        execution_ids=bound_execution_ids or [execution.execution_id],
     )
 
 
@@ -513,17 +542,40 @@ def stamp_contract_provenance(
     problem: ProblemRecord, measurement: OutcomeMeasurement
 ) -> OutcomeMeasurement:
     """Freeze the contract the observation is scored under, unless the
-    measurement already carries one (the scheduler stamps its own)."""
-    update: dict = {}
+    measurement already carries one (the scheduler stamps its own).
+
+    Snapshot and revision always describe the same contract: without a
+    snapshot BOTH come from the problem (a caller-supplied revision alone
+    would pair a stale number with a fresh snapshot); with a snapshot the
+    revision is the snapshot's."""
     if measurement.contract_snapshot is None:
-        update["contract_snapshot"] = problem.outcome_contract
-    if measurement.contract_revision is None:
-        update["contract_revision"] = (
-            measurement.contract_snapshot.revision
-            if measurement.contract_snapshot is not None
-            else problem.outcome_contract.revision
+        return measurement.model_copy(
+            update={
+                "contract_snapshot": problem.outcome_contract,
+                "contract_revision": problem.outcome_contract.revision,
+            }
         )
-    return measurement.model_copy(update=update) if update else measurement
+    if measurement.contract_revision is None:
+        return measurement.model_copy(
+            update={"contract_revision": measurement.contract_snapshot.revision}
+        )
+    return measurement
+
+
+# The contract terms that decide how a reading is SCORED. An amendment that
+# touches only guardrail_metrics or responsible_owner bumps the revision but
+# cannot reinterpret an observation, so it does not flag the snapshot.
+SCORING_TERM_FIELDS = (
+    "primary_metric",
+    "baseline",
+    "success_threshold",
+    "comparison_method",
+    "measurement_window_days",
+)
+
+
+def scoring_terms_differ(frozen: OutcomeContract, current: OutcomeContract) -> bool:
+    return any(getattr(frozen, name) != getattr(current, name) for name in SCORING_TERM_FIELDS)
 
 
 def build_outcome_snapshot(
@@ -531,19 +583,21 @@ def build_outcome_snapshot(
     measurement: OutcomeMeasurement | None,
     guardrails: list[GuardrailMeasurement],
 ) -> OutcomeSnapshot:
-    """Snapshot = CURRENT contract terms + the latest observation scored under
-    the contract revision that was in force when it was taken. An amendment
-    after a reading never re-labels that reading; the next scheduled read
-    evaluates the new terms."""
+    """Snapshot = CURRENT contract terms + the latest observation scored and
+    graded under the contract revision that was in force when it was taken.
+    An amendment after a reading never re-labels that reading; the next
+    scheduled read evaluates the new terms. ``contract_amended_after_measurement``
+    flags a change of SCORING terms only (a guardrail or owner edit bumps
+    the revision without touching how the reading was judged). The clock
+    fields are the reading's own when the scheduler stamped one."""
     contract = problem.outcome_contract
-    scored_under = (
-        measurement.contract_snapshot
-        if measurement is not None and measurement.contract_snapshot is not None
-        else contract
-    )
+    frozen = measurement.contract_snapshot if measurement is not None else None
+    scored_under = frozen if frozen is not None else contract
     latest_value = None if measurement is None else measurement.observed_value
     measurement_source = None if measurement is None else measurement.measurement_source
     measured_under = None if measurement is None else measurement.contract_revision
+    if measured_under is None and frozen is not None:
+        measured_under = frozen.revision
     return OutcomeSnapshot(
         problem_id=problem.problem_id,
         metric=contract.primary_metric,
@@ -555,16 +609,23 @@ def build_outcome_snapshot(
         measurement_window_days=contract.measurement_window_days,
         comparison_method=contract.comparison_method,
         measurement_source=measurement_source,
+        # The design grade belongs to the reading: graded under the method
+        # in force when it was taken, not the method an amendment upgraded to.
         evidence_grade=outcome_engine.evidence_grade(
-            comparison_method=contract.comparison_method,
+            comparison_method=scored_under.comparison_method,
             measurement_source=measurement_source,
         ),
         guardrails=guardrails,
         contract_revision=contract.revision,
         measured_under_revision=measured_under,
         contract_amended_after_measurement=(
-            measured_under is not None and measured_under != contract.revision
+            frozen is not None and scoring_terms_differ(frozen, contract)
         ),
+        measured_comparison_method=None if measurement is None else scored_under.comparison_method,
+        measured_baseline=None if measurement is None else scored_under.baseline,
+        measured_success_threshold=None if measurement is None else scored_under.success_threshold,
+        measurement_origin=None if measurement is None else measurement.clock_origin,
+        measurement_origin_at=None if measurement is None else measurement.clock_origin_at,
         checkpoint_kind=None if measurement is None else measurement.checkpoint_kind,
     )
 
@@ -756,11 +817,9 @@ class WorkflowStore:
                 if disclosure_applied is not None:
                     update["disclosure_applied"] = disclosure_applied
                 if dispatched_at is not None:
+                    # Only the push that really left CLARA stamps the clock
+                    # origin (action_push); a status update never invents one.
                     update["dispatched_at"] = dispatched_at
-                elif status == ExecutionStatus.pushed and execution.dispatched_at is None:
-                    # The clock origin for a real push: stamped here so every
-                    # push path (approval, retry, idempotent reuse) gets one.
-                    update["dispatched_at"] = utc_now()
                 if implemented_at is not None:
                     update["implemented_at"] = implemented_at
                 if implementation_note is not None:
@@ -969,6 +1028,9 @@ class WorkflowStore:
             and (tenant_id is None or conclusion.tenant_id == tenant_id)
         ]
         return max(conclusions, key=lambda conclusion: conclusion.reviewed_at, default=None)
+
+    def latest_outcome(self, problem_id: str) -> OutcomeMeasurement | None:
+        return self._outcomes.get(problem_id)
 
     def outcome_snapshot(self, problem: ProblemRecord) -> OutcomeSnapshot:
         return build_outcome_snapshot(
@@ -1245,6 +1307,8 @@ class SQLiteWorkflowStore:
         self._ensure_column("outcomes", "checkpoint_kind", "TEXT")
         self._ensure_column("outcomes", "plan_id", "INTEGER")
         self._ensure_column("outcomes", "execution_id", "TEXT")
+        self._ensure_column("outcomes", "clock_origin", "TEXT")
+        self._ensure_column("outcomes", "clock_origin_at", "TEXT")
         # Idempotent backfill for the JWT-tenant migration: header-era rows were
         # tagged with client strings ('demo_tenant'/...); the tenant key is now
         # str(workspace_id) and local dev is the default workspace ('1'). Closure
@@ -1331,13 +1395,10 @@ class SQLiteWorkflowStore:
             assignments += ", disclosure_applied = ?"
             values.append(int(disclosure_applied))
         if dispatched_at is not None:
+            # Only the push that really left CLARA stamps the clock origin
+            # (action_push); a status update never invents one.
             assignments += ", dispatched_at = ?"
             values.append(dispatched_at)
-        elif status == ExecutionStatus.pushed:
-            # Clock origin for a real push, stamped once (COALESCE keeps an
-            # earlier dispatch instant on idempotent re-pushes).
-            assignments += ", dispatched_at = COALESCE(dispatched_at, ?)"
-            values.append(utc_now())
         if implemented_at is not None:
             assignments += ", implemented_at = ?"
             values.append(implemented_at)
@@ -1573,8 +1634,9 @@ class SQLiteWorkflowStore:
             """
             INSERT INTO outcomes (problem_id, metric, observed_value, measured_at, notes,
                                   measurement_source, contract_revision, contract_json,
-                                  checkpoint_kind, plan_id, execution_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  checkpoint_kind, plan_id, execution_id,
+                                  clock_origin, clock_origin_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(problem_id) DO UPDATE SET
                 metric = excluded.metric,
                 observed_value = excluded.observed_value,
@@ -1585,7 +1647,9 @@ class SQLiteWorkflowStore:
                 contract_json = excluded.contract_json,
                 checkpoint_kind = excluded.checkpoint_kind,
                 plan_id = excluded.plan_id,
-                execution_id = excluded.execution_id
+                execution_id = excluded.execution_id,
+                clock_origin = excluded.clock_origin,
+                clock_origin_at = excluded.clock_origin_at
             """,
             (
                 measurement.problem_id,
@@ -1603,6 +1667,8 @@ class SQLiteWorkflowStore:
                 measurement.checkpoint_kind,
                 measurement.plan_id,
                 measurement.execution_id,
+                measurement.clock_origin,
+                measurement.clock_origin_at,
             ),
         )
         self._connection.commit()
@@ -1957,6 +2023,8 @@ class SQLiteWorkflowStore:
             checkpoint_kind=_col("checkpoint_kind"),
             plan_id=_col("plan_id"),
             execution_id=_col("execution_id"),
+            clock_origin=_col("clock_origin"),
+            clock_origin_at=_col("clock_origin_at"),
         )
 
     @staticmethod

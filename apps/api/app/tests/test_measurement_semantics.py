@@ -815,11 +815,17 @@ class TestSQLitePersistence:
         legacy = store.list_executions()[0]
         assert legacy.dispatched_at is None and legacy.implemented_at is None
 
+        # A status update never invents a clock origin: only the push that
+        # really left CLARA stamps dispatched_at (action_push passes it).
         pushed = store.update_execution(legacy.execution_id, status=ExecutionStatus.pushed, external_ref="CLARA-1")
-        assert pushed.dispatched_at is not None
-        first_dispatch = pushed.dispatched_at
+        assert pushed.dispatched_at is None
+        first_dispatch = "2026-07-02T00:00:00Z"
+        stamped = store.update_execution(
+            legacy.execution_id, status=ExecutionStatus.pushed, external_ref="CLARA-1", dispatched_at=first_dispatch
+        )
+        assert stamped.dispatched_at == first_dispatch
         again = store.update_execution(legacy.execution_id, status=ExecutionStatus.pushed, external_ref="CLARA-1")
-        assert again.dispatched_at == first_dispatch  # stamped once
+        assert again.dispatched_at == first_dispatch  # kept, never overwritten by omission
         implemented = store.update_execution(
             legacy.execution_id,
             status=ExecutionStatus.pushed,
@@ -843,7 +849,7 @@ class TestSQLitePersistence:
         newest = reopened.list_executions()[-1]
         assert newest.dispatched_at is None and newest.implemented_at is None
 
-    def test_memory_store_stamps_dispatch_once(self) -> None:
+    def test_memory_store_never_invents_a_dispatch_instant(self) -> None:
         store = WorkflowStore()
         store.record_approval(
             problem=load_seed_problems()[0],
@@ -851,13 +857,13 @@ class TestSQLitePersistence:
         )
         execution = store.list_executions()[0]
         pushed = store.update_execution(execution.execution_id, status=ExecutionStatus.pushed, external_ref="X")
-        assert pushed.dispatched_at is not None
-        again = store.update_execution(execution.execution_id, status=ExecutionStatus.pushed, external_ref="X")
-        assert again.dispatched_at == pushed.dispatched_at
+        assert pushed.dispatched_at is None  # a status flip is not a dispatch
         explicit = store.update_execution(
             execution.execution_id, status=ExecutionStatus.pushed, dispatched_at="2026-01-01T00:00:00Z"
         )
         assert explicit.dispatched_at == "2026-01-01T00:00:00Z"
+        again = store.update_execution(execution.execution_id, status=ExecutionStatus.pushed, external_ref="X")
+        assert again.dispatched_at == "2026-01-01T00:00:00Z"
 
     def test_sqlite_workflow_app_round_trips_the_snapshot(self, tmp_path: Path) -> None:
         app = _app(tmp_path, problem=_amendable_problem(), sqlite_workflows=True)

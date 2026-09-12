@@ -51,6 +51,10 @@ LOOP_CHECKPOINT_KINDS = frozenset({"window", "followup"})
 # legacy default for rows that predate the origin column.
 PLAN_ORIGINS = frozenset({"approval", "dispatch", "implementation"})
 DEFAULT_PLAN_ORIGIN = "approval"
+# Precedence between clocks: a later, more real origin replaces the plans of a
+# lower one (a real push moves the clock off the approval; an implementation
+# record moves it off both).
+ORIGIN_RANK = {"approval": 0, "dispatch": 1, "implementation": 2}
 
 
 def _parse_ts(value: str) -> datetime:
@@ -209,15 +213,24 @@ class SQLiteMeasurementPlanStore:
         self._connection.commit()
         return True
 
-    def supersede_pending(self, problem_id: str, *, note: str) -> int:
-        """Mark a problem's pending plans that do not already run from an
-        implementation record as superseded (an implementation record restarts
-        the clock from the moment the fix landed). Returns rows changed."""
-        cursor = self._connection.execute(
+    def supersede_pending(
+        self, problem_id: str, *, note: str, origins: set[str] | None = None
+    ) -> int:
+        """Mark a problem's LIVE plans (pending or manual_required — the ones
+        holding a checkpoint slot) as superseded, optionally only those whose
+        clock runs from one of ``origins``. Returns rows changed."""
+        sql = (
             "UPDATE measurement_plans SET status = 'superseded', note = ?"
-            " WHERE problem_id = ? AND status = 'pending' AND origin != 'implementation'",
-            (note, problem_id),
+            " WHERE problem_id = ? AND status IN ('pending', 'manual_required')"
         )
+        params: list[Any] = [note, problem_id]
+        if origins is not None:
+            wanted = sorted(origins)
+            if not wanted:
+                return 0
+            sql += f" AND origin IN ({', '.join('?' for _ in wanted)})"
+            params.extend(wanted)
+        cursor = self._connection.execute(sql, params)
         self._connection.commit()
         return cursor.rowcount
 
@@ -264,6 +277,16 @@ def schedule_measurements(
         raise ValueError(f"Unknown measurement origin: {origin!r}")
     if contract_revision is None:
         contract_revision = problem.outcome_contract.revision
+    # Origin precedence: live plans on a lower-ranked clock give way (a real
+    # push after a draft-only approval moves the clock to the dispatch); a
+    # same-or-higher clock keeps its plans and the insert below dedupes.
+    lower = {name for name, rank in ORIGIN_RANK.items() if rank < ORIGIN_RANK[origin]}
+    if lower:
+        plan_store.supersede_pending(
+            problem.problem_id,
+            note=f"superseded by {origin} clock ({execution_id})",
+            origins=lower,
+        )
     window_days = problem.outcome_contract.measurement_window_days
     executed = _parse_ts(executed_at)
     checkpoints = {"t7": 7}
@@ -293,11 +316,16 @@ def schedule_measurements(
     return scheduled
 
 
-def followup_window_start(executed_at: str, window_days: int) -> str:
-    """The keep-listening read covers the month AFTER the measurement window,
+def followup_window_start(due_at: str, gap_days: int = FOLLOWUP_GAP_DAYS) -> str:
+    """The keep-listening read covers the month BEFORE the follow-up came due —
+    i.e. the month after the measurement window the plan was scheduled with —
     not the cumulative span since execution: averaged over [executed, now] a
-    theme that fully returns in month two would still read as improved."""
-    start = _parse_ts(executed_at) + timedelta(days=window_days)
+    theme that fully returns in month two would still read as improved.
+
+    Derived from the plan's own ``due_at`` (fixed at scheduling as
+    executed + window + gap): a window amended after scheduling must not
+    rewrite what the follow-up reads."""
+    start = _parse_ts(due_at) - timedelta(days=gap_days)
     return start.isoformat().replace("+00:00", "Z")
 
 
@@ -485,9 +513,7 @@ def run_due_measurements(
         origin = plan.get("origin") or DEFAULT_PLAN_ORIGIN
         span_note = f"since {origin} ({str(plan['executed_at'])[:10]})"
         if plan["kind"] == "followup":
-            since = followup_window_start(
-                plan["executed_at"], problem.outcome_contract.measurement_window_days
-            )
+            since = followup_window_start(plan["due_at"])
             span_note = (
                 "in the month after the measurement window closed (keep-listening read;"
                 f" clock from {origin} {str(plan['executed_at'])[:10]})"
@@ -532,6 +558,10 @@ def run_due_measurements(
             execution_id=plan.get("execution_id"),
             contract_revision=problem.outcome_contract.revision,
             contract_snapshot=problem.outcome_contract,
+            # The clock this reading was taken on, so a later anchor (an
+            # implementation recorded afterwards) cannot relabel it.
+            clock_origin=origin,
+            clock_origin_at=plan["executed_at"],
         )
         try:
             workflow_store.record_outcome(problem=problem, measurement=measurement)

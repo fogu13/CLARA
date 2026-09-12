@@ -11,8 +11,10 @@ Design rules:
     failure is recorded on the execution (status=push_failed, detail=error).
   - No config for the destination -> the execution stays a draft (existing
     behaviour), with a detail note so the UI can say why.
-  - Idempotent: if an execution for the same problem+action already carries an
-    external_ref, we skip instead of creating a duplicate external record.
+  - Idempotent: if an execution created by the SAME approval run for this
+    action already carries an external_ref, we reuse it instead of creating a
+    duplicate external record. A record created under a superseded run is
+    never reused: it carries text nobody approved for the current revision.
 """
 
 from __future__ import annotations
@@ -32,8 +34,14 @@ from app.domain.models import (
     OwnerRoute,
     ProblemRecord,
 )
+from app.services.common import utc_now
 from app.services.routing import connector_overrides, route_for_owner
-from app.services.workflow import authorize_dispatch
+from app.services.workflow import (
+    DispatchAuthorization,
+    approved_action_keys,
+    authorize_dispatch,
+    is_human_reviewed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +88,7 @@ class _WorkflowStore(Protocol):
         external_ref: str | None = None,
         detail: str | None = None,
         disclosure_applied: bool | None = None,
+        dispatched_at: str | None = None,
     ) -> ExecutionRecord: ...
 
 
@@ -140,15 +149,27 @@ def push_approved_action(
     dispatch (see below); the refusal is also recorded on the execution's
     ``detail`` while its status and external_ref stay untouched.
 
-    Authorisation: an execution that carries the human-review stamp exists
-    because named reviewers approved ONE revision of the action. Before any
-    outbound write (first push or retry) the current action, the execution and
-    the workspace's four-eyes setting are checked against the append-only
-    approvals by ``workflow.authorize_dispatch``: the latest decision must be
-    an approval, the approval run must have created THIS execution, and the
-    action must still match the approved snapshot. Executions without the
-    stamp (auto-published graph pushes) have no approval to bind to and keep
-    the Art. 50 disclosure path below.
+    Authorisation: an execution that is effectively human-reviewed (the
+    Art. 50(4) stamp, or — for rows written before the stamp existed — an
+    approval on record for its action, see ``workflow.is_human_reviewed``)
+    exists because named reviewers approved ONE revision of the action.
+    Before any outbound write (first push or retry) the current action, the
+    execution and the workspace's four-eyes setting are checked against the
+    append-only approvals by ``workflow.authorize_dispatch``: the latest
+    decision must be an approval, the approval run must have created THIS
+    execution, and the action must still match the approved snapshot. The
+    check is re-run on a fresh read of the approvals immediately before the
+    connector call (after the connector config and team route are resolved),
+    so a rejection recorded in between still refuses the write; the network
+    call itself remains unguarded — a rejection that lands while the
+    connector is writing cannot recall the record. Executions with no
+    approval at all (auto-published graph pushes) have nothing to bind to and
+    keep the Art. 50 disclosure path below.
+
+    Not part of the approval: the workspace connector config and the team
+    routing (``OwnerRoute`` overrides) are admin configuration, resolved at
+    dispatch time. The resolved override is named in the execution's detail
+    so the audit trail says where the record really went.
 
     Concurrency: the whole check-and-push runs under a per-execution
     in-process lock and re-reads the execution first, so two retries in one
@@ -180,33 +201,18 @@ def push_approved_action(
             # dispatchable): return what stands, never push a second time.
             return current
 
-        authorized_by: list[str] = []
-        if current.human_reviewed:
-            authorization = authorize_dispatch(
+        approvals = workflow_store.list_approvals()
+        gated = is_human_reviewed(current, approved_action_keys(approvals))
+        authorization: DispatchAuthorization | None = None
+        if gated:
+            authorization = _check_authorization(
                 problem=problem,
                 action=action,
                 execution=current,
-                approvals=workflow_store.list_approvals(),
+                approvals=approvals,
                 four_eyes=four_eyes,
+                workflow_store=workflow_store,
             )
-            if not authorization.authorized:
-                logger.warning(
-                    "Action dispatch refused: problem=%s action=%s execution=%s reason=%s",
-                    problem.problem_id,
-                    action.action_id,
-                    current.execution_id,
-                    authorization.reason,
-                )
-                # update_execution resets external_ref/detail when omitted:
-                # pass both explicitly so only the detail changes.
-                workflow_store.update_execution(
-                    current.execution_id,
-                    status=current.status,
-                    external_ref=current.external_ref,
-                    detail=f"Dispatch refused ({authorization.reason}): {authorization.detail}"[:300],
-                )
-                raise DispatchNotAuthorized(authorization.reason or "refused", authorization.detail)
-            authorized_by = authorization.decision_ids
 
         return _dispatch(
             problem=problem,
@@ -216,8 +222,57 @@ def push_approved_action(
             workflow_store=workflow_store,
             disclosure_template=disclosure_template,
             owner_routes=owner_routes,
-            authorized_by=authorized_by,
+            authorization=authorization,
+            four_eyes=four_eyes,
         )
+
+
+def _check_authorization(
+    *,
+    problem: ProblemRecord,
+    action: ActionProposal,
+    execution: ExecutionRecord,
+    approvals: list[ApprovalRecord],
+    four_eyes: bool,
+    workflow_store: _WorkflowStore,
+) -> DispatchAuthorization:
+    """Run ``authorize_dispatch``; on refusal record it on the execution's
+    detail (status and external_ref untouched) and raise."""
+    authorization = authorize_dispatch(
+        problem=problem,
+        action=action,
+        execution=execution,
+        approvals=approvals,
+        four_eyes=four_eyes,
+    )
+    if not authorization.authorized:
+        logger.warning(
+            "Action dispatch refused: problem=%s action=%s execution=%s reason=%s",
+            problem.problem_id,
+            action.action_id,
+            execution.execution_id,
+            authorization.reason,
+        )
+        # update_execution resets external_ref/detail when omitted:
+        # pass both explicitly so only the detail changes.
+        workflow_store.update_execution(
+            execution.execution_id,
+            status=execution.status,
+            external_ref=execution.external_ref,
+            detail=f"Dispatch refused ({authorization.reason}): {authorization.detail}"[:300],
+        )
+        raise DispatchNotAuthorized(authorization.reason or "refused", authorization.detail)
+    return authorization
+
+
+def _route_note(route: OwnerRoute | None, overrides: dict[str, str]) -> str:
+    """Audit note naming the team route and the resolved override, e.g.
+    " via team route 'payments' -> project ELSEWHERE"."""
+    if route is None or not overrides:
+        return ""
+    labels = {"project_key": "project", "channel": "channel"}
+    resolved = ", ".join(f"{labels.get(key, key)} {value}" for key, value in overrides.items())
+    return f" via team route '{route.owner}' → {resolved}"
 
 
 def _dispatch(
@@ -229,10 +284,13 @@ def _dispatch(
     workflow_store: _WorkflowStore,
     disclosure_template: str | None,
     owner_routes: list[OwnerRoute] | None,
-    authorized_by: list[str],
+    authorization: DispatchAuthorization | None,
+    four_eyes: bool,
 ) -> ExecutionRecord:
     """The outbound write itself; callers hold the execution lock and have
-    already authorised the dispatch."""
+    already authorised the dispatch (``authorization`` is None only for
+    executions with no approval to bind to)."""
+    authorized_by = authorization.decision_ids if authorization is not None else []
     authorization_note = f" · authorized by {', '.join(authorized_by)}" if authorized_by else ""
     destination = execution.destination
     connector = DESTINATIONS.get(destination)
@@ -251,11 +309,15 @@ def _dispatch(
             detail=f"No active {destination} connector configured. draft only.",
         )
 
-    # Idempotency: an earlier approval for this action already created the
-    # external record; do not create a duplicate.
+    # Idempotency: an execution created by the SAME approval run for this
+    # action already created the external record; do not create a duplicate.
+    # Records of earlier (superseded) runs carry a different revision and
+    # are never reused — a re-approved revision gets its own record.
+    reusable = set(authorization.execution_ids) if authorization is not None else set()
     for existing in workflow_store.list_executions():
         if (
             existing.execution_id != execution.execution_id
+            and existing.execution_id in reusable
             and existing.problem_id == execution.problem_id
             and existing.action_id == execution.action_id
             and existing.external_ref
@@ -265,13 +327,28 @@ def _dispatch(
                 status=ExecutionStatus.pushed,
                 external_ref=existing.external_ref,
                 detail=f"Reused existing {destination} record (idempotent skip).",
+                # The clock ran from the reused record's dispatch, not from now.
+                dispatched_at=existing.dispatched_at,
             )
 
     route = route_for_owner(owner_routes or [], action.owner)
     overrides = connector_overrides(route, destination)
     if overrides:
         config = {**config, **overrides}
-    route_note = f" via team route '{route.owner}'" if overrides and route is not None else ""
+    route_note = _route_note(route, overrides)
+
+    if authorization is not None:
+        # Close the check-then-act window as far as the store allows: a
+        # decision recorded while config and route were being resolved must
+        # refuse the write. The connector call below stays unguarded.
+        authorization = _check_authorization(
+            problem=problem,
+            action=action,
+            execution=execution,
+            approvals=workflow_store.list_approvals(),
+            four_eyes=four_eyes,
+            workflow_store=workflow_store,
+        )
 
     disclosure = None if execution.human_reviewed else disclosure_template
     try:
@@ -313,4 +390,6 @@ def _dispatch(
         external_ref=external_id,
         detail=f"{destination} record created: {external_id}{route_note}{authorization_note}",
         disclosure_applied=True if disclosure else None,
+        # The measurement clock origin: the instant the record really left CLARA.
+        dispatched_at=utc_now(),
     )

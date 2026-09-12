@@ -535,9 +535,11 @@ def intervention_anchor(executions: list[Any]) -> tuple[str, str] | None:
 
     Earliest human-recorded ``implemented_at`` wins (the fix landed); else the
     earliest ``dispatched_at`` of a pushed execution (the ticket/message left
-    CLARA); else the earliest ``created_at`` of a draft-only execution, where
-    the approval itself is the deliverable. Executions that only ever failed
-    to push give no anchor: nothing happened that inflow could react to.
+    CLARA) — a pushed execution without one predates the dispatch stamp and
+    was pushed inside its approval request, so its ``created_at`` stands in;
+    else the earliest ``created_at`` of a draft-only execution, where the
+    approval itself is the deliverable. Executions that only ever failed to
+    push give no anchor: nothing happened that inflow could react to.
     """
     implemented = sorted(
         execution.implemented_at for execution in executions if execution.implemented_at
@@ -545,9 +547,9 @@ def intervention_anchor(executions: list[Any]) -> tuple[str, str] | None:
     if implemented:
         return "implementation", implemented[0]
     dispatched = sorted(
-        execution.dispatched_at
+        execution.dispatched_at or execution.created_at
         for execution in executions
-        if execution.dispatched_at and _status_name(execution.status) == "pushed"
+        if _status_name(execution.status) == "pushed"
     )
     if dispatched:
         return "dispatch", dispatched[0]

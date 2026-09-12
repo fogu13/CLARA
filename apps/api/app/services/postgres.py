@@ -1571,15 +1571,23 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
             )
         return True
 
-    def supersede_pending(self, problem_id: str, *, note: str) -> int:
-        """SQLite-store parity: pending plans not already running from an
-        implementation record are superseded when one is recorded."""
+    def supersede_pending(
+        self, problem_id: str, *, note: str, origins: set[str] | None = None
+    ) -> int:
+        """SQLite-store parity: live plans (pending or manual_required) are
+        superseded, optionally only those running from one of ``origins``."""
+        sql = (
+            "UPDATE clara_measurement_plans SET status = 'superseded', note = %s"
+            " WHERE problem_id = %s AND status IN ('pending', 'manual_required')"
+        )
+        params: list[Any] = [note, problem_id]
+        if origins is not None:
+            if not origins:
+                return 0
+            sql += " AND origin = ANY(%s)"
+            params.append(sorted(origins))
         with self._connect() as conn:
-            result = conn.execute(
-                "UPDATE clara_measurement_plans SET status = 'superseded', note = %s"
-                " WHERE problem_id = %s AND status = 'pending' AND origin != 'implementation'",
-                (note, problem_id),
-            )
+            result = conn.execute(sql, params)
             return result.rowcount
 
     def _row_to_plan(self, row: Any) -> dict[str, Any]:

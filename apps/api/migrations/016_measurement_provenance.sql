@@ -18,10 +18,15 @@
 --      loop verdict was inferred from "a closing plan is done", so a manual
 --      reading after an old window read could be certified "on real
 --      signals". The outcome payload now names the checkpoint that produced
---      it (checkpoint_kind, plan_id, execution_id) and freezes the contract
---      it was scored under (contract_revision, contract_snapshot); the API
---      reads status and verdict from that binding. The span note names the
---      clock origin.
+--      it (checkpoint_kind, plan_id, execution_id), freezes the contract
+--      it was scored under (contract_revision — COALESCEd to 1 for problems
+--      written before contracts carried a revision — and contract_snapshot)
+--      and records the clock it was taken on (clock_origin, clock_origin_at
+--      = the plan's origin and executed_at); the API reads status, verdict
+--      and the verdict's clock from that binding. The span note names the
+--      clock origin. The follow-up read starts at the plan's own due_at
+--      minus the 30-day gap, so a window amended after scheduling cannot
+--      rewrite what the follow-up reads.
 --
 -- The function body is 013 §3 with exactly those payload/span changes
 -- (mirrors app/services/measurement_scheduler.run_due_measurements — keep the
@@ -74,7 +79,6 @@ DECLARE
   skipped integer := 0;
   loop_closed integer := 0;
   fix_did_not_land integer := 0;
-  window_days integer;
   unenriched integer;
   span_note text;
   processed jsonb := '[]'::jsonb;
@@ -83,7 +87,7 @@ BEGIN
   PERFORM set_config('app.workspace_id', _ws_id::text, true);
 
   FOR plan IN
-    SELECT id, problem_id, execution_id, executed_at, kind, origin
+    SELECT id, problem_id, execution_id, executed_at, due_at, kind, origin
     FROM clara_measurement_plans
     WHERE status = 'pending' AND clara_safe_ts(due_at) <= _now
     ORDER BY due_at
@@ -129,11 +133,14 @@ BEGIN
       span_note := format('since %s (%s)',
         COALESCE(plan.origin, 'approval'), substr(plan.executed_at, 1, 10));
       IF plan.kind = 'followup' THEN
-        -- Keep-listening read: the month AFTER the window, not the cumulative
-        -- span (mirrors measurement_scheduler.followup_window_start).
-        window_days := COALESCE(
-          (problem_payload #>> '{outcome_contract,measurement_window_days}')::int, 28);
-        since_ts := since_ts + make_interval(days => window_days);
+        -- Keep-listening read: the month AFTER the window the plan was
+        -- scheduled with, not the cumulative span and not the CURRENT window
+        -- (mirrors measurement_scheduler.followup_window_start: due_at was
+        -- fixed at scheduling as executed + window + 30 days).
+        since_ts := clara_safe_ts(plan.due_at) - make_interval(days => 30);
+        IF since_ts IS NULL THEN
+          RAISE EXCEPTION 'unparseable due_at: %', plan.due_at;
+        END IF;
         span_note := format(
           'in the month after the measurement window closed (keep-listening read; clock from %s %s)',
           COALESCE(plan.origin, 'approval'), substr(plan.executed_at, 1, 10));
@@ -231,8 +238,12 @@ BEGIN
           'checkpoint_kind', plan.kind,
           'plan_id', plan.id,
           'execution_id', plan.execution_id,
-          'contract_revision', (problem_payload #>> '{outcome_contract,revision}')::int,
-          'contract_snapshot', problem_payload->'outcome_contract'
+          'contract_revision', COALESCE((problem_payload #>> '{outcome_contract,revision}')::int, 1),
+          'contract_snapshot', problem_payload->'outcome_contract',
+          -- The clock the reading was taken on (the plan's origin and
+          -- instant), so a later anchor cannot relabel it.
+          'clock_origin', COALESCE(plan.origin, 'approval'),
+          'clock_origin_at', plan.executed_at
         )
       );
 

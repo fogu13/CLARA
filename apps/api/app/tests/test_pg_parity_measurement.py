@@ -7,8 +7,11 @@ with the explicit URL.
 
 Proves that the plpgsql tick (clara_run_due_measurements) and the Python tick
 (measurement_scheduler.run_due_measurements) write the same outcome payload
-keys, that the Postgres workflow store scores and certifies exactly like the
-SQLite/memory stores, and that plan origin/contract_revision round-trip.
+keys (including the reading's clock), that the Postgres workflow store scores
+and certifies exactly like the SQLite/memory stores, that plan
+origin/contract_revision round-trip, that superseding by origin works, that
+the follow-up window derives from the plan's due_at, and that a problem
+payload without a contract revision is read as revision 1.
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.domain.models import OutcomeMeasurement, SignalRecord
+from app.domain.models import OutcomeContractUpdateRequest, OutcomeMeasurement, SignalRecord
 from app.services.measurement_scheduler import run_due_measurements, schedule_measurements
 from app.services.outcome_engine import loop_verdict
 from app.services.signals import build_candidates, promote_candidate
@@ -46,6 +49,8 @@ OUTCOME_KEYS = {
     "execution_id",
     "contract_revision",
     "contract_snapshot",
+    "clock_origin",
+    "clock_origin_at",
 }
 
 
@@ -137,9 +142,41 @@ def test_schedule_round_trips_origin_and_contract_revision(stores) -> None:
     assert {plan["origin"] for plan in plans} == {"dispatch"}
     assert {plan["contract_revision"] for plan in plans} == {problem.outcome_contract.revision}
     assert {plan["executed_at"] for plan in plans} == {_iso(DISPATCHED_AT)}
-    # Superseding marks only non-implementation pending plans.
+    # Superseding marks every live plan (any origin, manual_required too).
+    stores["plans"].mark(plans[0]["id"], status="manual_required", note="human")
     assert stores["plans"].supersede_pending(problem.problem_id, note="superseded by implementation record EXE-0001") == 3
     assert {plan["status"] for plan in stores["plans"].list_plans()} == {"superseded"}
+
+
+def test_supersede_pending_by_origin(stores) -> None:
+    problem = stores["problem"]
+    for origin in ("approval", "dispatch", "implementation"):
+        assert stores["plans"].schedule(
+            problem_id=problem.problem_id,
+            execution_id="EXE-0001",
+            executed_at=_iso(DISPATCHED_AT),
+            due_at=_iso(NOW + timedelta(days=1)),
+            kind=origin,
+            origin=origin,
+        )
+    assert stores["plans"].supersede_pending(problem.problem_id, note="none", origins=set()) == 0
+    assert stores["plans"].supersede_pending(problem.problem_id, note="lower clocks", origins={"approval", "dispatch"}) == 2
+    by_origin = {plan["origin"]: plan["status"] for plan in stores["plans"].list_plans()}
+    assert by_origin == {"approval": "superseded", "dispatch": "superseded", "implementation": "pending"}
+    # schedule_measurements applies the precedence itself: a dispatch clock
+    # supersedes approval plans and leaves the implementation plan alone.
+    assert stores["plans"].schedule(
+        problem_id=problem.problem_id, execution_id="EXE-0002", executed_at=_iso(DISPATCHED_AT),
+        due_at=_iso(NOW + timedelta(days=2)), kind="t7", origin="approval",
+    )
+    kinds = schedule_measurements(
+        stores["plans"], problem=problem, execution_id="EXE-0003", executed_at=_iso(DISPATCHED_AT), origin="dispatch"
+    )
+    assert set(kinds) == {"t7", "window", "followup"}
+    statuses = {(plan["origin"], plan["kind"], plan["status"]) for plan in stores["plans"].list_plans()}
+    assert ("approval", "t7", "superseded") in statuses
+    assert ("implementation", "implementation", "pending") in statuses
+    assert ("dispatch", "t7", "pending") in statuses
 
 
 def test_plpgsql_tick_binds_reading_and_certifies_like_sqlite(stores) -> None:
@@ -164,6 +201,8 @@ def test_plpgsql_tick_binds_reading_and_certifies_like_sqlite(stores) -> None:
     window_payload = next(p for p in payloads if p["checkpoint_kind"] == "window")
     assert set(window_payload) == OUTCOME_KEYS
     assert window_payload["execution_id"] == "EXE-0001"
+    assert window_payload["clock_origin"] == "dispatch"
+    assert window_payload["clock_origin_at"] == _iso(DISPATCHED_AT)
     assert window_payload["contract_revision"] == problem.outcome_contract.revision
     assert window_payload["contract_snapshot"]["success_threshold"] == problem.outcome_contract.success_threshold
     assert "since dispatch (" in window_payload["notes"]
@@ -177,6 +216,7 @@ def test_plpgsql_tick_binds_reading_and_certifies_like_sqlite(stores) -> None:
     assert snapshot.checkpoint_kind == "window"
     assert snapshot.measured_under_revision == problem.outcome_contract.revision
     assert snapshot.contract_amended_after_measurement is False
+    assert (snapshot.measurement_origin, snapshot.measurement_origin_at) == ("dispatch", _iso(DISPATCHED_AT))
     verdict, note = loop_verdict(
         outcome_status=snapshot.status,
         plans=stores["plans"].list_plans(),
@@ -259,6 +299,8 @@ def test_python_tick_writes_the_same_payload_keys_as_plpgsql(stores) -> None:
     assert set(by_kind["t7"]) == set(by_kind["window"]) == OUTCOME_KEYS
     assert by_kind["t7"]["measurement_source"] == by_kind["window"]["measurement_source"] == "instrumented"
     assert by_kind["t7"]["execution_id"] == by_kind["window"]["execution_id"] == "EXE-0001"
+    assert by_kind["t7"]["clock_origin"] == by_kind["window"]["clock_origin"] == "dispatch"
+    assert by_kind["t7"]["clock_origin_at"] == by_kind["window"]["clock_origin_at"] == _iso(DISPATCHED_AT)
     assert by_kind["t7"]["contract_revision"] == by_kind["window"]["contract_revision"]
     assert set(by_kind["t7"]["contract_snapshot"]) == set(by_kind["window"]["contract_snapshot"])
     assert "since dispatch (" in by_kind["t7"]["notes"]
@@ -266,3 +308,54 @@ def test_python_tick_writes_the_same_payload_keys_as_plpgsql(stores) -> None:
     plans = {plan["kind"]: plan for plan in stores["plans"].list_plans()}
     assert by_kind["t7"]["plan_id"] == plans["t7"]["id"]
     assert by_kind["window"]["plan_id"] == plans["window"]["id"]
+
+
+def test_plpgsql_followup_window_derives_from_due_at(stores) -> None:
+    """A window amended after scheduling must not rewrite the follow-up read:
+    the plpgsql tick starts the keep-listening read at due_at - 30 days."""
+    problem = stores["problem"]
+    executed = NOW - timedelta(days=59)  # window 28 -> follow-up due at T+58, i.e. yesterday
+    assert problem.outcome_contract.measurement_window_days == 28
+    schedule_measurements(
+        stores["plans"], problem=problem, execution_id="EXE-0001", executed_at=_iso(executed), origin="dispatch"
+    )
+    amended = stores["problems"].update_outcome_contract(
+        problem.problem_id, OutcomeContractUpdateRequest(measurement_window_days=60), actor="tester"
+    )
+    assert amended is not None and amended.outcome_contract.measurement_window_days == 60
+
+    result = stores["plans"].run_due(_iso(NOW))
+    assert result["measured"] == 3
+    followup = next(p for p in _outcome_payloads(problem.problem_id) if p["checkpoint_kind"] == "followup")
+    # [T+28, now] holds exactly the post-signal (20 days ago); the amended
+    # window [T+60, now] lies in the future and would have read nothing.
+    assert "1 matching signals" in followup["notes"]
+    assert "in the month after the measurement window closed" in followup["notes"]
+    assert float(followup["observed_value"]) == pytest.approx(1 / 31, abs=1e-4)
+    assert followup["contract_revision"] == 2
+    assert followup["contract_snapshot"]["measurement_window_days"] == 60
+
+
+def test_plpgsql_reads_a_missing_contract_revision_as_one(stores) -> None:
+    problem = stores["problem"]
+    import psycopg
+
+    with psycopg.connect(URL) as conn:
+        conn.execute("SELECT set_config('app.tenant_id', '1', false), set_config('app.workspace_id', '1', false)")
+        conn.execute(
+            "UPDATE clara_problems SET payload = payload #- '{outcome_contract,revision}' WHERE problem_id = %s",
+            (problem.problem_id,),
+        )
+    assert "revision" not in _rows(
+        "SELECT payload FROM clara_problems WHERE problem_id = %s", (problem.problem_id,)
+    )[0]["payload"]["outcome_contract"]
+    schedule_measurements(
+        stores["plans"], problem=problem, execution_id="EXE-0001", executed_at=_iso(DISPATCHED_AT), origin="dispatch"
+    )
+    assert stores["plans"].run_due(_iso(DISPATCHED_AT + timedelta(days=8)))["measured"] == 1
+    [payload] = _outcome_payloads(problem.problem_id)
+    assert payload["contract_revision"] == 1
+    assert payload["clock_origin"] == "dispatch"
+    snapshot = stores["fresh_workflows"]().outcome_snapshot(stores["problems"].get_problem(problem.problem_id))
+    assert snapshot.measured_under_revision == 1
+    assert snapshot.contract_amended_after_measurement is False

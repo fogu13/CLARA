@@ -689,10 +689,12 @@ class ExecutionRecord(BaseModel):
     reviewed_by: str | None = None
     reviewed_at: str | None = None
     disclosure_applied: bool = False
-    # Measurement clock origins. dispatched_at is stamped by the store when the
-    # push succeeds (the ticket/message left CLARA); implemented_at is a human
-    # attestation that the fix itself landed (POST .../implementation). A
-    # created ticket is not an implemented fix, so the two are kept apart.
+    # Measurement clock origins. dispatched_at is stamped by the push itself
+    # when the connector write succeeds (the ticket/message left CLARA) —
+    # never invented by a store on an unrelated status update; implemented_at
+    # is a human attestation that the fix itself landed (POST
+    # .../implementation). A created ticket is not an implemented fix, so the
+    # two are kept apart.
     dispatched_at: str | None = None
     implemented_at: str | None = None
     implementation_note: str | None = None
@@ -756,6 +758,11 @@ class OutcomeMeasurement(BaseModel):
     checkpoint_kind: str | None = None
     plan_id: int | None = None
     execution_id: str | None = None
+    # The clock the reading was taken on: the plan's origin (approval |
+    # dispatch | implementation) and instant, stamped by the scheduler that
+    # produced it. Manual and legacy readings carry None.
+    clock_origin: str | None = None
+    clock_origin_at: str | None = None
 
 
 LEARNING_RETENTION_DAYS = 730
@@ -914,9 +921,18 @@ class OutcomeSnapshot(BaseModel):
     contract_revision: int | None = None
     measured_under_revision: int | None = None
     contract_amended_after_measurement: bool = False
+    # The scoring terms the latest reading was evaluated under (its frozen
+    # contract snapshot; the current terms for legacy readings). None when
+    # nothing was measured. status and evidence_grade follow these, never the
+    # current terms above.
+    measured_comparison_method: str | None = None
+    measured_baseline: float | None = None
+    measured_success_threshold: float | None = None
     # Measurement clock: approval | dispatch | implementation and its instant
-    # (outcome_engine.intervention_anchor); the checkpoint kind of the latest
-    # instrumented reading (t7 | window | followup).
+    # — the clock the latest reading was taken on when it carries one, else
+    # the current intervention anchor (outcome_engine.intervention_anchor);
+    # the checkpoint kind of the latest instrumented reading (t7 | window |
+    # followup).
     measurement_origin: str | None = None
     measurement_origin_at: str | None = None
     checkpoint_kind: str | None = None
@@ -944,6 +960,7 @@ class OutcomeBoardItem(BaseModel):
     evidence_grade: str | None = None
     guardrails: list[GuardrailMeasurement] = Field(default_factory=list)
     loop_verdict: str | None = None
+    checkpoint_kind: str | None = None
     due_at: str | None = None
     overdue: bool = False
 

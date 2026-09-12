@@ -61,17 +61,28 @@ def problems_csv(summaries: list[Any]) -> str:
     return rows_to_csv(headers, rows)
 
 
+# Provenance columns appended when the board items carry them: what produced
+# the reading (instrumented | manual), which checkpoint, and the loop verdict.
+OUTCOME_PROVENANCE_COLUMNS = ("measurement_source", "checkpoint_kind", "loop_verdict")
+
+
 def outcomes_csv(board: Any) -> str:
     headers = [
         "problem_id", "title", "owner", "problem_status", "metric", "baseline",
         "success_threshold", "latest_value", "outcome_status",
         "improvement_direction", "measurement_window_days", "latest_learning_status",
     ]
+    provenance = [
+        name for name in OUTCOME_PROVENANCE_COLUMNS
+        if any(hasattr(i, name) for i in board.items)
+    ]
+    headers.extend(provenance)
     rows = [
         [i.problem_id, i.title, i.owner, i.problem_status.value, i.metric, i.baseline,
          i.success_threshold, i.latest_value, i.outcome_status,
          i.improvement_direction, i.measurement_window_days,
-         i.latest_learning_status.value if i.latest_learning_status else ""]
+         i.latest_learning_status.value if i.latest_learning_status else "",
+         *[getattr(i, name, None) or "" for name in provenance]]
         for i in board.items
     ]
     return rows_to_csv(headers, rows)
