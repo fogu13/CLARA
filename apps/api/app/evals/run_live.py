@@ -17,16 +17,30 @@ Design notes (why the comparisons are structured the way they are):
   - Synthesis on 0 real clusters returns 0 honestly (the harness no longer
     fabricates golden-set numbers).
 
-Run:    cd apps/api && python3 -m app.evals.run_live
+  - The golden set carries an optimisation split (the loop may tune on it) and a
+    held-out split (a frozen guardrail). The pooled A/B mixes both and is
+    exploratory; `by_split_ab` carries the per-split paired effect, which is
+    the only valid held-out statement about exemplars. The printed report
+    withholds per-item held-out failures unless --reveal-held-out is passed;
+    the JSON report keeps them. Every run that scores the held-out split is
+    counted in the history.jsonl ledger (`held_out_consultations`) so the
+    number of looks is on record — that file is gitignored
+    (app/evals/.gitignore), so the count is machine-local, not global.
+
+Run:    cd apps/api && python3 -m app.evals.run_live [--publish] [--reveal-held-out]
 Needs:  AI_BASE_URL / AI_API_KEY / AI_MODEL configured (cloud or local).
 Writes: app/evals/reports/report_<ts>.json  and appends app/evals/history.jsonl
+        (both gitignored)
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import random
 import re
+import subprocess
 import sys
 import time
 from collections import Counter
@@ -38,6 +52,7 @@ from typing import Any
 os.environ.setdefault("AI_TEMPERATURE", "0")
 
 from app.evals.harness import (  # noqa: E402
+    GOLDEN_SET_PATH,
     EvalHarness,
     load_golden_set,
     wilson_interval,
@@ -69,6 +84,19 @@ PROBE_LEARNINGS: dict[str, str] = {
 
 def _exemplars() -> list[dict] | None:
     return load_exemplars() if fewshot_enabled() else None
+
+
+AB_METRICS = ("sentiment", "urgency", "tag_exact")
+AB_SCOPE_NOTE = "pooled over optimisation and held-out items; exploratory"
+AB_DISABLED_NOTE = (
+    "exemplars are disabled (ENRICH_FEWSHOT off), so the ON arm would be the "
+    "same prompt as the OFF arm; an A/B of two identical arms measures model "
+    "noise only and is not reported — enrichment_ab and by_split_ab are null"
+)
+EMPTY_INFLUENCE: dict[str, Any] = {
+    "themes": 0, "adoption_rate": 0.0, "avg_off_alignment": 0.0,
+    "avg_on_alignment": 0.0, "alignment_lift": 0.0, "reworded_rate": 0.0, "examples": [],
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -115,11 +143,13 @@ def _score_enrichment(*, exemplars: list[dict] | None) -> dict[str, Any]:
             problems.append(f"urgency pred={act.get('urgency')} exp={exp.get('urgency')}")
         if not t_ok:
             problems.append(f"tags pred={act_tags} exp={exp_tags}")
+        split = g.get("split") or "unsplit"
         if problems:
-            failures.append({"id": g["id"], "problems": problems})
+            failures.append({"id": g["id"], "split": split, "problems": problems})
         per_item.append({
             "id": g["id"],
             "language": g.get("language", "en"),
+            "split": split,
             "pred": {
                 "sentiment": act.get("sentiment"),
                 "sentiment_score": act.get("sentiment_score"),
@@ -174,6 +204,139 @@ def _mcnemar_ab(off_vec: list[int], on_vec: list[int]) -> dict[str, Any]:
     """Paired McNemar of two per-item correctness vectors (off vs on)."""
     b, c, p = mcnemar_exact([bool(x) for x in off_vec], [bool(x) for x in on_vec])
     return {"gained": c, "lost": b, "p_value": round(p, 4)}
+
+
+def _paired_bootstrap_diff_ci(
+    off_vec: list[int],
+    on_vec: list[int],
+    *,
+    n_resamples: int = 2000,
+    seed: int = 12345,
+    ci: float = 0.95,
+) -> list[float] | None:
+    """Percentile bootstrap CI for the mean paired difference (on - off).
+
+    Resamples ITEMS with replacement (the pairing is kept), so the interval is
+    for the accuracy difference on the same items, not for two independent
+    accuracies. Fixed seed -> reproducible. None on an empty stratum.
+    """
+    n = len(off_vec)
+    if n == 0 or n != len(on_vec):
+        return None
+    diffs = [on_vec[i] - off_vec[i] for i in range(n)]
+    rng = random.Random(seed)
+    means = sorted(
+        sum(diffs[rng.randrange(n)] for _ in range(n)) / n
+        for _ in range(n_resamples)
+    )
+    lo_i = int((1 - ci) / 2 * n_resamples)
+    hi_i = min(n_resamples - 1, int((1 + ci) / 2 * n_resamples))
+    return [round(means[lo_i], 4), round(means[hi_i], 4)]
+
+
+def _by_split_ab(
+    off_vectors: dict[str, list[int]],
+    on_vectors: dict[str, list[int]],
+    splits: list[str],
+) -> dict[str, Any]:
+    """Per-split paired exemplar effect: {split: {metric: {...}}}.
+
+    For each split and metric: n, off/on accuracy, exact McNemar (gained =
+    on right & off wrong, lost = the reverse, p), the accuracy difference
+    and its 95 % paired-bootstrap interval. The held-out row is the only
+    valid statement about the exemplars' effect on items the loop never
+    tuned on; the pooled figure mixes both strata.
+    """
+    out: dict[str, Any] = {}
+    for split in sorted(set(splits)):
+        idx = [i for i, s in enumerate(splits) if s == split]
+        n = len(idx)
+        entry: dict[str, Any] = {}
+        for metric in AB_METRICS:
+            off = [off_vectors[metric][i] for i in idx]
+            on = [on_vectors[metric][i] for i in idx]
+            off_acc = round(sum(off) / n, 4) if n else None
+            on_acc = round(sum(on) / n, 4) if n else None
+            entry[metric] = {
+                "n": n,
+                "off_accuracy": off_acc,
+                "on_accuracy": on_acc,
+                **_mcnemar_ab(off, on),
+                "diff": round((sum(on) - sum(off)) / n, 4) if n else None,
+                "diff_ci95": _paired_bootstrap_diff_ci(off, on),
+            }
+        out[split] = entry
+    return out
+
+
+def _sha256_lines(lines: list[str]) -> str:
+    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+
+
+def _git_commit() -> str | None:
+    """`git rev-parse HEAD` of the checkout the harness runs from; None if unavailable."""
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=EVALS_DIR,
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.strip() or None
+
+
+def _run_config(exemplars: list[dict] | None, golden: list[dict] | None = None) -> dict[str, Any]:
+    """Provenance of one run: what was scored, with what, on which items.
+
+    The hashes let two reports be compared for identical inputs (golden set
+    bytes, held-out id list, exemplar texts) without diffing the files.
+    """
+    golden = golden if golden is not None else load_golden_set()
+    held_out_ids = sorted(str(g["id"]) for g in golden if g.get("split") == "held_out")
+    return {
+        "model": AI_MODEL,
+        "temperature": os.environ.get("AI_TEMPERATURE"),
+        "exemplars_enabled": exemplars is not None,
+        "exemplar_count": len(exemplars) if exemplars else 0,
+        "exemplars_sha256": (
+            _sha256_lines(sorted(str(e.get("text", "")) for e in exemplars)) if exemplars else None
+        ),
+        "golden_set_sha256": (
+            hashlib.sha256(GOLDEN_SET_PATH.read_bytes()).hexdigest()
+            if GOLDEN_SET_PATH.exists() else None
+        ),
+        "held_out_ids_sha256": _sha256_lines(held_out_ids),
+        "split_counts": dict(Counter(g.get("split") or "unsplit" for g in golden)),
+        "harness_git_commit": _git_commit(),
+    }
+
+
+def _held_out_consultations(history_path: Path) -> int:
+    """How many times the held-out split has been scored on this machine,
+    counting this run: prior ledger rows flagged `held_out_scored` + 1.
+
+    history.jsonl is gitignored (app/evals/.gitignore), so this is a
+    machine-local count of looks at the guardrail set, not a global one; a
+    fresh clone starts again at 1. It exists so the number of consultations
+    is on record at all — a validation set consulted on every iteration is
+    not an independent final test, and the count is what says how far from
+    one it has drifted.
+    """
+    prior = 0
+    if history_path.exists():
+        for line in history_path.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict) and row.get("held_out_scored"):
+                prior += 1
+    return prior + 1
 
 
 # --------------------------------------------------------------------------- #
@@ -335,32 +498,76 @@ def _learning_influence_probe(groups: list[tuple[str, list[dict]]]) -> dict[str,
 # Reporting
 # --------------------------------------------------------------------------- #
 
-def _print_report(report: dict) -> None:
+def _print_report(report: dict, *, reveal_held_out: bool = False) -> None:
+    """Print the operator summary.
+
+    Held-out protection: per-item failures are printed for the optimisation
+    split only; the held-out split appears as aggregate accuracies and as the
+    per-split paired A/B. Pass reveal_held_out=True (--reveal-held-out) to
+    print held-out ids — every such reveal is a look at the guardrail set.
+    """
     on = report["enrichment_on"]
-    off = report["enrichment_off"]
-    ab = report["enrichment_ab"]
+    off = report.get("enrichment_off")
+    ab = report.get("enrichment_ab_pooled")
     ci = report["ci"]
     print("\n=== Live triage eval ===")
     print(f"model: {report['model']}   timestamp: {report['timestamp']}")
     print(f"golden signals: {on['total_signals']}   (exemplars {'ON' if report['exemplars'] else 'OFF'})")
+    cfg = report.get("config") or {}
+    if cfg:
+        print(f"config: golden_set {str(cfg.get('golden_set_sha256'))[:12]}  "
+              f"held_out_ids {str(cfg.get('held_out_ids_sha256'))[:12]}  "
+              f"exemplars {str(cfg.get('exemplars_sha256'))[:12]} (n={cfg.get('exemplar_count')})  "
+              f"commit {str(cfg.get('harness_git_commit'))[:12]}")
 
-    print("\n[enrichment — production config (exemplars on), 95% bootstrap CI]")
+    print("\n[enrichment — production config (exemplars on), 95% Wilson interval]")
     print(f"  sentiment_accuracy: {on['sentiment_accuracy']:.2%}  (CI {ci['sentiment'][0]:.0%}–{ci['sentiment'][1]:.0%})")
     print(f"  urgency_accuracy:   {on['urgency_accuracy']:.2%}  (CI {ci['urgency'][0]:.0%}–{ci['urgency'][1]:.0%})")
     print(f"  tag_f1:             {on['tag_f1']:.2%}  (exact {on['tag_f1_exact']:.2%})")
-    print(f"  hallucination_rate: {on['hallucination_rate']:.2%}    pii_leak_count: {on['pii_leak_count']}")
+    if on.get("hallucination_rate") is None:
+        hall = (f"not evaluated (0 eligible EN items; "
+                f"{on.get('hallucination_excluded', 0)} non-EN excluded)")
+    else:
+        hall = (f"{on['hallucination_rate']:.2%} over {on.get('hallucination_eligible', '?')} EN items "
+                f"({on.get('hallucination_excluded', 0)} non-EN excluded)")
+    print(f"  hallucination_rate: {hall}    pii_leak_count: {on['pii_leak_count']}")
 
-    print("\n[exemplar A/B — in-run, paired McNemar (gained = exemplars fixed it)]")
-    for metric in ("sentiment", "urgency", "tag_exact"):
-        m = ab[metric]
-        off_v = {"sentiment": off["sentiment_accuracy"], "urgency": off["urgency_accuracy"],
-                 "tag_exact": off["tag_exact_accuracy"]}[metric]
-        on_v = {"sentiment": on["sentiment_accuracy"], "urgency": on["urgency_accuracy"],
-                "tag_exact": on["tag_exact_accuracy"]}[metric]
-        sig = "SIGNIFICANT" if m["p_value"] < 0.05 and m["gained"] > m["lost"] else "not significant"
-        print(f"  {metric:10s} off {off_v:.2%} -> on {on_v:.2%}  "
-              f"(gained {m['gained']}, lost {m['lost']}, p={m['p_value']:.3f} → {sig})")
-    print(f"  tag_f1 (fuzzy)  off {off['tag_f1']:.2%} -> on {on['tag_f1']:.2%}")
+    if ab is None or off is None:
+        print("\n[exemplar A/B — not run]")
+        print(f"  {report.get('ab_note') or 'no OFF arm was scored'}")
+    else:
+        print(f"\n[exemplar A/B — in-run, paired McNemar (gained = exemplars fixed it); "
+              f"{report.get('ab_scope_note', AB_SCOPE_NOTE)}]")
+        for metric in AB_METRICS:
+            m = ab[metric]
+            off_v = {"sentiment": off["sentiment_accuracy"], "urgency": off["urgency_accuracy"],
+                     "tag_exact": off["tag_exact_accuracy"]}[metric]
+            on_v = {"sentiment": on["sentiment_accuracy"], "urgency": on["urgency_accuracy"],
+                    "tag_exact": on["tag_exact_accuracy"]}[metric]
+            sig = "SIGNIFICANT" if m["p_value"] < 0.05 and m["gained"] > m["lost"] else "not significant"
+            print(f"  {metric:10s} off {off_v:.2%} -> on {on_v:.2%}  "
+                  f"(gained {m['gained']}, lost {m['lost']}, p={m['p_value']:.3f} → {sig})")
+        print(f"  tag_f1 (fuzzy)  off {off['tag_f1']:.2%} -> on {on['tag_f1']:.2%}")
+
+        print("\n[exemplar A/B by split — paired; the held_out row is the only valid held-out "
+              "statement about exemplars. Accept/reject reads the optimization row.]")
+        for split, metrics in (report.get("by_split_ab") or {}).items():
+            for metric, m in metrics.items():
+                lo, hi = m["diff_ci95"] if m["diff_ci95"] else (float("nan"), float("nan"))
+                print(f"  {split:13s} {metric:10s} n={m['n']:3d}  off {m['off_accuracy']:.2%} -> "
+                      f"on {m['on_accuracy']:.2%}  diff {m['diff']:+.2%} "
+                      f"(95% paired-bootstrap {lo:+.1%}..{hi:+.1%}; "
+                      f"gained {m['gained']}, lost {m['lost']}, p={m['p_value']:.3f})")
+
+    held = (report.get("by_split") or {}).get("held_out")
+    if held:
+        print(f"\n[held-out split (frozen guardrail, n={held['n']}) — aggregate only, not inspected per item]")
+        print(f"  sentiment_accuracy {held['sentiment_accuracy']:.2%}  "
+              f"urgency_accuracy {held['urgency_accuracy']:.2%}  "
+              f"tag_exact_accuracy {held['tag_exact_accuracy']:.2%}")
+        if report.get("held_out_consultations") is not None:
+            print(f"  held-out consultations on this machine (incl. this run): "
+                  f"{report['held_out_consultations']}")
 
     syn = report["synthesis"]
     print(f"\n[synthesis on demo — {syn['total_insights']} real clusters formed]")
@@ -387,9 +594,17 @@ def _print_report(report: dict) -> None:
     print("  (adoption = the recommendation took on the learning's remedy; proves the")
     print("   loop is active. Whether that remedy is BETTER needs measured outcomes.)")
 
-    print(f"\n[per-item enrichment failures (exemplars on): {len(report['failures'])}/{on['total_signals']}]")
-    for f in report["failures"]:
+    failures = report["failures"]
+    shown = [f for f in failures if reveal_held_out or f.get("split") != "held_out"]
+    withheld = len(failures) - len(shown)
+    scope = "all splits" if reveal_held_out else "optimization split only"
+    print(f"\n[per-item enrichment failures (exemplars on, {scope}): "
+          f"{len(shown)} shown of {len(failures)}/{on['total_signals']}]")
+    for f in shown:
         print(f"  {f['id']}: " + "; ".join(f["problems"]))
+    if withheld:
+        print(f"  ({withheld} held-out failure(s) withheld — the held-out split is a frozen "
+              f"guardrail; pass --reveal-held-out to print them, which counts as a look)")
     print(f"\nreport: {report['_report_path']}")
 
 
@@ -402,34 +617,106 @@ def _enr_dict(scored: dict, vectors: dict) -> dict[str, Any]:
         "tag_exact_accuracy": sum(vectors["tag_exact"]) / len(vectors["tag_exact"]) if vectors["tag_exact"] else 0.0,
         "tag_f1": r.tag_f1,
         "tag_f1_exact": r.tag_f1_exact,
+        # None = not evaluated (no eligible EN item); see harness.EnrichmentEvalResult.
         "hallucination_rate": r.hallucination_rate,
+        "hallucination_eligible": r.hallucination_eligible,
+        "hallucination_excluded": r.hallucination_excluded,
         "pii_leak_count": r.pii_leak_count,
         "enrich_latency_ms": scored["elapsed_ms"],
     }
+
+
+def build_report(
+    *,
+    scored_on: dict[str, Any],
+    scored_off: dict[str, Any] | None,
+    exemplars: list[dict] | None,
+    synthesis: dict[str, Any] | None = None,
+    influence: dict[str, Any] | None = None,
+    timestamp: datetime | None = None,
+) -> dict[str, Any]:
+    """Assemble the report dict from the scored arms (pure; no model calls).
+
+    scored_on is the production configuration (exemplars as given). scored_off
+    is the exemplar-free arm, or None when exemplars are disabled — then the
+    two arms would be identical and no A/B is reported (enrichment_ab,
+    by_split_ab, enrichment_off, per_item_off are null with `ab_note`).
+    """
+    now = timestamp or datetime.now(timezone.utc)
+    on_vec = scored_on["vectors"]
+    enrichment_on = _enr_dict(scored_on, on_vec)
+    ab_enabled = exemplars is not None and scored_off is not None
+
+    report: dict[str, Any] = {
+        "kind": "eval",
+        "timestamp": now.isoformat(),
+        "model": AI_MODEL,
+        "exemplars": exemplars is not None,
+        "config": _run_config(exemplars),
+        "enrichment_on": enrichment_on,
+    }
+    if ab_enabled:
+        off_vec = scored_off["vectors"]
+        assert scored_off["splits"] == scored_on["splits"], "arms scored different golden sets"
+        pooled = {m: _mcnemar_ab(off_vec[m], on_vec[m]) for m in AB_METRICS}
+        report.update({
+            "enrichment_off": _enr_dict(scored_off, off_vec),
+            # `enrichment_ab` is kept for compatibility; it IS the pooled test.
+            "enrichment_ab": pooled,
+            "enrichment_ab_pooled": pooled,
+            "ab_scope_note": AB_SCOPE_NOTE,
+            "ab_note": None,
+        })
+    else:
+        report.update({
+            "enrichment_off": None,
+            "enrichment_ab": None,
+            "enrichment_ab_pooled": None,
+            "ab_scope_note": AB_SCOPE_NOTE,
+            "ab_note": AB_DISABLED_NOTE,
+        })
+    report.update({
+        "ci_method": "wilson_score_95",
+        "ci": {"sentiment": list(wilson_interval(sum(on_vec["sentiment"]), len(on_vec["sentiment"]))),
+               "urgency": list(wilson_interval(sum(on_vec["urgency"]), len(on_vec["urgency"])))},
+        "by_language": _by_language(on_vec, scored_on["languages"]),
+        # The golden set is split into an optimisation stratum (the loop may
+        # tune on it) and a locked held-out stratum. The pooled figure above
+        # mixes both; the held-out row is the guardrail number.
+        "by_split": _by_stratum(on_vec, scored_on["splits"]),
+        "by_split_off": _by_stratum(scored_off["vectors"], scored_off["splits"]) if ab_enabled else None,
+        # Per-split paired effect: the only valid held-out statement about exemplars.
+        "by_split_ab": _by_split_ab(scored_off["vectors"], on_vec, scored_on["splits"]) if ab_enabled else None,
+        "synthesis": synthesis if synthesis is not None else {"total_insights": 0},
+        "learning_influence": influence if influence is not None else dict(EMPTY_INFLUENCE),
+        "failures": scored_on["failures"],
+        "per_item": scored_on["per_item"],
+        "failures_off": scored_off["failures"] if ab_enabled else None,
+        "per_item_off": scored_off["per_item"] if ab_enabled else None,
+    })
+    return report
 
 
 def main() -> int:
     if not AI_MODEL:
         print("AI_MODEL is unset — configure AI_BASE_URL/AI_API_KEY/AI_MODEL.", file=sys.stderr)
         return 2
+    reveal_held_out = "--reveal-held-out" in sys.argv
 
+    exemplars = _exemplars()
     try:
-        scored_on = _score_enrichment(exemplars=_exemplars())
-        scored_off = _score_enrichment(exemplars=None)
+        scored_on = _score_enrichment(exemplars=exemplars)
+        # No OFF arm when exemplars are disabled: it would be the same prompt
+        # twice, and an A/B of identical arms only measures model noise.
+        scored_off = _score_enrichment(exemplars=None) if exemplars is not None else None
     except AIProviderError as exc:
         print(f"LLM enrichment call failed: {exc}", file=sys.stderr)
         print("Check AI_BASE_URL / AI_API_KEY / AI_MODEL and that the endpoint is reachable.", file=sys.stderr)
         return 2
 
-    on_vec, off_vec = scored_on["vectors"], scored_off["vectors"]
-    enrichment_on = _enr_dict(scored_on, on_vec)
-    enrichment_off = _enr_dict(scored_off, off_vec)
-    enrichment_ab = {m: _mcnemar_ab(off_vec[m], on_vec[m]) for m in ("sentiment", "urgency", "tag_exact")}
-
     # Synthesis structural + influence probe (best-effort; enrichment is the priority).
-    synthesis = {"total_insights": 0}
-    influence = {"themes": 0, "adoption_rate": 0.0, "avg_off_alignment": 0.0,
-                 "avg_on_alignment": 0.0, "alignment_lift": 0.0, "reworded_rate": 0.0, "examples": []}
+    synthesis: dict[str, Any] = {"total_insights": 0}
+    influence: dict[str, Any] = dict(EMPTY_INFLUENCE)
     try:
         groups = _enrich_demo_groups()
         flat = [s for _, sigs in groups for s in sigs]
@@ -444,27 +731,14 @@ def main() -> int:
         synthesis = {"total_insights": 0, "error": f"{type(exc).__name__}: {exc}"}
 
     now = datetime.now(timezone.utc)
-    report: dict[str, Any] = {
-        "kind": "eval",
-        "timestamp": now.isoformat(),
-        "model": AI_MODEL,
-        "exemplars": bool(_exemplars()),
-        "enrichment_on": enrichment_on,
-        "enrichment_off": enrichment_off,
-        "enrichment_ab": enrichment_ab,
-        "ci_method": "wilson_score_95",
-        "ci": {"sentiment": list(wilson_interval(sum(on_vec["sentiment"]), len(on_vec["sentiment"]))),
-               "urgency": list(wilson_interval(sum(on_vec["urgency"]), len(on_vec["urgency"])))},
-        "by_language": _by_language(on_vec, scored_on["languages"]),
-        # The golden set is split into an optimisation stratum (the loop may
-        # tune on it) and a locked held-out stratum. The pooled figure above
-        # mixes both; the held-out row is the guardrail number.
-        "by_split": _by_stratum(on_vec, scored_on["splits"]),
-        "synthesis": synthesis,
-        "learning_influence": influence,
-        "failures": scored_on["failures"],
-        "per_item": scored_on["per_item"],
-    }
+    report = build_report(
+        scored_on=scored_on, scored_off=scored_off, exemplars=exemplars,
+        synthesis=synthesis, influence=influence, timestamp=now,
+    )
+    enrichment_on = report["enrichment_on"]
+    # Every run scores the held-out split; the ledger keeps count of the looks.
+    held_out_consultations = _held_out_consultations(HISTORY_PATH)
+    report["held_out_consultations"] = held_out_consultations
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     report_path = REPORTS_DIR / f"report_{now.strftime('%Y%m%dT%H%M%SZ')}.json"
@@ -485,7 +759,9 @@ def main() -> int:
                     "Hallucination heuristic covers EN items only. Intervals "
                     "are 95% Wilson score intervals. 'overall' pools the "
                     "optimisation and held-out strata; by_split.held_out is "
-                    "the locked guardrail figure."
+                    "the locked guardrail figure. by_split_ab is the paired "
+                    "exemplar effect per split; held_out_consultations is the "
+                    "machine-local count of runs that scored the held-out split."
                 ),
             },
             "overall": {
@@ -497,7 +773,13 @@ def main() -> int:
             },
             "by_language": report["by_language"],
             "by_split": report["by_split"],
+            "held_out_consultations": held_out_consultations,
         }
+        if report["by_split_ab"] is not None:
+            published["by_split_ab"] = report["by_split_ab"]
+            published["ab_scope_note"] = report["ab_scope_note"]
+        else:
+            published["ab_note"] = report["ab_note"]
         (EVALS_DIR / "published_metrics.json").write_text(json.dumps(published, indent=2) + "\n")
         print(f"published model-card metrics -> {EVALS_DIR / 'published_metrics.json'}")
 
@@ -510,15 +792,20 @@ def main() -> int:
         "tag_f1": enrichment_on["tag_f1"],
         "tag_f1_exact": enrichment_on["tag_f1_exact"],
         "tag_exact_accuracy": enrichment_on["tag_exact_accuracy"],
-        "exemplar_ab": enrichment_ab,
+        "exemplar_ab": report["enrichment_ab"],
+        "by_split_ab": report["by_split_ab"],
         "clusters": synthesis.get("total_insights"),
         "adoption_rate": influence["adoption_rate"],
         "alignment_lift": influence["alignment_lift"],
+        # The held-out split was scored by this run; the running count is the
+        # number of looks taken on this machine (history.jsonl is gitignored).
+        "held_out_scored": True,
+        "held_out_consultations": held_out_consultations,
     }
     with open(HISTORY_PATH, "a") as fh:
         fh.write(json.dumps(ledger) + "\n")
 
-    _print_report(report)
+    _print_report(report, reveal_held_out=reveal_held_out)
     return 0
 
 
