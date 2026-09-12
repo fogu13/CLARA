@@ -36,8 +36,11 @@ PREDICTORS. floor = keyword severity recomputed from the text (baseline.predict_
 same code run_eval.py uses); ml = results/predictions_ml.json ["risk"]; llm =
 results/predictions_llm.json (the 4 August generic-prompt run); llm_production =
 results/predictions_llm_production.json (the 5 September production-stage run on the
-model named in its .meta.json). Items missing from a prediction file are dropped from the
-pairs that involve that predictor and the drop is reported.
+model named in its .meta.json). Every prediction file goes through
+prediction_validation.validate_predictions exactly as run_eval.equity_slices does
+(first row per id wins, a label outside the risk vocabulary is invalid, never a
+miss), so an item with no VALID prediction is dropped from the pairs that involve
+that predictor — out of the recall denominator — and the drop is reported.
 
 EVIDENCE TYPES. Gold: AI-generated seed labels. Predictions: model outputs. This is a
 model comparison on a reference that is not human-labelled; it says nothing about
@@ -206,32 +209,53 @@ def compare_all(items: list[dict], predictors: list[str], resamples: int = RESAM
 # --------------------------------------------------------------------------
 # corpus loading (requires THESIS_DATA_DIR and the committed prediction files)
 # --------------------------------------------------------------------------
-def _load_predictions() -> dict[str, dict[str, str]]:
-    def by_id(path):
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-        if isinstance(data, dict) and "risk" in data:      # predictions_ml.json
-            return {k: v for k, v in data["risk"].items()}
-        return {r["id"]: r.get("risk") for r in data if r.get("risk")}  # list files
-    files = {"ml": "predictions_ml.json", "llm": "predictions_llm.json",
-             "llm_production": "predictions_llm_production.json"}
+RISK_LABELS = ["low", "medium", "high", "critical"]
+PREDICTION_FILES = {"ml": "predictions_ml.json", "llm": "predictions_llm.json",
+                    "llm_production": "predictions_llm_production.json"}
+
+
+def _rows(path: str) -> list[dict]:
+    """The prediction file as validator rows: {"id", "risk"} per item, unvalidated."""
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    if isinstance(data, dict) and "risk" in data:      # predictions_ml.json
+        return [{"id": k, "risk": v} for k, v in data["risk"].items()]
+    return list(data)                                   # list files (predict_llm*.py)
+
+
+def _load_predictions(expected_ids: list[str], corpus_ids: list[str] | None = None,
+                      results: str | None = None) -> dict[str, dict[str, str]]:
+    """{predictor: {id: VALID risk label}} — validated, never last-row-wins.
+
+    `expected_ids` is the same denominator run_eval.equity_slices validates
+    against (every risk-labelled item with text); an invalid label (e.g. "High")
+    or a missing row leaves the item out of that predictor's map, so it is
+    dropped from the recall denominator instead of counting as a miss.
+    """
+    from prediction_validation import validate_predictions
+
     out = {}
-    for key, name in files.items():
-        path = os.path.join(RESULTS, name)
+    for key, name in PREDICTION_FILES.items():
+        path = os.path.join(results or RESULTS, name)
         if os.path.exists(path):
-            out[key] = by_id(path)
+            vr = validate_predictions(_rows(path), expected_ids=expected_ids, field="risk",
+                                      labels=RISK_LABELS, corpus_ids=corpus_ids)
+            out[key] = dict(vr.by_id)
+            if vr.n_invalid or vr.n_missing:
+                print(f"note: {name}: {vr.n_valid} valid, {vr.n_invalid} invalid, "
+                      f"{vr.n_missing} missing of {vr.n_expected} risk-labelled items",
+                      file=sys.stderr)
         else:
             print(f"note: {path} absent, predictor {key} skipped", file=sys.stderr)
     return out
 
 
-def load_items() -> tuple[list[dict], list[str]]:
-    from load_datasets import load  # same THESIS_DATA_DIR contract as run_eval.py
+def build_items(sigs, preds: dict[str, dict[str, str]]) -> tuple[list[dict], list[str]]:
+    """Gold-escalate items of the two strata with each predictor's hit (pure)."""
     import baseline as bl
 
-    preds = _load_predictions()
     items = []
-    for s in load():
+    for s in sigs:
         if s.risk not in ESCALATE or s.language not in STRATA or not s.text:
             continue
         hits = {"floor": bl.predict_risk(s.text) in ESCALATE}
@@ -239,8 +263,17 @@ def load_items() -> tuple[list[dict], list[str]]:
             if s.id in table:
                 hits[key] = table[s.id] in ESCALATE
         items.append({"id": s.id, "language": s.language, "hits": hits})
-    predictors = ["floor"] + [k for k in ("ml", "llm", "llm_production") if k in preds]
+    predictors = ["floor"] + [k for k in PREDICTION_FILES if k in preds]
     return items, predictors
+
+
+def load_items() -> tuple[list[dict], list[str]]:
+    from load_datasets import load  # same THESIS_DATA_DIR contract as run_eval.py
+
+    sigs = load()
+    expected = [s.id for s in sigs if s.risk in RISK_LABELS and s.text]
+    preds = _load_predictions(expected, corpus_ids=[s.id for s in sigs])
+    return build_items(sigs, preds)
 
 
 def main(argv: list[str]) -> int:

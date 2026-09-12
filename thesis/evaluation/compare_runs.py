@@ -26,8 +26,10 @@ Conventions match run_eval.significance(): sentiment is scored on the rated
 items against the star-derived gold, risk on the items with a gold risk seed.
 Every run's file is first passed through prediction_validation: a row whose
 label is missing, empty or outside the task vocabulary is INVALID, a gold item
-with no row is MISSING, duplicate ids keep their first row, rows for unknown
-ids are counted and ignored. Nothing is defaulted to `neutral` / `low`. The
+with no row is MISSING, duplicate ids keep their first row, rows with no usable
+id are counted as invalid ids, rows for unknown ids (not in the corpus) and
+outside-task ids (in the corpus, not in this task's gold) are counted
+separately and ignored. Nothing is defaulted to `neutral` / `low`. The
 accuracy table carries both views per run — coverage-conditioned (valid rows
 only) and end-to-end (missing / invalid count as wrong over every gold item) —
 with the counts; pairs use the intersection of VALID ids and report n_dropped;
@@ -72,7 +74,10 @@ def load_run(path: str) -> dict[str, list[dict]]:
     if isinstance(data, dict):
         return {task: [{"id": k, task: v} for k, v in (data.get(task) or {}).items()]
                 for task in TASKS}
-    return {task: [{"id": row.get("id"), task: row.get(task)} for row in data]
+    # A row that is not a mapping is kept as-is so the validator counts it as
+    # an invalid id instead of this pre-pass raising on it.
+    return {task: [{"id": row.get("id"), task: row.get(task)} if isinstance(row, dict) else row
+                   for row in data]
             for task in TASKS}
 
 
@@ -102,6 +107,7 @@ def parse_runs(args, sigs) -> dict[str, dict[str, list[dict]]]:
 def compare(sigs, runs: dict[str, dict[str, list[dict]]]):
     rated = [s for s in sigs if s.star_rating is not None and s.text]
     have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
+    corpus_ids = [s.id for s in sigs]
     tasks = {
         "sentiment": (rated, lambda s: bl.gold_sentiment_from_stars(s.star_rating), SENT_LABELS),
         "risk": (have, lambda s: s.risk, RISK_LABELS),
@@ -114,7 +120,7 @@ def compare(sigs, runs: dict[str, dict[str, list[dict]]]):
         labelled: dict[str, dict[str, str]] = {}
         for name, run in runs.items():
             vs = validate_predictions(run.get(task) or [], expected_ids=[s.id for s in items],
-                                      field=task, labels=labels)
+                                      field=task, labels=labels, corpus_ids=corpus_ids)
             scored = [s for s in items if s.id in vs.by_id]
             if not scored:
                 continue
@@ -123,7 +129,9 @@ def compare(sigs, runs: dict[str, dict[str, list[dict]]]):
             labelled[name] = {s.id: p for s, p in zip(scored, y_pred)}
             sc = M.score(y_true, y_pred, labels)
             n_correct = sum(1 for t, p in zip(y_true, y_pred) if t == p)
-            e2e_lo, e2e_hi = M.wilson_interval(n_correct, vs.n_expected)
+            e2e_acc = round(n_correct / vs.n_expected, 4) if vs.n_expected else None
+            e2e_lo, e2e_hi = (M.wilson_interval(n_correct, vs.n_expected)
+                              if vs.n_expected else (None, None))
             acc_rows.append({"task": task, "run": name, "n": sc["n"],
                              "accuracy": sc["accuracy"],
                              "accuracy_ci_low": sc["accuracy_ci_low"],
@@ -134,9 +142,11 @@ def compare(sigs, runs: dict[str, dict[str, list[dict]]]):
                              "n_expected": vs.n_expected, "n_valid": vs.n_valid,
                              "n_invalid": vs.n_invalid, "n_missing": vs.n_missing,
                              "n_unknown_ids": vs.n_unknown_ids,
+                             "n_outside_task": vs.n_outside_task,
+                             "n_invalid_ids": vs.n_invalid_ids,
                              "n_duplicate_ids": vs.n_duplicate_ids,
                              "coverage": vs.coverage,
-                             "accuracy_end_to_end": round(n_correct / vs.n_expected, 4),
+                             "accuracy_end_to_end": e2e_acc,
                              "accuracy_end_to_end_ci_low": e2e_lo,
                              "accuracy_end_to_end_ci_high": e2e_hi})
             correct[name] = {s.id: p == t for s, p, t in zip(scored, y_pred, y_true)}

@@ -857,7 +857,7 @@ const en = {
     evalHallucination: "Hallucination rate",
     evalPii: "PII leaks",
     evalCitation:
-      "Source: the published snapshot served on the model card (eval run 2026-07-18, model glm-5.2, golden set n=100, 72 EN / 28 DE, adversarially verified). Hallucination (EN-scope) and PII are from the 2026-07-17 run of the same harness.",
+      "Source: the published snapshot served on the model card (eval run 2026-07-18, model glm-5.2, golden set n=100, 72 EN / 28 DE, adversarially verified). Hallucination and PII are from the 2026-07-17 15:22 UTC run of the same harness (n=80, 60 EN / 20 DE): the hallucination heuristic scores English items only, so its rate is 2 flagged of the 60 eligible English items.",
     evalCaveat:
       "n=100 is still a modest sample and the DE stratum (n=28) carries wide confidence intervals: differences of a few points are not statistically significant. The hallucination heuristic covers EN items only. Growing the labelled set remains planned. We state this plainly because honest limits are part of the product.",
     s3Title: "When and how to override",
@@ -1889,7 +1889,7 @@ const de: Dict = {
     evalHallucination: "Halluzinationsrate",
     evalPii: "PII-Lecks",
     evalCitation:
-      "Quelle: der veröffentlichte Snapshot auf der Modellkarte (Eval-Lauf 2026-07-18, Modell glm-5.2, Golden Set n=100, 72 EN / 28 DE, adversariell verifiziert). Halluzination (nur EN) und PII stammen aus dem Lauf 2026-07-17 desselben Harness.",
+      "Quelle: der veröffentlichte Snapshot auf der Modellkarte (Eval-Lauf 2026-07-18, Modell glm-5.2, Golden Set n=100, 72 EN / 28 DE, adversariell verifiziert). Halluzination und PII stammen aus dem Lauf 2026-07-17 15:22 UTC desselben Harness (n=80, 60 EN / 20 DE): Die Halluzinations-Heuristik bewertet nur englische Items, die Rate ist daher 2 markierte von 60 englischen Items.",
     evalCaveat:
       "n=100 ist weiterhin eine überschaubare Stichprobe, und das DE-Stratum (n=28) hat breite Konfidenzintervalle: Unterschiede von wenigen Punkten sind statistisch nicht signifikant. Die Halluzinations-Heuristik deckt nur EN-Items ab. Der weitere Ausbau des gelabelten Sets ist geplant. Wir sagen das offen, weil ehrliche Grenzen Teil des Produkts sind.",
     s3Title: "Wann und wie Sie eingreifen",

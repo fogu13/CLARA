@@ -120,8 +120,79 @@ def main() -> None:
         assert 0.0 <= row["perm_p_two_sided"] <= 1.0
     assert res["per_predictor"]["floor"]["gap_en_minus_de"] == round(8 / 41, 4)
 
+    # --- 7. C4: prediction files go through the validator, exactly as run_eval does ----
+    test_prediction_loading_matches_run_eval()
+
     print("test_equity_gap_bootstrap: all assertions passed (synthetic items only; "
           "the module has not been run on the corpus)")
+
+
+def test_prediction_loading_matches_run_eval() -> None:
+    """A row with label `High` (off vocabulary) and a duplicate id are handled
+    by prediction_validation in BOTH equity_gap_bootstrap and run_eval's
+    equity_slices: the item leaves the recall denominator, it is not a miss;
+    the first row wins, not the last."""
+    import json
+    import tempfile
+
+    from load_datasets import Signal
+    import run_eval as RE
+
+    def sig(i, lang, risk, text):
+        return Signal(id=f"S-{i}", dataset="fake", sector="x", source="store", language=lang,
+                      star_rating=None, text=text, theme="t", journey_stage="j", owner="o",
+                      action="a", risk=risk)
+
+    sigs = [sig(1, "en", "high", "Account blocked, terrible, lost money"),
+            sig(2, "en", "high", "Support never answers, awful"),
+            sig(3, "en", "critical", "Lost all my money, fraud"),
+            sig(4, "en", "high", "It is okay"),
+            sig(5, "en", "critical", "Love it"),
+            sig(6, "de", "high", "Konto gesperrt"),
+            sig(7, "de", "high", "Kein Support"),
+            sig(8, "de", "critical", "Geld weg"),
+            sig(9, "de", "high", "Geht so"),
+            sig(10, "de", "critical", "Sehr gut"),
+            sig(11, "de", "low", "Nur ein Kommentar")]
+    rows = [{"id": "S-1", "risk": "high"},
+            {"id": "S-2", "risk": "High"},       # off-vocabulary: invalid, must not count as a miss
+            {"id": "S-3", "risk": "high"},
+            {"id": "S-3", "risk": "low"},        # duplicate: the FIRST row wins (old loader: last)
+            {"id": "S-4", "risk": "low"},        # a real miss
+            {"id": "S-6", "risk": "critical"},
+            {"id": "S-7", "risk": "High"},       # invalid
+            {"id": "S-8", "risk": "high"},
+            {"id": "S-9", "risk": "low"},        # a real miss
+            {"id": "S-11", "risk": "low"},
+            "garbage"]                           # non-mapping row tolerated
+    # S-5 and S-10 missing entirely
+    tmp = tempfile.mkdtemp(prefix="clara_equity_gap_")
+    with open(os.path.join(tmp, "predictions_llm.json"), "w") as fh:
+        json.dump(rows, fh)
+
+    expected = [s.id for s in sigs if s.risk in eg.RISK_LABELS and s.text]
+    preds = eg._load_predictions(expected, corpus_ids=[s.id for s in sigs], results=tmp)
+    assert set(preds) == {"llm"}
+    assert "S-2" not in preds["llm"] and "S-7" not in preds["llm"], preds["llm"]
+    assert preds["llm"]["S-3"] == "high", preds["llm"]  # first row, not last
+    items, predictors = eg.build_items(sigs, preds)
+    assert predictors == ["floor", "llm"]
+    r = eg.stratum_recall(items, "llm")
+    # en gold-escalate S-1..S-5: valid llm rows S-1, S-3, S-4 -> n=3, hits 2 (S-4 missed)
+    assert r["en"]["n"] == 3 and r["en"]["hits"] == 2 and r["en"]["n_missing"] == 2, r["en"]
+    # de gold-escalate S-6..S-10: valid S-6, S-8, S-9 -> n=3, hits 2 (S-9 missed)
+    assert r["de"]["n"] == 3 and r["de"]["hits"] == 2 and r["de"]["n_missing"] == 2, r["de"]
+    assert "llm" not in next(it for it in items if it["id"] == "S-2")["hits"]
+
+    # run_eval.equity_slices on the same file gives the same denominators
+    RE.RESULTS = tmp
+    summary: dict = {}
+    maps = RE.score_llm(sigs, summary, key="llm", cache="predictions_llm.json", label="t")
+    RE.equity_slices(sigs, summary, {"llm": maps}, None)
+    eq = summary["escalation_recall_by_language"]
+    assert eq["en"]["n_gold_escalate_llm"] == 3 and eq["de"]["n_gold_escalate_llm"] == 3, eq
+    assert eq["en"]["recall_llm"] == r["en"]["recall"] and eq["de"]["recall_llm"] == r["de"]["recall"]
+    assert maps["risk"].keys() == preds["llm"].keys()
 
 
 if __name__ == "__main__":

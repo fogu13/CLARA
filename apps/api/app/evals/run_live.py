@@ -20,21 +20,36 @@ Design notes (why the comparisons are structured the way they are):
   - The golden set carries an optimisation split (the loop may tune on it) and a
     held-out split (a frozen guardrail). The pooled A/B mixes both and is
     exploratory; `by_split_ab` carries the per-split paired effect, which is
-    the only valid held-out statement about exemplars. The printed report
-    withholds per-item held-out failures unless --reveal-held-out is passed;
-    the JSON report keeps them. Every run that scores the held-out split is
-    counted in the history.jsonl ledger (`held_out_consultations`) so the
-    number of looks is on record — that file is gitignored
-    (app/evals/.gitignore), so the count is machine-local, not global.
+    the only valid held-out statement about exemplars.
+  - The in-run A/B is the EXEMPLAR effect (ON vs OFF, same prompt). It cannot
+    measure a prompt change (both arms carry it) or an exemplar edit (the OFF
+    arm has no exemplars either way). The loop's accept gate is therefore a
+    BETWEEN-run comparison, `--baseline-report PATH`: the ON arm's per-item
+    correctness is joined to the baseline run's by golden id and tested with
+    the same exact McNemar (`compare_reports`, written as `vs_baseline`).
+    Because the model is not deterministic, that difference includes run
+    noise from both runs — replication is still the standard for any claim
+    carried outside the loop. Both reports must have scored the same golden
+    set (config hashes are checked; a mismatch is refused).
+  - Held-out per-item rows never enter the main report: they go to a sidecar
+    `report_<ts>.held_out.json` (`held_out_sidecar`), the main report keeps
+    optimisation-split rows plus held-out AGGREGATES only, and the printed
+    report shows held-out failures only with --reveal-held-out. Every run
+    scores the held-out split, so every `kind: eval` ledger row counts as one
+    consultation (`held_out_consultations`); a reveal is recorded per row as
+    `held_out_revealed`. history.jsonl is gitignored (app/evals/.gitignore),
+    so the count is machine-local, not global.
 
 Run:    cd apps/api && python3 -m app.evals.run_live [--publish] [--reveal-held-out]
+                                                    [--baseline-report reports/report_<ts>.json]
 Needs:  AI_BASE_URL / AI_API_KEY / AI_MODEL configured (cloud or local).
-Writes: app/evals/reports/report_<ts>.json  and appends app/evals/history.jsonl
-        (both gitignored)
+Writes: app/evals/reports/report_<ts>.json, report_<ts>.held_out.json and appends
+        app/evals/history.jsonl (all gitignored)
 """
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -83,16 +98,28 @@ PROBE_LEARNINGS: dict[str, str] = {
 
 
 def _exemplars() -> list[dict] | None:
-    return load_exemplars() if fewshot_enabled() else None
+    """The active exemplar set, or None when few-shot is off OR the set is
+    empty: an enabled-but-empty list changes nothing in the prompt, so it is
+    treated exactly like disabled (no OFF arm, no A/B)."""
+    if not fewshot_enabled():
+        return None
+    exemplars = load_exemplars()
+    return list(exemplars) if exemplars else None
 
 
 AB_METRICS = ("sentiment", "urgency", "tag_exact")
 AB_SCOPE_NOTE = "pooled over optimisation and held-out items; exploratory"
 AB_DISABLED_NOTE = (
-    "exemplars are disabled (ENRICH_FEWSHOT off), so the ON arm would be the "
-    "same prompt as the OFF arm; an A/B of two identical arms measures model "
-    "noise only and is not reported — enrichment_ab and by_split_ab are null"
+    "exemplars are disabled (ENRICH_FEWSHOT off, or an empty exemplar set), so "
+    "the ON arm would be the same prompt as the OFF arm; an A/B of two identical "
+    "arms measures model noise only and is not reported — enrichment_ab and "
+    "by_split_ab are null"
 )
+# Report keys whose rows carry a `split`; the held-out rows of each go to the
+# sidecar file, never to the main report.
+PER_ITEM_KEYS = ("per_item", "per_item_off", "failures", "failures_off")
+# config hashes two runs must share before their per-item rows may be joined.
+COMPARABLE_HASHES = ("golden_set_sha256", "held_out_ids_sha256")
 EMPTY_INFLUENCE: dict[str, Any] = {
     "themes": 0, "adoption_rate": 0.0, "avg_off_alignment": 0.0,
     "avg_on_alignment": 0.0, "alignment_lift": 0.0, "reworded_rate": 0.0, "examples": [],
@@ -287,22 +314,38 @@ def _git_commit() -> str | None:
     return proc.stdout.strip() or None
 
 
+def _exemplars_sha256(exemplars: list[dict] | None) -> str | None:
+    """Hash of the FULL exemplar objects (text and every label), order-free.
+
+    Canonical JSON (sorted keys, compact separators) of the list sorted by
+    text, so a label edit on an exemplar changes the hash while re-ordering
+    the list does not. Hashing the texts alone missed sentiment / urgency /
+    tag edits, which are exactly the knobs the loop turns.
+    """
+    if not exemplars:
+        return None
+    canonical = json.dumps(
+        sorted(exemplars, key=lambda e: (str(e.get("text", "")), json.dumps(e, sort_keys=True, default=str))),
+        sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def _run_config(exemplars: list[dict] | None, golden: list[dict] | None = None) -> dict[str, Any]:
     """Provenance of one run: what was scored, with what, on which items.
 
     The hashes let two reports be compared for identical inputs (golden set
-    bytes, held-out id list, exemplar texts) without diffing the files.
+    bytes, held-out id list, full exemplar objects) without diffing the files.
+    An empty exemplar list counts as disabled (see _exemplars).
     """
     golden = golden if golden is not None else load_golden_set()
     held_out_ids = sorted(str(g["id"]) for g in golden if g.get("split") == "held_out")
     return {
         "model": AI_MODEL,
         "temperature": os.environ.get("AI_TEMPERATURE"),
-        "exemplars_enabled": exemplars is not None,
+        "exemplars_enabled": bool(exemplars),
         "exemplar_count": len(exemplars) if exemplars else 0,
-        "exemplars_sha256": (
-            _sha256_lines(sorted(str(e.get("text", "")) for e in exemplars)) if exemplars else None
-        ),
+        "exemplars_sha256": _exemplars_sha256(exemplars),
         "golden_set_sha256": (
             hashlib.sha256(GOLDEN_SET_PATH.read_bytes()).hexdigest()
             if GOLDEN_SET_PATH.exists() else None
@@ -315,7 +358,13 @@ def _run_config(exemplars: list[dict] | None, golden: list[dict] | None = None) 
 
 def _held_out_consultations(history_path: Path) -> int:
     """How many times the held-out split has been scored on this machine,
-    counting this run: prior ledger rows flagged `held_out_scored` + 1.
+    counting this run: every prior `kind: "eval"` ledger row + 1.
+
+    Every eval row is a consultation, whether or not it carries the
+    `held_out_scored` / `held_out_revealed` flags added later: the runner has
+    always enriched the golden set as a whole, so every eval run scored the
+    held-out split, including the rows written before the flags existed.
+    Counting only flagged rows under-reported the looks taken.
 
     history.jsonl is gitignored (app/evals/.gitignore), so this is a
     machine-local count of looks at the guardrail set, not a global one; a
@@ -334,9 +383,172 @@ def _held_out_consultations(history_path: Path) -> int:
                 row = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if isinstance(row, dict) and row.get("held_out_scored"):
+            if isinstance(row, dict) and row.get("kind") == "eval":
                 prior += 1
     return prior + 1
+
+
+# --------------------------------------------------------------------------- #
+# Held-out sidecar and between-run comparison (pure; no model calls)
+# --------------------------------------------------------------------------- #
+
+def split_held_out(report: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Move every held-out per-item row out of the report into a sidecar dict.
+
+    Returns (main, sidecar). `main` keeps the optimisation-split rows under
+    PER_ITEM_KEYS (a null key stays null) and every aggregate; `sidecar`
+    holds the held-out rows of both arms plus the run's identity, so the
+    held-out items can be joined to a later run by id without the main
+    report ever carrying them.
+    """
+    main = dict(report)
+    sidecar: dict[str, Any] = {
+        "kind": "eval_held_out",
+        "timestamp": report.get("timestamp"),
+        "model": report.get("model"),
+        "config": report.get("config"),
+        "note": ("held-out per-item rows of both arms; the frozen guardrail split. "
+                 "Not for inspection by the loop — compare_reports reads it for the "
+                 "held-out aggregate only."),
+    }
+    for key in PER_ITEM_KEYS:
+        rows = report.get(key)
+        if rows is None:
+            main[key] = None
+            sidecar[key] = None
+            continue
+        main[key] = [r for r in rows if r.get("split") != "held_out"]
+        sidecar[key] = [r for r in rows if r.get("split") == "held_out"]
+    return main, sidecar
+
+
+def load_report(path: Path | str) -> dict[str, Any]:
+    """Read a report JSON and, when its held-out sidecar exists, attach it as
+    `_held_out` so compare_reports can produce the held-out aggregate."""
+    path = Path(path)
+    report = json.loads(path.read_text())
+    if not isinstance(report, dict):
+        raise ValueError(f"{path}: not a report object")
+    report.setdefault("_report_path", str(path))
+    candidates = []
+    if report.get("held_out_sidecar"):
+        candidates.append(Path(report["held_out_sidecar"]))
+    candidates.append(path.with_name(path.name[:-len(".json")] + ".held_out.json")
+                      if path.name.endswith(".json") else path.with_suffix(".held_out.json"))
+    for candidate in candidates:
+        if candidate.exists():
+            sidecar = json.loads(candidate.read_text())
+            if isinstance(sidecar, dict):
+                report["_held_out"] = sidecar
+            break
+    return report
+
+
+def check_comparable(baseline_config: dict[str, Any] | None, new_config: dict[str, Any] | None) -> None:
+    """Refuse to join two runs that did not score the same items."""
+    for key in COMPARABLE_HASHES:
+        b = (baseline_config or {}).get(key)
+        n = (new_config or {}).get(key)
+        if not b or not n:
+            raise ValueError(
+                f"cannot compare runs: config.{key} is missing "
+                f"(baseline={b!r}, new={n!r}); both reports need a config block"
+            )
+        if b != n:
+            raise ValueError(
+                f"cannot compare runs: config.{key} differs (baseline {str(b)[:12]}…, "
+                f"new {str(n)[:12]}…) — the runs scored different items; re-run the "
+                f"baseline on the current golden set before comparing"
+            )
+
+
+def _per_item_rows(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """ON-arm per-item rows by id: the main report's plus the sidecar's."""
+    rows: dict[str, dict[str, Any]] = {}
+    for source in (report.get("per_item") or [], (report.get("_held_out") or {}).get("per_item") or []):
+        for row in source:
+            if isinstance(row, dict) and row.get("id") is not None:
+                rows.setdefault(str(row["id"]), row)
+    return rows
+
+
+def _guards(baseline: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
+    """Safety guards between two runs. `null` means not evaluated, never 0."""
+    b_on = baseline.get("enrichment_on") or {}
+    n_on = new.get("enrichment_on") or {}
+    b_h, n_h = b_on.get("hallucination_rate"), n_on.get("hallucination_rate")
+    if b_h is None or n_h is None:
+        h_status = "not_evaluated"
+    elif n_h > b_h:
+        h_status = "rose"
+    else:
+        h_status = "ok"
+    b_p, n_p = b_on.get("pii_leak_count"), n_on.get("pii_leak_count")
+    if n_p is None:
+        p_status = "not_evaluated"
+    elif n_p > 0:
+        p_status = "leak"
+    else:
+        p_status = "ok"
+    return {
+        "hallucination": {
+            "baseline": b_h, "new": n_h, "status": h_status,
+            "baseline_eligible": b_on.get("hallucination_eligible"),
+            "new_eligible": n_on.get("hallucination_eligible"),
+        },
+        "pii": {"baseline": b_p, "new": n_p, "status": p_status},
+    }
+
+
+def compare_reports(baseline: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
+    """Between-run paired comparison of the ON arm, joined by golden id.
+
+    Returns {split: {metric: {n, baseline_accuracy, new_accuracy, gained,
+    lost, p_value, diff, diff_ci95}}} plus `guards` (hallucination / PII,
+    see _guards) and `baseline` (identity of the joined run). gained = new
+    right & baseline wrong, lost = the reverse, p = exact McNemar; diff =
+    new - baseline accuracy with a 95 % paired-bootstrap interval (seed
+    12345). The held-out split, when both reports carry it (main rows in an
+    older report, or the sidecar), is an aggregate only. Refuses (ValueError)
+    when the two runs did not score the same golden set.
+    """
+    check_comparable(baseline.get("config"), new.get("config"))
+    b_rows = _per_item_rows(baseline)
+    n_rows = _per_item_rows(new)
+    shared = [i for i in n_rows if i in b_rows]
+    out: dict[str, Any] = {}
+    for split in sorted({n_rows[i].get("split") or "unsplit" for i in shared}):
+        ids = [i for i in shared if (n_rows[i].get("split") or "unsplit") == split]
+        n = len(ids)
+        entry: dict[str, Any] = {}
+        for metric in AB_METRICS:
+            b_vec = [int(bool((b_rows[i].get("correct") or {}).get(metric))) for i in ids]
+            n_vec = [int(bool((n_rows[i].get("correct") or {}).get(metric))) for i in ids]
+            entry[metric] = {
+                "n": n,
+                "baseline_accuracy": round(sum(b_vec) / n, 4) if n else None,
+                "new_accuracy": round(sum(n_vec) / n, 4) if n else None,
+                **_mcnemar_ab(b_vec, n_vec),
+                "diff": round((sum(n_vec) - sum(b_vec)) / n, 4) if n else None,
+                "diff_ci95": _paired_bootstrap_diff_ci(b_vec, n_vec),
+            }
+        out[split] = entry
+    out["guards"] = _guards(baseline, new)
+    out["baseline"] = {
+        "timestamp": baseline.get("timestamp"),
+        "model": baseline.get("model"),
+        "report_path": baseline.get("_report_path"),
+        "n_joined": len(shared),
+        "n_only_in_new": len(n_rows) - len(shared),
+        "n_only_in_baseline": len(b_rows) - len(shared),
+        "held_out_from_sidecar": bool((baseline.get("_held_out") or {}).get("per_item")),
+    }
+    return out
+
+
+def _vs_baseline_splits(vs: dict[str, Any]) -> dict[str, Any]:
+    """The split entries of a vs_baseline block (drops `guards` / `baseline`)."""
+    return {k: v for k, v in vs.items() if k not in ("guards", "baseline")}
 
 
 # --------------------------------------------------------------------------- #
@@ -498,13 +710,20 @@ def _learning_influence_probe(groups: list[tuple[str, list[dict]]]) -> dict[str,
 # Reporting
 # --------------------------------------------------------------------------- #
 
-def _print_report(report: dict, *, reveal_held_out: bool = False) -> None:
+def _print_report(
+    report: dict,
+    *,
+    reveal_held_out: bool = False,
+    held_out: dict[str, Any] | None = None,
+) -> None:
     """Print the operator summary.
 
     Held-out protection: per-item failures are printed for the optimisation
-    split only; the held-out split appears as aggregate accuracies and as the
-    per-split paired A/B. Pass reveal_held_out=True (--reveal-held-out) to
-    print held-out ids — every such reveal is a look at the guardrail set.
+    split only; the held-out split appears as aggregate accuracies, as the
+    per-split paired A/B and as the vs_baseline aggregate. Pass
+    reveal_held_out=True (--reveal-held-out) to print held-out ids (from the
+    `held_out` sidecar dict, or from an unsplit report's own rows) — every
+    such reveal is a look at the guardrail set and is recorded in the ledger.
     """
     on = report["enrichment_on"]
     off = report.get("enrichment_off")
@@ -526,11 +745,42 @@ def _print_report(report: dict, *, reveal_held_out: bool = False) -> None:
     print(f"  tag_f1:             {on['tag_f1']:.2%}  (exact {on['tag_f1_exact']:.2%})")
     if on.get("hallucination_rate") is None:
         hall = (f"not evaluated (0 eligible EN items; "
-                f"{on.get('hallucination_excluded', 0)} non-EN excluded)")
+                f"{on.get('hallucination_excluded', 0)} non-EN excluded, "
+                f"{on.get('hallucination_unassessed', 0)} EN unassessed)")
     else:
         hall = (f"{on['hallucination_rate']:.2%} over {on.get('hallucination_eligible', '?')} EN items "
-                f"({on.get('hallucination_excluded', 0)} non-EN excluded)")
+                f"({on.get('hallucination_excluded', 0)} non-EN excluded, "
+                f"{on.get('hallucination_unassessed', 0)} EN unassessed)")
     print(f"  hallucination_rate: {hall}    pii_leak_count: {on['pii_leak_count']}")
+
+    vs = report.get("vs_baseline")
+    if vs:
+        base = vs.get("baseline") or {}
+        print(f"\n[vs baseline — between-run, ON arm joined by golden id to "
+              f"{base.get('timestamp')} ({base.get('model')}); exact McNemar; "
+              f"n_joined={base.get('n_joined')}. ACCEPT reads the optimization rows; "
+              f"the held_out rows are an aggregate, not part of the decision]")
+        for split, metrics in _vs_baseline_splits(vs).items():
+            for metric, m in metrics.items():
+                lo, hi = m["diff_ci95"] if m["diff_ci95"] else (float("nan"), float("nan"))
+                if m["p_value"] < 0.05 and m["gained"] > m["lost"]:
+                    sig = "SIGNIFICANT GAIN"
+                elif m["p_value"] < 0.05 and m["lost"] > m["gained"]:
+                    sig = "SIGNIFICANT LOSS"
+                else:
+                    sig = "not significant"
+                print(f"  {split:13s} {metric:10s} n={m['n']:3d}  baseline {m['baseline_accuracy']:.2%} -> "
+                      f"new {m['new_accuracy']:.2%}  diff {m['diff']:+.2%} "
+                      f"(95% paired-bootstrap {lo:+.1%}..{hi:+.1%}; gained {m['gained']}, "
+                      f"lost {m['lost']}, p={m['p_value']:.3f} → {sig})")
+        g = vs.get("guards") or {}
+        h, pii = g.get("hallucination") or {}, g.get("pii") or {}
+
+        def fmt(v: Any) -> str:
+            return "null" if v is None else (f"{v:.2%}" if isinstance(v, float) else str(v))
+
+        print(f"  guards: hallucination {fmt(h.get('baseline'))} -> {fmt(h.get('new'))} "
+              f"[{h.get('status')}]   pii {pii.get('baseline')} -> {pii.get('new')} [{pii.get('status')}]")
 
     if ab is None or off is None:
         print("\n[exemplar A/B — not run]")
@@ -549,8 +799,9 @@ def _print_report(report: dict, *, reveal_held_out: bool = False) -> None:
                   f"(gained {m['gained']}, lost {m['lost']}, p={m['p_value']:.3f} → {sig})")
         print(f"  tag_f1 (fuzzy)  off {off['tag_f1']:.2%} -> on {on['tag_f1']:.2%}")
 
-        print("\n[exemplar A/B by split — paired; the held_out row is the only valid held-out "
-              "statement about exemplars. Accept/reject reads the optimization row.]")
+        print("\n[exemplar A/B by split — paired ON vs OFF; the exemplar-effect estimate, "
+              "reported, never the accept gate (that is vs_baseline). The held_out row is "
+              "the only valid held-out statement about exemplars.]")
         for split, metrics in (report.get("by_split_ab") or {}).items():
             for metric, m in metrics.items():
                 lo, hi = m["diff_ci95"] if m["diff_ci95"] else (float("nan"), float("nan"))
@@ -594,7 +845,9 @@ def _print_report(report: dict, *, reveal_held_out: bool = False) -> None:
     print("  (adoption = the recommendation took on the learning's remedy; proves the")
     print("   loop is active. Whether that remedy is BETTER needs measured outcomes.)")
 
-    failures = report["failures"]
+    # Held-out failures live in the sidecar (a split report) or, for an
+    # unsplit report, among its own rows; either way they print only on reveal.
+    failures = list(report.get("failures") or []) + list((held_out or {}).get("failures") or [])
     shown = [f for f in failures if reveal_held_out or f.get("split") != "held_out"]
     withheld = len(failures) - len(shown)
     scope = "all splits" if reveal_held_out else "optimization split only"
@@ -604,7 +857,10 @@ def _print_report(report: dict, *, reveal_held_out: bool = False) -> None:
         print(f"  {f['id']}: " + "; ".join(f["problems"]))
     if withheld:
         print(f"  ({withheld} held-out failure(s) withheld — the held-out split is a frozen "
-              f"guardrail; pass --reveal-held-out to print them, which counts as a look)")
+              f"guardrail; pass --reveal-held-out to print them, which counts as a look "
+              f"and is recorded in the ledger as held_out_revealed)")
+    if report.get("held_out_sidecar"):
+        print(f"  (held-out per-item rows: {report['held_out_sidecar']} — not for the loop to open)")
     print(f"\nreport: {report['_report_path']}")
 
 
@@ -621,6 +877,7 @@ def _enr_dict(scored: dict, vectors: dict) -> dict[str, Any]:
         "hallucination_rate": r.hallucination_rate,
         "hallucination_eligible": r.hallucination_eligible,
         "hallucination_excluded": r.hallucination_excluded,
+        "hallucination_unassessed": getattr(r, "hallucination_unassessed", 0),
         "pii_leak_count": r.pii_leak_count,
         "enrich_latency_ms": scored["elapsed_ms"],
     }
@@ -640,11 +897,13 @@ def build_report(
     scored_on is the production configuration (exemplars as given). scored_off
     is the exemplar-free arm, or None when exemplars are disabled — then the
     two arms would be identical and no A/B is reported (enrichment_ab,
-    by_split_ab, enrichment_off, per_item_off are null with `ab_note`).
+    by_split_ab, enrichment_off, per_item_off are null with `ab_note`). An
+    empty exemplar list is disabled: the arms would be identical too.
     """
     now = timestamp or datetime.now(timezone.utc)
     on_vec = scored_on["vectors"]
     enrichment_on = _enr_dict(scored_on, on_vec)
+    exemplars = list(exemplars) if exemplars else None
     ab_enabled = exemplars is not None and scored_off is not None
 
     report: dict[str, Any] = {
@@ -697,18 +956,140 @@ def build_report(
     return report
 
 
-def main() -> int:
+def published_snapshot(report: dict[str, Any], held_out_consultations: int) -> dict[str, Any]:
+    """The committed model-card snapshot (published_metrics.json) for a report.
+
+    Carries the hallucination guard with its denominators (`null` rate = not
+    evaluated), the PII count and the run's `config` block, so the snapshot
+    is citable on its own.
+    """
+    on = report["enrichment_on"]
+    published: dict[str, Any] = {
+        "published_at": report["timestamp"],
+        "model": report["model"],
+        "dataset": {
+            "total_items": on["total_signals"],
+            "note": (
+                "Curated golden set; DE stratum authored + adversarially "
+                "verified. Production config (few-shot exemplars on). "
+                "Hallucination heuristic covers EN items only: its rate is over "
+                "hallucination_eligible EN items with a tagged enrichment; "
+                "null means not evaluated. Intervals are 95% Wilson score "
+                "intervals. 'overall' pools the optimisation and held-out "
+                "strata; by_split.held_out is the locked guardrail figure. "
+                "by_split_ab is the paired exemplar effect per split; "
+                "held_out_consultations is the machine-local count of runs "
+                "that scored the held-out split."
+            ),
+        },
+        "overall": {
+            "sentiment_accuracy": on["sentiment_accuracy"],
+            "sentiment_ci95": report["ci"]["sentiment"],
+            "urgency_accuracy": on["urgency_accuracy"],
+            "urgency_ci95": report["ci"]["urgency"],
+            "tag_f1_fuzzy": on["tag_f1"],
+            "hallucination_rate": on.get("hallucination_rate"),
+            "hallucination_eligible": on.get("hallucination_eligible"),
+            "hallucination_excluded": on.get("hallucination_excluded"),
+            "hallucination_unassessed": on.get("hallucination_unassessed"),
+            "pii_leak_count": on.get("pii_leak_count"),
+        },
+        "by_language": report["by_language"],
+        "by_split": report["by_split"],
+        "held_out_consultations": held_out_consultations,
+        "config": report.get("config"),
+    }
+    if report.get("by_split_ab") is not None:
+        published["by_split_ab"] = report["by_split_ab"]
+        published["ab_scope_note"] = report["ab_scope_note"]
+    else:
+        published["ab_note"] = report["ab_note"]
+    return published
+
+
+def ledger_row(
+    report: dict[str, Any],
+    *,
+    held_out_consultations: int,
+    held_out_revealed: bool,
+) -> dict[str, Any]:
+    """The history.jsonl row for a run: headline metrics, both guards, the
+    config hashes that make the run citable, the between-run gate result when
+    a baseline was given, and whether held-out ids were revealed."""
+    on = report["enrichment_on"]
+    cfg = report.get("config") or {}
+    synthesis = report.get("synthesis") or {}
+    influence = report.get("learning_influence") or {}
+    vs = report.get("vs_baseline") or {}
+    return {
+        "kind": "eval",
+        "timestamp": report["timestamp"],
+        "model": report["model"],
+        "sentiment_accuracy": on["sentiment_accuracy"],
+        "urgency_accuracy": on["urgency_accuracy"],
+        "tag_f1": on["tag_f1"],
+        "tag_f1_exact": on["tag_f1_exact"],
+        "tag_exact_accuracy": on["tag_exact_accuracy"],
+        "hallucination_rate": on.get("hallucination_rate"),
+        "hallucination_eligible": on.get("hallucination_eligible"),
+        "hallucination_excluded": on.get("hallucination_excluded"),
+        "hallucination_unassessed": on.get("hallucination_unassessed"),
+        "pii_leak_count": on.get("pii_leak_count"),
+        "exemplar_ab": report.get("enrichment_ab"),
+        "by_split_ab": report.get("by_split_ab"),
+        "vs_baseline_optimization": vs.get("optimization"),
+        "vs_baseline_guards": vs.get("guards"),
+        "baseline_report": (vs.get("baseline") or {}).get("report_path"),
+        "clusters": synthesis.get("total_insights"),
+        "adoption_rate": influence.get("adoption_rate"),
+        "alignment_lift": influence.get("alignment_lift"),
+        "golden_set_sha256": cfg.get("golden_set_sha256"),
+        "held_out_ids_sha256": cfg.get("held_out_ids_sha256"),
+        "exemplars_sha256": cfg.get("exemplars_sha256"),
+        "harness_git_commit": cfg.get("harness_git_commit"),
+        # The held-out split was scored by this run; the running count is the
+        # number of looks taken on this machine (history.jsonl is gitignored).
+        "held_out_scored": True,
+        "held_out_revealed": bool(held_out_revealed),
+        "held_out_consultations": held_out_consultations,
+        "held_out_sidecar": report.get("held_out_sidecar"),
+    }
+
+
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    ap = argparse.ArgumentParser(prog="python3 -m app.evals.run_live",
+                                 description="Live triage eval against the golden set.")
+    ap.add_argument("--publish", action="store_true",
+                    help="also write the committed model-card snapshot (published_metrics.json)")
+    ap.add_argument("--reveal-held-out", action="store_true",
+                    help="print held-out per-item failures (a recorded look at the guardrail set)")
+    ap.add_argument("--baseline-report", type=Path, default=None, metavar="PATH",
+                    help="previous report to compare against (between-run paired test -> vs_baseline)")
+    return ap.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
     if not AI_MODEL:
         print("AI_MODEL is unset — configure AI_BASE_URL/AI_API_KEY/AI_MODEL.", file=sys.stderr)
         return 2
-    reveal_held_out = "--reveal-held-out" in sys.argv
+    args = _parse_args(sys.argv[1:] if argv is None else argv)
+    reveal_held_out = args.reveal_held_out
 
     exemplars = _exemplars()
+    baseline: dict[str, Any] | None = None
+    if args.baseline_report is not None:
+        # Refuse BEFORE any model call when the baseline scored different items.
+        try:
+            baseline = load_report(args.baseline_report)
+            check_comparable(baseline.get("config"), _run_config(exemplars))
+        except (OSError, ValueError) as exc:
+            print(f"--baseline-report {args.baseline_report}: {exc}", file=sys.stderr)
+            return 2
     try:
         scored_on = _score_enrichment(exemplars=exemplars)
-        # No OFF arm when exemplars are disabled: it would be the same prompt
-        # twice, and an A/B of identical arms only measures model noise.
-        scored_off = _score_enrichment(exemplars=None) if exemplars is not None else None
+        # No OFF arm when exemplars are disabled (or empty): it would be the
+        # same prompt twice, and an A/B of identical arms only measures noise.
+        scored_off = _score_enrichment(exemplars=None) if exemplars else None
     except AIProviderError as exc:
         print(f"LLM enrichment call failed: {exc}", file=sys.stderr)
         print("Check AI_BASE_URL / AI_API_KEY / AI_MODEL and that the endpoint is reachable.", file=sys.stderr)
@@ -735,77 +1116,38 @@ def main() -> int:
         scored_on=scored_on, scored_off=scored_off, exemplars=exemplars,
         synthesis=synthesis, influence=influence, timestamp=now,
     )
-    enrichment_on = report["enrichment_on"]
     # Every run scores the held-out split; the ledger keeps count of the looks.
     held_out_consultations = _held_out_consultations(HISTORY_PATH)
     report["held_out_consultations"] = held_out_consultations
+    if baseline is not None:
+        # Joined while the new report still holds every row (before the split).
+        report["vs_baseline"] = compare_reports(baseline, report)
 
+    # Held-out per-item rows go to the sidecar; the main report keeps the
+    # optimisation rows and the held-out aggregates only.
+    main_report, sidecar = split_held_out(report)
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    report_path = REPORTS_DIR / f"report_{now.strftime('%Y%m%dT%H%M%SZ')}.json"
-    report_path.write_text(json.dumps(report, indent=2))
-    report["_report_path"] = str(report_path)
+    stamp = now.strftime('%Y%m%dT%H%M%SZ')
+    report_path = REPORTS_DIR / f"report_{stamp}.json"
+    sidecar_path = REPORTS_DIR / f"report_{stamp}.held_out.json"
+    main_report["held_out_sidecar"] = str(sidecar_path)
+    sidecar_path.write_text(json.dumps(sidecar, indent=2))
+    report_path.write_text(json.dumps(main_report, indent=2))
+    main_report["_report_path"] = str(report_path)
 
-    if "--publish" in sys.argv:
+    if args.publish:
         # Committed model-card snapshot: what /compliance shows buyers. Only
         # written on an explicit flag so casual loop runs don't churn it.
-        published = {
-            "published_at": report["timestamp"],
-            "model": AI_MODEL,
-            "dataset": {
-                "total_items": enrichment_on["total_signals"],
-                "note": (
-                    "Curated golden set; DE stratum authored + adversarially "
-                    "verified. Production config (few-shot exemplars on). "
-                    "Hallucination heuristic covers EN items only. Intervals "
-                    "are 95% Wilson score intervals. 'overall' pools the "
-                    "optimisation and held-out strata; by_split.held_out is "
-                    "the locked guardrail figure. by_split_ab is the paired "
-                    "exemplar effect per split; held_out_consultations is the "
-                    "machine-local count of runs that scored the held-out split."
-                ),
-            },
-            "overall": {
-                "sentiment_accuracy": enrichment_on["sentiment_accuracy"],
-                "sentiment_ci95": report["ci"]["sentiment"],
-                "urgency_accuracy": enrichment_on["urgency_accuracy"],
-                "urgency_ci95": report["ci"]["urgency"],
-                "tag_f1_fuzzy": enrichment_on["tag_f1"],
-            },
-            "by_language": report["by_language"],
-            "by_split": report["by_split"],
-            "held_out_consultations": held_out_consultations,
-        }
-        if report["by_split_ab"] is not None:
-            published["by_split_ab"] = report["by_split_ab"]
-            published["ab_scope_note"] = report["ab_scope_note"]
-        else:
-            published["ab_note"] = report["ab_note"]
+        published = published_snapshot(main_report, held_out_consultations)
         (EVALS_DIR / "published_metrics.json").write_text(json.dumps(published, indent=2) + "\n")
         print(f"published model-card metrics -> {EVALS_DIR / 'published_metrics.json'}")
 
-    ledger = {
-        "kind": "eval",
-        "timestamp": report["timestamp"],
-        "model": AI_MODEL,
-        "sentiment_accuracy": enrichment_on["sentiment_accuracy"],
-        "urgency_accuracy": enrichment_on["urgency_accuracy"],
-        "tag_f1": enrichment_on["tag_f1"],
-        "tag_f1_exact": enrichment_on["tag_f1_exact"],
-        "tag_exact_accuracy": enrichment_on["tag_exact_accuracy"],
-        "exemplar_ab": report["enrichment_ab"],
-        "by_split_ab": report["by_split_ab"],
-        "clusters": synthesis.get("total_insights"),
-        "adoption_rate": influence["adoption_rate"],
-        "alignment_lift": influence["alignment_lift"],
-        # The held-out split was scored by this run; the running count is the
-        # number of looks taken on this machine (history.jsonl is gitignored).
-        "held_out_scored": True,
-        "held_out_consultations": held_out_consultations,
-    }
+    ledger = ledger_row(main_report, held_out_consultations=held_out_consultations,
+                        held_out_revealed=reveal_held_out)
     with open(HISTORY_PATH, "a") as fh:
         fh.write(json.dumps(ledger) + "\n")
 
-    _print_report(report, reveal_held_out=reveal_held_out)
+    _print_report(main_report, reveal_held_out=reveal_held_out, held_out=sidecar)
     return 0
 
 

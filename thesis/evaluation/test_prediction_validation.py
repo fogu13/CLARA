@@ -61,14 +61,93 @@ def test_unknown_ids_are_counted_and_never_scored():
     rows = [{"id": "a", "sentiment": "positive"},
             {"id": "ghost", "sentiment": "positive"},
             {"id": "ghost", "sentiment": "negative"},
-            {"sentiment": "positive"}]  # no id at all
+            {"sentiment": "positive"}]  # no id at all: an invalid id, not "unknown"
     vs = validate_predictions(rows, expected_ids=["a"], field="sentiment", labels=SENT)
     assert vs.by_id == {"a": "positive"}
     assert vs.n_returned == 4
-    assert vs.n_unknown_ids == 3, vs.n_unknown_ids
-    assert vs.unknown_ids == ["ghost", ""], vs.unknown_ids
+    assert vs.n_unknown_ids == 2, vs.n_unknown_ids
+    assert vs.unknown_ids == ["ghost"], vs.unknown_ids
+    assert vs.n_invalid_ids == 1
     assert vs.n_duplicate_ids == 0  # unknown rows are not duplicates of anything scored
     assert vs.n_expected == 1 and vs.n_valid == 1
+    # without corpus_ids nothing is "outside task": every non-gold id is unknown
+    assert vs.n_outside_task == 0 and vs.outside_task_ids == []
+
+
+def test_rows_without_a_usable_id_are_invalid_ids_and_never_matched():
+    # C9: no id / null / "" can never be matched, even to a gold id that is ""
+    # (the loader drops such gold records; the validator must not match them).
+    rows = [{"sentiment": "positive"},
+            {"id": None, "sentiment": "positive"},
+            {"id": "", "sentiment": "positive"},
+            {"id": "a", "sentiment": "negative"}]
+    vs = validate_predictions(rows, expected_ids=["a", "b"], field="sentiment", labels=SENT)
+    assert vs.by_id == {"a": "negative"}
+    assert vs.n_invalid_ids == 3, vs.counts()
+    assert vs.n_unknown_ids == 0 and vs.unknown_ids == []
+    assert vs.n_missing == 1 and vs.missing_ids == ["b"]
+    assert vs.n_valid + vs.n_invalid + vs.n_missing == vs.n_expected == 2
+    assert "n_invalid_ids" in vs.counts() and vs.detail()["n_invalid_ids"] == 3
+
+
+def test_non_mapping_rows_are_skipped_and_counted_as_invalid_ids():
+    # C12: a list of strings / ints / None in the file must not raise.
+    rows = ["S-1", 7, None, ["id", "a"], {"id": "a", "risk": "high"}]
+    vr = validate_predictions(rows, expected_ids=["a"], field="risk", labels=RISK)
+    assert vr.by_id == {"a": "high"}
+    assert vr.n_returned == 5 and vr.n_invalid_ids == 4
+    assert vr.n_unknown_ids == 0 and vr.n_valid == 1
+
+
+def test_unknown_is_split_from_outside_task_when_corpus_ids_given():
+    # C10: "not in the corpus at all" vs "in the corpus but outside this task"
+    rows = [{"id": "a", "sentiment": "positive"},
+            {"id": "unrated", "sentiment": "neutral"},   # corpus item, no star rating
+            {"id": "ghost", "sentiment": "positive"}]    # not a corpus id
+    vs = validate_predictions(rows, expected_ids=["a"], field="sentiment", labels=SENT,
+                              corpus_ids=["a", "unrated", "other"])
+    assert vs.n_unknown_ids == 1 and vs.unknown_ids == ["ghost"]
+    assert vs.n_outside_task == 1 and vs.outside_task_ids == ["unrated"]
+    assert vs.n_valid == 1 and vs.n_expected == 1
+    assert vs.counts()["n_outside_task"] == 1 and vs.detail()["outside_task_ids"] == ["unrated"]
+
+
+def test_duplicate_expected_ids_are_deduplicated_and_never_assert():
+    # C6: a gold list with a repeated id used to trip the internal assert.
+    rows = [{"id": "a", "sentiment": "positive"}, {"id": "b", "sentiment": "neutral"}]
+    vs = validate_predictions(rows, expected_ids=["a", "b", "a", "c", "b"],
+                              field="sentiment", labels=SENT)
+    assert vs.n_expected == 3 and vs.n_expected_duplicates == 2
+    assert vs.missing_ids == ["c"]  # order of first occurrence kept
+    assert vs.n_valid + vs.n_invalid + vs.n_missing == vs.n_expected
+    assert vs.counts()["n_expected_duplicates"] == 2
+    # int/str repeats collapse too
+    vi = validate_predictions([], expected_ids=[7, "7"], field="risk", labels=RISK)
+    assert vi.n_expected == 1 and vi.n_expected_duplicates == 1 and vi.missing_ids == ["7"]
+
+
+def test_nothing_expected_has_no_coverage_not_zero():
+    # C11: with n_expected == 0 the ratios are undefined, never 0.0.
+    vs = validate_predictions([{"id": "x", "sentiment": "positive"}], expected_ids=[],
+                              field="sentiment", labels=SENT)
+    assert vs.n_expected == 0 and vs.coverage is None
+    assert vs.counts()["coverage"] is None
+
+
+def test_open_vocabulary_accepts_any_non_empty_string():
+    # C5: labels=None -> journey_stage / owner style fields; empty / non-string
+    # is invalid, values are stored stripped.
+    rows = [{"id": "1", "owner": "Support Ops"},
+            {"id": "2", "owner": " Product "},
+            {"id": "3", "owner": ""},
+            {"id": "4", "owner": "   "},
+            {"id": "5", "owner": None},
+            {"id": "6", "owner": ["Support"]},
+            {"id": "7"}]
+    vo = validate_predictions(rows, expected_ids=list("1234567"), field="owner", labels=None)
+    assert vo.by_id == {"1": "Support Ops", "2": "Product"}, vo.by_id
+    assert vo.n_valid == 2 and vo.n_invalid == 5 and vo.n_missing == 0
+    assert vo.invalid_examples[0] == ("3", "")
 
 
 def test_missing_ids_stay_in_the_denominator():
@@ -133,6 +212,12 @@ if __name__ == "__main__":
     test_id_only_row_is_invalid_not_a_free_neutral()
     test_duplicate_ids_first_wins_and_are_counted()
     test_unknown_ids_are_counted_and_never_scored()
+    test_rows_without_a_usable_id_are_invalid_ids_and_never_matched()
+    test_non_mapping_rows_are_skipped_and_counted_as_invalid_ids()
+    test_unknown_is_split_from_outside_task_when_corpus_ids_given()
+    test_duplicate_expected_ids_are_deduplicated_and_never_assert()
+    test_nothing_expected_has_no_coverage_not_zero()
+    test_open_vocabulary_accepts_any_non_empty_string()
     test_missing_ids_stay_in_the_denominator()
     test_invalid_label_strings_are_not_admitted()
     test_int_and_str_ids_are_compared_as_str()

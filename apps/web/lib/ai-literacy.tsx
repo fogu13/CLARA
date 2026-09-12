@@ -4,8 +4,11 @@
 // printable AI-Literacy Pack. The five screens are pure i18n copy; the eval
 // numbers are a CITED SNAPSHOT of the committed published metrics (apps/api/
 // app/evals/published_metrics.json, run 2026-07-18; hallucination/PII from the
-// 2026-07-17 run) — deliberately not live values, so the pack a customer files
-// stays reproducible against that snapshot.
+// 2026-07-17T15:22Z run, n=80 with 60 EN / 20 DE items, recorded in commit
+// e454898 as 2 flagged items) — deliberately not live values, so the pack a
+// customer files stays reproducible against that snapshot. The hallucination
+// heuristic scores English items only, so its rate is quoted over the 60
+// eligible English items (2/60 = 3.3%), not over all 80 (2.5%).
 
 import { useI18n } from "@/lib/i18n";
 
@@ -49,7 +52,7 @@ export function EvalBlock({ t }: { t: Dict }) {
     [a.evalSentiment, "97%"],
     [a.evalUrgency, "90%"],
     [a.evalTagF1, "0.83"],
-    [a.evalHallucination, "2.5%"],
+    [a.evalHallucination, "3.3% (2 of 60 EN)"],
     [a.evalPii, "0"],
   ];
   return (

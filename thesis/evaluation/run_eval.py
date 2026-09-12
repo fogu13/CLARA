@@ -22,11 +22,15 @@ Two optional LLM prediction files are scored when present:
 Otherwise only the deterministic baselines run.
 
 Each LLM file is validated against the gold ids first (prediction_validation.py):
-duplicate ids keep their first row, unknown ids are counted and ignored, and a
-missing / empty / off-vocabulary label is INVALID — never defaulted. Per task the
-summary carries the coverage-conditioned score (`sentiment_llm`, valid rows only)
-and the end-to-end score (`sentiment_llm_end_to_end`, every gold item, missing or
-invalid counted as wrong) with the counts, repeated under `prediction_validation`.
+duplicate ids keep their first row, rows with no usable id are counted as invalid
+ids, unknown ids (not in the corpus) and outside-task ids (in the corpus, not in
+this task's gold) are counted separately and ignored, and a missing / empty /
+off-vocabulary label is INVALID — never defaulted. Per task the summary carries
+the coverage-conditioned score (`sentiment_llm`, valid rows only) and the
+end-to-end score (`sentiment_llm_end_to_end`, every gold item, missing or invalid
+counted as wrong) with the counts, repeated under `prediction_validation`. The
+taxonomy fields (journey_stage, owner; open vocabulary) go through the same
+validator under `prediction_validation.llm_taxonomy`.
 """
 from __future__ import annotations
 import csv
@@ -211,13 +215,25 @@ def score_taxonomy(sigs, summary):
         summary["taxonomy_path"] = ("not run — `python3 predict_llm.py --constrained`"
                                     " writes predictions_llm_taxonomy.json")
         return
-    preds = {p["id"]: p for p in json.load(open(cache))}
+    with open(cache) as fh:
+        rows = json.load(fh)
+    validation = summary.setdefault("prediction_validation", {}).setdefault("llm_taxonomy", {})
+    corpus_ids = [s.id for s in sigs]
     for field in ("journey_stage", "owner"):
-        have = [s for s in sigs if getattr(s, field) and s.id in preds and s.text]
+        # Open vocabulary (labels=None): any non-empty string is a valid answer;
+        # a missing row, an empty string or a non-string is invalid, never "".
+        expected = [s for s in sigs if getattr(s, field) and s.text]
+        if not expected:
+            continue
+        vt = validate_predictions(rows, expected_ids=[s.id for s in expected],
+                                  field=field, labels=None, corpus_ids=corpus_ids)
+        validation[field] = vt.detail()
+        have = [s for s in expected if s.id in vt.by_id]
+        y_true = [getattr(s, field) for s in have]
+        y_pred = [vt.by_id[s.id] for s in have]
+        summary[f"{field}_llm_closed_set_end_to_end"] = _end_to_end(vt, y_true, y_pred)
         if not have:
             continue
-        y_true = [getattr(s, field) for s in have]
-        y_pred = [str(preds[s.id].get(field, "") or "").strip() for s in have]
         vocab = set(y_true)
         overall = M.score(y_true, y_pred)
         top = collections.Counter(y_true).most_common(1)[0]
@@ -264,6 +280,9 @@ def equity_slices(sigs, summary, llm_maps=None, ml_risk=None):
     Each recall carries a 95% Wilson interval, and every pair of language
     strata gets a two-sided Fisher exact test per predictor, so a gap is
     reported with its uncertainty rather than as two bare proportions.
+    `recall_<p>` is coverage-conditioned (gold-escalate items the predictor
+    gave a valid label); `recall_<p>_end_to_end` counts a gold-escalate item
+    with no valid prediction as a miss.
 
     The composition tables are written because language is confounded with
     dataset on this corpus (German is largely the B2B stratum, English largely
@@ -303,6 +322,9 @@ def equity_slices(sigs, summary, llm_maps=None, ml_risk=None):
             row[f"n_gold_escalate_{name}"] = len(scored)
             row[f"recall_{name}"] = round(k / len(scored), 4)
             row[f"recall_{name}_ci_low"], row[f"recall_{name}_ci_high"] = lo, hi
+            # End-to-end companion: every gold-escalate item in the
+            # denominator; an item with no valid prediction is a miss.
+            row[f"recall_{name}_end_to_end"] = round(k / len(gold), 4)
             hits[(name, lang)] = (k, len(scored) - k)
         rows[lang] = row
     summary["escalation_recall_by_language"] = rows
@@ -313,7 +335,8 @@ def equity_slices(sigs, summary, llm_maps=None, ml_risk=None):
         per_pred = [
             col for name in predictors
             for col in (f"n_gold_escalate_{name}", f"recall_{name}",
-                        f"recall_{name}_ci_low", f"recall_{name}_ci_high")]
+                        f"recall_{name}_ci_low", f"recall_{name}_ci_high",
+                        f"recall_{name}_end_to_end")]
         seen = {c for r in rows.values() for c in r}
         cols = [c for c in lead + per_pred if c in seen]
         _w("escalation_recall_by_language.csv",
@@ -435,9 +458,14 @@ def _end_to_end(vs, y_true, y_pred):
     """
     correct = sum(1 for t, p in zip(y_true, y_pred) if t == p)
     n = vs.n_expected
+    if not n:
+        # Nothing expected: the accuracy is undefined, not 0.0, and there is
+        # no interval to report.
+        return {"rule": END_TO_END_RULE, **vs.counts(), "n_correct": correct,
+                "accuracy": None, "accuracy_ci_low": None, "accuracy_ci_high": None}
     lo, hi = M.wilson_interval(correct, n)
     return {"rule": END_TO_END_RULE, **vs.counts(), "n_correct": correct,
-            "accuracy": round(correct / n, 4) if n else 0.0,
+            "accuracy": round(correct / n, 4),
             "accuracy_ci_low": lo, "accuracy_ci_high": hi}
 
 
@@ -474,16 +502,19 @@ def score_llm(sigs, summary, *, key="llm", cache="predictions_llm.json", label="
     with open(path) as fh:
         rows = json.load(fh)
     # First row per id, for the raw-label sensitivity below (same "first
-    # occurrence wins" rule as the validator).
+    # occurrence wins" rule as the validator). A row that is not a mapping
+    # has no id: the validator counts it under n_invalid_ids; skip it here.
     first_row = {}
     for r in rows:
-        first_row.setdefault(str(r.get("id")), r)
+        if isinstance(r, dict) and r.get("id") not in (None, ""):
+            first_row.setdefault(str(r.get("id")), r)
     validation = summary.setdefault("prediction_validation", {}).setdefault(key, {})
     maps = {}
+    corpus_ids = [s.id for s in sigs]
 
     rated_all = [s for s in sigs if s.star_rating is not None and s.text]
     vs = validate_predictions(rows, expected_ids=[s.id for s in rated_all],
-                              field="sentiment", labels=SENT_LABELS)
+                              field="sentiment", labels=SENT_LABELS, corpus_ids=corpus_ids)
     validation["sentiment"] = vs.detail()
     maps["sentiment"] = dict(vs.by_id)
     rated = [s for s in rated_all if s.id in vs.by_id]
@@ -506,18 +537,25 @@ def score_llm(sigs, summary, *, key="llm", cache="predictions_llm.json", label="
         raw = collections.Counter(first_row[s.id].get("sentiment_raw") for s in rated)
         keep = [i for i, s in enumerate(rated) if first_row[s.id].get("sentiment_raw") != "mixed"]
         summary[f"sentiment_{key}_raw_label_counts"] = dict(raw)
-        summary[f"sentiment_{key}_excluding_mixed"] = {
+        excl = {
             "rule": "sensitivity: items the production model labelled mixed are dropped;"
                     " the primary score maps mixed -> neutral (pre-registered)",
+            "n_valid": len(keep),
             "n_dropped": len(rated) - len(keep),
-            **M.score([y_true[i] for i in keep], [y_pred[i] for i in keep], SENT_LABELS),
         }
+        if keep:
+            excl.update(M.score([y_true[i] for i in keep], [y_pred[i] for i in keep], SENT_LABELS))
+        else:
+            # No valid non-mixed row is left: there is nothing to condition on
+            # (M.score would raise on empty input); the counts say why.
+            excl["note"] = "no valid non-mixed prediction; no coverage-conditioned score"
+        summary[f"sentiment_{key}_excluding_mixed"] = excl
 
     have_all = [s for s in sigs if s.risk in RISK_LABELS and s.text]
     have = []
     if have_all:
         vr = validate_predictions(rows, expected_ids=[s.id for s in have_all],
-                                  field="risk", labels=RISK_LABELS)
+                                  field="risk", labels=RISK_LABELS, corpus_ids=corpus_ids)
         validation["risk"] = vr.detail()
         maps["risk"] = dict(vr.by_id)
         have = [s for s in have_all if s.id in vr.by_id]

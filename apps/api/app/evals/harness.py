@@ -73,6 +73,10 @@ class EnrichmentEvalResult:
     hallucination_rate: float | None = None
     hallucination_eligible: int = 0
     hallucination_excluded: int = 0
+    # English items the heuristic could not assess: the run returned no
+    # enrichment for them, or an enrichment with no tags. They are neither
+    # "grounded" nor "fabricated", so they leave the eligible denominator.
+    hallucination_unassessed: int = 0
     pii_leak_count: int = 0
     avg_latency_ms: float = 0.0
     results: list[EvalResult] = field(default_factory=list)
@@ -88,11 +92,13 @@ class EnrichmentEvalResult:
             f"Tag F1: {self.tag_f1:.2%} (exact {self.tag_f1_exact:.2%})",
             (
                 "Hallucination rate: not evaluated (0 eligible EN items; "
-                f"{self.hallucination_excluded} non-EN excluded)"
+                f"{self.hallucination_excluded} non-EN excluded, "
+                f"{self.hallucination_unassessed} EN unassessed)"
                 if self.hallucination_rate is None
                 else f"Hallucination rate: {self.hallucination_rate:.2%} "
                      f"(over {self.hallucination_eligible} EN items; "
-                     f"{self.hallucination_excluded} non-EN excluded)"
+                     f"{self.hallucination_excluded} non-EN excluded, "
+                     f"{self.hallucination_unassessed} EN unassessed)"
             ),
             f"PII leaks: {self.pii_leak_count}",
             f"Avg latency: {self.avg_latency_ms:.0f}ms",
@@ -207,11 +213,30 @@ def check_pii_leak(text: str) -> int:
     return count
 
 
+def language_primary_subtag(language: Any) -> str | None:
+    """Normalised primary language subtag: ``"EN"`` / ``"en-US"`` / ``"en_GB"``
+    -> ``"en"``; None, a non-string or an empty value -> None.
+
+    The single place that decides hallucination eligibility, used by
+    ``check_hallucination`` and by the eligible/excluded counter, so the two
+    can never disagree on what counts as English.
+    """
+    if not isinstance(language, str):
+        return None
+    primary = re.split(r"[-_]", language.strip().lower(), maxsplit=1)[0]
+    return primary or None
+
+
+def hallucination_eligible_language(language: Any) -> bool:
+    """True when the English-only grounding heuristic applies to ``language``."""
+    return language_primary_subtag(language) == "en"
+
+
 def check_hallucination(
     enrichment: dict[str, Any],
     original_text: str,
     *,
-    language: str = "en",
+    language: Any = "en",
 ) -> bool:
     """Check if an enrichment contains fabricated information.
 
@@ -228,7 +253,7 @@ def check_hallucination(
     Non-English items are excluded rather than reported with a meaningless
     number — the model card states this coverage limit.
     """
-    if language != "en":
+    if not hallucination_eligible_language(language):
         return False
     tags = enrichment.get("tags", [])
     text_lower = original_text.lower()
@@ -426,6 +451,7 @@ class EvalHarness:
         hallucination_count = 0
         hallucination_eligible = 0
         hallucination_excluded = 0
+        hallucination_unassessed = 0
         pii_count = 0
         latencies: list[float] = []
 
@@ -464,8 +490,17 @@ class EvalHarness:
             # Non-EN items are excluded from the DENOMINATOR as well as the
             # numerator; otherwise one flagged EN item next to one excluded DE
             # item would read as 0.5 instead of 1.0 over the eligible items.
-            language = item.get("language", "en")
-            if language == "en":
+            # Language is normalised ("EN", "en-US" are English); an item with
+            # no language is excluded, never assumed English. An English item
+            # the run returned nothing for, or tagged with nothing, cannot be
+            # grounded or flagged: it is "unassessed" and leaves the
+            # denominator too, so dropped items never read as grounded.
+            language = item.get("language")
+            if not hallucination_eligible_language(language):
+                hallucination_excluded += 1
+            elif not actual_enrichment or not actual_enrichment.get("tags"):
+                hallucination_unassessed += 1
+            else:
                 hallucination_eligible += 1
                 if check_hallucination(
                     actual_enrichment,
@@ -473,8 +508,6 @@ class EvalHarness:
                     language=language,
                 ):
                     hallucination_count += 1
-            else:
-                hallucination_excluded += 1
 
             # PII leak check
             pii_count += check_pii_leak(
@@ -506,6 +539,7 @@ class EvalHarness:
         )
         result.hallucination_eligible = hallucination_eligible
         result.hallucination_excluded = hallucination_excluded
+        result.hallucination_unassessed = hallucination_unassessed
         result.hallucination_rate = (
             hallucination_count / hallucination_eligible
             if hallucination_eligible > 0
@@ -537,7 +571,8 @@ class EvalHarness:
                 "hallucination_coverage",
                 float(hallucination_eligible),
                 f"{hallucination_eligible} eligible (EN), "
-                f"{hallucination_excluded} excluded (non-EN, heuristic not applicable)",
+                f"{hallucination_excluded} excluded (non-EN, heuristic not applicable), "
+                f"{hallucination_unassessed} unassessed (EN, no enrichment or no tags)",
             ),
             EvalResult("pii_leaks", float(pii_count), f"{pii_count} matches"),
             EvalResult("avg_latency_ms", result.avg_latency_ms),
@@ -631,6 +666,7 @@ class EvalHarness:
                 "hallucination_rate": enrichment.hallucination_rate,
                 "hallucination_eligible": enrichment.hallucination_eligible,
                 "hallucination_excluded": enrichment.hallucination_excluded,
+                "hallucination_unassessed": enrichment.hallucination_unassessed,
                 "pii_leak_count": enrichment.pii_leak_count,
                 "avg_latency_ms": enrichment.avg_latency_ms,
             },
