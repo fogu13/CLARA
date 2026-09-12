@@ -30,13 +30,16 @@ temperature 0; that is why every A/B is measured within one run, on paired items
 - The **held-out split is a frozen guardrail.** It is *scored* on every run (the runner
   cannot avoid that — the golden set is enriched as a whole) but it is **not inspected
   per item and it is not part of accept/reject.** The printed report shows only its
-  aggregate accuracies and the per-split paired A/B; per-item held-out failures are
-  withheld unless you pass `--reveal-held-out`, and doing so is a look at the guardrail
-  set that you must be able to justify.
+  aggregate accuracies and the per-split paired A/B; per-item held-out rows are written
+  to a sidecar file (`reports/report_<ts>.held_out.json`) that the main report only names
+  (`held_out_sidecar`). **Never open the sidecar.** Per-item held-out failures are printed
+  only with `--reveal-held-out`; the flag is recorded in the ledger row
+  (`held_out_revealed`) and is a look at the guardrail set that you must be able to justify.
 - **Every scoring of the held-out split is logged.** Each `history.jsonl` eval row
-  carries `held_out_scored: true` and a running `held_out_consultations` count (prior
-  flagged rows + 1). `history.jsonl` is gitignored, so this count is machine-local; it
-  exists so the number of looks is on record at all.
+  carries `held_out_scored: true` and a running `held_out_consultations` count (every
+  prior `kind:"eval"` row + 1 — earlier rows scored the split too, before the flag
+  existed). `history.jsonl` is gitignored, so this count is machine-local; it exists so
+  the number of looks is on record at all.
 - **A repeatedly consulted validation set is not an independent final test.** A split
   that has been scored on every iteration has informed the tuning through the aggregate
   numbers alone, whatever the per-item discipline. Say so wherever its numbers are
@@ -66,10 +69,14 @@ report — setup is incomplete.
    on) and reports: accuracies with **95 % Wilson intervals**, the **in-run paired
    exemplar A/B** (exact McNemar; pooled and per split), per-language and per-split
    accuracy, the hallucination / PII guards, and the synthesis learning-influence probe.
-   It does **not** run a McNemar test against the previous run — runs are not paired
-   (the model is not deterministic), so cross-run comparison is by interval overlap and
-   replication only. (Seed learnings first, once: `python3 -m app.evals.simulate_outcomes`.)
-   Read the printed **optimisation-split** failure table and the A/B lines.
+   From the second run on, pass `--baseline-report reports/report_<baseline ts>.json`:
+   the runner then joins the two runs' per-item outcomes by golden id and prints
+   `vs_baseline` — per split and metric: gained / lost, exact McNemar p, the accuracy
+   difference with a 95 % paired-bootstrap interval — plus `guards` (hallucination and
+   PII, compared only when both runs report a number). It refuses a baseline whose
+   golden-set or held-out-id hash differs from the current run. (Seed learnings first,
+   once: `python3 -m app.evals.simulate_outcomes`.) Read the printed
+   **optimisation-split** failure table, the `vs_baseline` block and the A/B lines.
 2. **First run only:** record it as the baseline and stop this iteration.
 3. **Diagnose:** pick the single weakest primary metric on the optimisation split and the
    specific signals driving it (e.g. `eval-004: urgency pred=low exp=medium`). State ONE
@@ -91,20 +98,21 @@ report — setup is incomplete.
    likewise outside the loop and must not be judged by whether the score went up.
 5. **Re-run the eval** (same command).
 6. **Accept or revert (significance, not raw delta):**
-   - ACCEPT only if the change is a **statistically significant** improvement **on the
-     optimisation split's paired A/B** — `by_split_ab.optimization` shows exact McNemar
-     `p < 0.05` with more items gained than lost for the metric under test — AND the
-     safety guards hold: `hallucination_rate` must not rise (compared only when both
-     runs report a number; `null` means "not evaluated", not 0) and `pii_leak_count`
-     stays 0. A bump inside the Wilson interval, or a pooled p-value, is not an accept.
-     The held-out split plays no part in accept/reject: do not accept because it went
-     up and do not reject because it went down — its per-split A/B is recorded, not
-     acted on.
-   - Note: a prompt change with exemplars ON is compared *within* the run against
-     exemplars OFF, which is the exemplar effect, not the prompt effect. To test a prompt
-     change, compare the new run's optimisation-split accuracy and interval against the
-     baseline run's, and require replication (a second run reproducing the gain) before
-     calling it accepted; the interval width tells you when a delta is noise.
+   - ACCEPT only if the change is a **statistically significant** improvement **against
+     the baseline run on the optimisation split** — `vs_baseline.optimization` shows
+     exact McNemar `p < 0.05` with more items gained than lost for the metric under
+     test — AND the `guards` block holds: `hallucination.status` is `ok` or
+     `not_evaluated` (never `rose`; `null` means "not evaluated", not 0) and
+     `pii_leak_count` stays 0. A bump inside the Wilson interval, a pooled p-value, or
+     the within-run A/B is not an accept. Require replication (a second run reproducing
+     the gain against the same baseline) before carrying the change outside the loop.
+     The held-out split plays no part in accept/reject: `vs_baseline.held_out` and
+     `by_split_ab.held_out` are aggregates that are recorded, not acted on — do not
+     accept because they went up and do not reject because they went down.
+   - `by_split_ab` (exemplars ON vs OFF within one run) is the **exemplar-effect
+     estimate**, reported on every run; it is never the gate. A prompt change moves both
+     arms and is invisible to it; an exemplar edit is measured against *no* exemplars by
+     it, not against the previous set. Only `vs_baseline` measures the change you made.
    - If exemplars are disabled (`ENRICH_FEWSHOT=0`), the runner reports no A/B at all
      (`ab_note`); never present two identical arms as an experiment.
    - On ACCEPT: `npm run api:lint && npm run api:test` must pass, then `git commit` with a
