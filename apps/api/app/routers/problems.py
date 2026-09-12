@@ -392,6 +392,24 @@ def build_router(
         if action is None:
             raise HTTPException(status_code=404, detail="Action proposal not found")
 
+        # An approval signs one revision of the action. Editing the approved
+        # revision in place would let a retry dispatch text nobody approved
+        # under the human-review stamp, so the approval must be revoked first
+        # (append-only trail: a rejection, then edit, then re-approve).
+        decisions = sorted(
+            (
+                approval
+                for approval in workflow_store.list_approvals()
+                if approval.problem_id == problem_id and approval.action_id == action_id
+            ),
+            key=lambda approval: (approval.created_at, approval.decision_id),
+        )
+        if decisions and decisions[-1].decision == ApprovalDecisionStatus.approved:
+            raise HTTPException(
+                status_code=409,
+                detail="Action is approved; record a rejection first, then edit and re-approve.",
+            )
+
         updated_problem = active_problem_store.update_action_proposal(
             problem_id,
             action_id,
@@ -682,6 +700,7 @@ def build_router(
                         workflow_store=workflow_store,
                         disclosure_template=workspace_settings.ai_disclosure_template,
                         owner_routes=workspace_settings.owner_routes,
+                        four_eyes=workspace_settings.four_eyes_approval,
                     )
                     if pushed.status.value in ("pushed", "push_failed"):
                         telemetry_store.record(
@@ -731,7 +750,7 @@ def build_router(
         second approval is refused) and nothing retries. The idempotency scan in
         push_approved_action prevents duplicate external records.
         """
-        from app.services.action_push import push_approved_action
+        from app.services.action_push import DispatchNotAuthorized, push_approved_action
         from app.services.workflow import find_action
 
         problem = require_problem(problem_id)
@@ -753,15 +772,26 @@ def build_router(
         if action is None:
             raise HTTPException(status_code=404, detail="Action not found")
         settings = workspace_store.get(user.workspace_id)
-        pushed = push_approved_action(
-            problem=problem,
-            action=action,
-            execution=execution,
-            config_store=connector_config_store,
-            workflow_store=workflow_store,
-            disclosure_template=settings.ai_disclosure_template,
-            owner_routes=settings.owner_routes,
-        )
+        try:
+            pushed = push_approved_action(
+                problem=problem,
+                action=action,
+                execution=execution,
+                config_store=connector_config_store,
+                workflow_store=workflow_store,
+                disclosure_template=settings.ai_disclosure_template,
+                owner_routes=settings.owner_routes,
+                four_eyes=settings.four_eyes_approval,
+            )
+        except DispatchNotAuthorized as exc:
+            # The approval bound to this execution no longer covers the current
+            # action revision (or was revoked/superseded): no outbound write.
+            telemetry_store.record(
+                "action_push_refused",
+                entity_id=execution_id,
+                metadata={"problem_id": problem_id, "reason": exc.reason},
+            )
+            raise HTTPException(status_code=409, detail=f"{exc.reason}: {exc.detail}") from exc
         telemetry_store.record(
             "action_push_retried",
             entity_id=execution_id,

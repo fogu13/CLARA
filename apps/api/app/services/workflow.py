@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from datetime import datetime
 from itertools import count
 from pathlib import Path
@@ -257,6 +259,194 @@ def fully_approved_now(
             approvers.clear()
     approvers.add(decision.reviewer)
     return len(approvers) >= 2
+
+
+# Fields of the approved action snapshot that decide WHAT is dispatched and
+# WHERE. `approval_state` is a UI label and `action_id` is the key; neither
+# changes the outbound payload, so neither can invalidate an approval.
+DISPATCH_SNAPSHOT_FIELDS = (
+    "class",
+    "owner",
+    "destination",
+    "proposal",
+    "risk_level",
+    "intervention_brief",
+    "depends_on",
+)
+
+
+@dataclass(frozen=True)
+class DispatchAuthorization:
+    """Result of binding a dispatch to the approval run that authorises it."""
+
+    authorized: bool
+    reason: str | None
+    detail: str
+    decision_ids: list[str] = dataclass_field(default_factory=list)
+    changed_fields: list[str] = dataclass_field(default_factory=list)
+
+
+def _dispatch_fields(snapshot: ActionProposalSnapshot) -> dict:
+    payload = snapshot.model_dump(mode="json", by_alias=True)
+    return {name: payload.get(name) for name in DISPATCH_SNAPSHOT_FIELDS}
+
+
+def _refused(
+    reason: str, detail: str, *, changed_fields: list[str] | None = None
+) -> DispatchAuthorization:
+    return DispatchAuthorization(
+        authorized=False,
+        reason=reason,
+        detail=detail,
+        decision_ids=[],
+        changed_fields=list(changed_fields or []),
+    )
+
+
+def authorize_dispatch(
+    *,
+    problem: ProblemRecord,
+    action: ActionProposal,
+    execution: ExecutionRecord,
+    approvals: list[ApprovalRecord],
+    four_eyes: bool,
+) -> DispatchAuthorization:
+    """Decide whether `execution` may be dispatched with the CURRENT `action`.
+
+    An approval signs one revision of one action (its `action_snapshot`).
+    Dispatch — the first push or a retry — must send exactly that revision,
+    under the decision(s) still in force, for the execution those decisions
+    created. Pure: no store access, no side effects. Rules are evaluated in
+    order over the append-only approvals of this action, ordered by
+    created_at then decision_id:
+
+    1. approval_missing              no decision at all
+    2. approval_revoked              latest decision is not `approved`
+    3. approval_incomplete           the current approval run has fewer distinct
+                                     reviewers than required (2 under four-eyes)
+    4. execution_superseded          this execution is not the one the current
+                                     approval run created (legacy rows without
+                                     execution_id fall back to created_at)
+    5. approval_unverifiable         an approval in the run has no snapshot
+    6. action_changed_since_approval current action differs from the approved
+                                     snapshot on a dispatch-relevant field
+    7. approval_revision_mismatch    four-eyes reviewers signed different revisions
+    8. destination_changed           execution.destination != approved destination
+    """
+    relevant = sorted(
+        (
+            approval
+            for approval in approvals
+            if approval.problem_id == problem.problem_id
+            and approval.action_id == action.action_id
+        ),
+        key=lambda approval: (approval.created_at, approval.decision_id),
+    )
+    if not relevant:
+        return _refused(
+            "approval_missing",
+            f"No approval decision exists for action {action.action_id}.",
+        )
+
+    latest = relevant[-1]
+    if latest.decision != ApprovalDecisionStatus.approved:
+        return _refused(
+            "approval_revoked",
+            f"The latest decision for action {action.action_id} is "
+            f"'{latest.decision.value}' ({latest.decision_id} by {latest.reviewer}); "
+            "the earlier approval no longer authorises dispatch.",
+        )
+
+    # The approval run: every approval after the last non-approved decision.
+    run: list[ApprovalRecord] = []
+    for approval in relevant:
+        if approval.decision == ApprovalDecisionStatus.approved:
+            run.append(approval)
+        else:
+            run = []
+
+    required = 2 if four_eyes else 1
+    reviewers: list[str] = []
+    for approval in run:
+        if approval.reviewer not in reviewers:
+            reviewers.append(approval.reviewer)
+    if len(reviewers) < required:
+        return _refused(
+            "approval_incomplete",
+            f"Action {action.action_id} has {len(reviewers)} of {required} required "
+            "distinct approvers; execution is still held.",
+        )
+
+    bound_execution_ids = [approval.execution_id for approval in run if approval.execution_id]
+    if bound_execution_ids:
+        belongs = execution.execution_id in bound_execution_ids
+    else:
+        # Legacy approvals (recorded before execution_id was persisted): the
+        # completing approval and its execution share one created_at stamp.
+        belongs = any(approval.created_at == execution.created_at for approval in run)
+    if not belongs:
+        return _refused(
+            "execution_superseded",
+            f"Execution {execution.execution_id} was not created by the current approval "
+            f"run for action {action.action_id} "
+            f"({', '.join(approval.decision_id for approval in run)}); "
+            "a newer approval created a newer execution.",
+        )
+
+    unverifiable = [approval.decision_id for approval in run if approval.action_snapshot is None]
+    if unverifiable:
+        return _refused(
+            "approval_unverifiable",
+            f"Approval {', '.join(unverifiable)} carries no action snapshot, so the approved "
+            "revision cannot be verified; record a fresh approval.",
+        )
+
+    completing = run[-1]
+    assert completing.action_snapshot is not None  # guarded above
+    approved_fields = _dispatch_fields(completing.action_snapshot)
+    current_fields = _dispatch_fields(action_snapshot(action))
+    changed = [
+        name for name in DISPATCH_SNAPSHOT_FIELDS if approved_fields[name] != current_fields[name]
+    ]
+    if changed:
+        return _refused(
+            "action_changed_since_approval",
+            f"Action {action.action_id} changed since approval {completing.decision_id} "
+            f"(fields: {', '.join(changed)}); record a rejection, then re-approve the revision.",
+            changed_fields=changed,
+        )
+
+    if four_eyes:
+        for approval in run[:-1]:
+            assert approval.action_snapshot is not None  # guarded above
+            other_fields = _dispatch_fields(approval.action_snapshot)
+            mismatch = [
+                name for name in DISPATCH_SNAPSHOT_FIELDS if other_fields[name] != approved_fields[name]
+            ]
+            if mismatch:
+                return _refused(
+                    "approval_revision_mismatch",
+                    f"Approvals {approval.decision_id} and {completing.decision_id} signed "
+                    f"different revisions of action {action.action_id} "
+                    f"(fields: {', '.join(mismatch)}).",
+                    changed_fields=mismatch,
+                )
+
+    if execution.destination != approved_fields["destination"]:
+        return _refused(
+            "destination_changed",
+            f"Execution {execution.execution_id} targets '{execution.destination}' but the "
+            f"approved destination is '{approved_fields['destination']}'.",
+        )
+
+    decision_ids = [approval.decision_id for approval in run]
+    return DispatchAuthorization(
+        authorized=True,
+        reason=None,
+        detail=f"Dispatch authorised by {', '.join(decision_ids)}.",
+        decision_ids=decision_ids,
+        changed_fields=[],
+    )
 
 
 def _parse_measured_at(value: str) -> datetime | None:
@@ -980,6 +1170,7 @@ class SQLiteWorkflowStore:
         self._ensure_column("approvals", "action_snapshot", "TEXT")
         self._ensure_column("approvals", "action_diff", "TEXT NOT NULL DEFAULT '[]'")
         self._ensure_column("approvals", "evidence_pack_hash", "TEXT")
+        self._ensure_column("approvals", "execution_id", "TEXT")
         self._ensure_column("outcomes", "measurement_source", "TEXT NOT NULL DEFAULT 'manual'")
         self._ensure_column("learning_conclusions", "tenant_id", "TEXT NOT NULL DEFAULT 'legacy'")
         self._ensure_column("learning_conclusions", "retention_expires_at", "TEXT NOT NULL DEFAULT ''")
@@ -1221,6 +1412,12 @@ class SQLiteWorkflowStore:
                 ),
             )
             execution_id = f"EXE-{execution_cursor.lastrowid:04d}"
+            # Bind the completing decision to the execution it created so a
+            # later retry can prove it dispatches under THIS approval run.
+            self._connection.execute(
+                "UPDATE approvals SET execution_id = ? WHERE id = ?",
+                (execution_id, approval_id),
+            )
             if action.destination == "jira":
                 draft = build_jira_issue_draft(
                     draft_id="JIRA-DRAFT-PENDING",
@@ -1629,6 +1826,7 @@ class SQLiteWorkflowStore:
             else None,
             action_diff=[ActionProposalChange.model_validate(item) for item in json.loads(diff_payload or "[]")],
             evidence_pack_hash=row["evidence_pack_hash"] if "evidence_pack_hash" in row.keys() else None,
+            execution_id=row["execution_id"] if "execution_id" in row.keys() else None,
         )
 
     @staticmethod

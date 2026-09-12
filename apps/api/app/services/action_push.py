@@ -19,20 +19,48 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from typing import Any, Protocol
 
 from app.connectors import DESTINATIONS
 from app.connectors.base import ConnectorError
 from app.domain.models import (
     ActionProposal,
+    ApprovalRecord,
     ExecutionRecord,
     ExecutionStatus,
     OwnerRoute,
     ProblemRecord,
 )
 from app.services.routing import connector_overrides, route_for_owner
+from app.services.workflow import authorize_dispatch
 
 logger = logging.getLogger(__name__)
+
+
+class DispatchNotAuthorized(Exception):
+    """The execution's approval trail does not authorise dispatching the
+    current action revision. `reason` is one of the authorize_dispatch codes."""
+
+    def __init__(self, reason: str, detail: str) -> None:
+        super().__init__(detail)
+        self.reason = reason
+        self.detail = detail
+
+
+# One lock per execution so a concurrent first push and retry (or two retries)
+# cannot both pass the status check and create two external records.
+_EXECUTION_LOCKS: dict[str, threading.Lock] = {}
+_EXECUTION_LOCKS_GUARD = threading.Lock()
+
+# Only executions in these states may be dispatched; anything else is
+# finished (pushed) or was never meant to leave CLARA (blocked/not_started).
+_DISPATCHABLE = {ExecutionStatus.draft_created, ExecutionStatus.push_failed}
+
+
+def _execution_lock(execution_id: str) -> threading.Lock:
+    with _EXECUTION_LOCKS_GUARD:
+        return _EXECUTION_LOCKS.setdefault(execution_id, threading.Lock())
 
 
 class _ConfigStore(Protocol):
@@ -41,6 +69,8 @@ class _ConfigStore(Protocol):
 
 class _WorkflowStore(Protocol):
     def list_executions(self) -> list[ExecutionRecord]: ...
+
+    def list_approvals(self) -> list[ApprovalRecord]: ...
 
     def update_execution(
         self,
@@ -100,11 +130,32 @@ def push_approved_action(
     workflow_store: _WorkflowStore,
     disclosure_template: str | None = None,
     owner_routes: list[OwnerRoute] | None = None,
+    four_eyes: bool = False,
 ) -> ExecutionRecord:
     """Push an approved action to its destination system, if one is configured.
 
     Returns the (possibly updated) execution record. Never raises for connector
-    failures — the outcome is recorded on the execution instead.
+    failures — the outcome is recorded on the execution instead. Raises
+    ``DispatchNotAuthorized`` when the approval trail does not cover this
+    dispatch (see below); the refusal is also recorded on the execution's
+    ``detail`` while its status and external_ref stay untouched.
+
+    Authorisation: an execution that carries the human-review stamp exists
+    because named reviewers approved ONE revision of the action. Before any
+    outbound write (first push or retry) the current action, the execution and
+    the workspace's four-eyes setting are checked against the append-only
+    approvals by ``workflow.authorize_dispatch``: the latest decision must be
+    an approval, the approval run must have created THIS execution, and the
+    action must still match the approved snapshot. Executions without the
+    stamp (auto-published graph pushes) have no approval to bind to and keep
+    the Art. 50 disclosure path below.
+
+    Concurrency: the whole check-and-push runs under a per-execution
+    in-process lock and re-reads the execution first, so two retries in one
+    process cannot both create an external record. Known limitation: the lock
+    is process-local. In a multi-worker Postgres deployment two workers can
+    still race on the same execution; closing that needs a DB row lock
+    (SELECT ... FOR UPDATE on the execution) rather than this lock.
 
     Art. 50: executions without a human-review stamp get `disclosure_template`
     appended to the outbound text and `disclosure_applied=True` recorded;
@@ -115,6 +166,74 @@ def push_approved_action(
     over the workspace connector config (credentials are never overridable), so
     each team receives its work in the tool and place it already uses.
     """
+    with _execution_lock(execution.execution_id):
+        current = next(
+            (
+                item
+                for item in workflow_store.list_executions()
+                if item.execution_id == execution.execution_id
+            ),
+            execution,
+        )
+        if current.status not in _DISPATCHABLE:
+            # A concurrent dispatch already finished (or the record was never
+            # dispatchable): return what stands, never push a second time.
+            return current
+
+        authorized_by: list[str] = []
+        if current.human_reviewed:
+            authorization = authorize_dispatch(
+                problem=problem,
+                action=action,
+                execution=current,
+                approvals=workflow_store.list_approvals(),
+                four_eyes=four_eyes,
+            )
+            if not authorization.authorized:
+                logger.warning(
+                    "Action dispatch refused: problem=%s action=%s execution=%s reason=%s",
+                    problem.problem_id,
+                    action.action_id,
+                    current.execution_id,
+                    authorization.reason,
+                )
+                # update_execution resets external_ref/detail when omitted:
+                # pass both explicitly so only the detail changes.
+                workflow_store.update_execution(
+                    current.execution_id,
+                    status=current.status,
+                    external_ref=current.external_ref,
+                    detail=f"Dispatch refused ({authorization.reason}): {authorization.detail}"[:300],
+                )
+                raise DispatchNotAuthorized(authorization.reason or "refused", authorization.detail)
+            authorized_by = authorization.decision_ids
+
+        return _dispatch(
+            problem=problem,
+            action=action,
+            execution=current,
+            config_store=config_store,
+            workflow_store=workflow_store,
+            disclosure_template=disclosure_template,
+            owner_routes=owner_routes,
+            authorized_by=authorized_by,
+        )
+
+
+def _dispatch(
+    *,
+    problem: ProblemRecord,
+    action: ActionProposal,
+    execution: ExecutionRecord,
+    config_store: _ConfigStore,
+    workflow_store: _WorkflowStore,
+    disclosure_template: str | None,
+    owner_routes: list[OwnerRoute] | None,
+    authorized_by: list[str],
+) -> ExecutionRecord:
+    """The outbound write itself; callers hold the execution lock and have
+    already authorised the dispatch."""
+    authorization_note = f" · authorized by {', '.join(authorized_by)}" if authorized_by else ""
     destination = execution.destination
     connector = DESTINATIONS.get(destination)
     if connector is None:
@@ -192,6 +311,6 @@ def push_approved_action(
         execution.execution_id,
         status=ExecutionStatus.pushed,
         external_ref=external_id,
-        detail=f"{destination} record created: {external_id}{route_note}",
+        detail=f"{destination} record created: {external_id}{route_note}{authorization_note}",
         disclosure_applied=True if disclosure else None,
     )

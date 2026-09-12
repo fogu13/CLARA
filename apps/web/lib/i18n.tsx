@@ -969,6 +969,8 @@ const en = {
     evidenceLine: "Evidence: {n} excerpts / model score {c} / {k} customers",
     dependencies: "Dependencies",
     noDependencies: "None - can be approved independently.",
+    actionEditorLocked:
+      "This action is approved; its text is locked. Record a rejection first, then edit and re-approve.",
     policyChecks: "Policy checks",
     notEvaluated: "not evaluated",
     blockingSuffix: " / blocking",
@@ -1989,6 +1991,8 @@ const de: Dict = {
     evidenceLine: "Evidenz: {n} Auszüge / Modell-Score {c} / {k} Kund:innen",
     dependencies: "Abhängigkeiten",
     noDependencies: "Keine. Kann unabhängig freigegeben werden.",
+    actionEditorLocked:
+      "Diese Maßnahme ist freigegeben; ihr Text ist gesperrt. Zuerst eine Ablehnung erfassen, dann bearbeiten und erneut freigeben.",
     policyChecks: "Richtlinienprüfungen",
     notEvaluated: "nicht geprüft",
     blockingSuffix: " / blockierend",
