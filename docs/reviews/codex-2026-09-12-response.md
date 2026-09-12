@@ -114,6 +114,8 @@ on the Actions log and the source history only.
   here. `thesis/evaluation/run_eval.py`, `compare_runs.py` and the new
   `equity_gap_bootstrap.py` cannot be executed on real data in this environment; their new logic is
   covered by synthetic plain-assert tests only. No synthetic data was substituted for results.
+- The manuscript compiles: `thesis/build_docx.sh` was run with a pandoc binary installed for the
+  purpose (`pip install pypandoc_binary`); the generated `.docx` is gitignored as before.
 - Exemplars-OFF per-item outputs for earlier runs are not recoverable (`reports/` and
   `history.jsonl` are gitignored and exist in no branch). The per-split paired exemplar effect will
   exist only after the next live run of the updated harness, which is a paid model run and was not
@@ -144,9 +146,9 @@ on the Actions log and the source history only.
    production; apply migration 016 in the Supabase SQL editor after 013 (the API also self-heals
    the two plan columns on boot, but the plpgsql function replacement only lives in the migration).
 5. **Product decisions.** Whether to add a UI control for recording implementation (the endpoint
-   exists); whether `survey_analysis.py` should suppress its support label below n = 40; whether
-   `score_taxonomy` should also go through the prediction validator; whether the web
-   `ModelCardMetrics` type should describe the new optional publish keys.
+   exists) and whether `survey_analysis.py` should suppress its support label below n = 40.
+   (`score_taxonomy` now goes through the validator, and the web `ModelCardMetrics` type describes
+   the new optional publish keys; both done in the second round.)
 6. **Split into PRs if wanted.** The branch holds one commit per area for the first round (C1;
    C2–C4; E2; E1; R1; manuscript; deck) and one per area for the second (dispatch + measurement;
    evaluation harness; loop prompt; manuscript), plus the docs commits. The second-round commits
@@ -154,8 +156,10 @@ on the Actions log and the source history only.
 7. **Independent re-probe of the second round.** The first adversarial pass was independent of
    the writers; the second-round fixes are covered by their own regression tests only. Re-running
    the probe pass (or the reviewer's own probes) on the final branch is the missing check.
-8. **Deck fit check.** `thesis/defense/defense_deck.pptx` was rebuilt from the corrected source,
-   but `check_fit.js` could not run here (its dependency is not installed); run it once locally.
+8. **Deck fit check: done.** `check_fit.js` was run with pptxgenjs installed in a scratch prefix.
+   The review edits had introduced or worsened eight overflowing text boxes; they were shortened
+   without changing any claim (two at a smaller font) and the binary rebuilt. Five overflows on
+   slides 2, 6, 8 and 24 predate the review and were left as they were.
 9. **Human validation** of the governance behaviour (an approver rejecting, editing and
    re-approving an action; a manual reading after an instrumented one; recording an
    implementation) has not happened and is not claimed.
@@ -197,6 +201,9 @@ Final integrated branch (`claude/relaxed-babbage-of6lum`), run in this environme
 | `npm run web:build` | pass |
 | `npm run thesis:test` (4 plain-assert scripts, synthetic data) | pass |
 | `python3 thesis/test_manuscript_consistency.py` | 7 checks pass |
+| `bash thesis/build_docx.sh` with a pandoc binary installed via `pypandoc_binary` | builds `build/thesis.docx` (2.0 MB) |
+| `node thesis/defense/check_fit.js` (pptxgenjs in a scratch prefix) | 5 pre-existing overflows remain; the 8 edit-related ones fixed |
+| `npm run web:lint` / `npm run web:build` after typing the model-card publish keys | pass |
 | Baseline on the reviewed commit | 851 passed |
 
 `npm run api:test` on the final branch: **976 passed, 7 skipped** (the skips are the Postgres parity tests, which need `CLARA_TEST_DATABASE_URL` and passed separately as listed), 0 failed.
