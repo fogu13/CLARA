@@ -293,12 +293,18 @@ class DispatchAuthorization:
     execution_ids: list[str] = dataclass_field(default_factory=list)
 
 
-def decision_order(approval: ApprovalRecord) -> tuple[str, int, str]:
-    """Sort key for the append-only approvals: created_at, then the NUMERIC
-    decision suffix (as strings ``DEC-10000`` sorts before ``DEC-9999``)."""
+def decision_order(approval: ApprovalRecord) -> tuple[int, str, str]:
+    """Sort key for the append-only approvals: the NUMERIC decision suffix
+    (append order — ids are minted from a counter, and as strings
+    ``DEC-10000`` would sort before ``DEC-9999``), then created_at.
+
+    Append order comes first because created_at is each process's wall
+    clock: a rejection recorded on a worker whose clock runs behind, or a
+    whole-second stamp (``...:00Z`` sorts after ``...:00.500000Z``), would
+    otherwise sort before the approval it revokes and never take effect."""
     _prefix, _, suffix = approval.decision_id.rpartition("-")
     number = int(suffix) if suffix.isdigit() else -1
-    return (approval.created_at, number, approval.decision_id)
+    return (number, approval.created_at, approval.decision_id)
 
 
 def latest_decisions(
@@ -345,8 +351,8 @@ def authorize_dispatch(
     Dispatch — the first push or a retry — must send exactly that revision,
     under the decision(s) still in force, for the execution those decisions
     created. Pure: no store access, no side effects. Rules are evaluated in
-    order over the append-only approvals of this action, ordered by
-    created_at then the numeric decision suffix (``decision_order``):
+    order over the append-only approvals of this action, in append order
+    (numeric decision suffix, then created_at — ``decision_order``):
 
     1. approval_missing              no decision at all
     2. approval_revoked              latest decision is not `approved`
@@ -595,7 +601,13 @@ def build_outcome_snapshot(
     scored_under = frozen if frozen is not None else contract
     latest_value = None if measurement is None else measurement.observed_value
     measurement_source = None if measurement is None else measurement.measurement_source
-    measured_under = None if measurement is None else measurement.contract_revision
+    measured_under = None
+    if measurement is not None:
+        # The frozen snapshot is the revision the reading was scored under; a
+        # bare contract_revision (pre-provenance rows could carry a client
+        # value) only stands in when no snapshot was frozen.
+        snapshot_rev = getattr(measurement.contract_snapshot, "revision", None)
+        measured_under = snapshot_rev if snapshot_rev is not None else measurement.contract_revision
     if measured_under is None and frozen is not None:
         measured_under = frozen.revision
     return OutcomeSnapshot(
@@ -733,6 +745,13 @@ def build_jira_issue_draft(
 
 
 class WorkflowStore:
+    def refresh(self) -> None:
+        """Drop any cached view so the next read is fresh. The in-memory store
+        has no cache; the Postgres store overrides this to force a reload —
+        authorization must never be decided on a snapshot another worker has
+        already made stale."""
+        return None
+
     def __init__(self) -> None:
         self._approval_ids = count(1)
         self._execution_ids = count(1)
@@ -1182,6 +1201,10 @@ class WorkflowStore:
 
 
 class SQLiteWorkflowStore:
+    def refresh(self) -> None:
+        """No cache: every read goes to the database."""
+        return None
+
     def __init__(self, path: Path) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)

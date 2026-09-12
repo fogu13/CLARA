@@ -533,7 +533,8 @@ LOOP_VERDICTS = (
 def intervention_anchor(executions: list[Any]) -> tuple[str, str] | None:
     """(origin, at) of the intervention the measurement clock runs from.
 
-    Earliest human-recorded ``implemented_at`` wins (the fix landed); else the
+    The latest human-recorded ``implemented_at`` wins (the most recent record
+    superseded every live checkpoint, so the clock follows it); else the
     earliest ``dispatched_at`` of a pushed execution (the ticket/message left
     CLARA) — a pushed execution without one predates the dispatch stamp and
     was pushed inside its approval request, so its ``created_at`` stands in;
@@ -545,7 +546,7 @@ def intervention_anchor(executions: list[Any]) -> tuple[str, str] | None:
         execution.implemented_at for execution in executions if execution.implemented_at
     )
     if implemented:
-        return "implementation", implemented[0]
+        return "implementation", implemented[-1]
     dispatched = sorted(
         execution.dispatched_at or execution.created_at
         for execution in executions

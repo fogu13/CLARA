@@ -244,6 +244,37 @@ def run() -> None:
     json.dumps(summary)
 
 
+def run_duplicate_gold_ids() -> None:
+    """A repeated gold id must be dropped (first record kept) by every
+    scorer, so one prediction is never scored against two gold rows and
+    n_correct cannot exceed n_expected (the Wilson interval used to raise)."""
+    from load_datasets import dedupe_signals
+
+    a = _signal(1, "en", 5, "low", "Great app, works every time")
+    dup = _signal(1, "en", 1, "critical", "Different text, same id")
+    b = _signal(2, "en", 1, "high", "Charged twice and support ignores me")
+    kept, n_dup = dedupe_signals([a, dup, b])
+    assert [s.id for s in kept] == [a.id, b.id] and n_dup == 1, (kept, n_dup)
+    import json, os, tempfile
+    import run_eval as re_
+
+    tmp = tempfile.mkdtemp(prefix="clara_dupe_")
+    with open(os.path.join(tmp, "predictions_llm.json"), "w") as fh:
+        json.dump([{"id": a.id, "sentiment": "positive", "risk": "low"},
+                   {"id": b.id, "sentiment": "negative", "risk": "high"}], fh)
+    original = re_.RESULTS
+    re_.RESULTS = tmp
+    try:
+        summary = {}
+        re_.score_llm([a, dup, b], summary, key="llm", cache="predictions_llm.json")
+    finally:
+        re_.RESULTS = original
+    assert summary["sentiment_llm"]["n"] == 2, summary["sentiment_llm"]
+    e2e = summary["sentiment_llm_end_to_end"]
+    assert e2e["n_expected"] == 2 and e2e["n_correct"] <= e2e["n_expected"], e2e
+
+
 if __name__ == "__main__":
+    run_duplicate_gold_ids()
     run()
     print("OK: run_eval wiring smoke test passed (synthetic data, no corpus)")

@@ -568,3 +568,106 @@ def test_decisions_are_ordered_by_numeric_suffix_not_as_strings() -> None:
     )
     assert result.reason == "approval_revoked"
     assert "DEC-10000" in result.detail
+
+
+# --------------------------------------------------------------------------- #
+# Third-pass probes: ordering under clock skew, fresh reads on the Postgres
+# store, and the legacy clock on idempotent reuse.
+# --------------------------------------------------------------------------- #
+
+
+def test_a_later_rejection_with_an_earlier_clock_still_revokes() -> None:
+    """A rejection appended after an approval revokes it even when its
+    created_at sorts earlier (a worker clock behind, or a whole-second stamp
+    that sorts after a fractional one). Append order wins, not the clock."""
+    from app.domain.models import ActionProposalSnapshot, ApprovalDecisionStatus, ApprovalRecord
+    from app.services.workflow import authorize_dispatch, decision_order, latest_decisions
+
+    problem = ProblemStore(load_seed_problems()).get_problem("PRB-108")
+    action = next(a for a in problem.action_proposals if a.action_id == "ACT-501")
+    snapshot = ActionProposalSnapshot.model_validate(action.model_dump(by_alias=True))
+    execution = ExecutionRecord(
+        execution_id="EXE-0001", problem_id="PRB-108", action_id="ACT-501",
+        destination=action.destination, status=ExecutionStatus.push_failed, owner=action.owner,
+        summary="s", created_at="2026-07-01T00:00:05Z", human_reviewed=True,
+    )
+    approved = ApprovalRecord(
+        decision_id="DEC-0001", problem_id="PRB-108", action_id="ACT-501",
+        decision=ApprovalDecisionStatus.approved,
+        reviewer="alice", created_at="2026-07-01T00:00:05Z", action_snapshot=snapshot,
+        execution_id="EXE-0001",
+    )
+    for skewed_at in ("2026-07-01T00:00:03Z", "2026-07-01T00:00:05.500000Z"):
+        rejected = approved.model_copy(update={
+            "decision_id": "DEC-0002", "decision": ApprovalDecisionStatus.rejected, "created_at": skewed_at,
+            "execution_id": None,
+        })
+        approvals = [rejected, approved]  # arrival order irrelevant: ids decide
+        assert [a.decision_id for a in sorted(approvals, key=decision_order)] == ["DEC-0001", "DEC-0002"]
+        assert latest_decisions(approvals, "PRB-108")["ACT-501"].decision_id == "DEC-0002"
+        verdict = authorize_dispatch(
+            problem=problem, action=action, execution=execution, approvals=approvals, four_eyes=False,
+        )
+        assert not verdict.authorized and verdict.reason == "approval_revoked", (skewed_at, verdict)
+
+
+def test_postgres_store_refresh_forces_a_reload_inside_the_ttl() -> None:
+    """The pre-dispatch checks call refresh(): on the Postgres store that must
+    bypass the read cache, or a rejection recorded by another worker inside
+    the TTL would be invisible to the re-check."""
+    from app.services.postgres import PostgresWorkflowStore
+    from app.services.workflow import WorkflowStore
+
+    counter = {"loads": 0}
+
+    class CountingConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def execute(self, sql, *args, **kwargs):
+            if "FROM clara_workflow_records" in str(sql):
+                counter["loads"] += 1
+            return self
+
+        def fetchall(self):
+            return []
+
+    store = PostgresWorkflowStore.__new__(PostgresWorkflowStore)
+    WorkflowStore.__init__(store)
+    store._connect = lambda: CountingConnection()
+    store.list_approvals()
+    store.list_approvals()
+    assert counter["loads"] == 1  # cached inside the TTL
+    store.refresh()
+    assert counter["loads"] == 2  # refresh() always reloads
+    store.list_approvals()
+    assert counter["loads"] == 2  # and the fresh snapshot is then reused
+    assert WorkflowStore().refresh() is None
+
+
+def test_same_run_reuse_of_a_legacy_record_anchors_on_its_created_at(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A reused external record whose execution predates the dispatched_at
+    stamp still gives the new execution a real dispatch instant (the legacy
+    row's created_at: the push happened inside that approval request)."""
+    jira = _FakeJira()
+    monkeypatch.setitem(DESTINATIONS, "jira", jira)
+    store = WorkflowStore()
+    client = _client(workflows=store)
+    problem_id, action_id = _promote_checkout_problem(client)
+    assert _decide(client, problem_id, action_id, "approved", reviewer="alice").status_code == 200
+    exe1 = _executions(client, problem_id)[0]
+    assert exe1["status"] == "pushed" and exe1["external_ref"]
+    # Simulate a row pushed before the stamp existed.
+    store._executions = [
+        record.model_copy(update={"dispatched_at": None}) if record.execution_id == exe1["execution_id"] else record
+        for record in store._executions
+    ]
+    assert client.put("/workspace", json={"four_eyes_approval": True}).status_code == 200
+    assert _decide(client, problem_id, action_id, "approved", reviewer="bob").status_code == 200
+    exe2 = next(e for e in _executions(client, problem_id) if e["execution_id"] != exe1["execution_id"])
+    assert exe2["status"] == "pushed" and exe2["external_ref"] == exe1["external_ref"]
+    assert exe2["dispatched_at"] == exe1["created_at"]
+    assert len(jira.calls) == 1  # the record was reused, not re-created

@@ -390,7 +390,8 @@ class TestCompareReports:
         new["enrichment_on"]["pii_leak_count"] = 1
         g = rl.compare_reports(baseline, new)["guards"]
         assert g["hallucination"] == {"baseline": 0.02, "new": 0.05, "status": "rose",
-                                      "baseline_eligible": 72, "new_eligible": 72}
+                                      "baseline_eligible": 72, "new_eligible": 72,
+                                      "limit": 0.05, "limit_ok": True}
         assert g["pii"] == {"baseline": 0, "new": 1, "status": "leak"}
         new["enrichment_on"]["hallucination_rate"] = 0.02
         new["enrichment_on"]["pii_leak_count"] = 0
@@ -398,10 +399,50 @@ class TestCompareReports:
         assert g["hallucination"]["status"] == "ok" and g["pii"]["status"] == "ok"
         new["enrichment_on"]["hallucination_rate"] = None
         g = rl.compare_reports(baseline, new)["guards"]
-        assert g["hallucination"]["status"] == "not_evaluated" and g["hallucination"]["new"] is None
+        assert g["hallucination"]["status"] == "new_not_evaluated" and g["hallucination"]["new"] is None
+        assert g["hallucination"]["limit_ok"] is None
+        # A baseline that was never evaluated is named as such and the new run
+        # is held to the ceiling instead of passing by default.
         baseline["enrichment_on"]["hallucination_rate"] = None
         new["enrichment_on"]["hallucination_rate"] = 0.0
-        assert rl.compare_reports(baseline, new)["guards"]["hallucination"]["status"] == "not_evaluated"
+        g = rl.compare_reports(baseline, new)["guards"]["hallucination"]
+        assert g["status"] == "baseline_not_evaluated" and g["limit_ok"] is True and g["limit"] == 0.05
+        new["enrichment_on"]["hallucination_rate"] = 0.5
+        g = rl.compare_reports(baseline, new)["guards"]["hallucination"]
+        assert g["status"] == "baseline_not_evaluated" and g["limit_ok"] is False
+
+    def test_rose_needs_more_flagged_items_not_a_smaller_denominator(self, regression) -> None:
+        """2 of 60 -> 2 of 59 (one more unassessed item) is not a rise; 2 of 60
+        -> 3 of 60 is."""
+        baseline, new = regression
+        baseline["enrichment_on"].update({"hallucination_rate": round(2 / 60, 4), "hallucination_eligible": 60})
+        new["enrichment_on"].update({"hallucination_rate": round(2 / 59, 4), "hallucination_eligible": 59})
+        assert rl.compare_reports(baseline, new)["guards"]["hallucination"]["status"] == "ok"
+        new["enrichment_on"].update({"hallucination_rate": round(3 / 60, 4), "hallucination_eligible": 60})
+        assert rl.compare_reports(baseline, new)["guards"]["hallucination"]["status"] == "rose"
+
+    def test_missing_baseline_sidecar_is_named_not_silent(self, regression) -> None:
+        baseline, new = regression
+        b_main, _ = rl.split_held_out(baseline)
+        n_main, n_side = rl.split_held_out(new)
+        vs = rl.compare_reports(b_main, {**n_main, "_held_out": n_side})
+        assert vs["baseline"]["held_out_from_sidecar"] is False
+        assert "sidecar missing" in vs["held_out_note"]
+        full = rl.compare_reports(baseline, new)  # unsplit reports: every row joins
+        assert "held_out_note" not in full and full["baseline"]["n_only_in_new"] == 0
+
+    def test_held_out_rows_print_no_verdict_label(self, regression, capsys) -> None:
+        baseline, new = regression
+        new["vs_baseline"] = rl.compare_reports(baseline, new)
+        new["_report_path"] = "<test>"
+        rl._print_report(new)
+        out = capsys.readouterr().out
+        # The vs_baseline block prints "baseline X -> new Y"; the by_split_ab
+        # block below it prints "off X -> on Y" and carries no verdict anyway.
+        held_out_lines = [line for line in out.splitlines()
+                          if line.strip().startswith("held_out") and "baseline " in line]
+        assert held_out_lines and all("aggregate only" in line for line in held_out_lines)
+        assert all("SIGNIFICANT" not in line for line in held_out_lines)
 
     def test_printed_report_shows_vs_baseline(self, regression, capsys) -> None:
         baseline, new = regression
@@ -487,6 +528,34 @@ class TestMainEndToEnd:
         assert published["overall"]["hallucination_eligible"] == 72
         assert published["overall"]["hallucination_excluded"] == 28
         assert published["config"]["golden_set_sha256"] == second["config"]["golden_set_sha256"]
+
+    def test_off_arm_failure_after_the_on_arm_scored_is_a_logged_consultation(self, env, monkeypatch, capsys) -> None:
+        """G2: the ON arm scored the golden set (held-out included) before the
+        OFF arm failed; the look is on record as an eval_failed row and counts
+        towards held_out_consultations, though no report is written."""
+        good = _fake_enrich(set())
+        calls = {"n": 0}
+
+        def flaky(signals, exemplars=None, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                # The class run_live itself catches (another test may reload
+                # app.services.ai, which would make a fresh import a different
+                # class and the exception uncaught).
+                raise rl.AIProviderError("gateway down")
+            return good(signals, exemplars=exemplars, **kwargs)
+
+        monkeypatch.setattr(rl, "enrich_signals", flaky)
+        assert rl.main([]) == 2
+        assert not list((env / "reports").glob("report_*.json")) if (env / "reports").exists() else True
+        rows = [json.loads(line) for line in (env / "history.jsonl").read_text().splitlines()]
+        assert rows[-1]["kind"] == "eval_failed" and rows[-1]["held_out_scored"] is True
+        assert rows[-1]["held_out_revealed"] is False and "gateway down" in rows[-1]["reason"]
+        assert rl._held_out_consultations(env / "history.jsonl") == 2
+        monkeypatch.setattr(rl, "enrich_signals", good)
+        assert rl.main([]) == 0
+        rows = [json.loads(line) for line in (env / "history.jsonl").read_text().splitlines()]
+        assert rows[-1]["kind"] == "eval" and rows[-1]["held_out_consultations"] == 2
 
     def test_baseline_with_other_golden_set_is_refused_before_scoring(self, env, monkeypatch, capsys) -> None:
         calls = {"n": 0}

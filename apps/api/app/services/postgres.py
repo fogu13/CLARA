@@ -979,6 +979,12 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
 
     # -- reads: refresh, then delegate to the in-memory logic --
 
+    def refresh(self) -> None:
+        """Force a reload: reads normally reuse a snapshot younger than
+        _WORKFLOW_REFRESH_TTL_SECONDS, which is fine for dashboards but not
+        for deciding whether a dispatch is still authorized."""
+        self._load_records(force=True)
+
     def list_approvals(self):
         self._load_records()
         return WorkflowStore.list_approvals(self)

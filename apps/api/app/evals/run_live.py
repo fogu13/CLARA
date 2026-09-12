@@ -356,6 +356,13 @@ def _run_config(exemplars: list[dict] | None, golden: list[dict] | None = None) 
     }
 
 
+def _append_ledger_row(history_path: Path, row: dict[str, Any]) -> None:
+    """Append one JSON row to the machine-local ledger (creating the file)."""
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(history_path, "a") as fh:
+        fh.write(json.dumps(row) + "\n")
+
+
 def _held_out_consultations(history_path: Path) -> int:
     """How many times the held-out split has been scored on this machine,
     counting this run: every prior `kind: "eval"` ledger row + 1.
@@ -383,7 +390,9 @@ def _held_out_consultations(history_path: Path) -> int:
                 row = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if isinstance(row, dict) and row.get("kind") == "eval":
+            if isinstance(row, dict) and row.get("kind") in ("eval", "eval_failed"):
+                # eval_failed: the ON arm scored the golden set (held-out
+                # included) before a later step failed; the look happened.
                 prior += 1
     return prior + 1
 
@@ -472,17 +481,29 @@ def _per_item_rows(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return rows
 
 
+HALLUCINATION_LIMIT = 0.05  # LOOP_PROMPT target: hallucination_rate <= 0.05 when evaluated
+
+
 def _guards(baseline: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
     """Safety guards between two runs. `null` means not evaluated, never 0."""
     b_on = baseline.get("enrichment_on") or {}
     n_on = new.get("enrichment_on") or {}
     b_h, n_h = b_on.get("hallucination_rate"), n_on.get("hallucination_rate")
-    if b_h is None or n_h is None:
-        h_status = "not_evaluated"
-    elif n_h > b_h:
-        h_status = "rose"
+    b_el, n_el = b_on.get("hallucination_eligible"), n_on.get("hallucination_eligible")
+    # Statuses are explicit about WHICH side is missing: a baseline that was
+    # never evaluated must not read as a pass for a new run that flags items.
+    # "rose" needs both the rate and the flagged COUNT to go up, so a shifted
+    # denominator (one more unassessed item) alone cannot trip it.
+    if n_h is None:
+        h_status = "new_not_evaluated"
+    elif b_h is None:
+        h_status = "baseline_not_evaluated"
     else:
-        h_status = "ok"
+        b_flagged = round(b_h * (b_el or 0)) if b_el else None
+        n_flagged = round(n_h * (n_el or 0)) if n_el else None
+        count_rose = (b_flagged is None or n_flagged is None) or n_flagged > b_flagged
+        h_status = "rose" if (n_h > b_h and count_rose) else "ok"
+    h_limit_ok = None if n_h is None else bool(n_h <= HALLUCINATION_LIMIT)
     b_p, n_p = b_on.get("pii_leak_count"), n_on.get("pii_leak_count")
     if n_p is None:
         p_status = "not_evaluated"
@@ -493,8 +514,11 @@ def _guards(baseline: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
     return {
         "hallucination": {
             "baseline": b_h, "new": n_h, "status": h_status,
-            "baseline_eligible": b_on.get("hallucination_eligible"),
-            "new_eligible": n_on.get("hallucination_eligible"),
+            "baseline_eligible": b_el,
+            "new_eligible": n_el,
+            # The hard ceiling from the loop targets, checked on the NEW run
+            # whenever it was evaluated (null = not assessable, never 0).
+            "limit": HALLUCINATION_LIMIT, "limit_ok": h_limit_ok,
         },
         "pii": {"baseline": b_p, "new": n_p, "status": p_status},
     }
@@ -543,12 +567,22 @@ def compare_reports(baseline: dict[str, Any], new: dict[str, Any]) -> dict[str, 
         "n_only_in_baseline": len(b_rows) - len(shared),
         "held_out_from_sidecar": bool((baseline.get("_held_out") or {}).get("per_item")),
     }
+    if out["baseline"]["n_only_in_new"] and not out["baseline"]["held_out_from_sidecar"]:
+        # Rows the new run scored that the baseline could not supply (its
+        # sidecar is missing): say so instead of silently reporting a partial
+        # or absent held-out aggregate — the final held-out declaration
+        # quotes this block.
+        out["held_out_note"] = (
+            "baseline sidecar missing: the held-out aggregate could not be joined; "
+            "re-run with a baseline report whose .held_out.json sidecar exists"
+        )
     return out
 
 
 def _vs_baseline_splits(vs: dict[str, Any]) -> dict[str, Any]:
-    """The split entries of a vs_baseline block (drops `guards` / `baseline`)."""
-    return {k: v for k, v in vs.items() if k not in ("guards", "baseline")}
+    """The split entries of a vs_baseline block (drops `guards`, `baseline`
+    and any note)."""
+    return {k: v for k, v in vs.items() if k not in ("guards", "baseline") and isinstance(v, dict)}
 
 
 # --------------------------------------------------------------------------- #
@@ -763,7 +797,11 @@ def _print_report(
         for split, metrics in _vs_baseline_splits(vs).items():
             for metric, m in metrics.items():
                 lo, hi = m["diff_ci95"] if m["diff_ci95"] else (float("nan"), float("nan"))
-                if m["p_value"] < 0.05 and m["gained"] > m["lost"]:
+                if split != "optimization":
+                    # Held-out (or unsplit) rows are an aggregate on record,
+                    # never a verdict: no GAIN/LOSS label to act on.
+                    sig = "aggregate only (not a decision)"
+                elif m["p_value"] < 0.05 and m["gained"] > m["lost"]:
                     sig = "SIGNIFICANT GAIN"
                 elif m["p_value"] < 0.05 and m["lost"] > m["gained"]:
                     sig = "SIGNIFICANT LOSS"
@@ -1085,6 +1123,7 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"--baseline-report {args.baseline_report}: {exc}", file=sys.stderr)
             return 2
+    scored_on = None
     try:
         scored_on = _score_enrichment(exemplars=exemplars)
         # No OFF arm when exemplars are disabled (or empty): it would be the
@@ -1093,6 +1132,18 @@ def main(argv: list[str] | None = None) -> int:
     except AIProviderError as exc:
         print(f"LLM enrichment call failed: {exc}", file=sys.stderr)
         print("Check AI_BASE_URL / AI_API_KEY / AI_MODEL and that the endpoint is reachable.", file=sys.stderr)
+        if scored_on is not None:
+            # The ON arm already scored the whole golden set: that look at the
+            # held-out split happened and must be on record even though no
+            # report is written.
+            _append_ledger_row(HISTORY_PATH, {
+                "kind": "eval_failed",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "model": AI_MODEL,
+                "held_out_scored": True,
+                "held_out_revealed": False,
+                "reason": f"OFF arm failed: {exc}"[:300],
+            })
         return 2
 
     # Synthesis structural + influence probe (best-effort; enrichment is the priority).
@@ -1144,8 +1195,7 @@ def main(argv: list[str] | None = None) -> int:
 
     ledger = ledger_row(main_report, held_out_consultations=held_out_consultations,
                         held_out_revealed=reveal_held_out)
-    with open(HISTORY_PATH, "a") as fh:
-        fh.write(json.dumps(ledger) + "\n")
+    _append_ledger_row(HISTORY_PATH, ledger)
 
     _print_report(main_report, reveal_held_out=reveal_held_out, held_out=sidecar)
     return 0

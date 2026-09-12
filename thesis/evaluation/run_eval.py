@@ -42,7 +42,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from load_datasets import load
+from load_datasets import dedupe_signals, load
 import baseline as bl
 import metrics as M
 import ml_baseline as ml
@@ -210,6 +210,7 @@ def score_taxonomy(sigs, summary):
     in-vocabulary rate — if the model ignores the inventory, the comparison is
     void and the reader has to be able to see that.
     """
+    sigs, _ = dedupe_signals(sigs)  # a repeated gold id must never double-score
     cache = os.path.join(RESULTS, "predictions_llm_taxonomy.json")
     if not os.path.exists(cache):
         summary["taxonomy_path"] = ("not run — `python3 predict_llm.py --constrained`"
@@ -289,6 +290,7 @@ def equity_slices(sigs, summary, llm_maps=None, ml_risk=None):
     fintech). Any per-language claim has to be read against them, so the
     harness emits them rather than leaving it to prose.
     """
+    sigs, _ = dedupe_signals(sigs)  # a repeated gold id must never double-score
     esc = lambda x: x in ("high", "critical")
     have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
     llm_maps = llm_maps or {}
@@ -495,6 +497,7 @@ def score_llm(sigs, summary, *, key="llm", cache="predictions_llm.json", label="
     mixed items is reported next to the primary one, so the reader can see
     how much of the result rests on the mapping rule.
     """
+    sigs, _ = dedupe_signals(sigs)  # a repeated gold id must never double-score
     path = os.path.join(RESULTS, cache)
     if not os.path.exists(path):
         summary[f"{key}_path"] = f"not run (no {cache}; {label})"
@@ -595,6 +598,7 @@ def significance(sigs, summary, ml_preds, llm_maps=None):
     corpus this size several "significant" gaps rest on one item; the table has
     to show that rather than leave it to a reader's arithmetic.
     """
+    sigs, _ = dedupe_signals(sigs)  # a repeated gold id must never double-score
     rated = [s for s in sigs if s.star_rating is not None and s.text]
     have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
     llm_maps = llm_maps or {}

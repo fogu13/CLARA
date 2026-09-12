@@ -793,3 +793,110 @@ def test_outcomes_csv_without_provenance_keeps_the_legacy_columns() -> None:
     header = outcomes_csv(SimpleNamespace(items=[item])).splitlines()[0]
     assert header.endswith("latest_learning_status")
     assert "loop_verdict" not in header
+
+
+# ---------------------------------------------------------------------------
+# Third-pass probes: clock precedence over done checkpoints, frozen grades,
+# the latest implementation record, revision truth and explicit-null terms.
+# ---------------------------------------------------------------------------
+
+
+def test_a_lower_clock_cannot_reopen_checkpoints_read_under_a_higher_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Dispatch-clock checkpoints already read must not be re-opened by a later
+    draft-only approval on the approval clock: no approval plans are inserted
+    and the certified verdict keeps the dispatch clock."""
+    monkeypatch.setitem(DESTINATIONS, "jira", _FakeJira())
+    app = _app(tmp_path, connectors=[JIRA_CONFIG])
+    client, problem, plans, telemetry = app["client"], app["problem"], app["plans"], app["telemetry"]
+    pid = problem.problem_id
+    _approve(client, problem, destination="jira")
+    pushed = _execution(client, pid)
+    assert pushed["status"] == "pushed"
+    executed = _parse(pushed["dispatched_at"])
+    at_window = _iso(executed + timedelta(days=problem.outcome_contract.measurement_window_days, hours=1))
+    assert client.post("/measurements/run-due", json={"now": at_window}).json()["measured"] == 2
+    done_before = {p["id"] for p in _plans(plans, pid) if p["status"] == "done"}
+    assert done_before and {p["origin"] for p in _plans(plans, pid)} == {"dispatch"}
+
+    _approve(client, problem, destination="research_panel")  # no connector: approval clock
+    after = _plans(plans, pid)
+    assert {p["origin"] for p in after} == {"dispatch"}, after
+    assert _events(telemetry, "measurement_scheduled")[-1]["metadata"]["kinds"] == []
+    snapshot = client.get(f"/problems/{pid}/outcome").json()
+    assert snapshot["measurement_origin"] == "dispatch"
+    assert "may predate the fix" not in (snapshot["loop_note"] or "")
+
+
+def test_window_amendment_cannot_move_a_certified_readings_grade(tmp_path: Path) -> None:
+    """The read-time ITS is computed under the contract and clock the reading
+    was taken on, so amending the window afterwards leaves the recorded
+    reading's evidence grade where it was; the live fit reports its own."""
+    app = _app(tmp_path, problem=_draft_problem(comparison_method="its_segmented_regression"))
+    client, problem, plans = app["client"], app["problem"], app["plans"]
+    pid = problem.problem_id
+    _approve(client, problem)
+    executed = _parse(_plans(plans, pid)[0]["executed_at"])
+    at_window = _iso(executed + timedelta(days=problem.outcome_contract.measurement_window_days, hours=1))
+    assert client.post("/measurements/run-due", json={"now": at_window}).json()["measured"] == 2
+    before = client.get(f"/problems/{pid}/outcome").json()
+    assert before["its"] is not None and before["its"]["evidence_grade"] in "ABCDE"
+    assert before["evidence_grade"] >= before["its"]["evidence_grade"]  # never better than the fit
+    response = client.patch(f"/problems/{pid}/outcome-contract", json={"measurement_window_days": 2})
+    assert response.status_code == 200, response.text
+    after = client.get(f"/problems/{pid}/outcome").json()
+    assert after["contract_amended_after_measurement"] is True
+    assert after["evidence_grade"] == before["evidence_grade"]
+    assert after["its"]["evidence_grade"] == before["its"]["evidence_grade"]
+    assert after["measured_comparison_method"] == before["measured_comparison_method"]
+
+
+def test_the_latest_implementation_record_anchors_the_clock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(DESTINATIONS, "jira", _FakeJira())
+    app = _app(tmp_path, connectors=[JIRA_CONFIG])
+    client, problem, plans = app["client"], app["problem"], app["plans"]
+    pid = problem.problem_id
+    _approve(client, problem, destination="jira")
+    _approve(client, problem, destination="research_panel")
+    executions = [e for e in client.get("/executions").json() if e["problem_id"] == pid]
+    assert len(executions) == 2
+    base = max(_parse(e["created_at"]) for e in executions)
+    t1, t2 = _iso(base + timedelta(minutes=1)), _iso(base + timedelta(minutes=2))
+    assert _implement(client, pid, executions[0]["execution_id"], t1).status_code == 200
+    assert _implement(client, pid, executions[1]["execution_id"], t2).status_code == 200
+    live = [p for p in _plans(plans, pid) if p["status"] == "pending"]
+    assert {p["executed_at"] for p in live} == {t2}
+    snapshot = client.get(f"/problems/{pid}/outcome").json()
+    assert (snapshot["measurement_origin"], snapshot["measurement_origin_at"]) == ("implementation", t2)
+    from app.services.outcome_engine import intervention_anchor
+    records = [e for e in client.app.state.workflow_store.list_executions() if e.problem_id == pid] if hasattr(client.app.state, "workflow_store") else None
+    if records is not None:
+        assert intervention_anchor(records) == ("implementation", t2)
+
+
+def test_frozen_snapshot_revision_beats_a_bare_contract_revision() -> None:
+    """A pre-provenance row could carry a client-supplied contract_revision
+    next to the snapshot the store froze: the snapshot is the truth."""
+    problem = _amendable_problem()
+    frozen = problem.outcome_contract.model_copy(update={"revision": 1})
+    measurement = OutcomeMeasurement(
+        problem_id=problem.problem_id, metric=frozen.primary_metric, observed_value=80.0,
+        measured_at="2026-09-01T00:00:00Z", contract_snapshot=frozen, contract_revision=7,
+    )
+    snapshot = build_outcome_snapshot(problem, measurement, [])
+    assert snapshot.measured_under_revision == 1
+    assert snapshot.contract_revision == 1
+    assert snapshot.contract_amended_after_measurement is False
+
+
+def test_explicit_null_terms_do_not_count_as_an_amendment(tmp_path: Path) -> None:
+    app = _app(tmp_path, problem=_amendable_problem())
+    client, problem, telemetry = app["client"], app["problem"], app["telemetry"]
+    pid = problem.problem_id
+    for body in ({"amendment_note": "why", "baseline": None}, {"amendment_note": "why", "guardrail_metrics": None}):
+        response = client.patch(f"/problems/{pid}/outcome-contract", json=body)
+        assert response.status_code == 422, (body, response.text)
+    contract = client.get(f"/problems/{pid}").json()["outcome_contract"]
+    assert contract["revision"] == 1 and contract["revision_note"] is None
+    assert not _events(telemetry, "contract_amended")

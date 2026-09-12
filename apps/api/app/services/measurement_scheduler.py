@@ -271,7 +271,8 @@ def schedule_measurements(
     push, the human-recorded implementation instant, or — only when the draft
     is the deliverable — the approval. ``contract_revision`` records which
     contract terms the checkpoints were scheduled under (defaults to the
-    problem's current revision).
+    problem's current revision). Returns the kinds actually inserted: nothing
+    when a higher-ranked clock already governs the problem.
     """
     if origin not in PLAN_ORIGINS:
         raise ValueError(f"Unknown measurement origin: {origin!r}")
@@ -280,6 +281,18 @@ def schedule_measurements(
     # Origin precedence: live plans on a lower-ranked clock give way (a real
     # push after a draft-only approval moves the clock to the dispatch); a
     # same-or-higher clock keeps its plans and the insert below dedupes.
+    higher = {name for name, rank in ORIGIN_RANK.items() if rank > ORIGIN_RANK[origin]}
+    if higher and any(
+        str(plan.get("problem_id")) == problem.problem_id
+        and (plan.get("origin") or DEFAULT_PLAN_ORIGIN) in higher
+        and plan.get("status") in ("pending", "manual_required", "done", "blocked")
+        for plan in plan_store.list_plans()
+    ):
+        # A higher-ranked clock already governs this problem (live or already
+        # read): a lower clock must not re-open its checkpoints, or a later
+        # draft-only approval would certify the loop on the approval clock
+        # after the real dispatch was measured.
+        return []
     lower = {name for name, rank in ORIGIN_RANK.items() if rank < ORIGIN_RANK[origin]}
     if lower:
         plan_store.supersede_pending(

@@ -502,7 +502,10 @@ def build_router(
                 status_code=409,
                 detail="Cannot change the contract metric after an outcome was recorded against it",
             )
-        term_fields_set = update.model_fields_set - {"amendment_note"}
+        term_fields_set = {
+            name for name in update.model_fields_set - {"amendment_note"}
+            if getattr(update, name) is not None  # an explicit null changes nothing
+        }
         if not term_fields_set:
             raise HTTPException(status_code=422, detail="no contract term changed")
         if update.comparison_method is None:
@@ -1305,23 +1308,40 @@ def build_router(
                 # implementation recorded afterwards cannot relabel it.
                 snapshot.measurement_origin, snapshot.measurement_origin_at = anchor
         if executed_at is not None:
+            # The read-time ITS reproduces the conditions of the recorded
+            # reading: the contract it was scored under (frozen snapshot) and
+            # the clock it was taken on, so a later window amendment or
+            # implementation record cannot move a certified reading's grade
+            # without a new observation.
+            latest_reading = workflow_store.latest_outcome(problem_id)
+            frozen_contract = getattr(latest_reading, "contract_snapshot", None)
+            its_problem = (
+                problem.model_copy(update={"outcome_contract": frozen_contract})
+                if frozen_contract is not None
+                else problem
+            )
+            its_anchor = snapshot.measurement_origin_at or executed_at
             snapshot.its = its_outcome_for_problem(
-                problem,
+                its_problem,
                 signal_store.list_signals(),
-                executed_at=executed_at,
+                executed_at=its_anchor,
                 now=utc_now(),
             )
             if snapshot.its is not None:
-                # Re-grade on the fit actually obtained: an ITS contract whose
+                # Grade on the fit actually obtained: an ITS contract whose
                 # series was too sparse for segmented regression is a plain
-                # before/after delta (grade D), not an ITS (grade C).
-                snapshot.evidence_grade = evidence_grade(
+                # before/after delta (grade D), not an ITS (grade C). The fit
+                # can only lower the recorded grade, never raise it.
+                realised = evidence_grade(
                     comparison_method=(
                         snapshot.measured_comparison_method or snapshot.comparison_method
                     ),
                     measurement_source=snapshot.measurement_source,
                     realised_method=snapshot.its.get("method"),
                 )
+                snapshot.its["evidence_grade"] = realised
+                if snapshot.evidence_grade is None or realised > snapshot.evidence_grade:
+                    snapshot.evidence_grade = realised
         plans = [
             plan
             for plan in measurement_plan_store.list_plans()

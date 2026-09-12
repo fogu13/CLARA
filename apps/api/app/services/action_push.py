@@ -201,6 +201,7 @@ def push_approved_action(
             # dispatchable): return what stands, never push a second time.
             return current
 
+        workflow_store.refresh()  # never authorize on a stale cross-worker snapshot
         approvals = workflow_store.list_approvals()
         gated = is_human_reviewed(current, approved_action_keys(approvals))
         authorization: DispatchAuthorization | None = None
@@ -275,6 +276,12 @@ def _route_note(route: OwnerRoute | None, overrides: dict[str, str]) -> str:
     return f" via team route '{route.owner}' → {resolved}"
 
 
+def _fresh_approvals(workflow_store):
+    """Approvals after dropping any cached snapshot (Postgres TTL cache)."""
+    workflow_store.refresh()
+    return workflow_store.list_approvals()
+
+
 def _dispatch(
     *,
     problem: ProblemRecord,
@@ -327,8 +334,10 @@ def _dispatch(
                 status=ExecutionStatus.pushed,
                 external_ref=existing.external_ref,
                 detail=f"Reused existing {destination} record (idempotent skip).",
-                # The clock ran from the reused record's dispatch, not from now.
-                dispatched_at=existing.dispatched_at,
+                # The clock ran from the reused record's dispatch, not from now;
+                # a legacy row without the stamp was pushed inside its own
+                # approval request, so its created_at is that instant.
+                dispatched_at=existing.dispatched_at or existing.created_at,
             )
 
     route = route_for_owner(owner_routes or [], action.owner)
@@ -345,7 +354,7 @@ def _dispatch(
             problem=problem,
             action=action,
             execution=execution,
-            approvals=workflow_store.list_approvals(),
+            approvals=_fresh_approvals(workflow_store),
             four_eyes=four_eyes,
             workflow_store=workflow_store,
         )

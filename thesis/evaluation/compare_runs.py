@@ -54,7 +54,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import baseline as bl  # noqa: E402
 import metrics as M  # noqa: E402
-from load_datasets import load  # noqa: E402
+from load_datasets import dedupe_signals, load  # noqa: E402
 from prediction_validation import validate_predictions  # noqa: E402
 
 SENT_LABELS = ["negative", "neutral", "positive"]
@@ -105,6 +105,7 @@ def parse_runs(args, sigs) -> dict[str, dict[str, list[dict]]]:
 
 
 def compare(sigs, runs: dict[str, dict[str, list[dict]]]):
+    sigs, _ = dedupe_signals(sigs)  # a repeated gold id must never double-score
     rated = [s for s in sigs if s.star_rating is not None and s.text]
     have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
     corpus_ids = [s.id for s in sigs]

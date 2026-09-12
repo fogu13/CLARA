@@ -218,8 +218,12 @@ BEGIN
       INSERT INTO clara_workflow_records (record_type, record_id, problem_id, tenant_id, payload)
       VALUES (
         'outcome',
+        -- Suffix = the plan id (zero-padded): readings written by one tick
+        -- share measured_at and created_at, and the API keeps the greatest
+        -- (created_at, record_id) as the latest reading, so the suffix must
+        -- follow processing order (due_at) instead of a random uuid.
         plan.problem_id || ':' || metric || ':' || measured_at_str || ':'
-          || replace(gen_random_uuid()::text, '-', ''),
+          || lpad(plan.id::text, 12, '0'),
         plan.problem_id,
         _ws_id::text,
         jsonb_build_object(

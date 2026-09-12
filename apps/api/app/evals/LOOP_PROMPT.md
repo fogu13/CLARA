@@ -60,8 +60,11 @@ temperature 0; that is why every A/B is measured within one run, on paired items
 You are improving CLARA's triage model by measured eval hill-climbing. Repo root is the
 CWD; backend is `apps/api`; work on the current git branch.
 
-**Ledger:** read `apps/api/app/evals/history.jsonl`. The last `kind:"eval"`/`accept`
-row is the current baseline. If `apps/api/app/evals/run_live.py` is missing, STOP and
+**Ledger:** read `apps/api/app/evals/history.jsonl`. The current baseline is the report
+of the last ACCEPTED run (the first run's report until an accept exists); a rejected
+run's row is never the baseline, so after a REVERT keep passing the previous baseline
+report. Rows with `kind:"eval_failed"` are runs that scored the golden set and then
+aborted: they count as consultations and are never baselines. If `apps/api/app/evals/run_live.py` is missing, STOP and
 report — setup is incomplete.
 
 1. **Run the eval:** `cd apps/api && python3 -m app.evals.run_live`. It scores real
@@ -101,9 +104,12 @@ report — setup is incomplete.
    - ACCEPT only if the change is a **statistically significant** improvement **against
      the baseline run on the optimisation split** — `vs_baseline.optimization` shows
      exact McNemar `p < 0.05` with more items gained than lost for the metric under
-     test — AND the `guards` block holds: `hallucination.status` is `ok` or
-     `not_evaluated` (never `rose`; `null` means "not evaluated", not 0) and
-     `pii_leak_count` stays 0. A bump inside the Wilson interval, a pooled p-value, or
+     test — AND the `guards` block holds: `hallucination.status` is `ok`, or
+     `new_not_evaluated` (no assessable English item in the new run), or
+     `baseline_not_evaluated` with `hallucination.limit_ok` true (the baseline had no
+     evaluated rate, so the new run is held to the ≤ 0.05 ceiling instead); never
+     `rose`, and `limit_ok` must not be false. `null` means "not evaluated", not 0.
+     `pii.status` must be `ok`. A bump inside the Wilson interval, a pooled p-value, or
      the within-run A/B is not an accept. Require replication (a second run reproducing
      the gain against the same baseline) before carrying the change outside the loop.
      The held-out split plays no part in accept/reject: `vs_baseline.held_out` and
@@ -137,8 +143,10 @@ report — setup is incomplete.
    `history.jsonl`, including the `held_out_consultations` count.
 
 ### Targets (tune as needed)
-Measured on the optimisation split:
-`sentiment_accuracy ≥ 0.90` · `urgency_accuracy ≥ 0.80` · `tag_f1 ≥ 0.60` ·
+Accuracy targets are measured on the optimisation split:
+`sentiment_accuracy ≥ 0.90` · `urgency_accuracy ≥ 0.80` · `tag_f1 ≥ 0.60`.
+The safety guards are pooled over every scored item (both splits — they are per-item
+checks, not tuning targets, and the runner reports no per-split hallucination or PII):
 `hallucination_rate ≤ 0.05` (when evaluated) · `pii_leak_count == 0`.
 Safety metrics (hallucination, PII) are hard constraints every iteration — never traded
 for accuracy gains. `hallucination_rate` is an English-only token-grounding heuristic
