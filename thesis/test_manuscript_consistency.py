@@ -85,11 +85,12 @@ def test_braun_and_clarke_2021_records_are_not_conflated() -> None:
 # D3 — the defence deck binary
 
 
-def test_ledger_records_the_rebuilt_deck_and_the_unrun_fit_check() -> None:
+def test_ledger_records_the_rebuilt_deck_and_the_fit_check() -> None:
     for row_id in ("R0.4", "R2.3"):
         row = _ledger_row(row_id)
-        assert "7b26334" in row, row_id
-        assert "check_fit.js" in row, row_id
+        assert "7b26334" in row and "d3f1ecf" in row, row_id
+        assert "check_fit.js" in row and "was run" in row, row_id
+        assert "unverified" not in row, row_id
 
 
 # D4 — what the gold-set evaluation is scored against
