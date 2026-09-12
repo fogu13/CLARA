@@ -221,7 +221,7 @@ Final integrated branch (`claude/relaxed-babbage-of6lum`), run in this environme
 | `npm run web:lint` | pass (2 pre-existing warnings) |
 | `npm run web:build` | pass |
 | `npm run thesis:test` (4 plain-assert scripts, synthetic data) | pass |
-| `python3 thesis/test_manuscript_consistency.py` | 7 checks pass |
+| `python3 thesis/test_manuscript_consistency.py` | 8 checks pass |
 | `bash thesis/build_docx.sh` with a pandoc binary installed via `pypandoc_binary` | builds `build/thesis.docx` (2.0 MB) |
 | `node thesis/defense/check_fit.js` (pptxgenjs in a scratch prefix) | 5 pre-existing overflows remain; the 8 edit-related ones fixed |
 | `npm run web:lint` / `npm run web:build` after typing the model-card publish keys | pass |
