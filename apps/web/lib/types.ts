@@ -729,11 +729,57 @@ export type ModelCardMetrics = {
     urgency_accuracy: number;
     urgency_ci95: [number, number];
     tag_f1_fuzzy: number;
+    // English-only grounding heuristic: rate over `hallucination_eligible`
+    // items; null means not evaluated (no eligible item), never 0.
+    hallucination_rate?: number | null;
+    hallucination_eligible?: number;
+    hallucination_excluded?: number;
+    hallucination_unassessed?: number;
+    pii_leak_count?: number;
   };
   by_language?: Record<
     string,
     { n: number; sentiment_accuracy: number | null; urgency_accuracy: number | null }
   >;
+  // Written by `run_live.py --publish` since September 2026; optional so
+  // older snapshots still type-check. `by_split.held_out` is the guardrail
+  // figure; `by_split_ab` is the paired exemplar effect per split.
+  by_split?: Record<string, ModelCardSplitMetrics>;
+  by_split_ab?: Record<string, Record<string, ModelCardPairedEffect>>;
+  ab_scope_note?: string;
+  ab_note?: string;
+  held_out_consultations?: number;
+  config?: {
+    model?: string;
+    temperature?: number;
+    exemplars_enabled?: boolean;
+    exemplar_count?: number;
+    exemplars_sha256?: string | null;
+    golden_set_sha256?: string;
+    held_out_ids_sha256?: string;
+    split_counts?: Record<string, number>;
+    harness_git_commit?: string | null;
+  } | null;
+};
+
+export type ModelCardSplitMetrics = {
+  n: number;
+  sentiment_accuracy: number | null;
+  urgency_accuracy: number | null;
+  tag_exact_accuracy?: number | null;
+  sentiment_ci?: [number, number] | null;
+  urgency_ci?: [number, number] | null;
+};
+
+export type ModelCardPairedEffect = {
+  n: number;
+  off_accuracy: number | null;
+  on_accuracy: number | null;
+  gained: number;
+  lost: number;
+  p_value: number | null;
+  diff: number | null;
+  diff_ci95: [number, number] | null;
 };
 
 // Destinations the API accepts on a route (domain/models.py KNOWN_DESTINATIONS).
