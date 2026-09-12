@@ -23,10 +23,16 @@ per-signal dicts with `id`, `sentiment`, `risk` (predict_llm*.py) or a dict
 `{"sentiment": {id: label}, "risk": {id: label}}` (ml_baseline via run_eval).
 
 Conventions match run_eval.significance(): sentiment is scored on the rated
-items against the star-derived gold, risk on the items with a gold risk seed;
-a missing field inside a scored item falls back to `neutral` / `low`; items a
-run did not score are excluded from that run and from its pairs; b = first run
-right and second wrong, c = the reverse, p = exact two-sided binomial(b + c).
+items against the star-derived gold, risk on the items with a gold risk seed.
+Every run's file is first passed through prediction_validation: a row whose
+label is missing, empty or outside the task vocabulary is INVALID, a gold item
+with no row is MISSING, duplicate ids keep their first row, rows for unknown
+ids are counted and ignored. Nothing is defaulted to `neutral` / `low`. The
+accuracy table carries both views per run — coverage-conditioned (valid rows
+only) and end-to-end (missing / invalid count as wrong over every gold item) —
+with the counts; pairs use the intersection of VALID ids and report n_dropped;
+b = first run right and second wrong, c = the reverse, p = exact two-sided
+binomial(b + c).
 
 Writes compare_runs_accuracy.csv (one row per run and task, with Wilson 95 %
 intervals), compare_runs_pairs.csv (one row per pair and task) and
@@ -47,36 +53,37 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import baseline as bl  # noqa: E402
 import metrics as M  # noqa: E402
 from load_datasets import load  # noqa: E402
+from prediction_validation import validate_predictions  # noqa: E402
 
 SENT_LABELS = ["negative", "neutral", "positive"]
 RISK_LABELS = ["low", "medium", "high", "critical"]
-DEFAULTS = {"sentiment": "neutral", "risk": "low"}
+TASKS = ("sentiment", "risk")
 
 
-def load_run(path: str) -> dict[str, dict[str, str]]:
-    """Return {task: {id: label}} from either prediction-file format."""
+def load_run(path: str) -> dict[str, list[dict]]:
+    """Return {task: rows} from either prediction-file format, unvalidated.
+
+    Rows are `{"id": ..., <task>: <raw label>}` exactly as the file carries
+    them (no defaulting, no de-duplication); compare() validates them against
+    the gold ids per task.
+    """
     with open(path, encoding="utf-8") as fh:
         data = json.load(fh)
     if isinstance(data, dict):
-        return {task: {str(k): v for k, v in (data.get(task) or {}).items()}
-                for task in DEFAULTS}
-    out: dict[str, dict[str, str]] = {task: {} for task in DEFAULTS}
-    for row in data:
-        sid = str(row.get("id") or "")
-        if not sid:
-            continue
-        for task, default in DEFAULTS.items():
-            out[task][sid] = row.get(task) or default
-    return out
+        return {task: [{"id": k, task: v} for k, v in (data.get(task) or {}).items()]
+                for task in TASKS}
+    return {task: [{"id": row.get("id"), task: row.get(task)} for row in data]
+            for task in TASKS}
 
 
-def floor_run(sigs) -> dict[str, dict[str, str]]:
-    return {"sentiment": {s.id: bl.predict_sentiment(s.text) for s in sigs if s.text},
-            "risk": {s.id: bl.predict_risk(s.text) for s in sigs if s.text}}
+def floor_run(sigs) -> dict[str, list[dict]]:
+    return {"sentiment": [{"id": s.id, "sentiment": bl.predict_sentiment(s.text)}
+                          for s in sigs if s.text],
+            "risk": [{"id": s.id, "risk": bl.predict_risk(s.text)} for s in sigs if s.text]}
 
 
-def parse_runs(args, sigs) -> dict[str, dict[str, dict[str, str]]]:
-    runs: dict[str, dict[str, dict[str, str]]] = {}
+def parse_runs(args, sigs) -> dict[str, dict[str, list[dict]]]:
+    runs: dict[str, dict[str, list[dict]]] = {}
     for spec in args:
         if spec == "floor":
             runs["floor"] = floor_run(sigs)
@@ -92,7 +99,7 @@ def parse_runs(args, sigs) -> dict[str, dict[str, dict[str, str]]]:
     return runs
 
 
-def compare(sigs, runs: dict[str, dict[str, dict[str, str]]]):
+def compare(sigs, runs: dict[str, dict[str, list[dict]]]):
     rated = [s for s in sigs if s.star_rating is not None and s.text]
     have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
     tasks = {
@@ -101,22 +108,37 @@ def compare(sigs, runs: dict[str, dict[str, dict[str, str]]]):
     }
     acc_rows, pair_rows, agree_rows = [], [], []
     for task, (items, gold_fn, labels) in tasks.items():
+        if not items:
+            continue
         correct: dict[str, dict[str, bool]] = {}
         labelled: dict[str, dict[str, str]] = {}
         for name, run in runs.items():
-            preds = run.get(task) or {}
-            scored = [s for s in items if s.id in preds]
+            vs = validate_predictions(run.get(task) or [], expected_ids=[s.id for s in items],
+                                      field=task, labels=labels)
+            scored = [s for s in items if s.id in vs.by_id]
             if not scored:
                 continue
             y_true = [gold_fn(s) for s in scored]
-            y_pred = [preds[s.id] or DEFAULTS[task] for s in scored]
+            y_pred = [vs.by_id[s.id] for s in scored]
             labelled[name] = {s.id: p for s, p in zip(scored, y_pred)}
             sc = M.score(y_true, y_pred, labels)
+            n_correct = sum(1 for t, p in zip(y_true, y_pred) if t == p)
+            e2e_lo, e2e_hi = M.wilson_interval(n_correct, vs.n_expected)
             acc_rows.append({"task": task, "run": name, "n": sc["n"],
                              "accuracy": sc["accuracy"],
                              "accuracy_ci_low": sc["accuracy_ci_low"],
                              "accuracy_ci_high": sc["accuracy_ci_high"],
-                             "f1_macro": sc["f1_macro"]})
+                             "f1_macro": sc["f1_macro"],
+                             # end-to-end view: every gold item in the denominator,
+                             # missing / invalid predictions count as wrong
+                             "n_expected": vs.n_expected, "n_valid": vs.n_valid,
+                             "n_invalid": vs.n_invalid, "n_missing": vs.n_missing,
+                             "n_unknown_ids": vs.n_unknown_ids,
+                             "n_duplicate_ids": vs.n_duplicate_ids,
+                             "coverage": vs.coverage,
+                             "accuracy_end_to_end": round(n_correct / vs.n_expected, 4),
+                             "accuracy_end_to_end_ci_low": e2e_lo,
+                             "accuracy_end_to_end_ci_high": e2e_hi})
             correct[name] = {s.id: p == t for s, p, t in zip(scored, y_pred, y_true)}
         names = list(correct)
         for i, a in enumerate(names):
@@ -135,6 +157,7 @@ def compare(sigs, runs: dict[str, dict[str, dict[str, str]]]):
                                    "agreement_ci_low": lo, "agreement_ci_high": hi})
                 pair_rows.append({
                     "task": task, "pair": f"{a}_vs_{b_name}", "n_pairs": len(ids),
+                    "n_dropped": len(items) - len(ids),
                     "acc_first": round(sum(av) / len(ids), 4),
                     "acc_second": round(sum(bv) / len(ids), 4),
                     "b_first_only_correct": b, "c_second_only_correct": c,

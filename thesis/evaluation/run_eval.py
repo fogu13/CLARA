@@ -20,6 +20,13 @@ Two optional LLM prediction files are scored when present:
   predictions_llm_production.json  CLARA's production enrich_signals path
                                    (predict_llm_production.py)                     -> keys *_llm_production
 Otherwise only the deterministic baselines run.
+
+Each LLM file is validated against the gold ids first (prediction_validation.py):
+duplicate ids keep their first row, unknown ids are counted and ignored, and a
+missing / empty / off-vocabulary label is INVALID — never defaulted. Per task the
+summary carries the coverage-conditioned score (`sentiment_llm`, valid rows only)
+and the end-to-end score (`sentiment_llm_end_to_end`, every gold item, missing or
+invalid counted as wrong) with the counts, repeated under `prediction_validation`.
 """
 from __future__ import annotations
 import csv
@@ -35,9 +42,12 @@ from load_datasets import load
 import baseline as bl
 import metrics as M
 import ml_baseline as ml
+from prediction_validation import validate_predictions
 
 # THESIS_RESULTS_DIR lets exploratory runs (e.g. THESIS_DATASETS=vodafone_de)
 # write elsewhere, so the committed thesis results/ are never overwritten.
+# Module-level on purpose: the smoke test (test_run_eval_smoke.py) points it at
+# a temp folder before calling score_llm/significance directly.
 RESULTS = os.environ.get("THESIS_RESULTS_DIR") or os.path.join(os.path.dirname(__file__), "results")
 SENT_LABELS = ["negative", "neutral", "positive"]
 RISK_LABELS = ["low", "medium", "high", "critical"]
@@ -269,9 +279,12 @@ def equity_slices(sigs, summary, llm_maps=None, ml_risk=None):
         scored_by = {"ml": lambda s, m=ml_risk: s.id in m}
     else:
         scored_by = {}
-    for key, preds in llm_maps.items():
-        predictors[key] = lambda s, m=preds: (s.id in m) and esc(m[s.id].get("risk", "low"))
-        scored_by[key] = lambda s, m=preds: s.id in m
+    for key, maps in llm_maps.items():
+        # maps["risk"] holds VALID predictions only (prediction_validation);
+        # an item without one is not scored for this predictor, never "low".
+        risk_map = maps.get("risk") or {}
+        predictors[key] = lambda s, m=risk_map: (s.id in m) and esc(m[s.id])
+        scored_by[key] = lambda s, m=risk_map: s.id in m
 
     rows, hits = {}, {}
     for lang in sorted({s.language for s in have}):
@@ -408,8 +421,44 @@ def eval_ml(sigs, summary):
     return ml_preds
 
 
+END_TO_END_RULE = ("every gold-labelled item is in the denominator; an item with no "
+                   "prediction (missing) or an invalid label (empty / off-vocabulary) "
+                   "counts as wrong")
+
+
+def _end_to_end(vs, y_true, y_pred):
+    """Accuracy over ALL expected items, missing/invalid counted as wrong.
+
+    The coverage-conditioned score next to it is computed on the valid rows
+    only, so the two views differ exactly by the model's non-answers; both are
+    reported because neither alone describes a model that abstains.
+    """
+    correct = sum(1 for t, p in zip(y_true, y_pred) if t == p)
+    n = vs.n_expected
+    lo, hi = M.wilson_interval(correct, n)
+    return {"rule": END_TO_END_RULE, **vs.counts(), "n_correct": correct,
+            "accuracy": round(correct / n, 4) if n else 0.0,
+            "accuracy_ci_low": lo, "accuracy_ci_high": hi}
+
+
 def score_llm(sigs, summary, *, key="llm", cache="predictions_llm.json", label=""):
-    """Score one LLM prediction file under summary keys `*_{key}`; return its map.
+    """Score one LLM prediction file under summary keys `*_{key}`.
+
+    Returns {"sentiment": {id: label}, "risk": {id: label}} holding the VALID
+    predictions only (see prediction_validation), or None when the file is
+    absent. Every gold item falls into valid / invalid / missing, and the
+    counts are written under summary["prediction_validation"][key][task].
+
+    Two quality views per task:
+      sentiment_{key}, risk_{key}               coverage-conditioned: valid rows
+                                                only, class set fixed to the task
+                                                labels (no stray class in the
+                                                macro average)
+      sentiment_{key}_end_to_end, risk_{key}_end_to_end
+                                                denominator = every gold item;
+                                                missing / invalid count as wrong
+    Per-class and confusion tables use the valid rows only, so they sum to
+    n_valid. No label is defaulted anywhere.
 
     Two files are supported (see LLM_RUNS): the generic-prompt run and the
     production-path run. A production file carries `sentiment_raw` (the
@@ -422,42 +471,71 @@ def score_llm(sigs, summary, *, key="llm", cache="predictions_llm.json", label="
     if not os.path.exists(path):
         summary[f"{key}_path"] = f"not run (no {cache}; {label})"
         return None
-    preds = {p["id"]: p for p in json.load(open(path))}
-    rated = [s for s in sigs if s.star_rating is not None and s.id in preds and s.text]
+    with open(path) as fh:
+        rows = json.load(fh)
+    # First row per id, for the raw-label sensitivity below (same "first
+    # occurrence wins" rule as the validator).
+    first_row = {}
+    for r in rows:
+        first_row.setdefault(str(r.get("id")), r)
+    validation = summary.setdefault("prediction_validation", {}).setdefault(key, {})
+    maps = {}
+
+    rated_all = [s for s in sigs if s.star_rating is not None and s.text]
+    vs = validate_predictions(rows, expected_ids=[s.id for s in rated_all],
+                              field="sentiment", labels=SENT_LABELS)
+    validation["sentiment"] = vs.detail()
+    maps["sentiment"] = dict(vs.by_id)
+    rated = [s for s in rated_all if s.id in vs.by_id]
     y_true = [bl.gold_sentiment_from_stars(s.star_rating) for s in rated]
-    y_pred = [preds[s.id].get("sentiment") or "neutral" for s in rated]
-    summary[f"sentiment_{key}"] = M.score(y_true, y_pred)
-    _per_class_and_confusion(y_true, y_pred, SENT_LABELS, f"sentiment_{key}",
-                             f"Sentiment ({key}) vs star-rating gold")
-    # Same slices as the lexicon floor (same >= MIN_SLICE minimum), so §5A.5
-    # compares like with like instead of a floor-only breakdown.
-    for attr in ("language", "sector", "source"):
-        summary[f"sentiment_{key}_by_{attr}"] = _slices(rated, y_true, y_pred, attr)
-    # Language x sector, because language is confounded with sector here: any
-    # aggregate per-language gap may be a composition effect. Only a sector
-    # carrying both languages supports a within-sector language claim.
-    summary[f"sentiment_{key}_by_language_sector"] = _cross_slices(rated, y_true, y_pred)
-    if any("sentiment_raw" in p for p in preds.values()):
-        raw = collections.Counter(preds[s.id].get("sentiment_raw") for s in rated)
-        keep = [i for i, s in enumerate(rated) if preds[s.id].get("sentiment_raw") != "mixed"]
+    y_pred = [vs.by_id[s.id] for s in rated]
+    summary[f"sentiment_{key}_end_to_end"] = _end_to_end(vs, y_true, y_pred)
+    if rated:
+        summary[f"sentiment_{key}"] = M.score(y_true, y_pred, SENT_LABELS)
+        _per_class_and_confusion(y_true, y_pred, SENT_LABELS, f"sentiment_{key}",
+                                 f"Sentiment ({key}) vs star-rating gold")
+        # Same slices as the lexicon floor (same >= MIN_SLICE minimum), so §5A.5
+        # compares like with like instead of a floor-only breakdown.
+        for attr in ("language", "sector", "source"):
+            summary[f"sentiment_{key}_by_{attr}"] = _slices(rated, y_true, y_pred, attr, SENT_LABELS)
+        # Language x sector, because language is confounded with sector here: any
+        # aggregate per-language gap may be a composition effect. Only a sector
+        # carrying both languages supports a within-sector language claim.
+        summary[f"sentiment_{key}_by_language_sector"] = _cross_slices(rated, y_true, y_pred, SENT_LABELS)
+    if any("sentiment_raw" in r for r in rows if isinstance(r, dict)):
+        raw = collections.Counter(first_row[s.id].get("sentiment_raw") for s in rated)
+        keep = [i for i, s in enumerate(rated) if first_row[s.id].get("sentiment_raw") != "mixed"]
         summary[f"sentiment_{key}_raw_label_counts"] = dict(raw)
         summary[f"sentiment_{key}_excluding_mixed"] = {
             "rule": "sensitivity: items the production model labelled mixed are dropped;"
                     " the primary score maps mixed -> neutral (pre-registered)",
             "n_dropped": len(rated) - len(keep),
-            **M.score([y_true[i] for i in keep], [y_pred[i] for i in keep]),
+            **M.score([y_true[i] for i in keep], [y_pred[i] for i in keep], SENT_LABELS),
         }
-    have = [s for s in sigs if s.risk in RISK_LABELS and s.id in preds and s.text]
-    if have:
+
+    have_all = [s for s in sigs if s.risk in RISK_LABELS and s.text]
+    have = []
+    if have_all:
+        vr = validate_predictions(rows, expected_ids=[s.id for s in have_all],
+                                  field="risk", labels=RISK_LABELS)
+        validation["risk"] = vr.detail()
+        maps["risk"] = dict(vr.by_id)
+        have = [s for s in have_all if s.id in vr.by_id]
         rt = [s.risk for s in have]
-        rp = [preds[s.id].get("risk") or "low" for s in have]
-        summary[f"risk_{key}"] = M.score(rt, rp)
-        _per_class_and_confusion(rt, rp, RISK_LABELS, f"risk_{key}",
-                                 f"Risk ({key}) vs risk_seed gold")
-        esc = lambda x: "escalate" if x in ("high", "critical") else "routine"
-        summary[f"risk_{key}_binary_escalation"] = M.score([esc(v) for v in rt], [esc(v) for v in rp])
-    summary[f"{key}_path"] = f"scored {len(rated)} sentiment / {len(have)} risk predictions ({label})"
-    return preds
+        rp = [vr.by_id[s.id] for s in have]
+        summary[f"risk_{key}_end_to_end"] = _end_to_end(vr, rt, rp)
+        if have:
+            summary[f"risk_{key}"] = M.score(rt, rp, RISK_LABELS)
+            _per_class_and_confusion(rt, rp, RISK_LABELS, f"risk_{key}",
+                                     f"Risk ({key}) vs risk_seed gold")
+            esc = lambda x: "escalate" if x in ("high", "critical") else "routine"
+            summary[f"risk_{key}_binary_escalation"] = M.score(
+                [esc(v) for v in rt], [esc(v) for v in rp], ["escalate", "routine"])
+    summary[f"{key}_path"] = (
+        f"scored {len(rated)} valid of {len(rated_all)} sentiment / "
+        f"{len(have)} valid of {len(have_all)} risk predictions ({label}); "
+        f"see prediction_validation.{key} for missing / invalid / duplicate / unknown-id counts")
+    return maps
 
 
 def significance(sigs, summary, ml_preds, llm_maps=None):
@@ -468,8 +546,11 @@ def significance(sigs, summary, ml_preds, llm_maps=None):
     matches the platform's in-repo harness (metrics.mcnemar_exact): b = first
     predictor right & second wrong, c = the reverse, p = exact two-sided
     binomial(b + c, 0.5). Each entry is computed on the intersection of items
-    both predictors scored, and reports both accuracies on exactly that paired
-    subset, so the tested gap is visible next to its p-value.
+    both predictors scored with a VALID label (an LLM run's missing or invalid
+    predictions are not defaulted, they drop the item from the pair), and
+    reports both accuracies on exactly that paired subset plus `n_dropped`
+    (gold items for the task outside the pair), so the tested gap is visible
+    next to its p-value and its coverage.
 
     The three `p_*_one*` columns are the fragility check: the p-value after a
     single item's correctness changes, in each of the three ways it can. On a
@@ -483,22 +564,24 @@ def significance(sigs, summary, ml_preds, llm_maps=None):
         "sentiment": (rated,
                       lambda s: bl.gold_sentiment_from_stars(s.star_rating),
                       lambda s: bl.predict_sentiment(s.text),
-                      (ml_preds or {}).get("sentiment", {}), "sentiment", "neutral"),
+                      (ml_preds or {}).get("sentiment", {}), "sentiment"),
         "risk": (have,
                  lambda s: s.risk,
                  lambda s: bl.predict_risk(s.text),
-                 (ml_preds or {}).get("risk", {}), "risk", "low"),
+                 (ml_preds or {}).get("risk", {}), "risk"),
     }
     order = ["floor", "ml"] + [key for key, _, _ in LLM_RUNS]
     out, csv_rows = {}, []
-    for task, (items, gold_fn, floor_fn, ml_map, fld, default) in tasks.items():
+    for task, (items, gold_fn, floor_fn, ml_map, fld) in tasks.items():
         correct = {"floor": {s.id: floor_fn(s) == gold_fn(s) for s in items}}
         if ml_map:
             correct["ml"] = {s.id: ml_map[s.id] == gold_fn(s)
                              for s in items if s.id in ml_map}
-        for key, preds in llm_maps.items():
-            correct[key] = {s.id: (preds[s.id].get(fld) or default) == gold_fn(s)
-                            for s in items if s.id in preds}
+        for key, maps in llm_maps.items():
+            # maps[fld] holds VALID predictions only (score_llm); no default.
+            valid = maps.get(fld) or {}
+            correct[key] = {s.id: valid[s.id] == gold_fn(s)
+                            for s in items if s.id in valid}
         present = [name for name in order if name in correct]
         res = {}
         for i, a in enumerate(present):
@@ -511,6 +594,7 @@ def significance(sigs, summary, ml_preds, llm_maps=None):
                 b, c, p = M.mcnemar_exact(av, bv)
                 entry = {
                     "n_pairs": len(ids),
+                    "n_dropped": len(items) - len(ids),
                     f"acc_{a}": round(sum(av) / len(ids), 4),
                     f"acc_{b_name}": round(sum(bv) / len(ids), 4),
                     "b_first_only_correct": b,
@@ -521,7 +605,8 @@ def significance(sigs, summary, ml_preds, llm_maps=None):
                 entry.update({k: v for k, v in sens.items() if k != "p_observed"})
                 res[f"{a}_vs_{b_name}"] = entry
                 csv_rows.append({"task": task, "pair": f"{a}_vs_{b_name}",
-                                 "n_pairs": len(ids), "acc_first": entry[f"acc_{a}"],
+                                 "n_pairs": len(ids), "n_dropped": len(items) - len(ids),
+                                 "acc_first": entry[f"acc_{a}"],
                                  "acc_second": entry[f"acc_{b_name}"],
                                  "b_first_only_correct": b, "c_second_only_correct": c,
                                  "p_exact_two_sided": entry["p_exact_two_sided"],
