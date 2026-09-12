@@ -62,7 +62,9 @@ Boyer, J., & Mili, H. (2011). *Agile Business Rule Development*. Springer.
 
 Braun, V., & Clarke, V. (2019). Reflecting on reflexive thematic analysis. *Qualitative Research in Sport, Exercise and Health*, 11(4), 589–597. https://doi.org/10.1080/2159676X.2019.1628806
 
-Braun, V., & Clarke, V. (2021). One size fits all? What counts as quality practice in (reflexive) thematic analysis? *Counselling and Psychotherapy Research*, 21(1), 37–47.
+Braun, V., & Clarke, V. (2021a). One size fits all? What counts as quality practice in (reflexive) thematic analysis? *Qualitative Research in Psychology*, 18(3), 328–352.
+
+Braun, V., & Clarke, V. (2021b). Can I use TA? Should I use TA? Should I not use TA? Comparing reflexive thematic analysis and other pattern-based qualitative analytic approaches. *Counselling and Psychotherapy Research*, 21(1), 37–47.
 
 Brown, T. B., et al. (2020). Language models are few-shot learners. *Proceedings of NeurIPS*.
 

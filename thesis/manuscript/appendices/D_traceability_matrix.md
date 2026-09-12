@@ -40,7 +40,7 @@ The **measured** rows concern triage quality (RQ3a) and escalation equity (RQ3b)
 | Series construction (complete UTC days, pre-window truncation, execution-day exclusion) | `outcome_engine.its_outcome_for_problem` |
 | Contract proposal (trailing baseline, 30-day window, T+7 early read) | `outcome_engine.propose_outcome_contract` |
 | Zero-input application at approval | `routers/problems.py` approval route |
-| Scheduled T+7 / T+30 re-measurement | `measurement_scheduler.py` + `migrations/011` (pg_cron) |
+| Scheduled T+7 / T+30 re-measurement from the plan's origin (dispatch; human-recorded implementation; approval only for a draft-only deliverable; no clock on a failed push), under a named contract revision, with each reading bound to its checkpoint | `measurement_scheduler.py` + `migrations/011` (pg_cron) + `migrations/016` (origins, contract revisions, bound readings) |
 | Exact-recovery + bias regression tests | `tests/test_outcome_engine.py` |
 | Evidence grade A–E stamped on every outcome readout: grades the measurement *design* (A randomized holdout; B controlled quasi-experiment, reserved; C interrupted time series; D uncontrolled before/after; E manual assertion or unmeasured). The board grades the contracted design; the problem detail re-grades on the fit actually obtained, so a refused ITS fit (`delta_insufficient_data`) reads D, never C | `outcome_engine.evidence_grade` (`realised_method`); `routers/problems.py` outcome route |
 | Measurement provenance (*instrumented* vs *manual*; manual values labelled "unverified manual observation"; the API route force-stamps manual so provenance cannot be spoofed by clients) | `routers/problems.py` measurement route |
