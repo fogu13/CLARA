@@ -17,7 +17,7 @@ Deploy:
 1. Locally: commit + `git push origin HEAD:main`
 2. Server: `cd /opt/stacks/clara/repo && git pull`
 3. `cd /opt/stacks/clara && docker compose up -d --build`
-4. Verify: `python3 scripts/live_smoke.py` from any machine → expect **17/17** (checks landing claims, security headers on web+API, fail-closed auth, cookie routes, model-card endpoint; read-only)
+4. Verify: `python3 scripts/live_smoke.py` from any machine → expect **22/22** checks OK (INFO rows do not count; checks landing claims, security headers on web+API, fail-closed auth, cookie routes, liveness `/health`, readiness `/ready`, model-card endpoint, swagger off; read-only). A `/ready → 404` with `/health → 200` means the running image predates the September 2026 readiness route (commit 01ced20): rebuild with step 3, it is not a Caddy or DB fault.
 
 Notes:
 
