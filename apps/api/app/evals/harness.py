@@ -43,11 +43,12 @@ class EvalResult:
     """Result of a single evaluation metric."""
 
     name: str
-    value: float
+    value: float | None
     detail: str = ""
 
     def __str__(self) -> str:
-        return f"{self.name}: {self.value:.4f} — {self.detail}"
+        shown = "not evaluated" if self.value is None else f"{self.value:.4f}"
+        return f"{self.name}: {shown} — {self.detail}"
 
 
 @dataclass
@@ -65,7 +66,13 @@ class EnrichmentEvalResult:
     tag_precision_exact: float = 0.0
     tag_recall_exact: float = 0.0
     tag_f1_exact: float = 0.0
-    hallucination_rate: float = 0.0
+    # Hallucination heuristic (check_hallucination) is English-only token
+    # grounding, so its denominator is the number of ELIGIBLE (language == "en")
+    # items, never the whole set. None means "not evaluated": no eligible item
+    # existed, which is not the same thing as a measured rate of 0.0.
+    hallucination_rate: float | None = None
+    hallucination_eligible: int = 0
+    hallucination_excluded: int = 0
     pii_leak_count: int = 0
     avg_latency_ms: float = 0.0
     results: list[EvalResult] = field(default_factory=list)
@@ -79,7 +86,14 @@ class EnrichmentEvalResult:
             f"Tag precision: {self.tag_precision:.2%} (exact {self.tag_precision_exact:.2%})",
             f"Tag recall: {self.tag_recall:.2%} (exact {self.tag_recall_exact:.2%})",
             f"Tag F1: {self.tag_f1:.2%} (exact {self.tag_f1_exact:.2%})",
-            f"Hallucination rate: {self.hallucination_rate:.2%}",
+            (
+                "Hallucination rate: not evaluated (0 eligible EN items; "
+                f"{self.hallucination_excluded} non-EN excluded)"
+                if self.hallucination_rate is None
+                else f"Hallucination rate: {self.hallucination_rate:.2%} "
+                     f"(over {self.hallucination_eligible} EN items; "
+                     f"{self.hallucination_excluded} non-EN excluded)"
+            ),
             f"PII leaks: {self.pii_leak_count}",
             f"Avg latency: {self.avg_latency_ms:.0f}ms",
         ]
@@ -410,6 +424,8 @@ class EvalHarness:
         tag_precisions_exact: list[float] = []
         tag_recalls_exact: list[float] = []
         hallucination_count = 0
+        hallucination_eligible = 0
+        hallucination_excluded = 0
         pii_count = 0
         latencies: list[float] = []
 
@@ -444,13 +460,21 @@ class EvalHarness:
             tag_precisions_exact.append(pe)
             tag_recalls_exact.append(re_)
 
-            # Hallucination check (EN items only — see check_hallucination)
-            if check_hallucination(
-                actual_enrichment,
-                item.get("text", ""),
-                language=item.get("language", "en"),
-            ):
-                hallucination_count += 1
+            # Hallucination check (EN items only — see check_hallucination).
+            # Non-EN items are excluded from the DENOMINATOR as well as the
+            # numerator; otherwise one flagged EN item next to one excluded DE
+            # item would read as 0.5 instead of 1.0 over the eligible items.
+            language = item.get("language", "en")
+            if language == "en":
+                hallucination_eligible += 1
+                if check_hallucination(
+                    actual_enrichment,
+                    item.get("text", ""),
+                    language=language,
+                ):
+                    hallucination_count += 1
+            else:
+                hallucination_excluded += 1
 
             # PII leak check
             pii_count += check_pii_leak(
@@ -480,7 +504,13 @@ class EvalHarness:
             if (result.tag_precision_exact + result.tag_recall_exact) > 0
             else 0
         )
-        result.hallucination_rate = hallucination_count / n if n > 0 else 0
+        result.hallucination_eligible = hallucination_eligible
+        result.hallucination_excluded = hallucination_excluded
+        result.hallucination_rate = (
+            hallucination_count / hallucination_eligible
+            if hallucination_eligible > 0
+            else None
+        )
         result.pii_leak_count = pii_count
         result.avg_latency_ms = sum(latencies) / n if n > 0 else 0
 
@@ -501,7 +531,13 @@ class EvalHarness:
             EvalResult(
                 "hallucination_rate",
                 result.hallucination_rate,
-                f"{hallucination_count} flagged",
+                f"{hallucination_count} flagged of {hallucination_eligible} eligible (EN)",
+            ),
+            EvalResult(
+                "hallucination_coverage",
+                float(hallucination_eligible),
+                f"{hallucination_eligible} eligible (EN), "
+                f"{hallucination_excluded} excluded (non-EN, heuristic not applicable)",
             ),
             EvalResult("pii_leaks", float(pii_count), f"{pii_count} matches"),
             EvalResult("avg_latency_ms", result.avg_latency_ms),
@@ -593,6 +629,8 @@ class EvalHarness:
                 "tag_recall_exact": enrichment.tag_recall_exact,
                 "tag_f1_exact": enrichment.tag_f1_exact,
                 "hallucination_rate": enrichment.hallucination_rate,
+                "hallucination_eligible": enrichment.hallucination_eligible,
+                "hallucination_excluded": enrichment.hallucination_excluded,
                 "pii_leak_count": enrichment.pii_leak_count,
                 "avg_latency_ms": enrichment.avg_latency_ms,
             },
