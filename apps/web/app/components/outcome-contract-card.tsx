@@ -8,7 +8,23 @@ import {
   updateOutcomeContract
 } from "@/lib/client-api";
 import { useI18n } from "@/lib/i18n";
-import type { ItsResult, LoopVerdict, OutcomeContractProposalPreview, ProblemRecord } from "@/lib/types";
+import type {
+  ItsResult,
+  LoopVerdict,
+  MeasurementOrigin,
+  OutcomeContractProposalPreview,
+  ProblemRecord
+} from "@/lib/types";
+
+export function measurementOriginLabel(
+  origin: MeasurementOrigin | null | undefined,
+  t: ReturnType<typeof useI18n>["t"]
+): string | null {
+  if (origin === "dispatch") return t.contract.originDispatch;
+  if (origin === "implementation") return t.contract.originImplementation;
+  if (origin === "approval") return t.contract.originApproval;
+  return null;
+}
 
 export function loopVerdictLabel(verdict: LoopVerdict | null | undefined, t: ReturnType<typeof useI18n>["t"]): string {
   switch (verdict) {
@@ -38,7 +54,14 @@ export function OutcomeContractCard({ problem }: { problem: ProblemRecord }) {
   const { t } = useI18n();
   const [proposal, setProposal] = useState<OutcomeContractProposalPreview | null>(null);
   const [its, setIts] = useState<ItsResult | null>(null);
-  const [loop, setLoop] = useState<{ verdict: LoopVerdict | null; note: string | null } | null>(null);
+  const [loop, setLoop] = useState<{
+    verdict: LoopVerdict | null;
+    note: string | null;
+    origin: MeasurementOrigin | null;
+    originAt: string | null;
+    amendedAfterMeasurement: boolean;
+    measuredUnderRevision: number | null;
+  } | null>(null);
   const [applyState, setApplyState] = useState<"idle" | "saving" | "error">("idle");
   const [editing, setEditing] = useState(false);
   const [editWindow, setEditWindow] = useState(
@@ -63,7 +86,14 @@ export function OutcomeContractCard({ problem }: { problem: ProblemRecord }) {
       .then((snapshot) => {
         if (cancelled) return;
         setIts(snapshot.its ?? null);
-        setLoop({ verdict: snapshot.loop_verdict ?? null, note: snapshot.loop_note ?? null });
+        setLoop({
+          verdict: snapshot.loop_verdict ?? null,
+          note: snapshot.loop_note ?? null,
+          origin: snapshot.measurement_origin ?? null,
+          originAt: snapshot.measurement_origin_at ?? null,
+          amendedAfterMeasurement: snapshot.contract_amended_after_measurement ?? false,
+          measuredUnderRevision: snapshot.measured_under_revision ?? null
+        });
       })
       .catch(() => {
         if (cancelled) return;
@@ -124,12 +154,35 @@ export function OutcomeContractCard({ problem }: { problem: ProblemRecord }) {
         <div className="text-sm font-semibold">{problem.outcome_contract.primary_metric}</div>
         <p className="mt-1 text-xs text-muted-foreground">
           {problem.outcome_contract.comparison_method} /{" "}
-          {problem.outcome_contract.measurement_window_days} {t.detail.days}
+          {problem.outcome_contract.measurement_window_days} {t.detail.days} ·{" "}
+          <span
+            title={
+              problem.outcome_contract.revised_at
+                ? `${problem.outcome_contract.revised_at.slice(0, 10)}${problem.outcome_contract.revision_note ? ` — ${problem.outcome_contract.revision_note}` : ""}`
+                : undefined
+            }
+          >
+            {t.contract.revision.replace("{n}", String(problem.outcome_contract.revision ?? 1))}
+          </span>
         </p>
         {loop ? (
           <p className={`mt-2 text-xs ${loopVerdictTone(loop.verdict)}`} title={loop.note ?? undefined}>
             <span className="font-semibold">{t.detail.loopVerdict}:</span> {loopVerdictLabel(loop.verdict, t)}
+            {measurementOriginLabel(loop.origin, t) ? (
+              <span className="text-muted-foreground">
+                {" "}· {measurementOriginLabel(loop.origin, t)}
+                {loop.originAt ? ` ${loop.originAt.slice(0, 10)}` : ""}
+              </span>
+            ) : null}
             {loop.note ? <span className="text-muted-foreground"> — {loop.note}</span> : null}
+          </p>
+        ) : null}
+        {loop?.amendedAfterMeasurement ? (
+          <p className="mt-1 text-xs text-amber-700">
+            {t.contract.amendedAfterMeasurement.replace(
+              "{n}",
+              String(loop.measuredUnderRevision ?? "")
+            )}
           </p>
         ) : null}
         {proposed ? (

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from app.domain.models import (
+    OUTCOME_CONTRACT_TERM_FIELDS,
     ActionProposal,
     ActionProposalUpdateRequest,
     OutcomeContract,
@@ -13,7 +14,7 @@ from app.domain.models import (
     ProblemUpdateRequest,
 )
 from app.domain.scoring import approval_pressure
-from app.services.common import SerializedConnection, action_snapshot  # re-exported for existing importers, SerializedConnection
+from app.services.common import SerializedConnection, action_snapshot, utc_now  # re-exported for existing importers, SerializedConnection
 
 
 def with_approval_pressure(problem: ProblemRecord) -> ProblemRecord:
@@ -64,15 +65,51 @@ def apply_problem_status(problem: ProblemRecord, status: ProblemStatus) -> Probl
     return with_approval_pressure(problem.model_copy(update={"status": status}))
 
 
+def outcome_contract_changes(
+    before: OutcomeContract, after: OutcomeContract
+) -> dict[str, dict[str, object]]:
+    """{field: {"before", "after"}} for every contract TERM that differs."""
+    changes: dict[str, dict[str, object]] = {}
+    for field in OUTCOME_CONTRACT_TERM_FIELDS:
+        old_value = getattr(before, field)
+        new_value = getattr(after, field)
+        if old_value != new_value:
+            changes[field] = {"before": old_value, "after": new_value}
+    return changes
+
+
 def apply_outcome_contract_update(
     problem: ProblemRecord,
     update: OutcomeContractUpdateRequest,
+    *,
+    actor: str | None = None,
+    note: str | None = None,
 ) -> ProblemRecord:
-    merged = problem.outcome_contract.model_dump()
-    merged.update(update.model_dump(exclude_unset=True, exclude_none=True))
-    return problem.model_copy(
-        update={"outcome_contract": OutcomeContract.model_validate(merged)}
+    """Merge the contract terms; bump the revision only when a term changed.
+
+    The single merge point for the PATCH route and the approval-time
+    auto-proposal. A no-op update returns the problem unchanged (no revision
+    bump), so re-applying the same terms never fakes an amendment.
+    """
+    current = problem.outcome_contract
+    merged = current.model_dump()
+    merged.update(
+        update.model_dump(
+            exclude_unset=True, exclude_none=True, include=set(OUTCOME_CONTRACT_TERM_FIELDS)
+        )
     )
+    candidate = OutcomeContract.model_validate(merged)
+    if not outcome_contract_changes(current, candidate):
+        return problem
+    revised = candidate.model_copy(
+        update={
+            "revision": current.revision + 1,
+            "revised_at": utc_now(),
+            "revised_by": actor,
+            "revision_note": note,
+        }
+    )
+    return problem.model_copy(update={"outcome_contract": revised})
 
 
 GDPR_ERASED = "[erased under GDPR Art. 17]"
@@ -171,12 +208,15 @@ class ProblemStore:
         self,
         problem_id: str,
         update: OutcomeContractUpdateRequest,
+        *,
+        actor: str | None = None,
+        note: str | None = None,
     ) -> ProblemRecord | None:
         existing = self._draft_problems.get(problem_id)
         if existing is None:
             return None
 
-        updated_problem = apply_outcome_contract_update(existing, update)
+        updated_problem = apply_outcome_contract_update(existing, update, actor=actor, note=note)
         self._draft_problems[problem_id] = updated_problem
         return updated_problem
 
@@ -336,12 +376,15 @@ class SQLiteProblemStore:
         self,
         problem_id: str,
         update: OutcomeContractUpdateRequest,
+        *,
+        actor: str | None = None,
+        note: str | None = None,
     ) -> ProblemRecord | None:
         existing = self.get_problem(problem_id)
         if existing is None or problem_id in self.seed_problems:
             return None
 
-        updated_problem = apply_outcome_contract_update(existing, update)
+        updated_problem = apply_outcome_contract_update(existing, update, actor=actor, note=note)
         payload = json.dumps(updated_problem.model_dump(mode="json", by_alias=True))
         self._connection.execute(
             """

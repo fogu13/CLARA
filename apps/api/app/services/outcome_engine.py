@@ -530,11 +530,49 @@ LOOP_VERDICTS = (
 )
 
 
+def intervention_anchor(executions: list[Any]) -> tuple[str, str] | None:
+    """(origin, at) of the intervention the measurement clock runs from.
+
+    Earliest human-recorded ``implemented_at`` wins (the fix landed); else the
+    earliest ``dispatched_at`` of a pushed execution (the ticket/message left
+    CLARA); else the earliest ``created_at`` of a draft-only execution, where
+    the approval itself is the deliverable. Executions that only ever failed
+    to push give no anchor: nothing happened that inflow could react to.
+    """
+    implemented = sorted(
+        execution.implemented_at for execution in executions if execution.implemented_at
+    )
+    if implemented:
+        return "implementation", implemented[0]
+    dispatched = sorted(
+        execution.dispatched_at
+        for execution in executions
+        if execution.dispatched_at and _status_name(execution.status) == "pushed"
+    )
+    if dispatched:
+        return "dispatch", dispatched[0]
+    drafts = sorted(
+        execution.created_at
+        for execution in executions
+        if _status_name(execution.status) == "draft_created"
+    )
+    if drafts:
+        return "approval", drafts[0]
+    return None
+
+
+def _status_name(status: Any) -> str:
+    return str(getattr(status, "value", status))
+
+
 def loop_verdict(
     *,
     outcome_status: str,
     plans: list[dict[str, Any]],
     measurement_source: str | None = None,
+    checkpoint_kind: str | None = None,
+    measurement_origin: str | None = None,
+    measurement_origin_at: str | None = None,
 ) -> tuple[str, str]:
     """(verdict, note) for one problem.
 
@@ -542,9 +580,15 @@ def loop_verdict(
     - measuring: checkpoints are scheduled but the closing read is not in yet.
     - manual_required: CLARA cannot observe the metric; a human must record it.
     - on_track: an early read (T+7, or a manual read) looks good — not proof yet.
-    - loop_closed: the window or follow-up checkpoint met the target on real
-      post-fix signal inflow. The theme dropped: the loop worked.
-    - fix_did_not_land: the closing checkpoint shows no improvement.
+    - loop_closed: the latest reading is an instrumented window or follow-up
+      checkpoint read that met the target. Certified target attainment on
+      real inflow; causal attribution rests on the comparison method.
+    - fix_did_not_land: that same closing read shows no improvement.
+
+    Certification is bound to the observation itself: only an instrumented
+    reading produced by a closing checkpoint (``checkpoint_kind``) certifies.
+    Legacy readings without a checkpoint kind fall back to "a closing plan is
+    done". A manual reading never certifies, whatever the plans say.
     """
     done_closing = {
         plan["kind"] for plan in plans if plan.get("status") == "done" and plan.get("kind") in LOOP_CHECKPOINT_KINDS
@@ -559,18 +603,50 @@ def loop_verdict(
             return "measuring", "Checkpoints are scheduled; the closing read is not in yet."
         return "not_measured", "No approved action has started the measurement clock."
 
-    closing_label = "follow-up" if "followup" in done_closing else "window"
+    instrumented = measurement_source == "instrumented"
+    if checkpoint_kind is not None:
+        certified = instrumented and checkpoint_kind in LOOP_CHECKPOINT_KINDS
+        closing_label = "follow-up" if checkpoint_kind == "followup" else "window"
+    else:
+        certified = instrumented and bool(done_closing)
+        closing_label = "follow-up" if "followup" in done_closing else "window"
+
+    clock = ""
+    if measurement_origin:
+        clock = f"; clock from {measurement_origin}"
+        if measurement_origin_at:
+            clock += f" on {str(measurement_origin_at)[:10]}"
+    caveat = (
+        " No dispatch or implementation was recorded, so this read may predate the fix."
+        if measurement_origin == "approval"
+        else ""
+    )
+
     if outcome_status == "target_met":
-        if done_closing:
-            return "loop_closed", f"Post-fix inflow met the target at the {closing_label} checkpoint on real signals."
-        if measurement_source == "manual":
-            return "on_track", "A manual reading met the target; the scheduled read will confirm it."
+        if certified:
+            return "loop_closed", (
+                f"Inflow met the target at the {closing_label} checkpoint (instrumented read{clock})."
+                " Target attained; causal attribution rests on the comparison method"
+                f" (see evidence grade).{caveat}"
+            )
+        if not instrumented:
+            return "on_track", (
+                "A manual reading met the target; it is not certified on signal inflow"
+                " — the next scheduled read will."
+            )
         return "on_track", "The early read met the target; the window checkpoint will confirm it."
     if outcome_status == "improving":
         return "on_track", "Inflow is moving the right way but has not reached the target yet."
     if outcome_status == "not_improved":
-        if done_closing:
-            return "fix_did_not_land", f"The {closing_label} checkpoint shows no improvement: the fix did not land."
+        if certified:
+            return "fix_did_not_land", (
+                f"The {closing_label} checkpoint shows no improvement (instrumented read{clock}):"
+                f" the fix did not land.{caveat}"
+            )
+        if not instrumented:
+            return "measuring", (
+                "A manual reading shows no improvement; the next scheduled read decides."
+            )
         return "measuring", "The early read shows no improvement yet; the window checkpoint decides."
     return "measuring", "Measurement in progress."
 

@@ -554,10 +554,29 @@ def test_loop_verdict_matrix() -> None:
     assert loop_verdict(outcome_status="not_measured", plans=pending)[0] == "measuring"
     assert loop_verdict(outcome_status="not_measured", plans=manual)[0] == "manual_required"
     assert loop_verdict(outcome_status="target_met", plans=pending)[0] == "on_track"
-    assert loop_verdict(outcome_status="target_met", plans=done_window)[0] == "loop_closed"
+    # Certification is bound to the observation: a done closing plan alone
+    # proves nothing about the latest reading. Only an instrumented reading
+    # certifies (legacy readings without a checkpoint kind fall back to the
+    # done-plan rule); a manual reading never does.
+    assert (
+        loop_verdict(outcome_status="target_met", plans=done_window, measurement_source="instrumented")[0]
+        == "loop_closed"
+    )
+    assert loop_verdict(outcome_status="target_met", plans=done_window)[0] == "on_track"
+    assert (
+        loop_verdict(outcome_status="target_met", plans=done_window, measurement_source="manual")[0]
+        == "on_track"
+    )
     assert loop_verdict(outcome_status="improving", plans=done_window)[0] == "on_track"
     assert loop_verdict(outcome_status="not_improved", plans=pending)[0] == "measuring"
-    assert loop_verdict(outcome_status="not_improved", plans=done_window)[0] == "fix_did_not_land"
+    assert (
+        loop_verdict(outcome_status="not_improved", plans=done_window, measurement_source="instrumented")[0]
+        == "fix_did_not_land"
+    )
+    assert (
+        loop_verdict(outcome_status="not_improved", plans=done_window, measurement_source="manual")[0]
+        == "measuring"
+    )
 
 
 # ---------------------------------------------------------------------------

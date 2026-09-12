@@ -315,6 +315,13 @@ export type OutcomeContract = {
   comparison_method: string;
   guardrail_metrics: string[];
   responsible_owner: string;
+  // Contract revision bookkeeping: every amendment that changes a term bumps
+  // the revision (who / when / why); readings keep the revision they were
+  // scored under.
+  revision?: number;
+  revised_at?: string | null;
+  revised_by?: string | null;
+  revision_note?: string | null;
 };
 
 export type OutcomeContractUpdateRequest = {
@@ -534,7 +541,19 @@ export type OutcomeSnapshot = {
   // loop_closed | fix_did_not_land (outcome_engine.loop_verdict).
   loop_verdict?: LoopVerdict | null;
   loop_note?: string | null;
+  // Contract provenance: current revision, the revision the latest reading
+  // was scored under, and whether the terms changed in between.
+  contract_revision?: number | null;
+  measured_under_revision?: number | null;
+  contract_amended_after_measurement?: boolean;
+  // Measurement clock: approval | dispatch | implementation and its instant;
+  // the checkpoint kind of the latest instrumented reading.
+  measurement_origin?: MeasurementOrigin | null;
+  measurement_origin_at?: string | null;
+  checkpoint_kind?: string | null;
 };
+
+export type MeasurementOrigin = "approval" | "dispatch" | "implementation";
 
 export type LoopVerdict =
   | "not_measured"

@@ -15,6 +15,12 @@ function statusVariant(status: string): "success" | "warning" | "secondary" | "o
   return "outline";
 }
 
+function originLabel(origin: MeasurementPlan["origin"], t: ReturnType<typeof useI18n>["t"]): string {
+  if (origin === "dispatch") return t.learnings.originDispatch;
+  if (origin === "implementation") return t.learnings.originImplementation;
+  return t.learnings.originApproval;
+}
+
 export function MeasurementCheckpointsPanel() {
   const { t } = useI18n();
   const [plans, setPlans] = useState<MeasurementPlan[]>([]);
@@ -103,11 +109,19 @@ export function MeasurementCheckpointsPanel() {
                     <span className="ml-2 text-xs text-muted-foreground">
                       {plan.kind === "t7" ? t.learnings.t7Check : plan.kind === "followup" ? t.learnings.followUp : t.learnings.windowClose} · {t.learnings.due} {plan.due_at.slice(0, 10)}
                     </span>
+                    <span
+                      className="ml-2 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                      title={plan.executed_at.slice(0, 10)}
+                    >
+                      {originLabel(plan.origin, t)}
+                    </span>
                     {plan.note ? (
                       <p className="mt-0.5 text-xs text-muted-foreground">{plan.note}</p>
                     ) : null}
                   </div>
-                  <Badge variant={statusVariant(plan.status)}>{plan.status.replaceAll("_", " ")}</Badge>
+                  <Badge variant={statusVariant(plan.status)}>
+                    {plan.status === "superseded" ? t.learnings.statusSuperseded : plan.status.replaceAll("_", " ")}
+                  </Badge>
                 </div>
               ))}
             </div>

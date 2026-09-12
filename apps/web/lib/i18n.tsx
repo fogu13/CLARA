@@ -554,6 +554,10 @@ const en = {
     windowClose: "window close",
     due: "due",
     followUp: "follow-up (keep listening)",
+    originApproval: "since approval (draft only)",
+    originDispatch: "since dispatch",
+    originImplementation: "since implementation",
+    statusSuperseded: "superseded",
     memoryTitle: "Learning memory",
     memorySubtitle:
       "What was done for each theme and whether it measurably worked. Human-validated learnings feed the next triage run; confidence decays with age.",
@@ -1024,6 +1028,12 @@ const en = {
     editContract: "Edit contract",
     editWindowLabel: "Measurement window (days)",
     editThresholdLabel: "Success threshold",
+    revision: "Contract v{n}",
+    amendedAfterMeasurement:
+      "The last reading was scored under contract v{n}; the amended terms apply from the next scheduled read.",
+    originApproval: "clock since approval (draft only)",
+    originDispatch: "clock since dispatch",
+    originImplementation: "clock since implementation",
   },
 } as const;
 
@@ -1576,6 +1586,10 @@ const de: Dict = {
     windowClose: "Fensterschluss",
     due: "fällig",
     followUp: "Nachkontrolle (weiter zuhören)",
+    originApproval: "seit Freigabe (nur Entwurf)",
+    originDispatch: "seit Versand",
+    originImplementation: "seit Umsetzung",
+    statusSuperseded: "ersetzt",
     memoryTitle: "Learning-Gedächtnis",
     memorySubtitle:
       "Was pro Thema getan wurde und ob es messbar gewirkt hat. Menschlich validierte Learnings fließen in die nächste Triage ein; das Vertrauen zerfällt mit der Zeit.",
@@ -2046,6 +2060,12 @@ const de: Dict = {
     editContract: "Vertrag bearbeiten",
     editWindowLabel: "Messfenster (Tage)",
     editThresholdLabel: "Erfolgsschwelle",
+    revision: "Vertrag v{n}",
+    amendedAfterMeasurement:
+      "Die letzte Messung wurde unter Vertrag v{n} bewertet; die geänderten Bedingungen gelten ab der nächsten geplanten Messung.",
+    originApproval: "Uhr seit Freigabe (nur Entwurf)",
+    originDispatch: "Uhr seit Versand",
+    originImplementation: "Uhr seit Umsetzung",
   },
 };
 

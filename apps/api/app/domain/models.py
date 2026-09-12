@@ -500,6 +500,14 @@ class OutcomeContract(BaseModel):
     comparison_method: str
     guardrail_metrics: list[str]
     responsible_owner: str
+    # Contract revisions: every amendment that changes a term bumps the
+    # revision and records who/when/why, so a recorded observation can be
+    # scored under the terms that were in force when it was taken instead of
+    # being silently reinterpreted by a later edit.
+    revision: int = 1
+    revised_at: str | None = None
+    revised_by: str | None = None
+    revision_note: str | None = None
 
 
 class ProblemRecord(BaseModel):
@@ -578,6 +586,21 @@ class OutcomeContractUpdateRequest(BaseModel):
     comparison_method: str | None = Field(default=None, min_length=1)
     guardrail_metrics: list[str] | None = None
     responsible_owner: str | None = Field(default=None, min_length=1)
+    # Free-text reason for the amendment; stored as the contract's
+    # revision_note, never merged into the contract terms themselves.
+    amendment_note: str | None = None
+
+
+# The contract terms an amendment may change (revision bookkeeping excluded).
+OUTCOME_CONTRACT_TERM_FIELDS = (
+    "primary_metric",
+    "baseline",
+    "success_threshold",
+    "measurement_window_days",
+    "comparison_method",
+    "guardrail_metrics",
+    "responsible_owner",
+)
 
 
 class OutcomeContractProposalPreview(BaseModel):
@@ -666,6 +689,20 @@ class ExecutionRecord(BaseModel):
     reviewed_by: str | None = None
     reviewed_at: str | None = None
     disclosure_applied: bool = False
+    # Measurement clock origins. dispatched_at is stamped by the store when the
+    # push succeeds (the ticket/message left CLARA); implemented_at is a human
+    # attestation that the fix itself landed (POST .../implementation). A
+    # created ticket is not an implemented fix, so the two are kept apart.
+    dispatched_at: str | None = None
+    implemented_at: str | None = None
+    implementation_note: str | None = None
+
+
+class ImplementationRecordRequest(BaseModel):
+    """Human attestation that an approved action's fix was implemented."""
+
+    implemented_at: str
+    note: str | None = None
 
 
 class JiraIssueDraft(BaseModel):
@@ -711,6 +748,14 @@ class OutcomeMeasurement(BaseModel):
     # value from raw signals; anything hand-entered stays "manual" so the UI can
     # label it an unverified manual observation (never visually conflated).
     measurement_source: str = "manual"
+    # Provenance of the observation: the contract revision it was scored under
+    # (and a frozen copy of that contract), plus — for scheduler reads — the
+    # checkpoint that produced it. Legacy rows carry None.
+    contract_revision: int | None = None
+    contract_snapshot: OutcomeContract | None = None
+    checkpoint_kind: str | None = None
+    plan_id: int | None = None
+    execution_id: str | None = None
 
 
 LEARNING_RETENTION_DAYS = 730
@@ -863,6 +908,18 @@ class OutcomeSnapshot(BaseModel):
     # measuring | manual_required | on_track | loop_closed | fix_did_not_land.
     loop_verdict: str | None = None
     loop_note: str | None = None
+    # Contract provenance: the current revision, the revision the latest
+    # reading was scored under, and whether the terms changed in between
+    # (status above is always the one under the measured revision).
+    contract_revision: int | None = None
+    measured_under_revision: int | None = None
+    contract_amended_after_measurement: bool = False
+    # Measurement clock: approval | dispatch | implementation and its instant
+    # (outcome_engine.intervention_anchor); the checkpoint kind of the latest
+    # instrumented reading (t7 | window | followup).
+    measurement_origin: str | None = None
+    measurement_origin_at: str | None = None
+    checkpoint_kind: str | None = None
 
 
 class OutcomeBoardItem(BaseModel):

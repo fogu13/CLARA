@@ -172,7 +172,11 @@ CREATE TABLE IF NOT EXISTS clara_measurement_plans (
     kind TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
     note TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Clock origin (approval | dispatch | implementation) and the contract
+    -- revision the checkpoints were scheduled under (migration 016).
+    origin TEXT NOT NULL DEFAULT 'approval',
+    contract_revision INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS clara_connector_configs (
@@ -369,6 +373,16 @@ class PostgresConnectionMixin:
                     """
                     CREATE INDEX IF NOT EXISTS clara_workflow_tenant_problem_idx
                     ON clara_workflow_records (tenant_id, problem_id, record_type)
+                    """
+                )
+                # Measurement provenance columns (migration 016) self-heal on
+                # DBs that predate it; the plpgsql tick itself only lives in
+                # the migration file.
+                cursor.execute(
+                    """
+                    ALTER TABLE clara_measurement_plans
+                    ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT 'approval',
+                    ADD COLUMN IF NOT EXISTS contract_revision INTEGER
                     """
                 )
                 # Self-heal the tenant-first PK on DBs that predate migration 011.
@@ -660,11 +674,18 @@ class PostgresProblemStore(PostgresConnectionMixin):
         updated = apply_problem_status(existing, status)
         return self._write_problem(updated)
 
-    def update_outcome_contract(self, problem_id: str, update) -> ProblemRecord | None:
+    def update_outcome_contract(
+        self,
+        problem_id: str,
+        update,
+        *,
+        actor: str | None = None,
+        note: str | None = None,
+    ) -> ProblemRecord | None:
         existing = self.get_problem(problem_id)
         if existing is None or problem_id in self.seed_problem_ids:
             return None
-        updated = apply_outcome_contract_update(existing, update)
+        updated = apply_outcome_contract_update(existing, update, actor=actor, note=note)
         return self._write_problem(updated)
 
     def scrub_customer(self, customer_id: str) -> int:
@@ -1206,7 +1227,16 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         return record
 
     def update_execution(
-        self, execution_id, *, status, external_ref=None, detail=None, disclosure_applied=None
+        self,
+        execution_id,
+        *,
+        status,
+        external_ref=None,
+        detail=None,
+        disclosure_applied=None,
+        dispatched_at=None,
+        implemented_at=None,
+        implementation_note=None,
     ):
         self._load_records(force=True)
         # Base class mutates the in-memory record; persist the flip too, or a
@@ -1217,6 +1247,9 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
             external_ref=external_ref,
             detail=detail,
             disclosure_applied=disclosure_applied,
+            dispatched_at=dispatched_at,
+            implemented_at=implemented_at,
+            implementation_note=implementation_note,
         )
         self._save_workflow_record("execution", updated.execution_id, updated.problem_id, updated)
         return updated
@@ -1517,6 +1550,8 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
         executed_at: str,
         due_at: str,
         kind: str,
+        origin: str = "approval",
+        contract_revision: int | None = None,
     ) -> bool:
         """Insert one checkpoint; False when an equivalent pending plan exists
         (same contract as the SQLite store, so callers report dedup honestly)."""
@@ -1530,11 +1565,22 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
                 return False
             conn.execute(
                 "INSERT INTO clara_measurement_plans"
-                " (problem_id, execution_id, executed_at, due_at, kind)"
-                " VALUES (%s, %s, %s, %s, %s)",
-                (problem_id, execution_id, executed_at, due_at, kind),
+                " (problem_id, execution_id, executed_at, due_at, kind, origin, contract_revision)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (problem_id, execution_id, executed_at, due_at, kind, origin, contract_revision),
             )
         return True
+
+    def supersede_pending(self, problem_id: str, *, note: str) -> int:
+        """SQLite-store parity: pending plans not already running from an
+        implementation record are superseded when one is recorded."""
+        with self._connect() as conn:
+            result = conn.execute(
+                "UPDATE clara_measurement_plans SET status = 'superseded', note = %s"
+                " WHERE problem_id = %s AND status = 'pending' AND origin != 'implementation'",
+                (note, problem_id),
+            )
+            return result.rowcount
 
     def _row_to_plan(self, row: Any) -> dict[str, Any]:
         return {
@@ -1547,6 +1593,8 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
             "status": row["status"],
             "note": row["note"],
             "created_at": str(row["created_at"]),
+            "origin": row.get("origin") or "approval",
+            "contract_revision": row.get("contract_revision"),
         }
 
     def list_plans(self) -> list[dict[str, Any]]:

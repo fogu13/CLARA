@@ -28,6 +28,7 @@ from app.domain.models import (
     EmergingProblemReport,
     ExecutionRecord,
     ExecutionStatus,
+    ImplementationRecordRequest,
     JiraIssueDraft,
     LearningConclusionRecord,
     LearningConclusionRequest,
@@ -59,11 +60,13 @@ from app.services.outcome_engine import (
     ITS_COMPARISON_METHOD,
     detectability_note,
     evidence_grade,
+    intervention_anchor,
     its_outcome_for_problem,
     loop_verdict,
     propose_outcome_contract,
     resolution_score,
 )
+from app.services.problems import outcome_contract_changes
 from app.services.routing import resolve_owner_route
 from app.services.signals import promote_candidate, theme_candidate_id
 from app.services.works_council import strip_redaction_sentinels
@@ -143,6 +146,7 @@ def build_outcome_board(
             outcome_status=snapshot.status,
             plans=plans_by_problem.get(problem.problem_id, []),
             measurement_source=snapshot.measurement_source,
+            checkpoint_kind=snapshot.checkpoint_kind,
         )
         if verdict == "loop_closed":
             loop_closed += 1
@@ -460,28 +464,56 @@ def build_router(
     def update_outcome_contract(
         problem_id: str,
         update: OutcomeContractUpdateRequest,
+        user: UserContext = Depends(get_current_user),  # noqa: B008
     ) -> ProblemRecord:
+        """Amend the outcome contract. Every real change is a new contract
+        revision (who / when / why) and is recorded as contract_amended
+        telemetry with the field diff; an observation already on record keeps
+        the status it earned under the revision it was scored against."""
         problem = require_problem(problem_id)
         update = strip_redaction_sentinels(update)
+        had_measurement = workflow_store.outcome_snapshot(problem).status != "not_measured"
         if (
             update.primary_metric
             and update.primary_metric != problem.outcome_contract.primary_metric
-            and workflow_store.outcome_snapshot(problem).status != "not_measured"
+            and had_measurement
         ):
             raise HTTPException(
                 status_code=409,
                 detail="Cannot change the contract metric after an outcome was recorded against it",
             )
-        if update.model_fields_set and update.comparison_method is None:
+        term_fields_set = update.model_fields_set - {"amendment_note"}
+        if term_fields_set and update.comparison_method is None:
             # An explicit edit upgrades the method to ITS unless the caller
             # says otherwise — and marks the contract as deliberately authored,
             # so the next approval's auto-proposal will not silently overwrite it.
             update = update.model_copy(update={"comparison_method": ITS_COMPARISON_METHOD})
-        updated_problem = active_problem_store.update_outcome_contract(problem_id, update)
+        updated_problem = active_problem_store.update_outcome_contract(
+            problem_id,
+            update,
+            actor=_actor_identifier(user),
+            note=update.amendment_note,
+        )
         if updated_problem is None:
             raise HTTPException(
                 status_code=409,
                 detail="Only promoted draft problem contracts can be edited",
+            )
+        changed = outcome_contract_changes(
+            problem.outcome_contract, updated_problem.outcome_contract
+        )
+        if changed:
+            telemetry_store.record(
+                "contract_amended",
+                entity_id=problem_id,
+                metadata={
+                    "problem_id": problem_id,
+                    "revision": updated_problem.outcome_contract.revision,
+                    "changed": changed,
+                    "actor": _actor_identifier(user),
+                    "note": update.amendment_note,
+                    "had_measurement": had_measurement,
+                },
             )
 
         return enrich_problem_for_response(updated_problem)
@@ -657,6 +689,8 @@ def build_router(
                         active_problem_store.update_outcome_contract(
                             problem_id,
                             OutcomeContractUpdateRequest(**proposed.model_dump()),
+                            actor=decision.reviewer,
+                            note="auto-proposed contract accepted at approval",
                         )
                         if proposed is not None
                         else None
@@ -690,6 +724,7 @@ def build_router(
                 else None
             )
             if execution is not None:
+                pushed: ExecutionRecord | None = None
                 try:
                     workspace_settings = workspace_store.get(user.workspace_id)
                     pushed = push_approved_action(
@@ -715,24 +750,64 @@ def build_router(
                 except Exception:  # noqa: BLE001 — approval already recorded; push is best-effort
                     logger.exception("Action push failed unexpectedly for %s", decision.action_id)
 
-                # Close-the-loop clock starts now: schedule T+7 / T+window
-                # re-measurement checkpoints for this problem's outcome contract.
-                try:
-                    kinds = schedule_measurements(
-                        measurement_plan_store,
-                        problem=problem,
-                        execution_id=execution.execution_id,
-                        executed_at=execution.created_at,
-                    )
-                    telemetry_store.record(
-                        "measurement_scheduled",
-                        entity_id=problem_id,
-                        metadata={"kinds": kinds, "execution_id": execution.execution_id},
-                    )
-                except Exception:  # noqa: BLE001 — scheduling is best-effort too
-                    logger.exception("Measurement scheduling failed for %s", problem_id)
+                # The close-the-loop clock has three possible origins and one
+                # non-start:
+                #   pushed        -> from dispatched_at (the action left CLARA)
+                #   draft_created -> from approval time: no connector for the
+                #                    destination, the draft is the deliverable
+                #   push_failed / anything else -> NO clock. Nothing reached the
+                #                    world, so signals "since execution" would
+                #                    measure a fix that never happened. A retry
+                #                    or an implementation record starts it.
+                # A human-recorded implementation (POST .../implementation)
+                # later supersedes either clock with the moment the fix landed.
+                _schedule_after_push(
+                    problem=problem,
+                    execution=execution,
+                    pushed=pushed,
+                )
 
         return record
+
+    def _schedule_after_push(
+        *, problem: ProblemRecord, execution: ExecutionRecord, pushed: ExecutionRecord | None
+    ) -> None:
+        status = pushed.status.value if pushed is not None else "push_error"
+        if status == ExecutionStatus.pushed.value:
+            origin, executed_at = "dispatch", pushed.dispatched_at or utc_now()
+        elif status == ExecutionStatus.draft_created.value:
+            origin, executed_at = "approval", execution.created_at
+        else:
+            telemetry_store.record(
+                "measurement_not_scheduled",
+                entity_id=problem.problem_id,
+                metadata={
+                    "problem_id": problem.problem_id,
+                    "execution_id": execution.execution_id,
+                    "reason": status,
+                },
+            )
+            return
+        try:
+            kinds = schedule_measurements(
+                measurement_plan_store,
+                problem=problem,
+                execution_id=execution.execution_id,
+                executed_at=executed_at,
+                origin=origin,
+            )
+            telemetry_store.record(
+                "measurement_scheduled",
+                entity_id=problem.problem_id,
+                metadata={
+                    "kinds": kinds,
+                    "execution_id": execution.execution_id,
+                    "origin": origin,
+                    "executed_at": executed_at,
+                },
+            )
+        except Exception:  # noqa: BLE001 — scheduling is best-effort
+            logger.exception("Measurement scheduling failed for %s", problem.problem_id)
 
     @router.post(
         "/problems/{problem_id}/executions/{execution_id}/retry",
@@ -797,7 +872,90 @@ def build_router(
             entity_id=execution_id,
             metadata={"problem_id": problem_id, "status": pushed.status.value},
         )
+        if pushed.status == ExecutionStatus.pushed:
+            # The failed push started no clock; the successful retry does,
+            # from the moment the action really left CLARA.
+            _schedule_after_push(problem=problem, execution=execution, pushed=pushed)
         return pushed
+
+    @router.post(
+        "/problems/{problem_id}/executions/{execution_id}/implementation",
+        response_model=ExecutionRecord,
+        dependencies=[Depends(require_role(Role.editor))],
+    )
+    def record_implementation(
+        problem_id: str,
+        execution_id: str,
+        request: ImplementationRecordRequest,
+        user: UserContext = Depends(get_current_user),  # noqa: B008
+    ) -> ExecutionRecord:
+        """Human attestation that the approved action's fix was implemented.
+
+        A created ticket is not an implemented fix. Recording the implementation
+        instant restarts the measurement clock from it: pending checkpoints that
+        ran from approval or dispatch are superseded and new ones are scheduled
+        from implemented_at, so post-fix inflow is read after the fix.
+        """
+        problem = require_problem(problem_id)
+        execution = next(
+            (
+                item
+                for item in workflow_store.list_executions()
+                if item.execution_id == execution_id and item.problem_id == problem_id
+            ),
+            None,
+        )
+        if execution is None:
+            raise HTTPException(status_code=404, detail="Execution not found")
+        try:
+            implemented_at = datetime.fromisoformat(request.implemented_at.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="implemented_at must be ISO 8601") from exc
+        if implemented_at.tzinfo is None:
+            implemented_at = implemented_at.replace(tzinfo=UTC)
+        if implemented_at > datetime.now(UTC) + timedelta(minutes=5):
+            raise HTTPException(status_code=422, detail="implemented_at cannot be in the future")
+        created_at = datetime.fromisoformat(execution.created_at.replace("Z", "+00:00"))
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=UTC)
+        if implemented_at < created_at:
+            raise HTTPException(
+                status_code=422,
+                detail="implemented_at cannot precede the execution's approval",
+            )
+        implemented_iso = implemented_at.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+        updated = workflow_store.update_execution(
+            execution_id,
+            status=execution.status,
+            external_ref=execution.external_ref,
+            detail=execution.detail,
+            implemented_at=implemented_iso,
+            implementation_note=request.note,
+        )
+        superseded = measurement_plan_store.supersede_pending(
+            problem_id, note=f"superseded by implementation record {execution_id}"
+        )
+        kinds = schedule_measurements(
+            measurement_plan_store,
+            problem=problem,
+            execution_id=execution_id,
+            executed_at=implemented_iso,
+            origin="implementation",
+        )
+        telemetry_store.record(
+            "implementation_recorded",
+            entity_id=problem_id,
+            metadata={
+                "problem_id": problem_id,
+                "execution_id": execution_id,
+                "implemented_at": implemented_iso,
+                "actor": _actor_identifier(user),
+                "superseded_plans": superseded,
+                "kinds": kinds,
+            },
+        )
+        return updated
 
     @router.get("/problems/{problem_id}/evidence-pack", dependencies=[read_dep])
     def export_evidence_pack(
@@ -992,15 +1150,18 @@ def build_router(
             if approval.problem_id == problem_id
             and approval.decision == ApprovalDecisionStatus.approved
         }
-        executed_at = min(
-            (
-                execution.created_at
+        anchor = intervention_anchor(
+            [
+                execution
                 for execution in workflow_store.list_executions()
                 if execution.problem_id == problem_id
                 and execution.action_id in approved_action_ids
-            ),
-            default=None,
+            ]
         )
+        executed_at = None
+        if anchor is not None:
+            snapshot.measurement_origin, snapshot.measurement_origin_at = anchor
+            executed_at = anchor[1]
         if executed_at is not None:
             snapshot.its = its_outcome_for_problem(
                 problem,
@@ -1026,6 +1187,9 @@ def build_router(
             outcome_status=snapshot.status,
             plans=plans,
             measurement_source=snapshot.measurement_source,
+            checkpoint_kind=snapshot.checkpoint_kind,
+            measurement_origin=snapshot.measurement_origin,
+            measurement_origin_at=snapshot.measurement_origin_at,
         )
         return snapshot
 

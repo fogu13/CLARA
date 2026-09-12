@@ -509,6 +509,66 @@ def learning_label(status: str) -> str:
     return status.replace("_", " ")
 
 
+def stamp_contract_provenance(
+    problem: ProblemRecord, measurement: OutcomeMeasurement
+) -> OutcomeMeasurement:
+    """Freeze the contract the observation is scored under, unless the
+    measurement already carries one (the scheduler stamps its own)."""
+    update: dict = {}
+    if measurement.contract_snapshot is None:
+        update["contract_snapshot"] = problem.outcome_contract
+    if measurement.contract_revision is None:
+        update["contract_revision"] = (
+            measurement.contract_snapshot.revision
+            if measurement.contract_snapshot is not None
+            else problem.outcome_contract.revision
+        )
+    return measurement.model_copy(update=update) if update else measurement
+
+
+def build_outcome_snapshot(
+    problem: ProblemRecord,
+    measurement: OutcomeMeasurement | None,
+    guardrails: list[GuardrailMeasurement],
+) -> OutcomeSnapshot:
+    """Snapshot = CURRENT contract terms + the latest observation scored under
+    the contract revision that was in force when it was taken. An amendment
+    after a reading never re-labels that reading; the next scheduled read
+    evaluates the new terms."""
+    contract = problem.outcome_contract
+    scored_under = (
+        measurement.contract_snapshot
+        if measurement is not None and measurement.contract_snapshot is not None
+        else contract
+    )
+    latest_value = None if measurement is None else measurement.observed_value
+    measurement_source = None if measurement is None else measurement.measurement_source
+    measured_under = None if measurement is None else measurement.contract_revision
+    return OutcomeSnapshot(
+        problem_id=problem.problem_id,
+        metric=contract.primary_metric,
+        baseline=contract.baseline,
+        success_threshold=contract.success_threshold,
+        latest_value=latest_value,
+        status=_contract_status(scored_under, latest_value),
+        improvement_direction=_contract_direction(scored_under),
+        measurement_window_days=contract.measurement_window_days,
+        comparison_method=contract.comparison_method,
+        measurement_source=measurement_source,
+        evidence_grade=outcome_engine.evidence_grade(
+            comparison_method=contract.comparison_method,
+            measurement_source=measurement_source,
+        ),
+        guardrails=guardrails,
+        contract_revision=contract.revision,
+        measured_under_revision=measured_under,
+        contract_amended_after_measurement=(
+            measured_under is not None and measured_under != contract.revision
+        ),
+        checkpoint_kind=None if measurement is None else measurement.checkpoint_kind,
+    )
+
+
 # Executions that actually left the system — drafts, blocks and failed pushes
 # never published content, so Art. 50 accounting excludes them.
 PUBLISHED_STATUSES = frozenset(
@@ -686,12 +746,25 @@ class WorkflowStore:
         external_ref: str | None = None,
         detail: str | None = None,
         disclosure_applied: bool | None = None,
+        dispatched_at: str | None = None,
+        implemented_at: str | None = None,
+        implementation_note: str | None = None,
     ) -> ExecutionRecord:
         for index, execution in enumerate(self._executions):
             if execution.execution_id == execution_id:
                 update: dict = {"status": status, "external_ref": external_ref, "detail": detail}
                 if disclosure_applied is not None:
                     update["disclosure_applied"] = disclosure_applied
+                if dispatched_at is not None:
+                    update["dispatched_at"] = dispatched_at
+                elif status == ExecutionStatus.pushed and execution.dispatched_at is None:
+                    # The clock origin for a real push: stamped here so every
+                    # push path (approval, retry, idempotent reuse) gets one.
+                    update["dispatched_at"] = utc_now()
+                if implemented_at is not None:
+                    update["implemented_at"] = implemented_at
+                if implementation_note is not None:
+                    update["implementation_note"] = implementation_note
                 updated = execution.model_copy(update=update)
                 self._executions[index] = updated
                 return updated
@@ -834,6 +907,7 @@ class WorkflowStore:
             existing.measured_at if existing is not None else None,
             measurement.measured_at,
         )
+        measurement = stamp_contract_provenance(problem, measurement)
         self._outcomes[problem.problem_id] = measurement
         return measurement
 
@@ -897,27 +971,10 @@ class WorkflowStore:
         return max(conclusions, key=lambda conclusion: conclusion.reviewed_at, default=None)
 
     def outcome_snapshot(self, problem: ProblemRecord) -> OutcomeSnapshot:
-        contract = problem.outcome_contract
-        measurement = self._outcomes.get(problem.problem_id)
-        latest_value = None if measurement is None else measurement.observed_value
-        measurement_source = None if measurement is None else measurement.measurement_source
-
-        return OutcomeSnapshot(
-            problem_id=problem.problem_id,
-            metric=contract.primary_metric,
-            baseline=contract.baseline,
-            success_threshold=contract.success_threshold,
-            latest_value=latest_value,
-            status=_contract_status(contract, latest_value),
-            improvement_direction=_contract_direction(contract),
-            measurement_window_days=contract.measurement_window_days,
-            comparison_method=contract.comparison_method,
-            measurement_source=measurement_source,
-            evidence_grade=outcome_engine.evidence_grade(
-                comparison_method=contract.comparison_method,
-                measurement_source=measurement_source,
-            ),
-            guardrails=self.latest_guardrails(problem.problem_id),
+        return build_outcome_snapshot(
+            problem,
+            self._outcomes.get(problem.problem_id),
+            self.latest_guardrails(problem.problem_id),
         )
 
     def state_for_problem(self, problem: ProblemRecord, tenant_id: str | None = None) -> WorkflowState:
@@ -1180,6 +1237,14 @@ class SQLiteWorkflowStore:
         self._ensure_column("executions", "reviewed_by", "TEXT")
         self._ensure_column("executions", "reviewed_at", "TEXT")
         self._ensure_column("executions", "disclosure_applied", "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column("executions", "dispatched_at", "TEXT")
+        self._ensure_column("executions", "implemented_at", "TEXT")
+        self._ensure_column("executions", "implementation_note", "TEXT")
+        self._ensure_column("outcomes", "contract_revision", "INTEGER")
+        self._ensure_column("outcomes", "contract_json", "TEXT")
+        self._ensure_column("outcomes", "checkpoint_kind", "TEXT")
+        self._ensure_column("outcomes", "plan_id", "INTEGER")
+        self._ensure_column("outcomes", "execution_id", "TEXT")
         # Idempotent backfill for the JWT-tenant migration: header-era rows were
         # tagged with client strings ('demo_tenant'/...); the tenant key is now
         # str(workspace_id) and local dev is the default workspace ('1'). Closure
@@ -1215,8 +1280,8 @@ class SQLiteWorkflowStore:
             INSERT INTO executions
                 (problem_id, action_id, destination, status, owner, summary, created_at,
                  external_ref, detail, human_reviewed, reviewed_by, reviewed_at,
-                 disclosure_applied)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 disclosure_applied, dispatched_at, implemented_at, implementation_note)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 execution.problem_id,
@@ -1232,6 +1297,9 @@ class SQLiteWorkflowStore:
                 execution.reviewed_by,
                 execution.reviewed_at,
                 int(execution.disclosure_applied),
+                execution.dispatched_at,
+                execution.implemented_at,
+                execution.implementation_note,
             ),
         )
         self._connection.commit()
@@ -1247,6 +1315,9 @@ class SQLiteWorkflowStore:
         external_ref: str | None = None,
         detail: str | None = None,
         disclosure_applied: bool | None = None,
+        dispatched_at: str | None = None,
+        implemented_at: str | None = None,
+        implementation_note: str | None = None,
     ) -> ExecutionRecord:
         # execution_id is derived as EXE-{rowid:04d}; map back to the numeric row id.
         try:
@@ -1259,6 +1330,20 @@ class SQLiteWorkflowStore:
         if disclosure_applied is not None:
             assignments += ", disclosure_applied = ?"
             values.append(int(disclosure_applied))
+        if dispatched_at is not None:
+            assignments += ", dispatched_at = ?"
+            values.append(dispatched_at)
+        elif status == ExecutionStatus.pushed:
+            # Clock origin for a real push, stamped once (COALESCE keeps an
+            # earlier dispatch instant on idempotent re-pushes).
+            assignments += ", dispatched_at = COALESCE(dispatched_at, ?)"
+            values.append(utc_now())
+        if implemented_at is not None:
+            assignments += ", implemented_at = ?"
+            values.append(implemented_at)
+        if implementation_note is not None:
+            assignments += ", implementation_note = ?"
+            values.append(implementation_note)
         cursor = self._connection.execute(
             f"UPDATE executions SET {assignments} WHERE id = ?",
             (*values, row_id),
@@ -1483,16 +1568,24 @@ class SQLiteWorkflowStore:
             existing_row["measured_at"] if existing_row is not None else None,
             measurement.measured_at,
         )
+        measurement = stamp_contract_provenance(problem, measurement)
         self._connection.execute(
             """
-            INSERT INTO outcomes (problem_id, metric, observed_value, measured_at, notes, measurement_source)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO outcomes (problem_id, metric, observed_value, measured_at, notes,
+                                  measurement_source, contract_revision, contract_json,
+                                  checkpoint_kind, plan_id, execution_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(problem_id) DO UPDATE SET
                 metric = excluded.metric,
                 observed_value = excluded.observed_value,
                 measured_at = excluded.measured_at,
                 notes = excluded.notes,
-                measurement_source = excluded.measurement_source
+                measurement_source = excluded.measurement_source,
+                contract_revision = excluded.contract_revision,
+                contract_json = excluded.contract_json,
+                checkpoint_kind = excluded.checkpoint_kind,
+                plan_id = excluded.plan_id,
+                execution_id = excluded.execution_id
             """,
             (
                 measurement.problem_id,
@@ -1501,6 +1594,15 @@ class SQLiteWorkflowStore:
                 measurement.measured_at,
                 measurement.notes,
                 measurement.measurement_source,
+                measurement.contract_revision,
+                (
+                    json.dumps(measurement.contract_snapshot.model_dump(mode="json"))
+                    if measurement.contract_snapshot is not None
+                    else None
+                ),
+                measurement.checkpoint_kind,
+                measurement.plan_id,
+                measurement.execution_id,
             ),
         )
         self._connection.commit()
@@ -1648,36 +1750,18 @@ class SQLiteWorkflowStore:
             latest[record.metric] = record
         return [latest[m] for m in sorted(latest)]
 
-    def outcome_snapshot(self, problem: ProblemRecord) -> OutcomeSnapshot:
-        contract = problem.outcome_contract
+    def latest_outcome(self, problem_id: str) -> OutcomeMeasurement | None:
         row = self._connection.execute(
             "SELECT * FROM outcomes WHERE problem_id = ?",
-            (problem.problem_id,),
+            (problem_id,),
         ).fetchone()
+        return None if row is None else self._measurement_from_row(row)
 
-        latest_value = None if row is None else float(row["observed_value"])
-        measurement_source = None
-        if row is not None:
-            measurement_source = (
-                row["measurement_source"] if "measurement_source" in row.keys() else "manual"
-            )
-
-        return OutcomeSnapshot(
-            problem_id=problem.problem_id,
-            metric=contract.primary_metric,
-            baseline=contract.baseline,
-            success_threshold=contract.success_threshold,
-            latest_value=latest_value,
-            status=_contract_status(contract, latest_value),
-            improvement_direction=_contract_direction(contract),
-            measurement_window_days=contract.measurement_window_days,
-            measurement_source=measurement_source,
-            comparison_method=contract.comparison_method,
-            evidence_grade=outcome_engine.evidence_grade(
-                comparison_method=contract.comparison_method,
-                measurement_source=measurement_source,
-            ),
-            guardrails=self.latest_guardrails(problem.problem_id),
+    def outcome_snapshot(self, problem: ProblemRecord) -> OutcomeSnapshot:
+        return build_outcome_snapshot(
+            problem,
+            self.latest_outcome(problem.problem_id),
+            self.latest_guardrails(problem.problem_id),
         )
 
     def latest_learning_conclusion(
@@ -1846,6 +1930,33 @@ class SQLiteWorkflowStore:
             reviewed_by=row["reviewed_by"],
             reviewed_at=row["reviewed_at"],
             disclosure_applied=bool(row["disclosure_applied"]),
+            dispatched_at=row["dispatched_at"],
+            implemented_at=row["implemented_at"],
+            implementation_note=row["implementation_note"],
+        )
+
+    @staticmethod
+    def _measurement_from_row(row: sqlite3.Row) -> OutcomeMeasurement:
+        keys = row.keys()
+
+        def _col(name: str):
+            return row[name] if name in keys else None
+
+        contract_json = _col("contract_json")
+        return OutcomeMeasurement(
+            problem_id=row["problem_id"],
+            metric=row["metric"],
+            observed_value=float(row["observed_value"]),
+            measured_at=row["measured_at"],
+            notes=row["notes"],
+            measurement_source=_col("measurement_source") or "manual",
+            contract_revision=_col("contract_revision"),
+            contract_snapshot=(
+                OutcomeContract.model_validate(json.loads(contract_json)) if contract_json else None
+            ),
+            checkpoint_kind=_col("checkpoint_kind"),
+            plan_id=_col("plan_id"),
+            execution_id=_col("execution_id"),
         )
 
     @staticmethod
