@@ -7,7 +7,7 @@
   "scripts": {
     "api:test": "cd apps/api && PYTHONPYCACHEPREFIX=/tmp/clara_pycache python3 -m pytest app/tests",
     "api:lint": "cd apps/api && python3 -m ruff check --select F app",
-    "thesis:test": "python3 thesis/evaluation/test_metrics.py && python3 thesis/evaluation/test_prediction_validation.py && python3 thesis/evaluation/test_run_eval_smoke.py && python3 thesis/evaluation/test_equity_gap_bootstrap.py && python3 thesis/evaluation/test_compare_runs_cli.py && python3 thesis/evaluation/test_survey_analysis.py && python3 thesis/test_manuscript_consistency.py",
+    "thesis:test": "python3 thesis/evaluation/test_metrics.py && python3 thesis/evaluation/test_prediction_validation.py && python3 thesis/evaluation/test_run_eval_smoke.py && python3 thesis/evaluation/test_equity_gap_bootstrap.py && python3 thesis/evaluation/test_compare_runs_cli.py && python3 thesis/evaluation/test_survey_analysis.py && python3 thesis/evaluation/test_multiple_comparisons.py && python3 thesis/evaluation/test_annotation_kit.py && python3 thesis/evaluation/test_retrospective_its.py && python3 thesis/evaluation/test_run_matrix.py && python3 thesis/evaluation/test_predict_embedding.py && python3 thesis/test_manuscript_consistency.py",
     "web:dev": "npm --workspace apps/web run dev",
     "web:lint": "npm --workspace apps/web run lint",
     "web:build": "npm --workspace apps/web run build",
