@@ -43,7 +43,7 @@ That's **3 screeners + 1 matrix (7 rows) + 2 quick + 1 open + 1 opt-in**.
 
 ## B. Hypothesis → confirmation logic
 
-Score Likert as **top-2-box agreement** (Agree + Strongly agree). Support levels are descriptive, pre-registered in `evaluation/survey_analysis.py` before any data: **≥60% = supported**, **40–59% = mixed/refine**, **<40% = not supported**, and **no verdict below n = 10**. For H2 and H8 the corroborating item must hold as well (below); a Likert bar that is met without its corroboration is reported as mixed/refine. Report n, %, a 95% Wilson interval and the median for every item; a verdict whose interval straddles its threshold is marked fragile.
+Score Likert as **top-2-box agreement** (Agree + Strongly agree). Support levels are descriptive, pre-registered in `evaluation/survey_analysis.py` before any data: **≥60% = supported**, **40–59% = mixed/refine**, **<40% = not supported**, and **no verdict below n = 40** on a hypothesis's usable denominator (descriptive counts and intervals only from n = 10 to 39; the number of responses alone below n = 10; §5B.1). *(Tier wording aligned with §5B.1 on 13 September 2026: the earlier text said n = 10, the analysis script's former threshold; Appendix G.7.)* For H2 and H8 the corroborating item must hold as well (below); a Likert bar that is met without its corroboration is reported as mixed/refine. Report n, %, a 95% Wilson interval and the median for every item; a verdict whose interval straddles its threshold is marked fragile.
 
 | Hyp. | Evidence in survey | "Confirmed" when |
 |------|--------------------|------------------|

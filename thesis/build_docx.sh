@@ -43,6 +43,9 @@ fi
 printf '\n\n---\n\n# Appendix F: External-Review Episode (July 2026)\n\n' >> "$OUT"
 tail -n +2 manuscript/appendices/F_external_review_episode.md >> "$OUT"
 
+printf '\n\n---\n\n# Appendix G: Provenance and Revision Log\n\n' >> "$OUT"
+tail -n +2 manuscript/appendices/G_provenance_log.md >> "$OUT"
+
 # Images in chapters use ../diagrams/... relative to manuscript/; the combined
 # file lives in build/, for which ../diagrams/ also resolves correctly.
 cd build

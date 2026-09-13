@@ -202,7 +202,7 @@ table(s, [
   ["Production enrichment stage, production default", "0.84", "0.53"],
 ], { x: 0.6, y: 1.6, w: 7.4, colW: [3.4, 2.0, 2.0] });
 card(s, 0.6, 3.62, 7.4, 1.3, "Paired McNemar on the same items, testing accuracy",
-  "Both learned methods beat the floor (p < 0.0001). The contextual path beats the learned model on sentiment in all four runs (p = 0.019–0.029) and ties it on severity; the production stage is within three points on sentiment (p = 0.23) and one severity level below the seeds. The production rows compare configurations (model, batch size, run date), not the model alone.", { size: 10.5 });
+  "Both learned methods beat the floor (p < 0.0001). The contextual path leads the learned model on sentiment in all four runs (p = 0.02–0.03; 0.09 Holm-corrected, so exploratory) and ties it on severity. The production stage is within three points on sentiment (p = 0.23), one severity level below the seeds, and compares configurations, not the model alone.", { size: 10.5 });
 s.addText("Contextual reasoning buys a great deal on sentiment and nothing demonstrable on severity, which lexical markers already carry. The production stage's severity shift is partly the seed labels' own calibration: a second rating, of unverified independent provenance, put seven of ten seed-critical items at high (kappa 0.55, weighted 0.70). The precondition can be met by more than one method; a deployer has a choice, not an instruction.",
   { ...BODY, x: 0.6, y: 5.1, w: 7.4, h: 1.5, fontSize: 14 });
 s.addImage({ path: `${T}/evaluation/results/risk_confusion.png`, x: 8.35, y: 1.6, w: 4.3, h: 3.82 });

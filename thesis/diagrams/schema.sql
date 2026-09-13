@@ -1,12 +1,14 @@
 -- Appendix E. The deployed CLARA data model (Postgres, Supabase-compatible).
 --
--- Source of truth: apps/api/migrations/001-015 plus the boot-time DDL the API
+-- Source of truth: apps/api/migrations/001-017 plus the boot-time DDL the API
 -- applies in apps/api/app/services/postgres.py (PostgresConnectionMixin,
--- SCHEMA_SQL). This file is an extract of that schema as deployed on
--- 5 September 2026, not a design sketch: every table below exists in the
--- running system, and the SQLite fallback used in tests and single-tenant
--- deployments mirrors the same shapes. Diagram 06_data_model_er.mmd draws
--- the same tables.
+-- SCHEMA_SQL). This file is an extract of that schema as the current build
+-- expects it (13 September 2026), not a design sketch: every table below
+-- exists in the running system (the three 017 columns of
+-- clara_measurement_plans are self-healed by the API on boot; the 017 tick
+-- function itself is pending application on production, DEPLOY.md), and the
+-- SQLite fallback used in tests and single-tenant deployments mirrors the
+-- same shapes. Diagram 06_data_model_er.mmd draws the same tables.
 --
 -- Two conventions matter for reading it.
 --   1. Document rows. Domain aggregates (problems, signals, workflow records,
@@ -231,17 +233,31 @@ CREATE INDEX IF NOT EXISTS clara_workflow_problem_idx
 -- Measurement checkpoints scheduled at execution: t7, window, followup.
 -- The scheduler recomputes the contract metric from raw signals at each due
 -- date (measurement_source = instrumented) and records the loop verdict.
+-- Scheduled checkpoints (DP1). Each plan records the clock it runs from
+-- (origin, executed_at; migration 016), the contract terms frozen at
+-- scheduling (contract_revision, contract_snapshot; 016/017) and the fixed
+-- observation interval it reads (observation_start, observation_end; 017).
+-- The plpgsql tick clara_run_due_measurements(_ws_id, _now) scores under the
+-- frozen terms over that interval and writes the reading as an outcome
+-- workflow record bound to the plan (checkpoint_kind, plan_id, execution_id,
+-- contract_snapshot, observation_start/end); clara_measurement_function_version()
+-- returns 17 once migration 017 is applied (read by GET /ready).
 CREATE TABLE IF NOT EXISTS clara_measurement_plans (
-  id            BIGSERIAL PRIMARY KEY,
-  workspace_id  BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
-  problem_id    TEXT NOT NULL,
-  execution_id  TEXT NOT NULL,
-  executed_at   TEXT NOT NULL,
-  due_at        TEXT NOT NULL,
-  kind          TEXT NOT NULL,                             -- t7 | window | followup
-  status        TEXT NOT NULL DEFAULT 'pending',           -- pending | done | skipped
-  note          TEXT,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                BIGSERIAL PRIMARY KEY,
+  workspace_id      BIGINT NOT NULL DEFAULT COALESCE(NULLIF(current_setting('app.workspace_id', true), ''), '1')::bigint,
+  problem_id        TEXT NOT NULL,
+  execution_id      TEXT NOT NULL,
+  executed_at       TEXT NOT NULL,                         -- the clock origin instant (ISO 8601)
+  due_at            TEXT NOT NULL,
+  kind              TEXT NOT NULL,                         -- t7 | window | followup
+  status            TEXT NOT NULL DEFAULT 'pending',       -- pending | done | skipped | manual_required | superseded | blocked
+  note              TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  origin            TEXT NOT NULL DEFAULT 'approval',      -- approval | dispatch | implementation (016)
+  contract_revision INTEGER,                               -- the revision scheduled under (016)
+  contract_snapshot JSONB,                                 -- the complete terms frozen at scheduling (017)
+  observation_start TEXT,                                  -- fixed interval, inclusive (017)
+  observation_end   TEXT
 );
 
 -- Learning memory (DP2). A reviewed learning_conclusion is copied here as a

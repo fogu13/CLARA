@@ -115,13 +115,16 @@ def test_held_out_split_history_matches_git() -> None:
         path.read_text(encoding="utf-8") for path in sorted(MANUSCRIPT.rglob("*.md"))
     )
     assert "defined on 18 July" not in manuscript_text
+    # The split's history lives once, in Appendix G.3; the chapters point at it.
+    log = _read("thesis/manuscript/appendices/G_provenance_log.md")
+    assert "17 July 2026" in log and "18 EN / 6 DE" in log and "23 EN / 7 DE" in log
     for relative in (
         "thesis/manuscript/03_methodology.md",
         "thesis/manuscript/05_evaluation_results.md",
     ):
         text = _read(relative)
-        assert "17 July 2026" in text and "18 EN / 6 DE" in text, relative
-        assert "23 EN / 7 DE" in text, relative
+        assert "G.3" in text, relative
+    assert "23 EN / 7 DE" in _read("thesis/manuscript/05_evaluation_results.md")  # where the numbers are read
     row = _ledger_row("R1.5")
     for commit in ("a1c1b8e", "58504f3", "5d250fb", "bf26f3d"):
         assert commit in row, commit
@@ -283,7 +286,8 @@ def test_second_rating_is_reported_with_unverified_provenance_not_as_a_human_che
         text = _read(relative)
         for phrase in _FORBIDDEN_RATING_PHRASES:
             assert phrase not in text, f"{relative} still says {phrase!r}"
-        assert "provenance" in text and "unverified" in text, relative
+        if relative != "thesis/manuscript/00_front_matter.md":  # the abstract no longer mentions the rating
+            assert "provenance" in text and "unverified" in text, relative
     for relative, needle in (
         ("thesis/manuscript/03_methodology.md", "second-rating agreement with independent human provenance unverified"),
         ("thesis/manuscript/05_evaluation_results.md", "independent human provenance unverified"),
@@ -294,8 +298,9 @@ def test_second_rating_is_reported_with_unverified_provenance_not_as_a_human_che
         ("thesis/board/board_spec.json", "independent human provenance unverified"),
     ):
         assert needle in _read(relative), relative
-    methodology = _read("thesis/manuscript/03_methodology.md")
-    assert "Fill blind risk labels" in methodology and "another rater" in methodology  # observed vs attested
+    log = _read("thesis/manuscript/appendices/G_provenance_log.md")
+    assert "Fill blind risk labels" in log and "another rater" in log  # observed vs attested, stated once
+    assert "G.1" in _read("thesis/manuscript/03_methodology.md")
     provenance = _read("thesis/evaluation/results/PROVENANCE_kappa.md")
     assert "01a077a7-b101-78c0-accc-97f813223a23" in provenance
     assert "kept apart" in provenance

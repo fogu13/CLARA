@@ -17,7 +17,7 @@ MSc Responsible AI capstone (RAI-9001, 30 ECTS, OPIT). This folder is the **sing
 | `manuscript/06_discussion.md` | Ch 6 — design principles, RAI reflections, limitations, future work |
 | `manuscript/07_conclusion.md` | Ch 7 — conclusion |
 | `manuscript/references.md` | Consolidated APA-7 bibliography |
-| `manuscript/appendices/` | EU AI Act/GDPR mapping (obligation vs commitment), DPIA (provider-prepared), traceability matrix (incl. ITS design→code map), external-review episode (Appendix F) |
+| `manuscript/appendices/` | EU AI Act/GDPR mapping (obligation vs commitment), DPIA (provider-prepared), traceability matrix (incl. ITS design→code map), external-review episode (Appendix F), provenance and revision log (Appendix G: dated provenance the chapters cross-reference) |
 | `instruments/` | Participant information and consent (bound), interview guide, survey, SUS, TAM + friction items, codebook template; `recruitment_outreach.md` is working material and is not bound |
 | `evaluation/` | Python harness over the **real** public datasets (Trade Republic, Henkel, Lieferando); `predict_llm.py` (generic prompt) and `predict_llm_production.py` (the artifact's own `enrich_signals` path, pre-registered rules); `compare_runs.py` (paired tests across results folders); `survey_analysis.py`. Outputs: `results/` (GLM-5.2 runs) and `results_mistral-small-2603/` (the production default through the production path) |
 | `research/` | Deep-research source log + OPIT citation sourcebook |
@@ -63,3 +63,13 @@ The full list of items that need the author after the 5 September 2026 revision 
 - **From `thesis-update/`**: `its-methodology-draft.md` **integrated** into the manuscript as §3.5.5 (+ Ch 4 §4.4 contract sentence, Ch 6 §6.5 rewrite, Appendix D mapping table, 2 new references); draft preserved in `archive/`. Screenshots `clara-01/02` added to `diagrams/screenshots/` (03/04 were already there, byte-identical). Email drafts → `correspondence/`.
 - **From old `thesis/`**: `PLAN_3_MONTHS.md` (June planning snapshot) → `archive/`. Superseded and dropped (recoverable from git history): `literature_review.md` (79K, Jun 24 — superseded by `manuscript/02_literature_review.md`), `chapters/ch4_artifact.md` (superseded by `manuscript/04_artifact.md`), `recruitment_and_consent.md` (byte-identical to `instruments/consent_and_recruitment.md`), `evaluation/prototype_metrics.py` (preserved as `evaluation/_reference_prototype_metrics.py`).
 - **Streamline edits**: dual-build framing removed (front matter, Ch 1, Ch 4, Ch 5, Ch 6, DPIA); Odradek figure 4.2 removed and Ch 4 figures renumbered; deployment fact updated (Render/Railway → Docker on EU VPS behind Caddy, matching production); "four design decisions" → five (Ch 1 §1.9, Ch 3 DSRM table, DSR diagram); consent-form title renamed to CLARA; `schema.sql`/diagram manifests updated.
+
+## Evaluation tooling added 13 September 2026 (no results claimed; runs need the corpus, raters or credentials)
+
+- `evaluation/multiple_comparisons.py` — Holm-adjusted paired tests over the committed McNemar results (`results/paired_tests_holm.csv`, run; quoted in §5A.3, §5A.6, §7).
+- `evaluation/annotation_kit.py` — draw blind rating files for two human raters (labels withheld), agreement (κ per field with bootstrap intervals), adjudication, a human-adjudicated gold standard and a re-score of every committed prediction file against it. Needs `THESIS_DATA_DIR` and two raters; no model call.
+- `evaluation/retrospective_its.py` — the shipped ITS estimator over an exported signal stream around a known event, with the graded readout (natural experiment; describes, does not attribute). Needs dated real inflow.
+- `evaluation/run_matrix.py` — the matched 2×2 rerun plan (both prompts × both models, one day, one batch size); dry run by default, credentials read from named environment variables only.
+- `evaluation/predict_embedding.py` — an embedding-classifier baseline (sentence embeddings + logistic regression, out-of-fold) scored by `compare_runs.py`; needs an embedding endpoint or a local sentence-transformers model.
+
+Each has a plain-assert test on synthetic data in `npm run thesis:test`.
