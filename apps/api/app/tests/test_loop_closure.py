@@ -658,7 +658,11 @@ def test_ready_probe_and_system_config_expose_residency() -> None:
     client = _client()
     ready = client.get("/ready")
     assert ready.status_code == 200
-    assert ready.json() == {"status": "ok"}  # unauthenticated probe: status only, no internals
+    # Unauthenticated probe: status, build identity and one word for the
+    # measurement schema — no backend type, error class or versions.
+    assert set(ready.json()) == {"status", "version", "measurement_schema"}
+    assert ready.json()["status"] == "ok"
+    assert ready.json()["measurement_schema"] == "compatible"  # SQLite: the Python tick is the code's own
     details = client.get("/ready/details")
     assert details.status_code == 200
     body = details.json()

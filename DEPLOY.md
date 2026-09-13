@@ -12,12 +12,25 @@
 - Sep 2026 additions: `CLARA_AI_REQUIRE_EU=true` (fail-closed data residency — a non-EU or unrecognised AI/embeddings/Langfuse host refuses to boot and cannot be saved from Settings; allowlist a private EU gateway via `CLARA_AI_EU_HOSTS`), `CLARA_TRIAGE_CHECKPOINTER=auto` (PostgresSaver: paused triage approvals survive restarts; `memory` opts out). The image now runs as an unprivileged user with a Docker `HEALTHCHECK` on `/health`; `GET /ready` is the deep probe (DB round-trip + residency) for Caddy/uptime checks
 - Vercel production env (not previews): `NEXT_PUBLIC_COOKIE_AUTH=1` + `AUTH_COOKIE_DOMAIN=clara.odradekai.com` (HttpOnly cookie sessions); `NEXT_PUBLIC_LEGAL_PAGES=1` publishes `/legal/*` + the launch surface AFTER legal review (fail-closed: DRAFT-marked docs never publish)
 
-Deploy:
+Deploy (no pending migration):
 
 1. Locally: commit + `git push origin HEAD:main`
 2. Server: `cd /opt/stacks/clara/repo && git pull`
-3. `cd /opt/stacks/clara && docker compose up -d --build`
-4. Verify: `python3 scripts/live_smoke.py` from any machine → expect **22/22** checks OK (INFO rows do not count; checks landing claims, security headers on web+API, fail-closed auth, cookie routes, liveness `/health`, readiness `/ready`, model-card endpoint, swagger off; read-only). A `/ready → 404` with `/health → 200` means the running image predates the September 2026 readiness route (commit 01ced20): rebuild with step 3, it is not a Caddy or DB fault.
+3. `cd /opt/stacks/clara && docker compose build --build-arg GIT_COMMIT=$(git -C repo rev-parse --short HEAD) && docker compose up -d`
+   (`docker compose up -d --build` also works but bakes no build identity: `/health` then reports `"version": null` and a smoke run cannot say which commit answered)
+4. Verify: `python3 scripts/live_smoke.py` from any machine → expect **22/22** checks OK (INFO rows do not count; checks landing claims, security headers on web+API, fail-closed auth, cookie routes, liveness `/health`, readiness `/ready`, model-card endpoint, swagger off; read-only). The run also prints two INFO rows: `served API build <commit>` (from `/health`) and `measurement schema <state>` (from `/ready`; WARN when a migration is pending). A `/ready → 404` with `/health → 200` means the running image predates the September 2026 readiness route (commit 01ced20): rebuild with step 3, it is not a Caddy or DB fault. Observed state: the uptime run of 13 Sep 2026 06:32 UTC still reported that 404, so no image built after 2 Sep had been deployed at that time; the served commit becomes identifiable once an image built with `--build-arg GIT_COMMIT` answers.
+
+Deploy with a pending migration — the release step (written 13 Sep 2026 for migration 017; **not yet performed on production** — this is the procedure, not a record of it having run):
+
+1. **Read the migration's ORDERING note** (top of the file). 017 is order-independent with respect to the image: the API self-heals the three plan columns on boot and its Python fallback tick honours the frozen terms and fixed intervals; until 017 is applied the plpgsql tick keeps 016 behaviour and `GET /ready` reports `"measurement_schema": "incompatible"` (`/ready/details`, signed in: expected vs found function version, missing columns, the action). 011 and 014 are the opposite: image first, then the file. Never apply a file whose note says "deploy the matching API code first" before the image is up.
+2. **Back up**: Supabase → Database → Backups (a point-in-time restore point, or a manual backup), and note the current image so it can be restored: `docker compose images` (name and ID) and `docker tag <image> clara-api:rollback`.
+3. **Deploy the image** — steps 1–3 of the plain deploy above, with `--build-arg GIT_COMMIT`.
+4. **Apply the migration** in the Supabase SQL editor (paste the file; every migration since 011 is written to be safe to re-run) and read the editor output: NOTICE rows are fine, a WARNING names something to act on (011's pg_cron warnings mean the tick stays in-process). To rehearse first, run the same file against a disposable database with `python3 scripts/apply_migrations.py <disposable-url> --only 017` — the CI job `postgres-parity` does exactly this on every push, including the upgrade from the pre-017 schema and function and a second application.
+5. **Smoke**: `python3 scripts/live_smoke.py` → 22/22, `served API build` = the commit you built, `measurement schema compatible`. Then, signed in as a viewer or above, `GET /ready/details` → `checks.measurement.state == "compatible"`, `found_function_version == 17`. Do not use production data to exercise the tick: a due checkpoint is read by pg_cron on its schedule; a tick run "just to see" is a production mutation.
+6. **Rollback** (only if the smoke fails or `/ready/details` disagrees with the deployed code):
+   - image: `docker tag clara-api:rollback <image> && docker compose up -d --no-build` (or `git checkout <previous commit>` in `repo/` and rebuild with its short SHA as `GIT_COMMIT`); `/health` must report the previous commit;
+   - migration: follow the ROLLBACK block at the top of the file. For 017: re-run section 2 of 016 (the previous function body; the version marker disappears, so `/ready` reports `incompatible` again by design) and drop the three columns only if the previous image must run against the database — the current image tolerates them either way;
+   - then the smoke again. A rollback of the file without the image (or the reverse) is a supported state for 017 and an outage for 011/014 — the ORDERING notes say which.
 
 Notes:
 
@@ -98,10 +111,21 @@ git push -u origin main
      telemetry on window/follow-up checkpoints. The API self-heals the two tables and their
      RLS on boot; the function replacement only lives in this file, so apply it or theme
      contracts measure 0 signals under pg_cron. Safe to re-run.
+   - `apps/api/migrations/014_tenant_scoped_keys.sql` — tenant-first primary keys on every
+     clara_ table with a workspace_id (the API self-heals the same swap on boot; ⚠️ deploy
+     the matching API code first, apply after 013). Safe to re-run.
    - `apps/api/migrations/015_api_key_lookup_and_indexes.sql` — API keys minted by any
      workspace authenticate (the key row names its workspace; the isolation policy admits
      the one exact-hash lookup inside `verify`), plus indexes for the signal ordering,
      workflow snapshot, plan dedup and alert dedup queries. Safe to re-run.
+   - `apps/api/migrations/016_measurement_provenance.sql` — plan clock origins and contract
+     revisions, and the `clara_run_due_measurements` that binds each reading to the
+     checkpoint, terms and clock it was taken on. Apply after 013 (replaces its function).
+     Safe to re-run.
+   - `apps/api/migrations/017_measurement_intervals.sql` — frozen contract terms and fixed
+     observation intervals on plans, `clara_measurement_function_version()` (= 17, read by
+     `GET /ready`) and the tick that scores under the frozen terms over the fixed interval.
+     Apply after 016. Safe to re-run; the release step above is the procedure.
    - `apps/api/migrations/012_embedding_dim_1024.sql` — **only if `AI_EMBED_MODEL` is
      1024-dim (e.g. `mistral-embed`)**. 003 pins `taxonomy_nodes.embedding` to
      `vector(768)`; this retargets it. ⚠️ **It clears every stored embedding** — vectors
@@ -109,8 +133,16 @@ git push -u origin main
      afterwards to re-embed. Until you do, semantic mapping returns no matches (visible,
      not silently wrong); `signal_node_map` history is left intact. Idempotent: re-running
      once the column is `vector(1024)` is a no-op and won't wipe fresh vectors.
-   _(For the existing **CLARA** project these are already applied via MCP — listed here for
-   reproducibility.)_
+   _(For the existing **CLARA** project 001–015 are applied via MCP; 016 and 017 are
+   applied as the release step above records. Listed here for reproducibility.)_
+
+   For a **disposable database** (CI, a scratch server, a rehearsal) the whole chain is
+   `python3 scripts/apply_migrations.py <url>`: the order above, the API's own boot DDL
+   between 008 and 009 (009, 011 and 014 alter tables only the API creates, and 004 must
+   precede the API DDL because its policies are typed on the INTEGER workspace_id it
+   adds), 012 last, one transaction per file, stop at the first failure. The server needs
+   pgvector (003); `.github/workflows/ci.yml` runs it on `pgvector/pgvector:pg16` and then
+   the Postgres parity, governance and migration-upgrade tests.
 
 ## Step 3 — Deploy API (historical: Render; any Docker host or PaaS works)
 

@@ -1004,6 +1004,51 @@ class PostgresCustomerContextStore(PostgresConnectionMixin, CustomerContextStore
 # collision would silently overwrite another instance's record via ON CONFLICT.
 _WORKFLOW_REFRESH_TTL_SECONDS = 2.0
 
+# The plpgsql measurement tick this code was written against (migration 017
+# installs clara_measurement_function_version() returning it). A database
+# whose function is older, or missing, is reported by GET /ready/details so
+# a deployment cannot silently run the tick with older semantics.
+EXPECTED_MEASUREMENT_FUNCTION_VERSION = 17
+MEASUREMENT_PLAN_COLUMNS = (
+    "origin",
+    "contract_revision",
+    "contract_snapshot",
+    "observation_start",
+    "observation_end",
+)
+
+
+def measurement_schema_state(conn: Any) -> dict[str, Any]:
+    """What the connected database's measurement tick is: the version marker
+    (None when the function does not exist), whether the tick function itself
+    exists (a database that predates 011 has none and the API runs its Python
+    tick), and which plan columns the API-side DDL still has to self-heal."""
+    version_row = conn.execute(
+        "SELECT to_regprocedure('public.clara_measurement_function_version()') IS NOT NULL AS present"
+    ).fetchone()
+    version_present = bool(version_row["present"] if isinstance(version_row, dict) else version_row[0])
+    version = None
+    if version_present:
+        row = conn.execute("SELECT public.clara_measurement_function_version() AS v").fetchone()
+        version = int(row["v"] if isinstance(row, dict) else row[0])
+    tick_row = conn.execute(
+        "SELECT to_regprocedure('public.clara_run_due_measurements(integer, timestamptz)') IS NOT NULL AS present"
+    ).fetchone()
+    tick_present = bool(tick_row["present"] if isinstance(tick_row, dict) else tick_row[0])
+    rows = conn.execute(
+        """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'clara_measurement_plans'
+        """
+    ).fetchall()
+    present = {(r["column_name"] if isinstance(r, dict) else r[0]) for r in rows}
+    return {
+        "function_version": version,
+        "tick_function_present": tick_present,
+        "columns_missing": [c for c in MEASUREMENT_PLAN_COLUMNS if c not in present],
+        "backend_tick": "plpgsql" if tick_present else "python",
+    }
+
 
 class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
     """DB-backed workflow store.

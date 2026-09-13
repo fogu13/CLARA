@@ -33,5 +33,55 @@ jobs:
       - name: Install API dependencies
         run: python -m pip install -e "apps/api[dev]"
 
-      - name: Run checks
+      - name: Run checks (API lint + tests, thesis checks, manuscript consistency, web lint + build)
         run: npm run check
+
+  postgres-parity:
+    # A disposable PostgreSQL 16 (the pgvector image: migration 003 needs the
+    # vector extension) with migrations 001-017 applied in the documented
+    # order by scripts/apply_migrations.py, the API's boot DDL between 008 and
+    # 009 as in production's history. Runs the parity, cache, concurrency,
+    # backlog-ordering and governance tests that npm run check skips without
+    # CLARA_TEST_DATABASE_URL, plus the upgrade test (pre-017 schema and
+    # function -> the new API boots -> 017 -> safe rerun), which creates and
+    # drops its own database on the service.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: clara
+          POSTGRES_PASSWORD: clara
+          POSTGRES_DB: clara_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U clara -d clara_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      CLARA_TEST_DATABASE_URL: postgresql://clara:clara@127.0.0.1:5432/clara_test
+      PGPASSWORD: clara
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install API dependencies
+        run: python -m pip install -e "apps/api[dev]"
+
+      - name: Apply migrations in the documented order
+        run: python scripts/apply_migrations.py "$CLARA_TEST_DATABASE_URL"
+
+      - name: Postgres parity, governance and migration-upgrade tests
+        run: |
+          cd apps/api
+          PYTHONPYCACHEPREFIX=/tmp/clara_pycache python -m pytest -q \
+            app/tests/test_pg_parity_measurement.py \
+            app/tests/test_pg_parity_governance.py \
+            app/tests/test_pg_migration_upgrade.py
