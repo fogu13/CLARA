@@ -318,6 +318,15 @@ def equity_slices(sigs, summary, llm_maps=None, ml_risk=None):
         for name, fn in predictors.items():
             scored = [s for s in gold if name not in scored_by or scored_by[name](s)]
             if not scored:
+                # A predictor that answered no gold-escalate item of this
+                # stratum validly is still reported: coverage 0, the
+                # coverage-conditioned recall null (nothing to condition on)
+                # and the end-to-end recall 0 (every item a miss). It cannot
+                # enter a Fisher test (no hits, no misses to test).
+                row[f"n_gold_escalate_{name}"] = 0
+                row[f"recall_{name}"] = None
+                row[f"recall_{name}_ci_low"], row[f"recall_{name}_ci_high"] = None, None
+                row[f"recall_{name}_end_to_end"] = 0.0
                 continue
             k = sum(1 for s in scored if fn(s))
             lo, hi = M.wilson_interval(k, len(scored))
@@ -352,6 +361,14 @@ def equity_slices(sigs, summary, llm_maps=None, ml_risk=None):
         for i, la in enumerate(langs):
             for lb in langs[i + 1:]:
                 if (name, la) not in hits or (name, lb) not in hits:
+                    # One stratum has no validly answered gold-escalate item:
+                    # the pair is reported as absent, not silently dropped.
+                    fisher.append({
+                        "predictor": name, "language_a": la, "language_b": lb,
+                        "hits_a": None, "misses_a": None, "hits_b": None, "misses_b": None,
+                        "recall_a": None, "recall_b": None, "p_fisher_two_sided": None,
+                        "note": "no test: a stratum has no validly answered gold-escalate item",
+                    })
                     continue
                 a, b = hits[(name, la)]
                 c, d = hits[(name, lb)]
@@ -360,6 +377,7 @@ def equity_slices(sigs, summary, llm_maps=None, ml_risk=None):
                     "hits_a": a, "misses_a": b, "hits_b": c, "misses_b": d,
                     "recall_a": round(a / (a + b), 4), "recall_b": round(c / (c + d), 4),
                     "p_fisher_two_sided": round(M.fisher_exact(a, b, c, d), 6),
+                    "note": "",
                 })
     summary["escalation_recall_fisher"] = fisher
     if fisher:

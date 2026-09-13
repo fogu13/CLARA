@@ -77,6 +77,12 @@ class EnrichmentEvalResult:
     # enrichment for them, or an enrichment with no tags. They are neither
     # "grounded" nor "fabricated", so they leave the eligible denominator.
     hallucination_unassessed: int = 0
+    # Per-item outcome of the heuristic, by golden id: the ids it assessed and
+    # the ids it flagged. run_live aggregates them per split (counts only, no
+    # ids reach the main report) so the safety guard can say which split its
+    # flagged items came from.
+    hallucination_eligible_ids: list[str] = field(default_factory=list)
+    hallucination_flagged_ids: list[str] = field(default_factory=list)
     pii_leak_count: int = 0
     avg_latency_ms: float = 0.0
     results: list[EvalResult] = field(default_factory=list)
@@ -502,12 +508,14 @@ class EvalHarness:
                 hallucination_unassessed += 1
             else:
                 hallucination_eligible += 1
+                result.hallucination_eligible_ids.append(str(item.get("id")))
                 if check_hallucination(
                     actual_enrichment,
                     item.get("text", ""),
                     language=language,
                 ):
                     hallucination_count += 1
+                    result.hallucination_flagged_ids.append(str(item.get("id")))
 
             # PII leak check
             pii_count += check_pii_leak(

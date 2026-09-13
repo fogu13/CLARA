@@ -44,6 +44,14 @@ temperature 0; that is why every A/B is measured within one run, on paired items
   that has been scored on every iteration has informed the tuning through the aggregate
   numbers alone, whatever the per-item discipline. Say so wherever its numbers are
   quoted, and quote the consultation count next to them.
+- **The held-out split takes part in selection through the safety veto.** The
+  hallucination and PII guards are pooled over every scored item, both splits included,
+  and a rise in either vetoes an accept. That is deliberate (safety is never traded for
+  accuracy on any item), and it means the held-out split is a **safety-validation set
+  used in selection**, not an untouched test set. The accuracy decision never reads it.
+  The runner records this as `guards.scope` and `guards.held_out_contributes`, with the
+  eligible / flagged counts per split; quote the scope wherever a held-out number is
+  quoted.
 - **The only valid held-out statement about exemplars is the per-split paired effect**
   (`by_split_ab.held_out`: off/on accuracy, gained/lost, exact McNemar p, diff with a 95 %
   paired-bootstrap interval). The pooled figure (`enrichment_ab`, labelled
@@ -111,10 +119,15 @@ report — setup is incomplete.
      `rose`, and `limit_ok` must not be false. `null` means "not evaluated", not 0.
      `pii.status` must be `ok`. A bump inside the Wilson interval, a pooled p-value, or
      the within-run A/B is not an accept. Require replication (a second run reproducing
-     the gain against the same baseline) before carrying the change outside the loop.
-     The held-out split plays no part in accept/reject: `vs_baseline.held_out` and
-     `by_split_ab.held_out` are aggregates that are recorded, not acted on — do not
-     accept because they went up and do not reject because they went down.
+     the gain against the same baseline) before carrying the change outside the loop;
+     replication reduces the chance that one run's noise carried the accept, it does
+     not restore a controlled type-I error rate for a sequential search (see 6 below).
+     The held-out split plays no part in the ACCURACY decision: `vs_baseline.held_out`
+     and `by_split_ab.held_out` are aggregates that are recorded, not acted on — do not
+     accept because they went up and do not reject because they went down. It does
+     take part in the SAFETY veto (`guards` are pooled over both splits, see "The two
+     splits"): a hallucination or PII rise on held-out items vetoes the accept, and
+     `guards.scope` says so.
    - `by_split_ab` (exemplars ON vs OFF within one run) is the **exemplar-effect
      estimate**, reported on every run; it is never the gate. A prompt change moves both
      arms and is invisible to it; an exemplar edit is measured against *no* exemplars by
@@ -125,7 +138,10 @@ report — setup is incomplete.
      message naming the change and the before→after metric + p-value. Append an
      `{"kind":"accept", ...}` row to `history.jsonl`.
    - On REVERT: `git checkout -- <changed files>` and append a `{"kind":"reject",
-     "hypothesis":...}` row so the same idea isn't retried.
+     "hypothesis":...}` row so the same idea isn't retried. Copy the run's
+     `config.inputs` block (the fingerprint of the effective prompt, tool schema,
+     ordered exemplars, flags, dataset and source identity) into the reject row: a
+     rejected candidate must be as identifiable as an accepted one.
    - **The ledger and reports are versioned evidence**: copy the run's
      `reports/report_*.json` and the new `history.jsonl` rows into a committed location
      (both files are gitignored in place) in the same commit (accepted or rejected). An
@@ -136,8 +152,11 @@ report — setup is incomplete.
      decision, but any claim carried outside the loop (thesis, model card, sales)
      must be made at a sample size fixed BEFORE the run that produces it — testing
      at every size and claiming at the first p < 0.05 crossing is sequential
-     testing without alpha control. Replication (consecutive significant runs at
-     the frozen n) is the accepted substitute.
+     testing without alpha control. Consecutive significant runs at the frozen n
+     bound model noise on the same items; they do not substitute for alpha control,
+     because the search that produced the candidate was sequential. Every result of
+     this loop is therefore **exploratory**: carry it outside the loop as such, and
+     reserve a confirmatory claim for a pre-registered n and a split consulted once.
 7. **Stop conditions:** stop the loop when ALL targets below are met, OR when 3
    consecutive iterations produced no accepted change. Print the metric trajectory from
    `history.jsonl`, including the `held_out_consultations` count.
@@ -157,8 +176,9 @@ the DE items (`hallucination_excluded`).
 When tuning stops, run the eval once more, and record in the ledger and in the citing
 document: the date, `config.golden_set_sha256`, `config.held_out_ids_sha256`,
 `config.exemplars_sha256`, `held_out_consultations`, and `by_split_ab.held_out`. State
-that the split was consulted N times before this read. Any change to prompt, exemplars
-or golden set after this point re-opens it.
+that the split was consulted N times before this read, and that it served as the
+safety-validation set of every selection (`guards.scope`). Any change to prompt,
+exemplars or golden set after this point re-opens it.
 
 ### Never
 - edit a golden label to match a wrong prediction, or to move any score;
