@@ -372,6 +372,11 @@ export type MeasurementPlan = {
   // What executed_at is: approval (draft only) | dispatch | implementation.
   origin?: "approval" | "dispatch" | "implementation" | null;
   contract_revision?: number | null;
+  // The scoring terms frozen at scheduling and the fixed interval the
+  // checkpoint reads, whenever the worker gets to it.
+  contract_snapshot?: Record<string, unknown> | null;
+  observation_start?: string | null;
+  observation_end?: string | null;
 };
 
 export type AskAnswer = {

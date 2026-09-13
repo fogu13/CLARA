@@ -58,7 +58,12 @@ from app.services.taxonomies import (
 )
 from app.services.common import utc_now
 from app.services.governance import advisory_lock_key
-from app.services.workflow import DISPATCH_CLAIM_TTL_SECONDS, WorkflowStore, find_action
+from app.services.workflow import (
+    DISPATCH_CLAIM_TTL_SECONDS,
+    WorkflowStore,
+    find_action,
+    outcome_order_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -178,9 +183,13 @@ CREATE TABLE IF NOT EXISTS clara_measurement_plans (
     note TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Clock origin (approval | dispatch | implementation) and the contract
-    -- revision the checkpoints were scheduled under (migration 016).
+    -- revision the checkpoints were scheduled under (migration 016); the
+    -- frozen scoring terms and the fixed observation interval (migration 017).
     origin TEXT NOT NULL DEFAULT 'approval',
-    contract_revision INTEGER
+    contract_revision INTEGER,
+    contract_snapshot JSONB,
+    observation_start TEXT,
+    observation_end TEXT
 );
 
 CREATE TABLE IF NOT EXISTS clara_connector_configs (
@@ -386,7 +395,10 @@ class PostgresConnectionMixin:
                     """
                     ALTER TABLE clara_measurement_plans
                     ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT 'approval',
-                    ADD COLUMN IF NOT EXISTS contract_revision INTEGER
+                    ADD COLUMN IF NOT EXISTS contract_revision INTEGER,
+                    ADD COLUMN IF NOT EXISTS contract_snapshot JSONB,
+                    ADD COLUMN IF NOT EXISTS observation_start TEXT,
+                    ADD COLUMN IF NOT EXISTS observation_end TEXT
                     """
                 )
                 # Self-heal the tenant-first PK on DBs that predate migration 011.
@@ -1094,7 +1106,14 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
                 transitions.append(ProblemTransitionRecord.model_validate(payload))
             elif record_type == "outcome":
                 measurement = OutcomeMeasurement.model_validate(payload)
-                outcomes[measurement.problem_id] = measurement
+                # Readings are append-only rows; the latest one per problem is
+                # decided by the observation-interval rule (workflow.
+                # outcome_order_key), not by insertion order alone: a T+7
+                # checkpoint processed after the window read must not
+                # displace it.
+                current = outcomes.get(measurement.problem_id)
+                if current is None or outcome_order_key(measurement) >= outcome_order_key(current):
+                    outcomes[measurement.problem_id] = measurement
             elif record_type == "learning_conclusion":
                 learning_conclusions.append(LearningConclusionRecord.model_validate(payload))
             elif record_type == "closure":
@@ -1677,9 +1696,17 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
         kind: str,
         origin: str = "approval",
         contract_revision: int | None = None,
+        contract_snapshot=None,
+        observation_start: str | None = None,
+        observation_end: str | None = None,
     ) -> bool:
         """Insert one checkpoint; False when an equivalent pending plan exists
         (same contract as the SQLite store, so callers report dedup honestly)."""
+        snapshot = (
+            contract_snapshot.model_dump(mode="json")
+            if hasattr(contract_snapshot, "model_dump")
+            else contract_snapshot
+        )
         with self._connect() as conn:
             existing = conn.execute(
                 "SELECT id FROM clara_measurement_plans"
@@ -1690,9 +1717,21 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
                 return False
             conn.execute(
                 "INSERT INTO clara_measurement_plans"
-                " (problem_id, execution_id, executed_at, due_at, kind, origin, contract_revision)"
-                " VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (problem_id, execution_id, executed_at, due_at, kind, origin, contract_revision),
+                " (problem_id, execution_id, executed_at, due_at, kind, origin, contract_revision,"
+                "  contract_snapshot, observation_start, observation_end)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    problem_id,
+                    execution_id,
+                    executed_at,
+                    due_at,
+                    kind,
+                    origin,
+                    contract_revision,
+                    self._jsonb(snapshot) if snapshot is not None else None,
+                    observation_start,
+                    observation_end,
+                ),
             )
         return True
 
@@ -1728,12 +1767,15 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
             "created_at": str(row["created_at"]),
             "origin": row.get("origin") or "approval",
             "contract_revision": row.get("contract_revision"),
+            "contract_snapshot": _payload(row["contract_snapshot"]) if row.get("contract_snapshot") else None,
+            "observation_start": row.get("observation_start"),
+            "observation_end": row.get("observation_end"),
         }
 
     def list_plans(self) -> list[dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM clara_measurement_plans ORDER BY due_at"
+                "SELECT * FROM clara_measurement_plans ORDER BY due_at, id"
             ).fetchall()
         return [self._row_to_plan(row) for row in rows]
 
@@ -1741,7 +1783,7 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM clara_measurement_plans"
-                " WHERE status = 'pending' AND due_at <= %s ORDER BY due_at",
+                " WHERE status = 'pending' AND due_at <= %s ORDER BY due_at, id",
                 (now,),
             ).fetchall()
         return [self._row_to_plan(row) for row in rows]

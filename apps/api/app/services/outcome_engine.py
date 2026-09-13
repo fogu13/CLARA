@@ -68,6 +68,36 @@ def detectability_note(
     )
 
 
+# The comparison methods CLARA recognises, with the grade of the design each
+# names when it is REALISED by instrumented data. The dictionary is the whole
+# rule: a method that is not in it is not graded (E), whatever words it
+# contains — "uncontrolled_before_after" and "matched_control" both contain
+# "control", and a typo such as "hodlout" names no design at all.
+DESIGN_GRADES: dict[str, str] = {
+    # A: randomised holdout. Reserved: nothing in CLARA realises a holdout.
+    "randomized_holdout": "A",
+    "randomised_holdout": "A",
+    # B: controlled quasi-experiment. Reserved: not realised by CLARA either.
+    "matched_control": "B",
+    "difference_in_differences": "B",
+    "synthetic_control": "B",
+    # C: interrupted time series, segmented regression (only when fitted).
+    "its_segmented_regression": "C",
+    "its": "C",
+    # D: uncontrolled before/after on instrumented inflow.
+    "pre_post_signal_rate": "D",
+    "before_after": "D",
+    "uncontrolled_before_after": "D",
+    "pre_post": "D",
+}
+# What the engine can actually realise today: the checkpoint reading is a
+# before/after rate comparison (D); the read-time estimator is an ITS whose
+# fit either succeeds (C) or falls back to a labelled delta (D).
+REALISABLE_GRADES = frozenset({"C", "D"})
+# realised_method values the read-time estimator reports.
+ITS_REALISED = "its"
+
+
 def evidence_grade(
     *,
     comparison_method: str,
@@ -77,30 +107,32 @@ def evidence_grade(
     """A–E design grade for an outcome readout (external-review evidence scale).
 
     A  randomized holdout / control group, instrumented measurement
-    B  controlled quasi-experiment (diff-in-diff, matched control) — reserved,
-       CLARA does not produce this design yet
-    C  interrupted time series (segmented regression)
+    B  controlled quasi-experiment (diff-in-diff, matched control)
+    C  interrupted time series (segmented regression), fit obtained
     D  uncontrolled before/after, instrumented
-    E  manual assertion or nothing measured yet (descriptive only)
+    E  manual assertion, nothing measured yet, or a method CLARA does not
+       recognise (descriptive only)
 
-    Grades the design from fields available on every snapshot. The board
-    grades the contracted design; the problem detail, which runs the ITS,
-    also passes the fit it actually obtained (``realised_method``): when the
-    contract promised an ITS but the series was too sparse and the engine
-    fell back to a labelled plain delta, the readout IS an uncontrolled
-    before/after and is graded D, not C — the grade follows the evidence
-    that exists, not the evidence that was planned.
+    The grade is the grade of the design that was REALISED, never of the
+    design that was promised: the method is looked up in DESIGN_GRADES (an
+    explicit table, no substring matching), and a grade CLARA cannot realise
+    today (A, B — no holdout or matched control is produced by any code path)
+    is reported as the design the data actually support, an uncontrolled
+    before/after (D). An ITS contract is C only when ``realised_method`` says
+    the segmented regression was fitted (``"its"``); a sparse series that fell
+    back to the labelled plain delta, or a reading taken without a fit, is D.
+    Manual readings are E whatever the fit says.
     """
     if measurement_source is None or measurement_source == "manual":
         return "E"
-    method = comparison_method.lower()
-    if "holdout" in method or "control" in method:
-        return "A"
-    if "its" in method:
-        if realised_method is not None and realised_method != "its":
-            return "D"
-        return "C"
-    return "D"
+    design = DESIGN_GRADES.get((comparison_method or "").strip().lower())
+    if design is None:
+        return "E"
+    if design not in REALISABLE_GRADES:
+        return "D"
+    if design == "C":
+        return "C" if realised_method == ITS_REALISED else "D"
+    return design
 
 
 def outcome_direction(*, baseline: float, target: float) -> str:
@@ -568,6 +600,44 @@ def _status_name(status: Any) -> str:
     return str(getattr(status, "value", status))
 
 
+def _certifying_plan(
+    plans: list[dict[str, Any]],
+    *,
+    checkpoint_kind: str,
+    plan_id: int | None,
+    execution_id: str | None,
+) -> dict[str, Any] | None:
+    """The done closing plan a reading is deterministically bound to.
+
+    A reading that names its plan (``plan_id``, stamped by the scheduler that
+    produced it) certifies only through THAT plan: it must exist among the
+    problem's plans, be done, be of the reading's checkpoint kind and, when
+    the reading names an execution, belong to the same execution. No plan of
+    another execution is ever borrowed. A reading that carries a checkpoint
+    kind but no plan id (a tick that predates plan binding) certifies only
+    when exactly one done plan of that kind exists for the problem.
+    """
+    candidates = [
+        plan
+        for plan in plans
+        if plan.get("status") == "done" and plan.get("kind") == checkpoint_kind
+    ]
+    if plan_id is not None:
+        for plan in candidates:
+            if str(plan.get("id")) != str(plan_id):
+                continue
+            if execution_id and plan.get("execution_id") and plan.get("execution_id") != execution_id:
+                return None
+            return plan
+        return None
+    if len(candidates) == 1:
+        plan = candidates[0]
+        if execution_id and plan.get("execution_id") and plan.get("execution_id") != execution_id:
+            return None
+        return plan
+    return None
+
+
 def loop_verdict(
     *,
     outcome_status: str,
@@ -576,6 +646,9 @@ def loop_verdict(
     checkpoint_kind: str | None = None,
     measurement_origin: str | None = None,
     measurement_origin_at: str | None = None,
+    plan_id: int | None = None,
+    execution_id: str | None = None,
+    evidence_grade: str | None = None,
 ) -> tuple[str, str]:
     """(verdict, note) for one problem.
 
@@ -585,17 +658,20 @@ def loop_verdict(
     - on_track: an early read (T+7, or a manual read) looks good — not proof yet.
     - loop_closed: the latest reading is an instrumented window or follow-up
       checkpoint read that met the target. Certified target attainment on
-      real inflow; causal attribution rests on the comparison method.
-    - fix_did_not_land: that same closing read shows no improvement.
+      real inflow; what can be attributed to the action depends on the
+      evidence grade of the design.
+    - fix_did_not_land: that same closing read observed no improvement.
+      The verdict name is the product's; the note says what was observed and
+      attributes nothing an uncontrolled design cannot support.
 
     Certification is bound to the observation itself: only an instrumented
-    reading produced by a closing checkpoint (``checkpoint_kind``) certifies.
-    Legacy readings without a checkpoint kind fall back to "a closing plan is
-    done". A manual reading never certifies, whatever the plans say.
+    reading produced by a closing checkpoint (``checkpoint_kind``) certifies,
+    and only through the plan it names (``_certifying_plan``: the reading's
+    own plan, same execution; never another execution's completed plan). A
+    legacy reading without a checkpoint kind has unknown provenance and is
+    never certified; the next scheduled read is. A manual reading never
+    certifies, whatever the plans say.
     """
-    done_closing = {
-        plan["kind"] for plan in plans if plan.get("status") == "done" and plan.get("kind") in LOOP_CHECKPOINT_KINDS
-    }
     pending = any(plan.get("status") == "pending" for plan in plans)
     manual = any(plan.get("status") == "manual_required" for plan in plans)
 
@@ -607,12 +683,26 @@ def loop_verdict(
         return "not_measured", "No approved action has started the measurement clock."
 
     instrumented = measurement_source == "instrumented"
+    certified = False
+    binding_note = ""
+    closing_label = "window"
     if checkpoint_kind is not None:
-        certified = instrumented and checkpoint_kind in LOOP_CHECKPOINT_KINDS
         closing_label = "follow-up" if checkpoint_kind == "followup" else "window"
-    else:
-        certified = instrumented and bool(done_closing)
-        closing_label = "follow-up" if "followup" in done_closing else "window"
+        if instrumented and checkpoint_kind in LOOP_CHECKPOINT_KINDS:
+            bound = _certifying_plan(
+                plans, checkpoint_kind=checkpoint_kind, plan_id=plan_id, execution_id=execution_id
+            )
+            certified = bound is not None
+            if not certified:
+                binding_note = (
+                    " The reading names no done checkpoint of its own execution, so it is not"
+                    " certified."
+                )
+    elif instrumented:
+        binding_note = (
+            " Provenance unknown: the reading predates checkpoint binding, so it is not"
+            " certified; the next scheduled closing read is."
+        )
 
     clock = ""
     if measurement_origin:
@@ -624,33 +714,45 @@ def loop_verdict(
         if measurement_origin == "approval"
         else ""
     )
+    if evidence_grade in ("A", "B", "C"):
+        attribution = f" Attribution to the action rests on the design (evidence grade {evidence_grade})."
+    else:
+        attribution = (
+            " Attribution to the action is not established: the design is an uncontrolled"
+            f" before/after (evidence grade {evidence_grade or 'D'})."
+        )
 
     if outcome_status == "target_met":
         if certified:
             return "loop_closed", (
                 f"Inflow met the target at the {closing_label} checkpoint (instrumented read{clock})."
-                " Target attained; causal attribution rests on the comparison method"
-                f" (see evidence grade).{caveat}"
+                f" Target attained.{attribution}{caveat}"
             )
         if not instrumented:
             return "on_track", (
                 "A manual reading met the target; it is not certified on signal inflow"
                 " — the next scheduled read will."
             )
-        return "on_track", "The early read met the target; the window checkpoint will confirm it."
+        return "on_track", (
+            "The early read met the target; the window checkpoint will confirm it."
+            f"{binding_note}"
+        )
     if outcome_status == "improving":
         return "on_track", "Inflow is moving the right way but has not reached the target yet."
     if outcome_status == "not_improved":
         if certified:
             return "fix_did_not_land", (
-                f"The {closing_label} checkpoint shows no improvement (instrumented read{clock}):"
-                f" the fix did not land.{caveat}"
+                f"The {closing_label} checkpoint observed no improvement (instrumented read{clock})."
+                f"{attribution}{caveat}"
             )
         if not instrumented:
             return "measuring", (
                 "A manual reading shows no improvement; the next scheduled read decides."
             )
-        return "measuring", "The early read shows no improvement yet; the window checkpoint decides."
+        return "measuring", (
+            "The early read shows no improvement yet; the window checkpoint decides."
+            f"{binding_note}"
+        )
     return "measuring", "Measurement in progress."
 
 

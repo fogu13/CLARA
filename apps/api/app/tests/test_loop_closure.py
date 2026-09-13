@@ -204,14 +204,21 @@ def test_ai_themes_become_candidates_and_the_loop_closes(monkeypatch: pytest.Mon
         assert snapshot["status"] == "target_met"
         assert snapshot["measurement_source"] == "instrumented"
         assert snapshot["loop_verdict"] == "loop_closed"
-        assert snapshot["latest_value"] == pytest.approx(1 / 40, abs=1e-4)
-        # The contract promises segmented regression, but four pre-signals over
-        # three hours cannot support it: the engine returned the labelled plain
-        # delta, and the evidence grade follows the fit obtained (D), not the
-        # design that was planned (C). The board, which does not run the ITS,
-        # still shows the contracted design grade.
+        # The window checkpoint reads its fixed interval [T, T+window], not
+        # the cumulative span up to the (late) processing instant.
+        window_days = snapshot["measurement_window_days"]
+        assert snapshot["latest_value"] == pytest.approx(1 / window_days, abs=1e-4)
+        assert snapshot["observation_start"] == _iso(executed)
+        assert snapshot["observation_end"] == _iso(executed + timedelta(days=window_days))
+        # The contract promises segmented regression; the checkpoint reading
+        # itself is an uncontrolled before/after on instrumented inflow
+        # (grade D). The live read-time ITS is graded separately on the fit it
+        # obtained: four pre-signals over three hours cannot support it, so
+        # the engine returned the labelled plain delta (D as well).
         assert snapshot["comparison_method"] == "its_segmented_regression"
         assert snapshot["its"]["method"] == "delta_insufficient_data"
+        assert snapshot["its"]["evidence_grade"] == "D"
+        assert "live cumulative" in snapshot["its"]["scope"]
         assert snapshot["evidence_grade"] == "D"
 
         board = client.get("/outcome-board").json()
@@ -556,12 +563,21 @@ def test_loop_verdict_matrix() -> None:
     assert loop_verdict(outcome_status="target_met", plans=pending)[0] == "on_track"
     # Certification is bound to the observation: a done closing plan alone
     # proves nothing about the latest reading. Only an instrumented reading
-    # certifies (legacy readings without a checkpoint kind fall back to the
-    # done-plan rule); a manual reading never does.
+    # produced by a closing checkpoint it names certifies; a legacy reading
+    # without a checkpoint kind has unknown provenance and never does, and a
+    # manual reading never does.
+    bound_window = [{"id": 7, "kind": "window", "status": "done", "problem_id": "p"}]
     assert (
-        loop_verdict(outcome_status="target_met", plans=done_window, measurement_source="instrumented")[0]
+        loop_verdict(
+            outcome_status="target_met", plans=bound_window, measurement_source="instrumented",
+            checkpoint_kind="window", plan_id=7,
+        )[0]
         == "loop_closed"
     )
+    legacy_verdict, legacy_note = loop_verdict(
+        outcome_status="target_met", plans=done_window, measurement_source="instrumented"
+    )
+    assert legacy_verdict == "on_track" and "Provenance unknown" in legacy_note
     assert loop_verdict(outcome_status="target_met", plans=done_window)[0] == "on_track"
     assert (
         loop_verdict(outcome_status="target_met", plans=done_window, measurement_source="manual")[0]
@@ -570,8 +586,15 @@ def test_loop_verdict_matrix() -> None:
     assert loop_verdict(outcome_status="improving", plans=done_window)[0] == "on_track"
     assert loop_verdict(outcome_status="not_improved", plans=pending)[0] == "measuring"
     assert (
-        loop_verdict(outcome_status="not_improved", plans=done_window, measurement_source="instrumented")[0]
+        loop_verdict(
+            outcome_status="not_improved", plans=bound_window, measurement_source="instrumented",
+            checkpoint_kind="window", plan_id=7,
+        )[0]
         == "fix_did_not_land"
+    )
+    assert (
+        loop_verdict(outcome_status="not_improved", plans=done_window, measurement_source="instrumented")[0]
+        == "measuring"
     )
     assert (
         loop_verdict(outcome_status="not_improved", plans=done_window, measurement_source="manual")[0]

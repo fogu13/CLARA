@@ -803,6 +803,12 @@ class OutcomeMeasurement(BaseModel):
     # produced it. Manual and legacy readings carry None.
     clock_origin: str | None = None
     clock_origin_at: str | None = None
+    # The observation interval the reading covers (inclusive bounds), fixed
+    # when the checkpoint was scheduled: a worker that runs late reads the
+    # same interval as one that runs on time. measured_at stays the
+    # processing instant. Manual and legacy readings carry None.
+    observation_start: str | None = None
+    observation_end: str | None = None
 
 
 LEARNING_RETENTION_DAYS = 730
@@ -972,10 +978,16 @@ class OutcomeSnapshot(BaseModel):
     # — the clock the latest reading was taken on when it carries one, else
     # the current intervention anchor (outcome_engine.intervention_anchor);
     # the checkpoint kind of the latest instrumented reading (t7 | window |
-    # followup).
+    # followup), the plan and execution that produced it, and the fixed
+    # observation interval it covers.
     measurement_origin: str | None = None
     measurement_origin_at: str | None = None
     checkpoint_kind: str | None = None
+    plan_id: int | None = None
+    execution_id: str | None = None
+    observation_start: str | None = None
+    observation_end: str | None = None
+    measured_at: str | None = None
 
 
 class OutcomeBoardItem(BaseModel):

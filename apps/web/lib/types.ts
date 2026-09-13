@@ -582,6 +582,13 @@ export type OutcomeSnapshot = {
   measurement_origin?: MeasurementOrigin | null;
   measurement_origin_at?: string | null;
   checkpoint_kind?: string | null;
+  // The plan and execution the latest reading is bound to, the fixed
+  // observation interval it covers and its processing instant.
+  plan_id?: number | null;
+  execution_id?: string | null;
+  observation_start?: string | null;
+  observation_end?: string | null;
+  measured_at?: string | null;
 };
 
 export type MeasurementOrigin = "approval" | "dispatch" | "implementation";

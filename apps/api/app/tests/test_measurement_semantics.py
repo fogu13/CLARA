@@ -224,7 +224,11 @@ class TestVerdictBinding:
         assert recorded.plan_id == window_plan["id"]
         assert recorded.contract_revision == problem.outcome_contract.revision
         assert recorded.contract_snapshot == problem.outcome_contract
-        assert "since approval (" in (recorded.notes or "")
+        # The reading names its clock and the fixed interval it covers.
+        assert "clock from approval" in (recorded.notes or "")
+        assert "in the fixed interval" in (recorded.notes or "")
+        assert recorded.observation_start == window_plan["observation_start"]
+        assert recorded.observation_end == window_plan["observation_end"]
         assert window_plan["status"] == "done" and "observed" in window_plan["note"]
 
         snapshot = client.get(f"/problems/{problem.problem_id}/outcome").json()
@@ -281,43 +285,56 @@ class TestVerdictBinding:
         assert any(p["kind"] == "window" and p["status"] == "done" for p in _plans(plans, problem.problem_id))
 
 
+DONE_WINDOW = [{"id": 1, "kind": "window", "status": "done", "execution_id": "EXE-0001"}]
+DONE_FOLLOWUP = [{"id": 2, "kind": "followup", "status": "done", "execution_id": "EXE-0001"}]
+
+
 @pytest.mark.parametrize(
-    ("status", "source", "kind", "plans", "expected"),
+    ("status", "source", "kind", "plans", "plan_id", "expected"),
     [
-        ("not_measured", None, None, [], "not_measured"),
-        ("not_measured", None, None, [{"kind": "t7", "status": "pending"}], "measuring"),
-        ("not_measured", None, None, [{"kind": "window", "status": "manual_required"}], "manual_required"),
-        # Instrumented closing reads certify either way.
-        ("target_met", "instrumented", "window", [], "loop_closed"),
-        ("target_met", "instrumented", "followup", [], "loop_closed"),
-        ("not_improved", "instrumented", "window", [], "fix_did_not_land"),
-        ("not_improved", "instrumented", "followup", [], "fix_did_not_land"),
+        ("not_measured", None, None, [], None, "not_measured"),
+        ("not_measured", None, None, [{"kind": "t7", "status": "pending"}], None, "measuring"),
+        ("not_measured", None, None, [{"kind": "window", "status": "manual_required"}], None, "manual_required"),
+        # Instrumented closing reads certify through the done plan they name.
+        ("target_met", "instrumented", "window", DONE_WINDOW, 1, "loop_closed"),
+        ("target_met", "instrumented", "followup", DONE_FOLLOWUP, 2, "loop_closed"),
+        ("not_improved", "instrumented", "window", DONE_WINDOW, 1, "fix_did_not_land"),
+        ("not_improved", "instrumented", "followup", DONE_FOLLOWUP, 2, "fix_did_not_land"),
+        # A closing read that names no done checkpoint of its own is not certified
+        # (13 Sep 2026 review, F4: no borrowing, no unknown provenance).
+        ("target_met", "instrumented", "window", [], None, "on_track"),
+        ("not_improved", "instrumented", "window", [], None, "measuring"),
+        ("target_met", "instrumented", "window", DONE_WINDOW, 99, "on_track"),
         # An instrumented early read is not proof, whatever the plans say.
-        ("target_met", "instrumented", "t7", [{"kind": "window", "status": "done"}], "on_track"),
-        ("not_improved", "instrumented", "t7", [{"kind": "window", "status": "done"}], "measuring"),
+        ("target_met", "instrumented", "t7", DONE_WINDOW, None, "on_track"),
+        ("not_improved", "instrumented", "t7", DONE_WINDOW, None, "measuring"),
         # A manual reading never certifies, even next to a done closing plan.
-        ("target_met", "manual", None, [{"kind": "window", "status": "done"}], "on_track"),
-        ("not_improved", "manual", None, [{"kind": "followup", "status": "done"}], "measuring"),
-        ("improving", "manual", None, [{"kind": "window", "status": "done"}], "on_track"),
-        # Legacy instrumented readings (no checkpoint kind) fall back to the plans.
-        ("target_met", "instrumented", None, [{"kind": "window", "status": "done"}], "loop_closed"),
-        ("target_met", "instrumented", None, [{"kind": "t7", "status": "done"}], "on_track"),
-        ("not_improved", "instrumented", None, [{"kind": "window", "status": "done"}], "fix_did_not_land"),
-        ("not_improved", "instrumented", None, [{"kind": "t7", "status": "pending"}], "measuring"),
-        ("improving", "instrumented", "window", [], "on_track"),
+        ("target_met", "manual", None, DONE_WINDOW, None, "on_track"),
+        ("not_improved", "manual", None, DONE_FOLLOWUP, None, "measuring"),
+        ("improving", "manual", None, DONE_WINDOW, None, "on_track"),
+        # Legacy instrumented readings (no checkpoint kind) have unknown
+        # provenance and never certify; the next scheduled read does.
+        ("target_met", "instrumented", None, DONE_WINDOW, None, "on_track"),
+        ("target_met", "instrumented", None, [{"kind": "t7", "status": "done"}], None, "on_track"),
+        ("not_improved", "instrumented", None, DONE_WINDOW, None, "measuring"),
+        ("not_improved", "instrumented", None, [{"kind": "t7", "status": "pending"}], None, "measuring"),
+        ("improving", "instrumented", "window", [], None, "on_track"),
     ],
 )
-def test_loop_verdict_certifies_only_instrumented_closing_reads(status, source, kind, plans, expected) -> None:
-    verdict, _ = loop_verdict(
-        outcome_status=status, plans=plans, measurement_source=source, checkpoint_kind=kind
+def test_loop_verdict_certifies_only_instrumented_closing_reads(status, source, kind, plans, plan_id, expected) -> None:
+    verdict, note = loop_verdict(
+        outcome_status=status, plans=plans, measurement_source=source, checkpoint_kind=kind, plan_id=plan_id
     )
     assert verdict == expected
+    if source == "instrumented" and kind is None and status != "improving":
+        assert "Provenance unknown" in note
 
 
 def test_loop_verdict_note_words_target_attainment_not_causation() -> None:
     _, note = loop_verdict(
         outcome_status="target_met",
-        plans=[],
+        plans=DONE_WINDOW,
+        plan_id=1,
         measurement_source="instrumented",
         checkpoint_kind="window",
         measurement_origin="dispatch",
@@ -325,11 +342,17 @@ def test_loop_verdict_note_words_target_attainment_not_causation() -> None:
     )
     assert "Inflow met the target at the window checkpoint" in note
     assert "clock from dispatch on 2026-09-01" in note
-    assert "causal attribution rests on the comparison method" in note
+    assert "Attribution to the action is not established" in note  # grade D by default
     assert "predate the fix" not in note
+    _, graded = loop_verdict(
+        outcome_status="target_met", plans=DONE_WINDOW, plan_id=1, measurement_source="instrumented",
+        checkpoint_kind="window", evidence_grade="C",
+    )
+    assert "rests on the design (evidence grade C)" in graded
     _, approval_note = loop_verdict(
         outcome_status="target_met",
-        plans=[],
+        plans=DONE_FOLLOWUP,
+        plan_id=2,
         measurement_source="instrumented",
         checkpoint_kind="followup",
         measurement_origin="approval",

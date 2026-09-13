@@ -4,7 +4,7 @@ import json
 import sqlite3
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from datetime import datetime
+from datetime import UTC, datetime
 from itertools import count
 from pathlib import Path
 from uuid import uuid4
@@ -565,16 +565,52 @@ def _parse_measured_at(value: str) -> datetime | None:
         return None
 
 
+CHECKPOINT_RANK = {"t7": 0, "window": 1, "followup": 2}
+
+
+def outcome_order_key(measurement: OutcomeMeasurement) -> tuple:
+    """The deterministic order of readings of one problem: the later
+    observation interval wins (its end, falling back to measured_at for
+    manual and legacy readings), then the processing instant, then the
+    closing-ness of the checkpoint, then the plan id — so two readings
+    written by one tick with the same measured_at still have one "latest",
+    and a reading that covers an earlier interval never displaces a later
+    one even when it was processed afterwards."""
+    end = _parse_measured_at(measurement.observation_end or "") if measurement.observation_end else None
+    measured = _parse_measured_at(measurement.measured_at)
+    epoch = datetime.min.replace(tzinfo=UTC)
+    return (
+        (end or measured or epoch),
+        (measured or epoch),
+        CHECKPOINT_RANK.get(measurement.checkpoint_kind or "", -1),
+        measurement.plan_id or 0,
+    )
+
+
 def assert_measurement_not_stale(
     existing_measured_at: str | None,
     incoming_measured_at: str,
+    *,
+    existing_observation_end: str | None = None,
+    incoming_observation_end: str | None = None,
 ) -> None:
     """Reject a measurement older than the recorded one: a late backfill must
     not regress latest_value and flip outcome status / the learning gate.
     Equal timestamps stay allowed (corrections supersede by insertion order);
-    unparseable timestamps don't block the write."""
+    unparseable timestamps don't block the write. When both readings carry a
+    fixed observation interval, the interval end decides (a T+7 checkpoint
+    processed after the window checkpoint must not displace the window read,
+    whatever the processing order)."""
     if existing_measured_at is None:
         return
+    if existing_observation_end and incoming_observation_end:
+        existing_end = _parse_measured_at(existing_observation_end)
+        incoming_end = _parse_measured_at(incoming_observation_end)
+        if existing_end is not None and incoming_end is not None and incoming_end < existing_end:
+            raise HTTPException(
+                status_code=409,
+                detail="A reading covering a later observation interval already exists for this problem",
+            )
     existing = _parse_measured_at(existing_measured_at)
     incoming = _parse_measured_at(incoming_measured_at)
     if existing is None or incoming is None:
@@ -713,6 +749,11 @@ def build_outcome_snapshot(
         measurement_origin=None if measurement is None else measurement.clock_origin,
         measurement_origin_at=None if measurement is None else measurement.clock_origin_at,
         checkpoint_kind=None if measurement is None else measurement.checkpoint_kind,
+        plan_id=None if measurement is None else measurement.plan_id,
+        execution_id=None if measurement is None else measurement.execution_id,
+        observation_start=None if measurement is None else measurement.observation_start,
+        observation_end=None if measurement is None else measurement.observation_end,
+        measured_at=None if measurement is None else measurement.measured_at,
     )
 
 
@@ -1125,6 +1166,8 @@ class WorkflowStore:
         assert_measurement_not_stale(
             existing.measured_at if existing is not None else None,
             measurement.measured_at,
+            existing_observation_end=existing.observation_end if existing is not None else None,
+            incoming_observation_end=measurement.observation_end,
         )
         measurement = stamp_contract_provenance(problem, measurement)
         self._outcomes[problem.problem_id] = measurement
@@ -1477,6 +1520,8 @@ class SQLiteWorkflowStore:
         self._ensure_column("outcomes", "execution_id", "TEXT")
         self._ensure_column("outcomes", "clock_origin", "TEXT")
         self._ensure_column("outcomes", "clock_origin_at", "TEXT")
+        self._ensure_column("outcomes", "observation_start", "TEXT")
+        self._ensure_column("outcomes", "observation_end", "TEXT")
         # Idempotent backfill for the JWT-tenant migration: header-era rows were
         # tagged with client strings ('demo_tenant'/...); the tenant key is now
         # str(workspace_id) and local dev is the default workspace ('1'). Closure
@@ -1852,12 +1897,16 @@ class SQLiteWorkflowStore:
             raise HTTPException(status_code=422, detail="Metric does not match the outcome contract")
 
         existing_row = self._connection.execute(
-            "SELECT measured_at FROM outcomes WHERE problem_id = ?",
+            "SELECT measured_at, observation_end FROM outcomes WHERE problem_id = ?",
             (measurement.problem_id,),
         ).fetchone()
         assert_measurement_not_stale(
             existing_row["measured_at"] if existing_row is not None else None,
             measurement.measured_at,
+            existing_observation_end=(
+                existing_row["observation_end"] if existing_row is not None else None
+            ),
+            incoming_observation_end=measurement.observation_end,
         )
         measurement = stamp_contract_provenance(problem, measurement)
         self._connection.execute(
@@ -1865,8 +1914,9 @@ class SQLiteWorkflowStore:
             INSERT INTO outcomes (problem_id, metric, observed_value, measured_at, notes,
                                   measurement_source, contract_revision, contract_json,
                                   checkpoint_kind, plan_id, execution_id,
-                                  clock_origin, clock_origin_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  clock_origin, clock_origin_at,
+                                  observation_start, observation_end)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(problem_id) DO UPDATE SET
                 metric = excluded.metric,
                 observed_value = excluded.observed_value,
@@ -1879,7 +1929,9 @@ class SQLiteWorkflowStore:
                 plan_id = excluded.plan_id,
                 execution_id = excluded.execution_id,
                 clock_origin = excluded.clock_origin,
-                clock_origin_at = excluded.clock_origin_at
+                clock_origin_at = excluded.clock_origin_at,
+                observation_start = excluded.observation_start,
+                observation_end = excluded.observation_end
             """,
             (
                 measurement.problem_id,
@@ -1899,6 +1951,8 @@ class SQLiteWorkflowStore:
                 measurement.execution_id,
                 measurement.clock_origin,
                 measurement.clock_origin_at,
+                measurement.observation_start,
+                measurement.observation_end,
             ),
         )
         self._connection.commit()
@@ -2263,6 +2317,8 @@ class SQLiteWorkflowStore:
             execution_id=_col("execution_id"),
             clock_origin=_col("clock_origin"),
             clock_origin_at=_col("clock_origin_at"),
+            observation_start=_col("observation_start"),
+            observation_end=_col("observation_end"),
         )
 
     @staticmethod

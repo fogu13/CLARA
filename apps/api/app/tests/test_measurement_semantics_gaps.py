@@ -566,28 +566,59 @@ ORIGIN_DAY = {"approval": 1, "dispatch": 2, "implementation": 3}
 # ---------------------------------------------------------------------------
 
 
-def test_followup_reads_its_own_scheduled_window_after_an_amendment(tmp_path: Path) -> None:
+def test_window_amendment_replans_the_pending_checkpoints_explicitly(tmp_path: Path) -> None:
+    """B7, revised by the 13 Sep 2026 review (F2): a window amendment no longer
+    leaves the pending follow-up reading the OLD month silently — it
+    supersedes every live checkpoint and re-plans it under the new revision
+    on the same clock, with an audit event, so what the follow-up reads is
+    what a human amended it to read."""
     problem = _draft_problem(measurement_window_days=30, comparison_method="pre_post_signal_rate")
     app = _app(tmp_path, problem=problem)
-    client, plans, workflows = app["client"], app["plans"], app["workflows"]
+    client, plans, workflows, telemetry = app["client"], app["plans"], app["workflows"], app["telemetry"]
     pid = problem.problem_id
     executed = NOW - timedelta(days=61)
     schedule_measurements(plans, problem=problem, execution_id="EXE-0001", executed_at=_iso(executed), origin="dispatch")
-    followup = next(p for p in _plans(plans, pid) if p["kind"] == "followup")
-    assert followup["due_at"] == _iso(executed + timedelta(days=60))
+    old_followup = next(p for p in _plans(plans, pid) if p["kind"] == "followup")
+    assert old_followup["due_at"] == _iso(executed + timedelta(days=60))
+    assert old_followup["observation_start"] == _iso(executed + timedelta(days=30))
+    assert old_followup["observation_end"] == _iso(executed + timedelta(days=60))
+    assert old_followup["contract_snapshot"]["revision"] == 1
 
     amended = client.patch(f"/problems/{pid}/outcome-contract", json={"measurement_window_days": 60, "comparison_method": "pre_post_signal_rate"})
     assert amended.status_code == 200, amended.text
 
+    rows = _plans(plans, pid)
+    superseded = [p for p in rows if p["status"] == "superseded"]
+    assert {p["kind"] for p in superseded} == {"t7", "window", "followup"}
+    assert all(p["note"] == "superseded by contract revision 2 (amendment)" for p in superseded)
+    live = [p for p in rows if p["status"] == "pending"]
+    assert {p["kind"] for p in live} == {"t7", "window", "followup"}
+    assert all(p["contract_snapshot"]["revision"] == 2 for p in live)
+    assert all(p["contract_snapshot"]["measurement_window_days"] == 60 for p in live)
+    assert all(p["executed_at"] == _iso(executed) and p["origin"] == "dispatch" and p["execution_id"] == "EXE-0001" for p in live)
+    new_followup = next(p for p in live if p["kind"] == "followup")
+    assert new_followup["observation_start"] == _iso(executed + timedelta(days=60))
+    assert new_followup["observation_end"] == _iso(executed + timedelta(days=90))
+    [event] = _events(telemetry, "measurement_replanned")
+    assert event["metadata"]["revision"] == 2
+    assert event["metadata"]["changed"] == ["measurement_window_days"]
+    assert event["metadata"]["superseded"] == 3
+    assert set(event["metadata"]["kinds"]) == {"t7", "window", "followup"}
+
+    # The new window (T+60) is due; the new follow-up (T+90) is not.
     result = client.post("/measurements/run-due", json={"now": _iso(NOW)}).json()
-    assert result["measured"] == 3
+    assert result["measured"] == 2
     recorded = workflows.latest_outcome(pid)
-    assert recorded.checkpoint_kind == "followup"
-    # The month after the window the plan was scheduled with: [T+30, T+60],
-    # which holds every pre-signal; the amended window would have read only
-    # [T+60, now] and seen one.
-    assert "10 matching signals" in (recorded.notes or "")
-    assert recorded.observed_value == pytest.approx(10 / 31, abs=1e-4)
+    assert recorded.checkpoint_kind == "window"
+    assert recorded.contract_revision == 2
+    assert (recorded.observation_start, recorded.observation_end) == (_iso(executed), _iso(executed + timedelta(days=60)))
+    # Nine of the ten pre-signals fall inside [T, T+60]; the tenth (half a day
+    # before NOW = T+61) lies after the fixed interval's end.
+    assert "9 matching signals" in (recorded.notes or "")
+    assert recorded.observed_value == pytest.approx(9 / 60, abs=1e-4)
+    snapshot = client.get(f"/problems/{pid}/outcome").json()
+    assert snapshot["measured_under_revision"] == 2
+    assert snapshot["contract_amended_after_measurement"] is False
 
 
 def test_followup_window_start_derives_from_due_at() -> None:

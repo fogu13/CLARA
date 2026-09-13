@@ -56,7 +56,7 @@ from app.services.context_impact import build_affected_context_explorer
 from app.services.emerging import build_emerging_problem_report
 from app.services.governance import problem_lock
 from app.services.learning_engine import learning_from_problem_conclusion, with_decay
-from app.services.measurement_scheduler import schedule_measurements
+from app.services.measurement_scheduler import replan_after_amendment, schedule_measurements
 from app.services.outcome_engine import (
     ITS_COMPARISON_METHOD,
     detectability_note,
@@ -69,6 +69,7 @@ from app.services.outcome_engine import (
 )
 from app.services.outbound import build_outbound_content, outbound_sha256
 from app.services.problems import outcome_contract_changes
+from app.services.workflow import SCORING_TERM_FIELDS
 from app.services.routing import resolve_owner_route
 from app.services.signals import promote_candidate, theme_candidate_id
 from app.services.workflow import (
@@ -155,6 +156,9 @@ def build_outcome_board(
             plans=plans_by_problem.get(problem.problem_id, []),
             measurement_source=snapshot.measurement_source,
             checkpoint_kind=snapshot.checkpoint_kind,
+            plan_id=snapshot.plan_id,
+            execution_id=snapshot.execution_id,
+            evidence_grade=snapshot.evidence_grade,
         )
         if verdict == "loop_closed":
             loop_closed += 1
@@ -569,6 +573,7 @@ def build_router(
             problem.outcome_contract, updated_problem.outcome_contract
         )
         if changed:
+            _replan_after_amendment(updated_problem, changed, actor=_actor_identifier(user))
             telemetry_store.record(
                 "contract_amended",
                 entity_id=problem_id,
@@ -788,6 +793,7 @@ def build_router(
                             problem.outcome_contract, upgraded.outcome_contract
                         )
                         if changed:
+                            _replan_after_amendment(upgraded, changed, actor=decision.reviewer)
                             telemetry_store.record(
                                 "contract_amended",
                                 entity_id=problem_id,
@@ -892,6 +898,39 @@ def build_router(
 
     def _push_event(event_type: str, execution_id: str, metadata: dict) -> None:
         telemetry_store.record(event_type, entity_id=execution_id, metadata=metadata)
+
+    def _replan_after_amendment(problem: ProblemRecord, changed: dict, *, actor: str | None) -> None:
+        """A pending checkpoint is bound to the terms it was scheduled with.
+        When an amendment touches a scoring term, the problem's live
+        checkpoints are superseded and re-planned under the new revision on
+        the same clock, and the audit trail says so (measurement_replanned);
+        readings already on record are untouched."""
+        if not any(field in changed for field in SCORING_TERM_FIELDS):
+            return
+        revision = problem.outcome_contract.revision
+        try:
+            result = replan_after_amendment(
+                measurement_plan_store,
+                problem=problem,
+                note=f"superseded by contract revision {revision} (amendment)",
+            )
+        except Exception:  # noqa: BLE001 — re-planning is best-effort, the amendment stands
+            logger.exception("Re-planning after amendment failed for %s", problem.problem_id)
+            return
+        if result["superseded"] or result["kinds"]:
+            telemetry_store.record(
+                "measurement_replanned",
+                entity_id=problem.problem_id,
+                metadata={
+                    "problem_id": problem.problem_id,
+                    "revision": revision,
+                    "changed": sorted(changed),
+                    "superseded": result["superseded"],
+                    "kinds": result["kinds"],
+                    "clock": result["clock"],
+                    "actor": actor,
+                },
+            )
 
     def _schedule_after_push(
         *,
@@ -1218,6 +1257,8 @@ def build_router(
                 "execution_id": None,
                 "clock_origin": None,
                 "clock_origin_at": None,
+                "observation_start": None,
+                "observation_end": None,
             }
         )
         recorded = workflow_store.record_outcome(problem=problem, measurement=measurement)
@@ -1398,20 +1439,23 @@ def build_router(
                 now=utc_now(),
             )
             if snapshot.its is not None:
-                # Grade on the fit actually obtained: an ITS contract whose
-                # series was too sparse for segmented regression is a plain
-                # before/after delta (grade D), not an ITS (grade C). The fit
-                # can only lower the recorded grade, never raise it.
-                realised = evidence_grade(
-                    comparison_method=(
-                        snapshot.measured_comparison_method or snapshot.comparison_method
-                    ),
-                    measurement_source=snapshot.measurement_source,
+                # The read-time ITS is a LIVE, cumulative estimate over
+                # [anchor, now] on real inflow — identified separately from
+                # the checkpoint reading, which covers its fixed interval. It
+                # is graded on the fit actually obtained: C when the segmented
+                # regression was fitted, D when the series was too sparse and
+                # the engine fell back to the labelled delta. The reading's
+                # own grade (snapshot.evidence_grade) is the grade of its
+                # design and is not moved by the live estimate.
+                snapshot.its["evidence_grade"] = evidence_grade(
+                    comparison_method=ITS_COMPARISON_METHOD,
+                    measurement_source="instrumented",
                     realised_method=snapshot.its.get("method"),
                 )
-                snapshot.its["evidence_grade"] = realised
-                if snapshot.evidence_grade is None or realised > snapshot.evidence_grade:
-                    snapshot.evidence_grade = realised
+                snapshot.its["scope"] = (
+                    "live cumulative read-time estimate over [clock origin, now] on real"
+                    " inflow; not a checkpoint reading"
+                )
         plans = [
             plan
             for plan in measurement_plan_store.list_plans()
@@ -1424,6 +1468,9 @@ def build_router(
             checkpoint_kind=snapshot.checkpoint_kind,
             measurement_origin=snapshot.measurement_origin,
             measurement_origin_at=snapshot.measurement_origin_at,
+            plan_id=snapshot.plan_id,
+            execution_id=snapshot.execution_id,
+            evidence_grade=snapshot.evidence_grade,
         )
         return snapshot
 

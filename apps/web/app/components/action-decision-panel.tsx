@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { hasRole } from "../../lib/auth-client";
-import { getContractProposal, getWorkflowState, submitApproval,
+import { getContractProposal, getOutboundPreview, getWorkflowState, submitApproval,
+  recordImplementation,
   retryExecution
 } from "../../lib/client-api";
 import { currentUserEmail } from "../../lib/auth-client";
@@ -12,9 +13,30 @@ import type {
   ActionProposal,
   ActionProposalChange,
   ApprovalDecisionStatus,
+  ExecutionRecord,
+  OutboundPreview,
   OutcomeContractProposalPreview,
   WorkflowState
 } from "../../lib/types";
+
+// Executions whose fix can be attested: the record left CLARA (pushed) or the
+// draft itself is the deliverable. A failed push has nothing to implement.
+const IMPLEMENTABLE: ReadonlySet<ExecutionRecord["status"]> = new Set(["pushed", "draft_created", "completed"]);
+
+function localDateTimeValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// Parse the datetime-local value into an ISO instant; null when it is not a
+// valid instant or lies in the future (the API refuses both as well).
+export function implementationInstant(value: string, now: Date = new Date()): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  if (parsed.getTime() > now.getTime() + 5 * 60 * 1000) return null;
+  return parsed.toISOString();
+}
 
 type DecisionState = {
   state: "loading" | "idle" | "saving" | "saved" | "error";
@@ -91,6 +113,16 @@ export function ActionDecisionPanel({
   }, []);
   const [acceptContract, setAcceptContract] = useState(true);
   const [retrying, setRetrying] = useState(false);
+  // The outbound content the reviewer is looking at: its hash travels with
+  // the decision so the API refuses to sign text that changed in between.
+  const [preview, setPreview] = useState<OutboundPreview | null>(null);
+  const [implementing, setImplementing] = useState(false);
+  const [implementedAtInput, setImplementedAtInput] = useState(() => localDateTimeValue(new Date()));
+  const [implementationNote, setImplementationNote] = useState("");
+  const [implementationState, setImplementationState] = useState<{ state: "idle" | "saving" | "saved" | "error"; message: string }>({
+    state: "idle",
+    message: ""
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -121,6 +153,14 @@ export function ActionDecisionPanel({
       })
       .catch(() => {
         if (!cancelled) setContractProposal(null);
+      });
+
+    getOutboundPreview(problemId, action.action_id)
+      .then((shown) => {
+        if (!cancelled) setPreview(shown);
+      })
+      .catch(() => {
+        if (!cancelled) setPreview(null);
       });
 
     return () => {
@@ -155,7 +195,8 @@ export function ActionDecisionPanel({
         decision,
         reviewer: currentUserEmail() ?? "local-user",
         note: note.trim() || `Decision recorded in the app (${decision.replaceAll("_", " ")}).`,
-        accept_proposed_contract: acceptContract
+        accept_proposed_contract: acceptContract,
+        expected_outbound_sha256: preview?.sha256 ?? null
       });
       const workflow = await getWorkflowState(problemId);
 
@@ -165,11 +206,45 @@ export function ActionDecisionPanel({
         workflow
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not record the decision.";
+      const contentChanged = /changed since it was displayed/i.test(message);
+      if (contentChanged) {
+        // Refresh what the reviewer is looking at; the next decision signs
+        // the current text.
+        getOutboundPreview(problemId, action.action_id).then(setPreview).catch(() => setPreview(null));
+      }
       setDecisionState((current) => ({
         ...current,
         state: "error",
-        message: error instanceof Error ? error.message : "Could not record the decision."
+        message: contentChanged ? t.actionsPage.decisionContentChanged : message
       }));
+    }
+  }
+
+  async function saveImplementation(execution: ExecutionRecord) {
+    const instant = implementationInstant(implementedAtInput);
+    if (instant === null) {
+      setImplementationState({ state: "error", message: t.actionsPage.implementationInvalid });
+      return;
+    }
+    setImplementationState({ state: "saving", message: "" });
+    try {
+      const updated = await recordImplementation(problemId, execution.execution_id, {
+        implemented_at: instant,
+        note: implementationNote.trim() || null
+      });
+      const workflow = await getWorkflowState(problemId);
+      setDecisionState((current) => ({ ...current, workflow }));
+      setImplementing(false);
+      setImplementationState({
+        state: "saved",
+        message: t.actionsPage.implementationRecorded.replace("{at}", (updated.implemented_at ?? instant).slice(0, 16).replace("T", " "))
+      });
+    } catch (error) {
+      setImplementationState({
+        state: "error",
+        message: error instanceof Error ? error.message : "Could not record the implementation."
+      });
     }
   }
 
@@ -250,7 +325,66 @@ export function ActionDecisionPanel({
             Execution: {matchingExecution.status.replaceAll("_", " ")} in{" "}
             {matchingExecution.destination}
             {matchingExecution.external_ref ? ` · ${t.actionsPage.externalRef}: ${matchingExecution.external_ref}` : ""}
+            {matchingExecution.dispatched_at ? ` · ${t.actionsPage.dispatchedOn} ${matchingExecution.dispatched_at.slice(0, 16).replace("T", " ")}` : ""}
+            {matchingExecution.implemented_at ? ` · ${t.actionsPage.implementedOn} ${matchingExecution.implemented_at.slice(0, 16).replace("T", " ")}` : ""}
+            {matchingExecution.dispatch_claimed_at ? ` · ${t.actionsPage.beingDispatched}` : ""}
           </p>
+          {matchingExecution.implementation_note ? (
+            <p className="text-xs text-muted-foreground">{matchingExecution.implementation_note}</p>
+          ) : null}
+          {canDecide && IMPLEMENTABLE.has(matchingExecution.status) ? (
+            <div className="mt-1 text-xs">
+              {implementing ? (
+                <form
+                  className="space-y-1"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void saveImplementation(matchingExecution);
+                  }}
+                >
+                  <p className="text-muted-foreground">{t.actionsPage.implementationHint}</p>
+                  <label className="block">
+                    {t.actionsPage.implementedAt}
+                    <input
+                      type="datetime-local"
+                      required
+                      max={localDateTimeValue(new Date())}
+                      value={implementedAtInput}
+                      onChange={(event) => setImplementedAtInput(event.target.value)}
+                      className="ml-2 rounded-md border bg-background px-2 py-1"
+                    />
+                  </label>
+                  <label className="block">
+                    {t.actionsPage.implementationNote}
+                    <input
+                      type="text"
+                      maxLength={300}
+                      value={implementationNote}
+                      onChange={(event) => setImplementationNote(event.target.value)}
+                      className="ml-2 w-64 rounded-md border bg-background px-2 py-1"
+                    />
+                  </label>
+                  <div className="flex gap-2 pt-1">
+                    <button type="submit" disabled={implementationState.state === "saving"}>
+                      {implementationState.state === "saving" ? t.actionsPage.savingImplementation : t.actionsPage.saveImplementation}
+                    </button>
+                    <button type="button" onClick={() => setImplementing(false)}>
+                      {t.common.cancel}
+                    </button>
+                  </div>
+                </form>
+              ) : matchingExecution.implemented_at ? null : (
+                <button type="button" onClick={() => setImplementing(true)}>
+                  {t.actionsPage.recordImplementation}
+                </button>
+              )}
+              {implementationState.message ? (
+                <p className={implementationState.state === "error" ? "text-destructive" : "text-muted-foreground"}>
+                  {implementationState.message}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {matchingExecution.status === "push_failed" ? (
             <div className="mt-1 flex flex-wrap items-center gap-2">
               {matchingExecution.detail ? (

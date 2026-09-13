@@ -51,6 +51,8 @@ OUTCOME_KEYS = {
     "contract_snapshot",
     "clock_origin",
     "clock_origin_at",
+    "observation_start",
+    "observation_end",
 }
 
 
@@ -212,7 +214,9 @@ def test_plpgsql_tick_binds_reading_and_certifies_like_sqlite(stores) -> None:
     assert window_payload["clock_origin_at"] == _iso(DISPATCHED_AT)
     assert window_payload["contract_revision"] == problem.outcome_contract.revision
     assert window_payload["contract_snapshot"]["success_threshold"] == problem.outcome_contract.success_threshold
-    assert "since dispatch (" in window_payload["notes"]
+    assert "clock from dispatch" in window_payload["notes"] and "in the fixed interval" in window_payload["notes"]
+    assert window_payload["observation_start"] == _iso(DISPATCHED_AT)
+    assert window_payload["observation_end"] == _iso(DISPATCHED_AT + timedelta(days=problem.outcome_contract.measurement_window_days))
     window_plan = next(p for p in stores["plans"].list_plans() if p["kind"] == "window")
     assert window_payload["plan_id"] == window_plan["id"]
     assert window_plan["status"] == "done"
@@ -310,8 +314,11 @@ def test_python_tick_writes_the_same_payload_keys_as_plpgsql(stores) -> None:
     assert by_kind["t7"]["clock_origin_at"] == by_kind["window"]["clock_origin_at"] == _iso(DISPATCHED_AT)
     assert by_kind["t7"]["contract_revision"] == by_kind["window"]["contract_revision"]
     assert set(by_kind["t7"]["contract_snapshot"]) == set(by_kind["window"]["contract_snapshot"])
-    assert "since dispatch (" in by_kind["t7"]["notes"]
-    assert "since dispatch (" in by_kind["window"]["notes"]
+    assert "clock from dispatch" in by_kind["t7"]["notes"] and "in the fixed interval" in by_kind["t7"]["notes"]
+    assert "clock from dispatch" in by_kind["window"]["notes"] and "in the fixed interval" in by_kind["window"]["notes"]
+    # Both ticks record the same fixed interval for the same plan kinds.
+    assert by_kind["t7"]["observation_end"] == _iso(DISPATCHED_AT + timedelta(days=7))
+    assert by_kind["window"]["observation_end"] == _iso(DISPATCHED_AT + timedelta(days=problem.outcome_contract.measurement_window_days))
     plans = {plan["kind"]: plan for plan in stores["plans"].list_plans()}
     assert by_kind["t7"]["plan_id"] == plans["t7"]["id"]
     assert by_kind["window"]["plan_id"] == plans["window"]["id"]
@@ -334,13 +341,17 @@ def test_plpgsql_followup_window_derives_from_due_at(stores) -> None:
     result = stores["plans"].run_due(_iso(NOW))
     assert result["measured"] == 3
     followup = next(p for p in _outcome_payloads(problem.problem_id) if p["checkpoint_kind"] == "followup")
-    # [T+28, now] holds exactly the post-signal (20 days ago); the amended
-    # window [T+60, now] lies in the future and would have read nothing.
+    # The plan's fixed interval [T+28, T+58] holds exactly the post-signal (20
+    # days ago); an amendment made behind the API (no re-planning) neither
+    # moves the interval nor the terms: the reading is scored under the
+    # frozen revision 1 with the 28-day window it was scheduled with.
     assert "1 matching signals" in followup["notes"]
-    assert "in the month after the measurement window closed" in followup["notes"]
-    assert float(followup["observed_value"]) == pytest.approx(1 / 31, abs=1e-4)
-    assert followup["contract_revision"] == 2
-    assert followup["contract_snapshot"]["measurement_window_days"] == 60
+    assert "in the fixed interval" in followup["notes"]
+    assert float(followup["observed_value"]) == pytest.approx(1 / 30, abs=1e-4)
+    assert followup["contract_revision"] == 1
+    assert followup["contract_snapshot"]["measurement_window_days"] == 28
+    assert followup["observation_start"] == _iso(executed + timedelta(days=28))
+    assert followup["observation_end"] == _iso(executed + timedelta(days=58))
 
 
 def test_plpgsql_reads_a_missing_contract_revision_as_one(stores) -> None:
