@@ -17,8 +17,9 @@ became a regression test). Nothing below claims to have read the bundle.
 Environment limits that shape the evidence: outbound HTTPS from this environment goes through a
 policy proxy that refuses `api.clara.odradekai.com` (HTTP 403 from the proxy for `/health`,
 `/ready`, `/ready/details`), so live verification of production rests on the GitHub Actions
-uptime logs, which are read-only and dated. A scratch PostgreSQL 16 (`clara_test`, migrations
-001–016 applied) is available for parity tests. No model was called; no participant data, no
+uptime logs, which are read-only and dated. A scratch PostgreSQL 16 (`clara_test`; rebuilt during this
+response from an empty database by `scripts/apply_migrations.py` with `postgresql-16-pgvector` 0.6.0
+installed from the distribution package, migrations 001–017) is available for parity tests. No model was called; no participant data, no
 production mutation, no connector action.
 
 ## 1. Disposition table (written before any edit)
@@ -64,19 +65,102 @@ desired invariant (section 4 names them).
 
 ## 3. Work packages, commits and acceptance results
 
-Filled in as the work landed; see section 4 for the validation record and section 5 for the
-source-to-claim ledger.
+Commits on `claude/relaxed-babbage-of6lum` after `a5bd38d`, in order; each is reviewable on its own.
 
-_(to be completed)_
+| Commit | Package | What landed | Acceptance evidence |
+|---|---|---|---|
+| `d29b8b6` | WP1 (F1) | `OutboundContent` frozen on the approval (`outbound_snapshot`, `outbound_sha256`, preview route `GET /problems/{id}/actions/{id}/outbound-preview`); `authorize_dispatch` refuses `problem_changed_since_approval`, `approval_unverifiable` (a pre-binding approval attests but cannot dispatch) and `dispatch_in_progress`; `expected_outbound_sha256` on decisions (stale hash → 409, nothing recorded); per-problem `problem_lock` on memory/SQLite and `pg_advisory_xact_lock` on PostgreSQL around problem/action edits and approval inserts, with the guard re-run inside the transaction; `claim_dispatch`/`release_dispatch` compare-and-set with a 300 s TTL on all three stores; the push sends the frozen content; a decision recorded while the connector was writing is annotated on the execution and emitted as `action_pushed_during_revocation`. | `test_dispatch_binding.py` (10 tests: title changed behind the API refuses the retry on memory and SQLite; edit and approval serialised; frozen content is what dispatch sends; stale expected hash refuses the decision; four-eyes reviewers must sign the same content; pre-binding approval covers the attestation only; snapshots persist; a live claim refuses the retry and an expired one is taken over; the claim is a compare-and-set; rejection during the connector call annotated and reported). `test_pg_parity_governance.py` (5 tests on PostgreSQL, two store instances: committed rejection beats a cached snapshot; DB compare-and-set claim; edit committed while a decision waited → 409; decision first → edit guard refuses; JSONB round trip). |
+| `bac90c3` | — | Sections 1–2 of this response (dispositions before any edit; reproduction log). | — |
+| `be86add` | WP2 (F2, F3, F4, UI) | Plans freeze `contract_snapshot` and `observation_start`/`observation_end` at scheduling; both ticks score the frozen terms over the fixed interval (`plan_scoring_terms`, `plan_observation_interval`; legacy plans without frozen terms measured only under an unchanged revision, else `blocked`); `replan_after_amendment` supersedes and reschedules pending checkpoints on the same clock (`measurement_replanned`); latest-reading rule `outcome_order_key`; explicit `DESIGN_GRADES` and realised-design `evidence_grade`; `_certifying_plan` binding; verdict "no improvement observed" with attribution stated separately; live ITS estimate graded on its fit and labelled read-time; migration `017_measurement_intervals.sql` (016 untouched); web: implementation-recording form, preview hash on decisions, interval and revision on the checkpoints panel. | `test_measurement_intervals.py` (11 tests: late worker = punctual worker on memory and SQLite; interval and terms on the plan; three overdue kinds in one tick; latest by interval not processing order; late T+7 blocked; theme enrichment inside the interval only; guardrails bounded; amendment re-plans; guardrail-only amendments do not; frozen terms behind the API; legacy plan blocked then measured when the link holds), `test_evidence_grades.py` (7), `test_implementation_record_api.py` (3 tests, 5 cases: viewer 403 / editor records; malformed, future and pre-approval instants 422 and record nothing; pre-dispatch refused and a created ticket never counts), updated `test_measurement_semantics.py`, `test_dispatch_authorization_gaps.py`, `test_loop_closure.py`, `test_review_phase_c2.py`, `test_works_council_walker.py`; `test_pg_parity_measurement.py` (8 on PostgreSQL, payload keys incl. the interval). |
+| `3e86f66` | WP3 (F5, F6, F7, F9) | `compare_runs.py`: fixed column sets, a row for every run and task (`n_expected`, `n_valid`, `n_invalid`, `coverage`, end-to-end accuracy 0.0, quality metrics empty) and for every absent pair (`n_pairs = 0`), `_write` always writes the header; `run_eval.py`: unanswered-predictor equity rows; `run_live.py`: `config.inputs` (experimental: model, temperature, batch size, effective system-prompt hash via `build_system_prompt`, tool-schema hash, ordered and order-free exemplar hashes, flags; nuisance: dataset and split hashes, harness commit, dirty state, harness source hash, Python version; rejected candidates carry it in the ledger row), `inputs_changed`, guards with `scope`, per-split eligible/flagged counts and `held_out_contributes`; `LOOP_PROMPT.md`: the held-out split is a safety-validation set used in selection, replication is not alpha control, the loop is exploratory; `survey_analysis.py`: counts only below n = 10, `DESCRIPTIVE ONLY (n < 40)`, verdicts from n = 40 per usable denominator with corroboration at n ≥ 40; `npm run check` now runs `thesis:test` and the manuscript consistency checks. | `thesis/evaluation/test_compare_runs_cli.py` (cases a and b through the real CLI, stale files never survive), `thesis/evaluation/test_survey_analysis.py` (n = 9/10/39/40, per-hypothesis denominators, corroboration at n < 40 and failed, fragile only at the verdict tier), `test_run_live_reporting.py::TestInputFingerprint` and `::test_guard_scope_names_the_held_out_split_as_a_safety_validation_set`, `test_eval_harness.py`. |
+| `140a6b5` | WP5 (CI, release, `/ready`) | `GET /health` carries the build identity; `GET /ready` adds `measurement_schema` (never a 503 on its own); `/ready/details` names expected vs found function version, missing columns, tick and action; `measurement_schema_state`, `measurement_compatibility`; Dockerfile `GIT_COMMIT` build arg; `scripts/apply_migrations.py` (documented order, API boot DDL between 008 and 009, one transaction per file, pgvector check); `test_pg_migration_upgrade.py`; CI job `postgres-parity` on `pgvector/pgvector:pg16`; smoke prints the served build and the schema state; DEPLOY.md release step, 014/016/017 in the migration list, observed `/ready` state. | `test_readiness_diagnostics.py` (16 cases: compatibility matrix, build identity, public `/ready` shape, old function under a new app reported not evicted, Python fallback, database failure → 503 with the error class only, catalogue reads), `test_pg_migration_upgrade.py` (2 on PostgreSQL: the four-step upgrade; the script's plan and its refusal of unlisted files), fresh-database chain on the scratch server (§4). |
+| `aab9aaa` | WP4 (F8, F9, F7 wording, F1–F4 sentences, Aug/Sep contrast) | Manuscript, ledger, deck source, board spec, provenance record and notes reworded; `defense_deck.pptx`, `board/canvas.html` and `build/thesis.docx` regenerated; six new consistency checks. | `test_manuscript_consistency.py` 15/15 after the re-point below; deck fit check; rendered-text inspection (§4). |
+| this commit | — | Claim ledger re-pointed (53 citation groups) at the commits that last touched each artefact; sections 3–6 of this response. | `test_manuscript_consistency.py` 15/15. |
+
+Probe → regression test (the probes of §2 were deleted once each became a test): F1 →
+`test_dispatch_binding.py::test_title_changed_behind_the_api_after_approval_refuses_the_retry`
+and `::test_edit_and_approval_of_one_problem_are_serialised`; F2 →
+`test_measurement_intervals.py::test_reading_is_scored_under_the_plans_frozen_terms_when_the_contract_changed_behind_the_api`;
+F3 → `::test_late_worker_reads_the_same_interval_as_a_punctual_one`; F4 →
+`test_evidence_grades.py::test_instrumented_grades_follow_the_explicit_design_table`,
+`::test_no_grade_a_or_b_is_reachable_today`,
+`::test_legacy_readings_have_unknown_provenance_and_manual_readings_never_certify`; F5 →
+`thesis/evaluation/test_compare_runs_cli.py`; F6 → `test_run_live_reporting.py::TestInputFingerprint`;
+F7 → `::test_guard_scope_names_the_held_out_split_as_a_safety_validation_set`; F9 →
+`thesis/evaluation/test_survey_analysis.py::test_tiers_at_9_10_39_and_40`; `/ready` →
+`test_readiness_diagnostics.py` and `test_pg_migration_upgrade.py`.
 
 ## 4. Validation record
 
-_(to be completed)_
+Exact invocations and the outputs they gave, at the state named. Nothing here ran a model, read or
+wrote participant data, wrote to production or called a connector.
+
+| Check | State | Command | Result |
+|---|---|---|---|
+| API lint | `140a6b5` and final HEAD | `cd apps/api && python3 -m ruff check --select F app scripts ../../scripts` | `All checks passed!` |
+| API tests | `140a6b5` (no API code changed after it) | `npm run api:test` | `1085 passed, 15 skipped, 46 warnings in 216.87s`; the 15 skipped are the three PostgreSQL files without `CLARA_TEST_DATABASE_URL` |
+| Migration chain, fresh database | `140a6b5` | `psql … -c "DROP DATABASE clara_test WITH (FORCE)" -c "CREATE DATABASE clara_test"; python3 scripts/apply_migrations.py postgresql://clara@127.0.0.1:54329/clara_test` | plan `001, 002, 004, 003, 005, 006, 007, 008, API boot DDL, 009, 010, 011, 013, 014, 015, 016, 017, 012`; 011 warns that pg_cron is unavailable (tick stays in-process); final line `measurement schema: function_version=17 tick=plpgsql columns_missing=[]`. A first attempt with the API DDL before 001 failed at 004 (`function public.is_current_workspace(bigint) does not exist`), which is why the DDL sits between 008 and 009 |
+| PostgreSQL parity and governance | `140a6b5`, scratch server | `CLARA_TEST_DATABASE_URL=… python3 -m pytest -q app/tests/test_pg_parity_measurement.py app/tests/test_pg_parity_governance.py` | `13 passed in 2.30s` |
+| PostgreSQL upgrade | `140a6b5`, scratch server | `… python3 -m pytest -q app/tests/test_pg_migration_upgrade.py` | `2 passed in 1.41s` (the test creates and drops `clara_upgrade_<hex>` on the server) |
+| Thesis checks | final HEAD | `npm run thesis:test` | every script passes; `test_manuscript_consistency.py`: 15 ok (before the re-point, `test_ledger_commits_are_the_last_to_touch_each_artefact` listed the citations WP1–WP5 had made stale) |
+| Web lint | `aab9aaa` (web unchanged since `be86add`) | `npm run web:lint` | `0 errors, 2 warnings` — both pre-existing `@next/next/no-img-element` warnings in `apps/web/app/(public)/landing.tsx`, a file no commit here touches |
+| Web build | `aab9aaa` | `npm run web:build` | exit 0, 39 static pages |
+| Deck | `aab9aaa` | `node thesis/defense/make_deck.js && node thesis/defense/check_fit.js` | `written`; `5 box(es) estimated to overflow` on slides 24 (1.64×, 1.04×), 6, 8 and 2 — the five that predate the reviews; the first WP4 wording added a sixth (slide 16, 1.02×) and the bullet was shortened until the check returned to five |
+| Board | `aab9aaa` | `python3 thesis/board/build_canvas.py` | `wrote ../board/canvas.html`; the new wording occurs once in the rendered canvas |
+| Manuscript | `aab9aaa` | `PANDOC=… bash thesis/build_docx.sh`; `pandoc thesis/build/thesis.docx -t plain` | `built: 2.0M thesis.docx`. Rendered text: "independent human provenance unverified" ×3 and "… is unverified" ×4, "Fill blind risk labels" ×1, "no improvement observed" ×1, "prompt/pipeline × run date" ×1, "DESCRIPTIVE ONLY (n < 40)" ×1, "safety-validation set" ×2, "explicit table of methods" ×1; 0 for "the one human check", "only human check", "blind human rating", "on the owner's attestation", "blind second rating", "blind double-labelling", "the pipeline barely moves", "never optimised against", "writes a support label from n = 10"; "fix did not land" ×1, in the new §4 sentence that says the platform does not say so |
+| Deck XML | `aab9aaa` | `unzip defense_deck.pptx; grep` over `ppt/slides/*.xml` and `ppt/notesSlides/*.xml` | "Second-rating agreement" ×1, "provenance unverified" ×3, "do not replace alpha control" ×1; 0 for "Inter-annotator", "on attestation", "blind second", "three consecutive significant runs", "AI exposure unrecorded"; 26 slides |
+| Live production | — | `scripts/live_smoke.py` cannot reach `api.clara.odradekai.com` from here (proxy 403) | The state stands as of uptime run 869 (§2): `/ready → 404`, everything else green. Not re-verified |
 
 ## 5. Source-to-claim ledger
 
-_(to be completed)_
+| Claim made in this response | Source | Evidence type |
+|---|---|---|
+| Production answers `/ready` with a FastAPI-shaped 404 and `/health` with 200 (13 Sep 2026 06:32 UTC) | GitHub Actions uptime run 869, job 103685774369 | CI log, observed, dated |
+| The deployed commit cannot be identified | the same log: the deployed `/health` body carries no version | inference from the log; resolved by the next build that carries `GIT_COMMIT` |
+| The full migration chain applies on an empty PostgreSQL 16 with pgvector and `clara_measurement_function_version()` returns 17 | `scripts/apply_migrations.py` output on the scratch server (§4) | observed on a disposable database; not production |
+| The API boot DDL must run between 008 and 009 | the failed first attempt (`is_current_workspace(bigint)`) and the successful run (§4) | observed |
+| `1085 passed, 15 skipped`; `13 passed`; `2 passed`; consistency `15 ok` | pytest and script output (§4) | observed |
+| F8: the filled sample and its κ file were committed together 29 minutes after the rubric, under the author's git identity; nothing committed identifies a rater | `git log` (`c2d6f57`, `24d56fc`, `5ee0c35`), `PROVENANCE_kappa.md` §2 | repository evidence |
+| F8: an AI-assistant task record "Fill blind risk labels" (`01a077a7-b101-78c0-accc-97f813223a23`) holds 40 labels identical to the file | the follow-up review of 13 Sep 2026 | reviewer-reported; not committed; not verifiable here |
+| F8: a second person produced the labels | the owner's statement of 12 Sep 2026 ("another rater") | attestation |
+| F8: κ = 0.55 unweighted (0.38–0.72), 0.70 linear-weighted (0.56–0.82), 27/40, 38/40 | `thesis/evaluation/results/kappa_risk.json`, `kappa_sample.py score` | reproducible from committed files; unchanged |
+| The September generic repeats agree with the August generic run on 85.8–86.8% of risk labels | `thesis/evaluation/results/compare_runs_agreement.csv`, rows `glm_generic_run0_vs_glm_generic_run{1,2,3}` | committed results file; no rerun |
+| `survey_analysis.py` issued `CONFIRMED` from n = 10 before `3e86f66` | probe output (§2) against `MIN_N = 10` | observed |
+| Five deck overflows predate the reviews; none new | `check_fit.js` output before and after the bullet change | observed (the check is a heuristic estimate, not a renderer) |
+| The two web lint warnings are pre-existing | eslint output naming `landing.tsx:153` and `:236`; `git log` shows no commit here touched the file | observed |
+| Nothing in this response reports a human validation, a new model-evaluation result or a participant finding | — | by construction: no model call, no participant data, no production write |
 
 ## 6. Remaining external dependencies
 
-_(to be completed)_
+1. **Production release (owner).** Apply `017_measurement_intervals.sql` in the Supabase SQL editor,
+   rebuild the image with `--build-arg GIT_COMMIT=$(git rev-parse --short HEAD)`, run
+   `scripts/live_smoke.py`, read `/ready/details` (DEPLOY.md release step; written, not performed).
+   Until then: `/ready` keeps answering 404; the pg_cron tick on production runs the 016 function,
+   so any checkpoint that falls due there is read open-ended under the current contract terms, and
+   the plans the new API writes (frozen terms, fixed intervals) are ignored by that tick. The API
+   self-heals the plan columns on boot either way, and `GET /ready` will say `incompatible` until
+   017 is applied.
+2. **A rejection that arrives after the external call began (F1).** The dispatch claim is taken
+   at the store before authorisation, the authorisation is re-checked under the claim, and the
+   connector call itself cannot be interrupted. If a rejection commits after the call started, the
+   external record exists: the execution is annotated `WARNING: <reason> recorded during dispatch …
+   needs manual withdrawal`, `action_pushed_during_revocation` telemetry is emitted, and the
+   execution is never retried. No automatic withdrawal is attempted, because a connector-side
+   delete would be a second unreviewed external action. Test:
+   `test_dispatch_binding.py::test_rejection_recorded_during_the_connector_call_is_annotated_and_reported`.
+3. **CI.** `.github/workflows/ci.yml` runs on pull requests and on pushes to `main`; a push to this
+   branch alone does not run it, so the first `postgres-parity` run is pending the pull request.
+   Its service image `pgvector/pgvector:pg16` is public; a pull failure fails the job at service
+   start, visibly.
+4. **F8 provenance (owner).** Either the rater's role, hand-over and return dates and AI-access
+   statement (`PROVENANCE_kappa.md` §6), or confirmation that the task record produced the file
+   (then the cross-model wording of `review-2026-09-12-response-notes.md`). Until then every
+   document describes the rating as second-rating agreement with independent human provenance
+   unverified.
+5. **Practitioner study.** Survey and interview data remain to be collected; the reporting tiers
+   are now enforced by the script as well as pre-registered.
+6. **Live concurrency.** The advisory lock and the dispatch claim are exercised by two store
+   instances in one process (threads for the lock); a multi-worker deployment test is not possible
+   here.
+7. **Environment.** pgvector on the scratch server was installed from the distribution package
+   during this response; the environment is ephemeral, and CI carries the reproducible version.
