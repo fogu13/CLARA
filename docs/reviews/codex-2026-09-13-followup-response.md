@@ -164,3 +164,13 @@ wrote participant data, wrote to production or called a connector.
    here.
 7. **Environment.** pgvector on the scratch server was installed from the distribution package
    during this response; the environment is ephemeral, and CI carries the reproducible version.
+
+## 7. Second pass, same day: the manuscript against the code, and as research
+
+After the response above the owner asked whether the manuscript reflects the code changes and for a review of the thesis as research. Dispositions and evidence for that pass are in `thesis/CLAIM_LEDGER.md` section H; in short:
+
+- **Stale passages.** Nine passages that the code changes had left behind or that contradicted each other were corrected (ledger H3); Appendix E was re-extracted for migrations 016/017.
+- **Multiple comparisons.** The paired McNemar tests were reported unadjusted. `thesis/evaluation/multiple_comparisons.py` applies the Holm step-down within two pre-defined families per task over the committed results (no rerun): the headline sentiment lead reads p = 0.087 adjusted (0.029 unadjusted) and is now reported as a replicated, exploratory lead in §5A.3, §5A.6, §6.4, §7 and the deck (H1).
+- **Length and register.** Dated provenance moved out of the chapters into Appendix G (2,117 words); repeated interpretation passages in Chapters 4–7 were compressed; the abstract was rewritten (293 words); a capability table replaced the prose-only competitor comparison. Main chapters: 45,330 → 43,804 words. The remaining length is content whose cutting is the author's call (H2).
+- **Tooling for the studies that need humans or paid runs** (H5), each tested on synthetic data, none run on the corpus here: `annotation_kit.py` (two-rater blind labelling, agreement, adjudication, re-score of the committed predictions against a human gold standard), `retrospective_its.py` (the shipped estimator over real dated inflow around a known event), `run_matrix.py` (the matched 2×2 rerun), `predict_embedding.py` (an embedding-classifier baseline). `package.json` `thesis:test` runs their tests.
+- **Not done, because it cannot be done from here:** the practitioner interviews and survey, the human annotation study, the matched model rerun, the embedding baseline on the corpus, a self-hosted model run, and the retrospective ITS on real inflow. The remaining-actions list in the ledger names each with its command.
