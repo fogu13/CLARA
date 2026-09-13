@@ -44,6 +44,7 @@ from app.services.problems import ProblemStore
 from app.services.seed import load_seed_problems
 from app.services.signals import SignalStore
 from app.services.telemetry import SQLiteTelemetryStore
+from app.services.outbound import build_outbound_content, outbound_sha256
 from app.services.workflow import (
     WorkflowStore,
     action_snapshot,
@@ -62,6 +63,15 @@ JIRA_CONFIG = {
 
 def _iso(moment: datetime) -> str:
     return moment.isoformat().replace("+00:00", "Z")
+
+
+def _seed_outbound():
+    """The outbound content of the seed action PRB-108/ACT-501, which every
+    hand-built approval below signs (13 Sep 2026, F1: an approval without
+    it cannot dispatch)."""
+    problem = next(p for p in load_seed_problems() if p.problem_id == "PRB-108")
+    content = build_outbound_content(problem, find_action(problem, "ACT-501"))
+    return {"outbound_snapshot": content, "outbound_sha256": outbound_sha256(content)}
 
 
 class _FakeJira:
@@ -229,8 +239,8 @@ def test_idempotent_reuse_is_limited_to_the_authorising_run_and_copies_its_clock
     snap = action_snapshot(action)
     store._approvals.extend(
         [
-            ApprovalRecord(decision_id="DEC-0001", problem_id="PRB-108", action_id="ACT-501", decision="approved", reviewer="a", created_at="2026-07-01T00:00:00Z", action_snapshot=snap, execution_id=earlier.execution_id),
-            ApprovalRecord(decision_id="DEC-0002", problem_id="PRB-108", action_id="ACT-501", decision="approved", reviewer="b", created_at="2026-07-01T00:00:01Z", action_snapshot=snap, execution_id=current.execution_id),
+            ApprovalRecord(decision_id="DEC-0001", problem_id="PRB-108", action_id="ACT-501", decision="approved", reviewer="a", created_at="2026-07-01T00:00:00Z", action_snapshot=snap, **_seed_outbound(), execution_id=earlier.execution_id),
+            ApprovalRecord(decision_id="DEC-0002", problem_id="PRB-108", action_id="ACT-501", decision="approved", reviewer="b", created_at="2026-07-01T00:00:01Z", action_snapshot=snap, **_seed_outbound(), execution_id=current.execution_id),
         ]
     )
 
@@ -507,7 +517,7 @@ def test_recheck_refuses_when_the_store_changes_between_calls(monkeypatch: pytes
     )
     approved = ApprovalRecord(
         decision_id="DEC-0001", problem_id="PRB-108", action_id="ACT-501", decision="approved",
-        reviewer="alice", created_at="2026-07-01T00:00:00Z", action_snapshot=action_snapshot(action),
+        reviewer="alice", created_at="2026-07-01T00:00:00Z", action_snapshot=action_snapshot(action), **_seed_outbound(),
         execution_id=execution.execution_id,
     )
     rejected = ApprovalRecord(
@@ -552,7 +562,7 @@ def test_decisions_are_ordered_by_numeric_suffix_not_as_strings() -> None:
     stamp = "2026-07-01T00:00:00+00:00"
     approved = ApprovalRecord(
         decision_id="DEC-9999", problem_id="PRB-108", action_id="ACT-501", decision="approved",
-        reviewer="alice", created_at=stamp, action_snapshot=action_snapshot(action), execution_id="EXE-0001",
+        reviewer="alice", created_at=stamp, action_snapshot=action_snapshot(action), **_seed_outbound(), execution_id="EXE-0001",
     )
     rejected = ApprovalRecord(
         decision_id="DEC-10000", problem_id="PRB-108", action_id="ACT-501", decision="rejected",
@@ -594,7 +604,7 @@ def test_a_later_rejection_with_an_earlier_clock_still_revokes() -> None:
     approved = ApprovalRecord(
         decision_id="DEC-0001", problem_id="PRB-108", action_id="ACT-501",
         decision=ApprovalDecisionStatus.approved,
-        reviewer="alice", created_at="2026-07-01T00:00:05Z", action_snapshot=snapshot,
+        reviewer="alice", created_at="2026-07-01T00:00:05Z", action_snapshot=snapshot, **_seed_outbound(),
         execution_id="EXE-0001",
     )
     for skewed_at in ("2026-07-01T00:00:03Z", "2026-07-01T00:00:05.500000Z"):

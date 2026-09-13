@@ -33,6 +33,11 @@ class FakePostgresConnection:
     def fetchall(self):
         return self.rows
 
+    def fetchone(self):
+        # record_approval reads the stored problem under the advisory lock;
+        # the fake holds workflow rows only, so there is no problem row.
+        return None
+
 
 def test_postgres_url_normalization_accepts_supabase_postgres_scheme() -> None:
     assert normalize_database_url("postgres://user:pass@host:5432/postgres") == (
@@ -151,7 +156,7 @@ def test_postgres_workflow_loads_approval_with_action_diff() -> None:
     store = PostgresWorkflowStore.__new__(PostgresWorkflowStore)
     WorkflowStore.__init__(store)
     store._connect = lambda: FakePostgresConnection([])
-    store._save_workflow_record = lambda *record: saved_records.append(record)
+    store._save_workflow_record = lambda *record, **_kwargs: saved_records.append(record)
 
     store.record_approval(
         problem=problem,
@@ -191,7 +196,7 @@ def test_postgres_workflow_records_outcome_without_list_state() -> None:
     WorkflowStore.__init__(store)
     # Refresh-on-read (#23) reloads from the DB on every op, so the fake must
     # serve back what was saved — an empty fake would erase in-memory state.
-    store._save_workflow_record = lambda *record: saved_records.append(record)
+    store._save_workflow_record = lambda *record, **_kwargs: saved_records.append(record)
     store._connect = lambda: FakePostgresConnection(
         [{"record_type": r[0], "payload": _model_payload(r[3])} for r in saved_records]
     )
@@ -241,7 +246,7 @@ def test_postgres_workflow_records_learning_conclusion() -> None:
     store = PostgresWorkflowStore.__new__(PostgresWorkflowStore)
     WorkflowStore.__init__(store)
     store._connect = lambda: FakePostgresConnection([])
-    store._save_workflow_record = lambda *record: saved_records.append(record)
+    store._save_workflow_record = lambda *record, **_kwargs: saved_records.append(record)
 
     conclusion = store.record_learning_conclusion(
         problem=problem,

@@ -45,7 +45,8 @@ import type {
   TaxonomyType,
   TerminologyDictionaryEntry,
   WorkflowState,
-  WorkspaceSettings
+  WorkspaceSettings,
+  OutboundPreview
 } from "./types";
 import { cookieAuthEnabled } from "./auth-client";
 
@@ -217,6 +218,28 @@ export async function getLearnings(): Promise<LearningMemoryItem[]> {
 
 export async function getProblem(problemId: string): Promise<ProblemRecord> {
   return requestJson<ProblemRecord>(`${apiBaseUrl()}/problems/${problemId}`);
+}
+
+// The outbound content an approval would sign, with its hash; send the hash
+// back as expected_outbound_sha256 so the API refuses a decision on text that
+// changed after it was displayed.
+export async function getOutboundPreview(problemId: string, actionId: string): Promise<OutboundPreview> {
+  return requestJson<OutboundPreview>(
+    `${apiBaseUrl()}/problems/${problemId}/actions/${actionId}/outbound-preview`
+  );
+}
+
+// Human attestation that the approved action's fix landed; restarts the
+// measurement clock from implemented_at (a created ticket never counts).
+export async function recordImplementation(
+  problemId: string,
+  executionId: string,
+  request: { implemented_at: string; note?: string | null }
+): Promise<ExecutionRecord> {
+  return requestJson<ExecutionRecord>(
+    `${apiBaseUrl()}/problems/${problemId}/executions/${executionId}/implementation`,
+    { method: "POST", body: JSON.stringify(request) }
+  );
 }
 
 // Re-run the destination push for an execution whose push failed (idempotent

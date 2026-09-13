@@ -432,6 +432,27 @@ export type ApprovalDecision = {
   reviewer: string;
   note?: string;
   accept_proposed_contract?: boolean;
+  // Hash of the outbound content the reviewer was shown (outbound-preview);
+  // the API refuses the decision (409) when the content changed since.
+  expected_outbound_sha256?: string | null;
+};
+
+// The reviewed outbound content an approval freezes (title, statement,
+// evidence ids, action text); dispatch sends exactly this.
+export type OutboundContent = {
+  title: string;
+  description: string;
+  priority: number;
+  problem_id: string;
+  insight_title: string;
+  insight_summary: string;
+  insight_severity?: string | null;
+  insight_signal_ids: string[];
+};
+
+export type OutboundPreview = {
+  content: OutboundContent;
+  sha256: string;
 };
 
 export type ApprovalRecord = ApprovalDecision & {
@@ -444,6 +465,8 @@ export type ApprovalRecord = ApprovalDecision & {
   evidence_pack_hash?: string | null;
   // Execution created by this decision (null while four-eyes holds it).
   execution_id?: string | null;
+  outbound_snapshot?: OutboundContent | null;
+  outbound_sha256?: string | null;
 };
 
 export type ExecutionStatus =
@@ -471,6 +494,14 @@ export type ExecutionRecord = {
   reviewed_by?: string | null;
   reviewed_at?: string | null;
   disclosure_applied?: boolean;
+  // Measurement clock origins: the instant the record left CLARA and the
+  // human-attested instant the fix landed (POST .../implementation).
+  dispatched_at?: string | null;
+  implemented_at?: string | null;
+  implementation_note?: string | null;
+  // Live dispatch claim (another worker is pushing this execution).
+  dispatch_claimed_at?: string | null;
+  dispatch_claimed_by?: string | null;
 };
 
 export type ClosureRecordRequest = {

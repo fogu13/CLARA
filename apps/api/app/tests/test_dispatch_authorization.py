@@ -40,6 +40,7 @@ from app.services.measurement_scheduler import SQLiteMeasurementPlanStore
 from app.services.problems import ProblemStore
 from app.services.seed import load_seed_problems
 from app.services.signals import SignalStore
+from app.services.outbound import build_outbound_content, outbound_sha256
 from app.services.workflow import (
     SQLiteWorkflowStore,
     WorkflowStore,
@@ -450,25 +451,47 @@ def _legacy_workflow_db(path: Path, *, with_snapshot: bool) -> None:
         )
 
 
-def test_legacy_approval_without_execution_id_authorises_by_created_at(
+def test_legacy_approval_without_execution_id_binds_by_created_at_but_cannot_dispatch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A pre-binding approval (action snapshot, no execution id, no outbound
+    snapshot) still names its execution through the created_at fallback, so
+    a human can record the implementation of what it pushed; it cannot
+    authorise a NEW dispatch, because nothing on record proves which title
+    and statement it signed (13 Sep 2026 review, F1). The remedy is a fresh
+    approval, as for a record without an action snapshot."""
     db_path = tmp_path / "legacy.db"
     _legacy_workflow_db(db_path, with_snapshot=True)
     store = SQLiteWorkflowStore(db_path)
     approval = store.list_approvals()[0]
     assert approval.execution_id is None and approval.action_snapshot is not None
+    assert approval.outbound_snapshot is None
 
     client = _client(ProblemStore(load_seed_problems()), workflows=store)
     assert client.put("/connectors/jira", json=JIRA_CONFIG).status_code == 200
     jira = _FakeJira(fail_calls=set())
     monkeypatch.setitem(DESTINATIONS, "jira", jira)
-    execution_id = store.list_executions()[0].execution_id
-    retried = client.post(f"/problems/PRB-108/executions/{execution_id}/retry")
-    assert retried.status_code == 200, retried.text
-    assert retried.json()["status"] == "pushed"
-    assert "authorized by DEC-0001" in retried.json()["detail"]
-    assert len(jira.calls) == 1
+    execution = store.list_executions()[0]
+    retried = client.post(f"/problems/PRB-108/executions/{execution.execution_id}/retry")
+    assert retried.status_code == 409, retried.text
+    assert retried.json()["detail"].startswith("approval_unverifiable")
+    assert "outbound-content snapshot" in retried.json()["detail"]
+    assert jira.calls == []
+    assert SQLiteWorkflowStore(db_path).list_executions()[0].status == ExecutionStatus.push_failed
+
+    # The created_at binding still authorises the attestation path.
+    problem = next(p for p in load_seed_problems() if p.problem_id == "PRB-108")
+    result = authorize_dispatch(
+        problem=problem, action=find_action(problem, "ACT-501"), execution=execution,
+        approvals=store.list_approvals(), four_eyes=False, outbound_binding=False,
+    )
+    assert result.authorized is True and result.decision_ids == ["DEC-0001"]
+    recorded = client.post(
+        f"/problems/PRB-108/executions/{execution.execution_id}/implementation",
+        json={"implemented_at": execution.created_at, "note": "landed"},
+    )
+    assert recorded.status_code == 200, recorded.text
+    assert recorded.json()["implemented_at"] is not None
 
 
 def test_legacy_approval_without_snapshot_fails_closed(
@@ -517,7 +540,18 @@ def _approval(
     execution_id: str | None = None,
     problem_id: str = "PRB-108",
     action_id: str = "ACT-501",
+    outbound="default",
 ) -> ApprovalRecord:
+    # An approval that signed an action revision also signed the outbound
+    # content (13 Sep 2026, F1); the helper freezes the seed content unless a
+    # test asks for a legacy record (outbound=None).
+    if outbound == "default":
+        outbound = None
+        if snapshot is not None:
+            problem = next((p for p in load_seed_problems() if p.problem_id == problem_id), None)
+            action = find_action(problem, action_id) if problem is not None else None
+            if action is not None:
+                outbound = build_outbound_content(problem, action)
     return ApprovalRecord(
         decision_id=decision_id,
         problem_id=problem_id,
@@ -527,6 +561,8 @@ def _approval(
         created_at=created_at,
         action_snapshot=snapshot,
         execution_id=execution_id,
+        outbound_snapshot=outbound,
+        outbound_sha256=outbound_sha256(outbound) if outbound is not None else None,
     )
 
 

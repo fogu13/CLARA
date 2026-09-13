@@ -21,8 +21,9 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 import threading
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from app.connectors import DESTINATIONS
 from app.connectors.base import ConnectorError
@@ -35,13 +36,17 @@ from app.domain.models import (
     ProblemRecord,
 )
 from app.services.common import utc_now
+from app.services.outbound import apply_disclosure, build_outbound_content, outbound_payload
 from app.services.routing import connector_overrides, route_for_owner
 from app.services.workflow import (
+    DISPATCHABLE_STATUSES,
     DispatchAuthorization,
     approved_action_keys,
     authorize_dispatch,
     is_human_reviewed,
 )
+
+__all__ = ["apply_disclosure", "push_approved_action", "DispatchNotAuthorized", "DispatchClaimed"]
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +61,22 @@ class DispatchNotAuthorized(Exception):
         self.detail = detail
 
 
+class DispatchClaimed(Exception):
+    """Another worker holds a live dispatch claim on the execution (or the
+    record stopped being dispatchable between the read and the claim)."""
+
+    reason = "dispatch_in_progress"
+
+    def __init__(self, execution_id: str, claimed_by: str | None = None) -> None:
+        self.execution_id = execution_id
+        self.claimed_by = claimed_by
+        self.detail = (
+            f"Execution {execution_id} is being dispatched by another worker"
+            f"{f' ({claimed_by})' if claimed_by else ''}; retry once that attempt has ended."
+        )
+        super().__init__(self.detail)
+
+
 # One lock per execution so a concurrent first push and retry (or two retries)
 # cannot both pass the status check and create two external records.
 _EXECUTION_LOCKS: dict[str, threading.Lock] = {}
@@ -63,7 +84,10 @@ _EXECUTION_LOCKS_GUARD = threading.Lock()
 
 # Only executions in these states may be dispatched; anything else is
 # finished (pushed) or was never meant to leave CLARA (blocked/not_started).
-_DISPATCHABLE = {ExecutionStatus.draft_created, ExecutionStatus.push_failed}
+_DISPATCHABLE = set(DISPATCHABLE_STATUSES)
+
+# Telemetry hook: (event_type, execution_id, metadata).
+EventHook = Callable[[str, str, dict[str, Any]], None]
 
 
 def _execution_lock(execution_id: str) -> threading.Lock:
@@ -71,14 +95,27 @@ def _execution_lock(execution_id: str) -> threading.Lock:
         return _EXECUTION_LOCKS.setdefault(execution_id, threading.Lock())
 
 
+def worker_identity() -> str:
+    """Who holds a dispatch claim: host and pid (audit, not authorisation)."""
+    return f"{socket.gethostname()}:{os.getpid()}"
+
+
 class _ConfigStore(Protocol):
     def get_config(self, connector_type: str) -> Any: ...
 
 
 class _WorkflowStore(Protocol):
+    def refresh(self) -> None: ...
+
     def list_executions(self) -> list[ExecutionRecord]: ...
 
     def list_approvals(self) -> list[ApprovalRecord]: ...
+
+    def claim_dispatch(
+        self, execution_id: str, *, worker: str, now: str | None = None
+    ) -> ExecutionRecord | None: ...
+
+    def release_dispatch(self, execution_id: str) -> None: ...
 
     def update_execution(
         self,
@@ -92,42 +129,28 @@ class _WorkflowStore(Protocol):
     ) -> ExecutionRecord: ...
 
 
-def apply_disclosure(description: str, template: str) -> str:
-    """Append the Art. 50 AI-disclosure line to outbound text (final line)."""
-    if not template:
-        return description
-    return f"{description}\n\n{template}" if description else template
-
-
 def _build_push_payload(
-    problem: ProblemRecord, action: ActionProposal, *, disclosure: str | None = None
+    problem: ProblemRecord,
+    action: ActionProposal,
+    *,
+    disclosure: str | None = None,
+    authorization: DispatchAuthorization | None = None,
 ) -> dict[str, Any]:
-    """Map a problem + approved action onto the dict shape connectors expect.
+    """The dict shape connectors expect.
 
-    This is the single choke point for outbound text: a disclosure passed here
-    reaches every destination (Jira description, Slack message) unchanged.
+    Gated executions send the content their approval froze
+    (``authorization.outbound``): a retry never rebuilds the title or the
+    statement from the current problem, so nothing reaches the destination
+    that the reviewers did not read. Ungated executions (no approval to bind
+    to) are built from the current problem and action. The disclosure line
+    and the deep link are added here for both.
     """
-    risk_priority = {"critical": 1, "high": 1, "medium": 2, "low": 3}
-    description = action.proposal
-    if disclosure:
-        description = apply_disclosure(description, disclosure)
-    # Deep link back to the problem so the team working in Jira/Slack can reach
-    # the evidence, the approval trail and the outcome contract in one click.
-    web_url = (os.getenv("CLARA_WEB_URL") or "").rstrip("/")
-    clara_url = f"{web_url}/insights/{problem.problem_id}" if web_url else ""
-    return {
-        "title": f"{problem.title} [{action.class_.value}]",
-        "description": description,
-        "priority": risk_priority.get(action.risk_level.value, 3),
-        "problem_id": problem.problem_id,
-        "clara_url": clara_url,
-        "insight_title": problem.title,
-        "insight_summary": problem.statement,
-        "insight_severity": problem.impact_band,
-        "insight_signal_ids": [
-            evidence.signal_id for evidence in problem.evidence[:10] if evidence.signal_id
-        ],
-    }
+    content = (
+        authorization.outbound
+        if authorization is not None and authorization.outbound is not None
+        else build_outbound_content(problem, action)
+    )
+    return outbound_payload(content, disclosure=disclosure)
 
 
 def push_approved_action(
@@ -140,6 +163,7 @@ def push_approved_action(
     disclosure_template: str | None = None,
     owner_routes: list[OwnerRoute] | None = None,
     four_eyes: bool = False,
+    on_event: EventHook | None = None,
 ) -> ExecutionRecord:
     """Push an approved action to its destination system, if one is configured.
 
@@ -172,11 +196,22 @@ def push_approved_action(
     so the audit trail says where the record really went.
 
     Concurrency: the whole check-and-push runs under a per-execution
-    in-process lock and re-reads the execution first, so two retries in one
-    process cannot both create an external record. Known limitation: the lock
-    is process-local. In a multi-worker Postgres deployment two workers can
-    still race on the same execution; closing that needs a DB row lock
-    (SELECT ... FOR UPDATE on the execution) rather than this lock.
+    in-process lock AND a store-level dispatch claim
+    (``workflow_store.claim_dispatch``: a compare-and-set on the execution
+    row, one conditional UPDATE on Postgres), so two retries in one process
+    or on two workers cannot both create an external record; a live claim
+    held elsewhere raises ``DispatchClaimed``. The claim is cleared by the
+    status write that ends the attempt (or released explicitly on paths
+    that write no status).
+
+    Rejection during the network call: the authorisation is re-checked on a
+    fresh read right before ``connector.push``; the call itself cannot be
+    guarded. A decision recorded while the connector was writing is detected
+    afterwards (``authorize_dispatch`` on a fresh read once more): the
+    external record exists and cannot be recalled by CLARA, so the execution
+    is recorded as ``pushed`` with a detail naming the decision, the
+    ``action_pushed_during_revocation`` event is emitted through ``on_event``
+    and the record needs manual withdrawal at the destination.
 
     Art. 50: executions without a human-review stamp get `disclosure_template`
     appended to the outbound text and `disclosure_applied=True` recorded;
@@ -188,6 +223,7 @@ def push_approved_action(
     each team receives its work in the tool and place it already uses.
     """
     with _execution_lock(execution.execution_id):
+        workflow_store.refresh()  # never authorize on a stale cross-worker snapshot
         current = next(
             (
                 item
@@ -201,31 +237,43 @@ def push_approved_action(
             # dispatchable): return what stands, never push a second time.
             return current
 
-        workflow_store.refresh()  # never authorize on a stale cross-worker snapshot
-        approvals = workflow_store.list_approvals()
-        gated = is_human_reviewed(current, approved_action_keys(approvals))
-        authorization: DispatchAuthorization | None = None
-        if gated:
-            authorization = _check_authorization(
+        claimed = workflow_store.claim_dispatch(
+            current.execution_id, worker=worker_identity(), now=utc_now()
+        )
+        if claimed is None:
+            raise DispatchClaimed(current.execution_id, current.dispatch_claimed_by)
+        current = claimed
+
+        try:
+            approvals = workflow_store.list_approvals()
+            gated = is_human_reviewed(current, approved_action_keys(approvals))
+            authorization: DispatchAuthorization | None = None
+            if gated:
+                authorization = _check_authorization(
+                    problem=problem,
+                    action=action,
+                    execution=current,
+                    approvals=approvals,
+                    four_eyes=four_eyes,
+                    workflow_store=workflow_store,
+                )
+
+            return _dispatch(
                 problem=problem,
                 action=action,
                 execution=current,
-                approvals=approvals,
-                four_eyes=four_eyes,
+                config_store=config_store,
                 workflow_store=workflow_store,
+                disclosure_template=disclosure_template,
+                owner_routes=owner_routes,
+                authorization=authorization,
+                four_eyes=four_eyes,
+                on_event=on_event,
             )
-
-        return _dispatch(
-            problem=problem,
-            action=action,
-            execution=current,
-            config_store=config_store,
-            workflow_store=workflow_store,
-            disclosure_template=disclosure_template,
-            owner_routes=owner_routes,
-            authorization=authorization,
-            four_eyes=four_eyes,
-        )
+        finally:
+            # Paths that wrote no status (no connector, refusal) still end
+            # the attempt; a status write already cleared the claim.
+            workflow_store.release_dispatch(current.execution_id)
 
 
 def _check_authorization(
@@ -293,10 +341,12 @@ def _dispatch(
     owner_routes: list[OwnerRoute] | None,
     authorization: DispatchAuthorization | None,
     four_eyes: bool,
+    on_event: EventHook | None = None,
 ) -> ExecutionRecord:
-    """The outbound write itself; callers hold the execution lock and have
-    already authorised the dispatch (``authorization`` is None only for
-    executions with no approval to bind to)."""
+    """The outbound write itself; callers hold the execution lock and the
+    dispatch claim and have already authorised the dispatch
+    (``authorization`` is None only for executions with no approval to bind
+    to)."""
     authorized_by = authorization.decision_ids if authorization is not None else []
     authorization_note = f" · authorized by {', '.join(authorized_by)}" if authorized_by else ""
     destination = execution.destination
@@ -362,7 +412,8 @@ def _dispatch(
     disclosure = None if execution.human_reviewed else disclosure_template
     try:
         result = connector.push(
-            _build_push_payload(problem, action, disclosure=disclosure), config
+            _build_push_payload(problem, action, disclosure=disclosure, authorization=authorization),
+            config,
         )
     except ConnectorError as exc:
         logger.warning(
@@ -393,11 +444,48 @@ def _dispatch(
         )
 
     external_id = result.get("external_id") or ""
+    revocation_note = ""
+    if authorization is not None:
+        # The network call was unguarded: a decision recorded while the
+        # connector was writing could not stop the record. Say so on the
+        # execution and through telemetry; the record needs manual withdrawal.
+        after = authorize_dispatch(
+            problem=problem,
+            action=action,
+            execution=execution,
+            approvals=_fresh_approvals(workflow_store),
+            four_eyes=four_eyes,
+        )
+        if not after.authorized:
+            revocation_note = (
+                f" · WARNING: {after.reason} recorded during dispatch ({after.detail[:120]});"
+                f" the {destination} record {external_id} left CLARA and needs manual withdrawal"
+            )
+            logger.warning(
+                "Action pushed during revocation: execution=%s destination=%s reason=%s",
+                execution.execution_id,
+                destination,
+                after.reason,
+            )
+            if on_event is not None:
+                on_event(
+                    "action_pushed_during_revocation",
+                    execution.execution_id,
+                    {
+                        "problem_id": problem.problem_id,
+                        "destination": destination,
+                        "external_ref": external_id,
+                        "reason": after.reason,
+                    },
+                )
     return workflow_store.update_execution(
         execution.execution_id,
         status=ExecutionStatus.pushed,
         external_ref=external_id,
-        detail=f"{destination} record created: {external_id}{route_note}{authorization_note}",
+        detail=(
+            f"{destination} record created: {external_id}{route_note}{authorization_note}"
+            f"{revocation_note}"
+        )[:600],
         disclosure_applied=True if disclosure else None,
         # The measurement clock origin: the instant the record really left CLARA.
         dispatched_at=utc_now(),

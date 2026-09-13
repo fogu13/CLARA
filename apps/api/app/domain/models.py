@@ -641,6 +641,29 @@ class TimelineEvent(BaseModel):
     created_at: str
 
 
+class OutboundContent(BaseModel):
+    """The reviewed content of an outbound record, frozen on the approval.
+
+    Everything the destination connector receives that is reviewed text or
+    reviewed evidence: the ticket title (problem title + action class), the
+    approved action text, the priority derived from the approved risk level
+    and the problem's title, statement, severity band and evidence ids.
+    Admin routing (project key, channel), credentials and the deep link are
+    resolved at dispatch and are deliberately not part of it: an admin may
+    re-route a team without re-review, but nobody may change what the
+    reviewers read. ``services.outbound`` builds and hashes it.
+    """
+
+    title: str
+    description: str
+    priority: int
+    problem_id: str
+    insight_title: str
+    insight_summary: str
+    insight_severity: str | None = None
+    insight_signal_ids: list[str] = Field(default_factory=list)
+
+
 class ApprovalDecision(BaseModel):
     action_id: str
     decision: ApprovalDecisionStatus
@@ -650,6 +673,11 @@ class ApprovalDecision(BaseModel):
     # contract (trailing-28d baseline, 30d window, ITS scoring) unless the
     # reviewer opts out.
     accept_proposed_contract: bool = True
+    # Optimistic binding: the hash of the outbound content the reviewer was
+    # shown (GET .../outbound-preview). When present, an approval whose
+    # current content hashes differently is refused (409) instead of signing
+    # text the reviewer never read.
+    expected_outbound_sha256: str | None = None
 
 
 class ApprovalRecord(ApprovalDecision):
@@ -658,6 +686,11 @@ class ApprovalRecord(ApprovalDecision):
     created_at: str
     action_snapshot: ActionProposalSnapshot | None = None
     action_diff: list[ActionProposalChange] = Field(default_factory=list)
+    # The outbound content this decision signed and its SHA-256 (set
+    # server-side at approval time). Dispatch sends exactly this content;
+    # a drift of the problem's title/statement/evidence refuses the dispatch.
+    outbound_snapshot: OutboundContent | None = None
+    outbound_sha256: str | None = None
     # Content hash of the evidence pack as it stood when this decision was made
     # (set server-side, never from the request body). Re-exporting and comparing
     # hashes proves whether the pack the approver saw has since changed.
@@ -698,6 +731,13 @@ class ExecutionRecord(BaseModel):
     dispatched_at: str | None = None
     implemented_at: str | None = None
     implementation_note: str | None = None
+    # Dispatch claim: set by the worker that is currently pushing this
+    # execution (store-level compare-and-set, see WorkflowStore.claim_dispatch)
+    # and cleared by the status write that ends the attempt. A live claim
+    # from another worker refuses a concurrent dispatch; an expired one
+    # (DISPATCH_CLAIM_TTL_SECONDS) is taken over.
+    dispatch_claimed_at: str | None = None
+    dispatch_claimed_by: str | None = None
 
 
 class ImplementationRecordRequest(BaseModel):
