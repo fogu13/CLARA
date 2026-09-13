@@ -90,7 +90,9 @@ def test_ledger_records_the_rebuilt_deck_and_the_fit_check() -> None:
         row = _ledger_row(row_id)
         assert "7b26334" in row and "d3f1ecf" in row, row_id
         assert "check_fit.js" in row and "was run" in row, row_id
-        assert "unverified" not in row, row_id
+        # The rebuild and the fit check are recorded as done, never as unverified
+        # (the rating's provenance, a different matter, is unverified by design).
+        assert not re.search(r"(?:fit check|rebuil\w+)[^.;]{0,60}unverified|unverified[^.;]{0,60}(?:fit check|rebuil\w+)", row), row_id
 
 
 # D4 — what the gold-set evaluation is scored against
@@ -247,6 +249,155 @@ def test_governance_sentences_match_the_code() -> None:
         assert commit in _ledger_row(row_id), row_id
     assert "4bd1af8" not in "".join(_ledger_row(r) for r in ("C1", "C2", "C3", "C4", "E1", "E2"))
     assert "being made outside this worktree" not in ledger
+
+
+# F8 (13 September 2026) — the second risk rating is second-rating agreement, not a human check
+
+
+_RATING_DOCUMENTS = (
+    "thesis/manuscript/00_front_matter.md",
+    "thesis/manuscript/02_literature_review.md",
+    "thesis/manuscript/03_methodology.md",
+    "thesis/manuscript/05_evaluation_results.md",
+    "thesis/manuscript/06_discussion.md",
+    "thesis/manuscript/appendices/D_traceability_matrix.md",
+    "thesis/defense/make_deck.js",
+    "thesis/board/board_spec.json",
+    "thesis/board/canvas.html",
+)
+_FORBIDDEN_RATING_PHRASES = (
+    "the one human check",
+    "the only human check",
+    "blind human rating",
+    "second person's rating on the owner's attestation",
+    "blind second rating",
+    "blind second rater",
+    "blind double-labelling",
+    "Inter-annotator agreement",
+    "rests on attestation",
+)
+
+
+def test_second_rating_is_reported_with_unverified_provenance_not_as_a_human_check() -> None:
+    for relative in _RATING_DOCUMENTS:
+        text = _read(relative)
+        for phrase in _FORBIDDEN_RATING_PHRASES:
+            assert phrase not in text, f"{relative} still says {phrase!r}"
+        assert "provenance" in text and "unverified" in text, relative
+    for relative, needle in (
+        ("thesis/manuscript/03_methodology.md", "second-rating agreement with independent human provenance unverified"),
+        ("thesis/manuscript/05_evaluation_results.md", "independent human provenance unverified"),
+        ("thesis/manuscript/06_discussion.md", "independent human provenance is unverified"),
+        ("thesis/manuscript/appendices/D_traceability_matrix.md", "independent human provenance unverified"),
+        ("thesis/manuscript/02_literature_review.md", "independent human provenance is unverified"),
+        ("thesis/defense/make_deck.js", "independent human provenance is unverified"),
+        ("thesis/board/board_spec.json", "independent human provenance unverified"),
+    ):
+        assert needle in _read(relative), relative
+    methodology = _read("thesis/manuscript/03_methodology.md")
+    assert "Fill blind risk labels" in methodology and "another rater" in methodology  # observed vs attested
+    provenance = _read("thesis/evaluation/results/PROVENANCE_kappa.md")
+    assert "01a077a7-b101-78c0-accc-97f813223a23" in provenance
+    assert "kept apart" in provenance
+    for row_id in ("R0.1", "R0.2", "R0.3", "R0.4"):
+        assert "unverified" in _ledger_row(row_id), row_id
+    # The statistic itself is untouched: the files the rows cite are the 6 September ones.
+    assert "24d56fc" in _ledger_row("R0.1") and "5ee0c35" in _ledger_row("R0.1")
+
+
+# F9 — the survey script issues verdicts only from the pre-registered n
+
+
+def test_survey_tiers_match_the_script() -> None:
+    sys.path.insert(0, str(ROOT / "thesis" / "evaluation"))
+    import survey_analysis as survey  # noqa: E402
+
+    assert survey.MIN_N == 10 and survey.VERDICT_MIN_N == 40
+    assert survey.verdict(0.9, 39, (0.8, 0.95)) == ("DESCRIPTIVE ONLY (n < 40)", False)
+    assert survey.verdict(0.9, 40, (0.8, 0.95))[0] == "CONFIRMED"
+    chapter = _read("thesis/manuscript/05_evaluation_results.md")
+    rule = next(line for line in chapter.splitlines() if "**Survey tiers depend only on the survey n.**" in line)
+    assert "n ≥ 40" in rule and "DESCRIPTIVE ONLY (n < 40)" in rule
+    assert "writes a support label from n = 10" not in rule
+    assert "VERDICT_MIN_N = 40" in _ledger_row("R3.2")
+
+
+# August-vs-September — a configuration contrast, not "the pipeline only"
+
+
+def test_generic_versus_production_pair_is_a_configuration_contrast() -> None:
+    chapter = _read("thesis/manuscript/05_evaluation_results.md")
+    for phrase in (
+        "only difference from the \"LLM path\" row is the pipeline",
+        "only thing that differs from the generic-prompt row is the pipeline",
+        "the *pipeline* effect",
+        "the pipeline barely moves",
+        "the pipeline effect above holds",
+    ):
+        assert phrase not in chapter, phrase
+    assert "prompt/pipeline × run date" in chapter
+    assert "run date" in _ledger_row("R4.5")
+    agreement = _read("thesis/evaluation/results/compare_runs_agreement.csv")
+    for pair in ("glm_generic_run0_vs_glm_generic_run1", "glm_generic_run0_vs_glm_generic_run2", "glm_generic_run0_vs_glm_generic_run3"):
+        assert pair in agreement, pair
+
+
+# F4 — the grade sentence matches the explicit grade table; the verdict label attributes nothing
+
+
+def test_evidence_grade_sentence_matches_the_grade_table() -> None:
+    sys.path.insert(0, str(ROOT / "apps" / "api"))
+    from app.services.outcome_engine import DESIGN_GRADES, REALISABLE_GRADES, evidence_grade  # noqa: E402
+
+    assert REALISABLE_GRADES == frozenset({"C", "D"})
+    assert {DESIGN_GRADES[m] for m in ("randomized_holdout", "randomised_holdout")} == {"A"}
+    assert evidence_grade(comparison_method="randomized_holdout", measurement_source="instrumented") == "D"
+    assert evidence_grade(comparison_method="matched_control", measurement_source="instrumented") == "D"
+    assert evidence_grade(comparison_method="uncontrolled_before_after", measurement_source="instrumented") == "D"
+    assert evidence_grade(comparison_method="controll", measurement_source="instrumented") == "E"
+    assert evidence_grade(comparison_method="its_segmented_regression", measurement_source="instrumented") == "D"
+    assert evidence_grade(comparison_method="its_segmented_regression", measurement_source="instrumented", realised_method="its") == "C"
+    assert evidence_grade(comparison_method="its_segmented_regression", measurement_source="manual", realised_method="its") == "E"
+    methodology = _read("thesis/manuscript/03_methodology.md")
+    grading = next(line for line in methodology.splitlines() if line.startswith("**Grading and bounding the measurement itself.**"))
+    assert "explicit table" in grading and "not produced by the platform" in grading and "never C" in grading
+    failure = next(line for line in _read("thesis/manuscript/04_artifact.md").splitlines() if line.startswith("**Failure modes.**"))
+    assert "*no improvement observed*" in failure and "*fix did not land*" not in failure
+    assert "fixed observation interval" in failure
+    assert "No improvement observed" in _read("apps/web/lib/i18n.tsx")
+
+
+# F7 — the held-out split is a safety-validation set used in selection; no alpha by replication
+
+
+def test_held_out_split_is_named_a_safety_validation_set() -> None:
+    methodology = _read("thesis/manuscript/03_methodology.md")
+    assert "safety-validation set" in methodology and "substitute for alpha control" in methodology
+    chapter = _read("thesis/manuscript/05_evaluation_results.md")
+    assert "never optimised against" not in chapter
+    assert "safety veto" in chapter and "safety-validation set" in chapter
+    assert "safety-validation set" in _read("apps/api/app/evals/LOOP_PROMPT.md")
+    deck = _read("thesis/defense/make_deck.js")
+    assert "do not replace alpha control" in deck and "three consecutive significant runs" not in deck
+
+
+# F1–F3 — the governance sentences name the outbound binding, frozen terms and fixed intervals
+
+
+def test_contract_sentences_name_frozen_terms_fixed_intervals_and_the_outbound_binding() -> None:
+    methodology = _read("thesis/manuscript/03_methodology.md")
+    contracts_line = next(line for line in methodology.splitlines() if line.startswith("**Outcome contracts.**"))
+    for needle in ("frozen on the plan", "fixed observation interval", "measurement_replanned", "blocked"):
+        assert needle in contracts_line, needle
+    artifact = _read("thesis/manuscript/04_artifact.md").splitlines()
+    hitl = next(line for line in artifact if line.startswith("- **Human-in-the-loop approval.**"))
+    assert "outbound" in hitl and "claimed at the store" in hitl
+    contract = next(line for line in artifact if line.startswith("- **Outcome contract and closure levels.**"))
+    assert "frozen when they were scheduled" in contract
+    assert "def replan_after_amendment" in _read("apps/api/app/services/measurement_scheduler.py")
+    assert '"measurement_replanned"' in _read("apps/api/app/routers/problems.py")  # the audit event the sentence names
+    for row_id in ("F1", "F2/F3", "F4", "F7", "F8", "F9"):
+        _ledger_row(row_id)
 
 
 if __name__ == "__main__":

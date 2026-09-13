@@ -62,23 +62,45 @@ None of the committed artefacts records:
   review describes (§5);
 - the environment in which the labels were entered (a spreadsheet, an editor, a chat session).
 
-Because AI exposure was not recorded, the rating is treated in the manuscript as a blind
-human rating on the owner's attestation, and each place that calls it "the one human check"
-carries that qualifier (§3.5.4, §3.7, §5A.4.2, §6.4 item 1, Appendix D).
+Because AI exposure was not recorded, the manuscript treated the rating, between 12 and 13
+September 2026, as a blind human rating on the owner's attestation; since the follow-up
+review's observation (§5) it is described as second-rating agreement with independent
+human provenance unverified, and no document calls it a human check.
 
-## 5. The external review's observation (unresolved)
+## 5. The external reviews' observation (12 and 13 September 2026; unresolved)
 
-The external review of 12 September 2026 states that the committed labels are identical to a
-label set produced in an AI-assisted session titled "Fill blind risk labels". That
-observation cannot be verified from the repository: no such session, transcript or label set
-is committed, and the repository holds only the one filled sample. It is recorded here as an
-unresolved item, not as a finding. Two readings are compatible with everything the repository
-shows: a person produced the labels and a model, asked separately, produced the same 40 labels;
-or the labels in the file are the model's. The repository cannot distinguish them, and this
-record does not choose. If the owner later confirms that the labels came from a model, the
-statistic is retained as cross-model agreement and every "human check" phrase is replaced;
-the exact alternative wording is prepared in `thesis/review-2026-09-12-response-notes.md`
-so that it can be applied without re-analysis.
+The external review of 12 September 2026 stated that the committed labels are identical to a
+label set produced in an AI-assisted session titled "Fill blind risk labels". The follow-up
+review of 13 September 2026 names the record: an assistant task with that title, id
+`01a077a7-b101-78c0-accc-97f813223a23`, whose 40 rows match `kappa_sample.csv` row for row.
+The repository can neither confirm nor refute it: no such task record, transcript or label
+set is committed, and the repository holds only the one filled sample.
+
+Observed evidence and attestation, kept apart:
+
+| | Source | What it says |
+|---|---|---|
+| Observed (repository) | `git log`, §2 | The filled sample and its κ file were committed together 29 minutes after the rubric, under the author's git identity; nothing committed identifies a rater, a hand-over or a return time. |
+| Observed (reported by the reviewer) | the 13 September review | An AI-assistant task record titled "Fill blind risk labels" (id above) whose 40 labels are identical to the committed file. Reported, not committed; unverifiable here. |
+| Attested | the owner, 12 September 2026 | "another rater": a second person, not the author, produced the labels. |
+
+The two are not reconciled. Until they are, every document in this repository describes the
+rating as **second-rating agreement with independent human provenance unverified**: the
+statistic stands (it is reproducible from the files, which are unchanged), it says how a
+second reading of the rubric orders these 40 texts, and it is not called a human check, a
+blind human rating or an inter-annotator agreement anywhere (manuscript abstract, §2.13,
+§3.5.4, §3.7, §5A.4.2, §6.4 item 1 and Appendix D; `CLAIM_LEDGER.md` R0.1–R0.4; the defence
+deck; the board). Two readings remain compatible with everything the repository shows: a
+person produced the labels and a model, asked separately, produced the same 40; or the
+labels in the file are the model's. This record does not choose.
+
+What would resolve it: (a) the owner supplies the rater's role, the hand-over and return
+dates and a statement of AI access, as §6.3 requires for any new rating, after which the
+manuscript may call the rating a human check on the owner's record; or (b) the owner
+confirms that the task record produced the file, in which case the statistic is retained
+as cross-model agreement and the prepared wording in
+`thesis/review-2026-09-12-response-notes.md` is applied. Neither had happened at the time
+of writing (13 September 2026).
 
 ## 6. Rule for any further rating
 

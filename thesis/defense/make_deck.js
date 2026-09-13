@@ -188,7 +188,7 @@ card(s, 6.75, 4.22, 5.95, 2.0, "What I did about it",
   "I corrected the thesis rather than softening the wording, and the same audit ran over the public site the next day. Seven claims were corrected there, and three of them are now checks that run against production every 30 minutes and fail if the old wording comes back.", { size: 13 });
 s.addText("The same lesson three times. A declared control is not an enforced control until somebody checks it. The platform in July, the method in August, my own writing last week.",
   { ...BODY, x: 0.6, y: 6.4, w: 12.1, h: 0.5, fontSize: 14.5, color: NAVY, bold: true });
-s.addNotes("2 minutes, and this is the slide I would spend extra time on if she engages. The embedding story is the portable architecture lesson: cosine thresholds are not comparable across embedding models, so a provider swap that looks like a config change silently rewrites the behaviour of every semantic feature. Be honest about the residual, which is that the calibrated values live in the deployment environment and the in-code defaults are still the old ones. If she asks what is still open from the review: the one agreement number is the 40-item blind second risk rating (kappa 0.55 unweighted, 0.70 weighted), attested as a second person's, with its provenance recorded in PROVENANCE_kappa.md and the rater's exposure to AI suggestions unrecorded; there is none behind the in-repo golden set, and that remains the most attackable gap.");
+s.addNotes("2 minutes, and this is the slide I would spend extra time on if she engages. The embedding story is the portable architecture lesson: cosine thresholds are not comparable across embedding models, so a provider swap that looks like a config change silently rewrites the behaviour of every semantic feature. Be honest about the residual, which is that the calibrated values live in the deployment environment and the in-code defaults are still the old ones. If she asks what is still open from the review: the one agreement number is the 40-item second risk rating (kappa 0.55 unweighted, 0.70 weighted); its independent human provenance is unverified (the owner attests a second person, the files identify no rater, and the 13 September review reports an AI-assistant task record with identical labels), so it is second-rating agreement and not a human check; there is none behind the in-repo golden set, and that remains the most attackable gap.");
 
 // ---------- 9. Result 1: accuracy ----------
 s = slide();
@@ -203,7 +203,7 @@ table(s, [
 ], { x: 0.6, y: 1.6, w: 7.4, colW: [3.4, 2.0, 2.0] });
 card(s, 0.6, 3.62, 7.4, 1.3, "Paired McNemar on the same items, testing accuracy",
   "Both learned methods beat the floor (p < 0.0001). The contextual path beats the learned model on sentiment in all four runs (p = 0.019–0.029) and ties it on severity; the production stage is within three points on sentiment (p = 0.23) and one severity level below the seeds. The production rows compare configurations (model, batch size, run date), not the model alone.", { size: 10.5 });
-s.addText("Contextual reasoning buys a great deal on sentiment and nothing demonstrable on severity, which lexical markers already carry. The production stage's severity shift is partly the seed labels' own calibration: a blind second rater put seven of ten seed-critical items at high (kappa 0.55, weighted 0.70). The precondition can be met by more than one method; a deployer has a choice, not an instruction.",
+s.addText("Contextual reasoning buys a great deal on sentiment and nothing demonstrable on severity, which lexical markers already carry. The production stage's severity shift is partly the seed labels' own calibration: a second rating, of unverified independent provenance, put seven of ten seed-critical items at high (kappa 0.55, weighted 0.70). The precondition can be met by more than one method; a deployer has a choice, not an instruction.",
   { ...BODY, x: 0.6, y: 5.1, w: 7.4, h: 1.5, fontSize: 14 });
 s.addImage({ path: `${T}/evaluation/results/risk_confusion.png`, x: 8.35, y: 1.6, w: 4.3, h: 3.82 });
 card(s, 8.35, 5.42, 4.3, 1.5, "How this is scored",
@@ -294,7 +294,7 @@ table(s, [
   ["Perishable memory (DP2)", "Partially measured", "remedy adoption 21% to 71%; replicated on GLM-5.2, not on the production default; simulated outcomes"],
   ["Outcome contracts (DP1)", "Demonstrated", "designed, built and instrumented; one live contract still pending"],
   ["Method hardening", "Shipped, partly measured", "calibration and the refusal harness measured; the rest covered by unit tests"],
-  ["Inter-annotator agreement", "Measured once, on attestation", "kappa 0.55 (0.70 weighted), 40 blind risk items; second person (attested), AI exposure unrecorded; none on golden set"],
+  ["Second-rating agreement", "Measured once, provenance unverified", "kappa 0.55 (0.70 weighted), 40 risk items; independent human provenance unverified, so no human check; none on golden set"],
   ["AI-verbatim detection", "Measured, refused", "0.86% flagged on 6,154 genuine reviews; per-comment authorship deliberately not implemented"],
   ["Practitioner value (RQ4)", "Pending", "instruments ready; interviews not started"],
 ], { x: 0.6, y: 1.55, w: 12.1, colW: [3.3, 2.6, 6.2], rowH: 0.5 });
@@ -311,8 +311,8 @@ bullets(s, [
   "Language is confounded with sector and the texts are English paraphrases, so every per-language result is a source-language stratum; one cross-language claim was retracted rather than defended.",
   "The German-source escalate stratum is eight signals.",
   "Routing is scored only with the inventory supplied, and two of the six gold fields are not scored at all.",
-  "One agreement number: kappa 0.55, 40 blind risk items, second person (attested; AI exposure unrecorded); none on golden set.",
-  "Urgency exemplar effect tested at n = 60, 80, 100 without alpha spending; the claim rests on three consecutive significant runs, not the first crossing.",
+  "One agreement number: kappa 0.55 on 40 risk items, human provenance unverified, so no human check; none on golden set.",
+  "Urgency exemplar effect tested at n = 60, 80, 100 without alpha spending; same-item re-runs bound model noise and do not replace alpha control, so the claim is exploratory.",
   "Outcome data behind the learning loop is simulated, so the distinctive claim is demonstrated and not field-proven.",
   "I am the designer, the founder and the researcher, managed by external labels, standard instruments and a reproducible harness.",
 ], { x: 0.8, y: 1.92, w: 5.8, h: 4.7, fontSize: 12.5 });
@@ -320,7 +320,7 @@ sub(s, "Next, in order of value", 6.9, 1.5, 5.8);
 bullets(s, [
   "One live outcome contract on real data, scored by interrupted time series at the action date, then synthetic difference in differences as panels accumulate (Arkhangelsky et al., 2021). The estimator is already built and tested.",
   "The practitioner study. Twelve to fifteen interviews and task sessions, with the survey for breadth.",
-  "A second independent human rating on a new sample of the risk seeds, and a first one on the golden set, with rater and date recorded: the existing kappa rests on attestation, and repeats on the same forty items would not be replication.",
+  "A human rating with recorded provenance on a new sample of the risk seeds, and a first one on the golden set, with rater role, dates and AI access recorded: the existing kappa's independent human provenance is unverified, and repeats on the same forty items would not be replication.",
   "Score theme and recommended action by the semantic agreement procedure, closing the last two of six gold fields.",
   "Score routing in the free-form production condition, so the numbers describe the deployed system.",
   "Relabel the new multi-market data to gold standard, which would break the language and sector confound.",
@@ -333,7 +333,7 @@ title(s, "Questions for you", "Six decisions I would rather take with you than g
 const asks = [
   ["1. The ethics step", "Section 3.9 of my methodology already says the study runs under OPIT ethics expectations confirmed with you. My consent sheet is still headed draft and still tells me to check with you first. One of those has to change. Is there a required OPIT template, or is your confirmation the step, and may I record it as such?"],
   ["2. Recruitment, and what the survey can carry", "Recruitment has not started and nine days of August are left. If twelve to fifteen interviews is not realistic from here, is a survey-led section 5B acceptable with a smaller interview set for depth? And can you open any part of the OPIT network to me?"],
-  ["3. Scope for the submission", "Of what is left, interviews, one live outcome measurement, a second independent human rating on a new sample (the existing kappa rests on attestation), semantic scoring of two gold fields and free-form routing, which do you consider required and which is honest future work?"],
+  ["3. Scope for the submission", "Of what is left, interviews, one live outcome measurement, a human rating with recorded provenance on a new sample (the existing kappa's independent human provenance is unverified), semantic scoring of two gold fields and free-form routing, which do you consider required and which is honest future work?"],
   ["4. Simulated outcomes", "Section 6.5 still calls one live outcome contract the most important next step. Is the thesis defensible with the contract demonstrated and perceived but not measured, or do I force one small live measurement in at the cost of interview time?"],
   ["5. Does RQ3b stand on its own", "The learned model shows an observed 32.6-point gap of its own on eight German-source signals, reported descriptively because within-predictor tests do not rank predictors. Is that enough as written, or do I need natural German-language data first? That decides whether relabelling the new corpora is required work."],
   ["6. Where the methodology review belongs", "An independent statistics and ML review produced eleven findings, all ten recommendations shipped, and none of it is written up in the thesis. The same is true of the three new corpora. Section 5A, an appendix, or the repository only?"],
