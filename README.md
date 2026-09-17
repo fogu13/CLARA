@@ -225,3 +225,10 @@ npm run check
 - AI-generated claims must carry evidence, confidence, limitations, and audit metadata.
 - Execution should start as draft-plus-approval. Controlled autonomy comes later.
 - Outcome tracking starts simple, then moves toward holdouts and causal measurement where customers have enough data.
+
+## License
+
+CLARA is licensed under the GNU Affero General Public License v3.0 or later
+(AGPL-3.0-or-later). See [LICENSE](./LICENSE). If you run a modified version
+as a network service, you must offer its source to the users of that service
+under the same license.
