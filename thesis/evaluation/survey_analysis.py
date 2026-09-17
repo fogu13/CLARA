@@ -5,10 +5,10 @@ Reads the form's CSV export and computes, for each hypothesis, top-2-box agreeme
 corroborations (H2 source count, H8 measurement frequency), then prints/writes a
 verdict per hypothesis.
 
-Reporting tiers (pre-registered in the manuscript, §5B.0/§5B.1, and enforced
-here — 13 September 2026 review, finding F9):
-  n < 10          INSUFFICIENT N — only the number of answers is reported
-  10 <= n < 40    DESCRIPTIVE ONLY — the proportion and its interval are
+Reporting tiers (pre-registered in the manuscript, §5B.3, and enforced here;
+13 September 2026 review, finding F9):
+  n < 10          INSUFFICIENT N: only the number of answers is reported
+  10 <= n < 40    DESCRIPTIVE ONLY: the proportion and its interval are
                   reported; no hypothesis verdict is issued
   n >= 40         a verdict is issued (rules below)
 where n is each hypothesis's own usable denominator (the answers that item
@@ -36,7 +36,7 @@ COLS = {
     "H2_likert": "Our customer feedback is spread across so many tools that it's hard to see the priorities in one place.",
     "H5": "When feedback calls for action, it's often unclear who owns the response.",
     "H4": "Where in the customer journey a problem happens changes how much we prioritise it.",
-    "H6": "I'd be more comfortable letting software act on feedback automatically if a human approved the riskier actions first.",
+    "H6": "I'd be more comfortable letting software act on feedback automatically if a person approved each action before it was sent.",
     "H7": "I wouldn't trust software to act on feedback unless I could see and audit exactly what it did and why.",
     "H8_likert": "Being able to prove an action actually resolved the customer's problem would be valuable to me.",
     "H2_count": "Roughly how many separate tools/sources does your customer feedback live in?",
@@ -184,7 +184,7 @@ def main():
             r[COLS["H8_freq"]] = "Always"
         assert {h: v for h, _, _, v in analyse(rows)}["H8"].startswith("MIXED/REFINE")
         assert {h: v for h, _, _, v in analyse(rows[:4])}["H1"] == "INSUFFICIENT N"
-        print("demo OK — logic runs:")
+        print("demo OK; logic runs:")
     else:
         if len(sys.argv) < 2:
             print(__doc__); sys.exit(1)

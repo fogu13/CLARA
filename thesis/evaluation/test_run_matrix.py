@@ -1,9 +1,10 @@
-"""Plain-assert checks for run_matrix.py: the dry run prints a matched plan and never a secret.
+"""Plain-assert checks for run_matrix.py: the dry run prints the plan and its design and never a secret.
 Run: python3 thesis/evaluation/test_run_matrix.py   (exits non-zero on failure)
 """
 from __future__ import annotations
 
 import io
+import json
 import os
 import sys
 import tempfile
@@ -42,6 +43,26 @@ def test_dry_run_prints_variable_names_never_values() -> None:
     assert "must-never-print" not in text
     assert "AI_API_KEY=$GLM_API_KEY" in text and "AI_API_KEY=$MISTRAL_API_KEY" in text
     assert text.count("predict_llm_production.py") == 2 and text.count("predict_llm.py") == 2
+    assert RM.DESIGN in text
+
+
+def test_design_is_the_module_constant_and_reaches_the_manifest() -> None:
+    assert RM.DESIGN == ("prompt-and-pipeline configuration × model, one day: generic prompt per item, "
+                         "production stage batched at the requested size")
+    models = [RM.parse_model("glm=CLARA_TEST_UNSET_BASE:CLARA_TEST_UNSET_KEY:glm-5.2"),
+              RM.parse_model("mistral=CLARA_TEST_UNSET_BASE2:CLARA_TEST_UNSET_KEY2:mistral-small-2603")]
+    for name in ("CLARA_TEST_UNSET_BASE", "CLARA_TEST_UNSET_KEY", "CLARA_TEST_UNSET_BASE2", "CLARA_TEST_UNSET_KEY2"):
+        os.environ.pop(name, None)
+    out_root = tempfile.mkdtemp(prefix="clara_matrix_manifest_")
+    steps = RM.plan(models, batch_size=25, out_root=out_root)
+    with redirect_stdout(io.StringIO()):
+        code = RM.execute(steps, batch_size=25, out_root=out_root, models=models)
+    assert code == 1  # credentials unset: nothing ran, the manifest still records the design
+    with open(os.path.join(out_root, "MANIFEST.json"), encoding="utf-8") as fh:
+        manifest = json.load(fh)
+    assert manifest["design"] == RM.DESIGN and manifest["batch_size"] == 25
+    assert manifest["steps"] == [{"step": "glm_generic", "status": "skipped: credentials unset"}]
+    assert not os.path.exists(os.path.join(out_root, "glm_generic"))
 
 
 def test_bad_specs_are_refused() -> None:

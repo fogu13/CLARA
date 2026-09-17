@@ -138,6 +138,68 @@ def test_agreement_adjudication_and_rescore_round_trip() -> None:
     ml_vs_llm = pairs[("risk", "ml_vs_llm_generic")]
     assert ml_vs_llm["n_pairs"] == str(len(SIGS)) and ml_vs_llm["c_second_only_correct"] != "0"
     assert float(ml_vs_llm["p_exact_two_sided"]) <= 1.0
+    assert all(r["note"] == "" for r in acc.values())  # without --retrain-ml no row carries a note
+
+
+def _agreed_gold(out: str) -> str:
+    """Two identical ratings -> no disagreements -> a gold with the seed-derived labels."""
+    AK.draw(["A", "B"], out_dir=out)
+    a_path, b_path = os.path.join(out, "rater_A.csv"), os.path.join(out, "rater_B.csv")
+    _write_rows(a_path, _fill(_rows(a_path)))
+    _write_rows(b_path, _fill(_rows(b_path)))
+    AK.agreement(a_path, b_path, out_dir=out)
+    gold = os.path.join(out, "gold_human.csv")
+    AK.adjudicate(a_path, b_path, os.path.join(out, "disagreements.csv"), out_path=gold)
+    return gold
+
+
+def test_retrain_ml_on_the_human_gold_is_lazy_and_out_of_fold() -> None:
+    # ml_baseline (scikit-learn) is imported inside the retrain branch only, never at module level.
+    assert not hasattr(AK, "ml_baseline")
+    source = open(AK.__file__, encoding="utf-8").read()
+    assert "\nimport ml_baseline" not in source and "\n    import ml_baseline" in source
+
+    out = tempfile.mkdtemp(prefix="clara_annotation_")
+    gold = _agreed_gold(out)
+    ids = [g["public_signal_id"] for g in _rows(gold)]
+    ml_path = os.path.join(out, "ml.json")
+    with open(ml_path, "w", encoding="utf-8") as fh:
+        json.dump({"sentiment": {i: "negative" for i in ids}, "risk": {i: "high" for i in ids}}, fh)
+    missing = os.path.join(out, "missing.json")
+    scored = os.path.join(out, "scored")
+    argv = ["rescore", gold, "--out", scored, "--predictions", f"ml={ml_path}", "--retrain-ml", "--min-per-class", "2"]
+    for label in ("llm_generic", "llm_production_glm", "llm_production_mistral", "llm_taxonomy"):
+        argv += ["--predictions", f"{label}={missing}"]
+    assert AK.main(argv) == 0
+
+    acc = {(r["field"], r["predictor"]): r for r in _rows(os.path.join(scored, "human_gold_accuracy.csv"))}
+    assert {k for k in acc if k[1] == "ml_retrained"} == {("sentiment", "ml_retrained"), ("risk", "ml_retrained")}
+    sentiment = acc[("sentiment", "ml_retrained")]
+    assert (sentiment["n_gold"], sentiment["n_valid"], sentiment["n_invalid"], sentiment["n_absent"]) == ("12", "12", "0", "0")
+    risk = acc[("risk", "ml_retrained")]
+    # low and medium have one item each: below --min-per-class 2 they get no out-of-fold prediction.
+    assert (risk["n_gold"], risk["n_valid"], risk["n_absent"]) == ("12", "10", "2")
+    for row in (sentiment, risk):
+        assert "human gold" in row["note"] and "folds" in row["note"] and "seed labels" in row["note"]
+        assert 0.0 <= float(row["accuracy"]) <= 1.0 and 0.0 <= float(row["accuracy_end_to_end"]) <= 1.0
+        assert float(row["accuracy_ci_low"]) <= float(row["accuracy"]) <= float(row["accuracy_ci_high"])
+    assert acc[("sentiment", "ml")]["note"] == ""
+    pairs = {(r["field"], r["pair"]): r for r in _rows(os.path.join(scored, "human_gold_pairs.csv"))}
+    assert pairs[("risk", "ml_retrained_vs_ml")]["n_pairs"] == "10"
+    assert pairs[("sentiment", "ml_retrained_vs_ml")]["n_pairs"] == "12"
+    summary = json.load(open(os.path.join(scored, "human_gold_summary.json"), encoding="utf-8"))
+    assert summary["ml_retrained"]["min_per_class"] == 2 and summary["ml_retrained"]["fields"] == ["sentiment", "risk"]
+    assert summary["ml_retrained"]["per_field"]["risk"]["folds"] == 4  # capped by the smallest kept class (critical, 4)
+    assert "seed labels" in summary["ml_retrained"]["evidence_type"]
+
+    # At the default minimum (5 per class) this twelve-item gold has no two classes large enough: refused, not faked.
+    small = AK.rescore(gold, out_dir=os.path.join(out, "scored_default"), retrain_ml=True,
+                       predictions={"ml": ml_path, **{label: missing for label in
+                                                      ("llm_generic", "llm_production_glm", "llm_production_mistral", "llm_taxonomy")}})
+    assert small["ml_retrained"]["min_per_class"] == 5
+    acc = {(r["field"], r["predictor"]): r for r in _rows(os.path.join(out, "scored_default", "human_gold_accuracy.csv"))}
+    assert acc[("sentiment", "ml_retrained")]["n_valid"] == "0" and acc[("sentiment", "ml_retrained")]["note"].startswith("not retrained")
+    assert acc[("sentiment", "ml_retrained")]["accuracy"] == ""
 
 
 if __name__ == "__main__":

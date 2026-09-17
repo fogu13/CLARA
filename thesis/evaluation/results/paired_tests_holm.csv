@@ -1,25 +1,21 @@
-family,task,pair,n_pairs,b,c,p_raw,m,holm_p,significant_raw_05,significant_holm_05,note
-ordering,risk,floor_vs_ml,106,8,37,0.000015,6,0.000075,yes,yes,
-ordering,risk,floor_vs_llm,106,3,36,0.000000,6,0.000000,yes,yes,
-ordering,risk,floor_vs_llm_production,106,4,14,0.030884,6,0.061768,yes,no,
-ordering,risk,ml_vs_llm,106,19,23,0.643969,6,0.643969,no,no,
-ordering,risk,ml_vs_llm_production,106,36,17,0.012660,6,0.037980,yes,yes,
-ordering,risk,llm_vs_llm_production,106,26,3,0.000015,6,0.000075,yes,yes,
-ordering,sentiment,floor_vs_ml,153,15,78,0.000000,6,0.000000,yes,yes,
-ordering,sentiment,floor_vs_llm,153,6,81,0.000000,6,0.000000,yes,yes,
-ordering,sentiment,floor_vs_llm_production,153,7,77,0.000000,6,0.000000,yes,yes,
-ordering,sentiment,ml_vs_llm,153,7,19,0.028959,6,0.086877,yes,no,"the comparison §5A.3 leads with; no primary test was declared before the runs, so it is one of six on this task"
-ordering,sentiment,ml_vs_llm_production,153,12,19,0.281042,6,0.453124,no,no,
-ordering,sentiment,llm_vs_llm_production,153,8,3,0.226562,6,0.453124,no,no,
-configuration,risk,ml_vs_glm_generic_run0,106,19,23,0.643969,6,0.643969,no,no,
-configuration,risk,ml_vs_glm_production,106,36,17,0.012660,6,0.053110,yes,no,
-configuration,risk,ml_vs_mistral_production,106,27,18,0.232693,6,0.465386,no,no,
-configuration,risk,glm_generic_run0_vs_glm_production,106,26,3,0.000015,6,0.000090,yes,yes,
-configuration,risk,glm_generic_run0_vs_mistral_production,106,18,5,0.010622,6,0.053110,yes,no,
-configuration,risk,glm_production_vs_mistral_production,106,6,16,0.052479,6,0.157437,no,no,
-configuration,sentiment,ml_vs_glm_generic_run0,153,7,19,0.028959,6,0.173754,yes,no,
-configuration,sentiment,ml_vs_glm_production,153,12,19,0.281042,6,0.906248,no,no,
-configuration,sentiment,ml_vs_mistral_production,153,9,18,0.122078,6,0.610390,no,no,
-configuration,sentiment,glm_generic_run0_vs_glm_production,153,8,3,0.226562,6,0.906248,no,no,
-configuration,sentiment,glm_generic_run0_vs_mistral_production,153,5,2,0.453125,6,0.906250,no,no,
-configuration,sentiment,glm_production_vs_mistral_production,153,3,5,0.726562,6,0.906250,no,no,
+family,task,pair,n_pairs,b,c,acc_first,acc_second,diff,diff_ci_low,diff_ci_high,p_raw,m,holm_p,significant_raw_05,significant_holm_05,note
+retrospective,risk,floor_vs_ml,106,8,37,0.4057,0.6792,0.2736,0.1610,0.3862,0.000015,10,0.000137,yes,yes,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,risk,floor_vs_llm,106,3,36,0.4057,0.7170,0.3113,0.2122,0.4104,0.000000,10,0.000000,yes,yes,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,risk,floor_vs_llm_production,106,4,14,0.4057,0.5000,0.0943,0.0180,0.1707,0.030884,10,0.123535,yes,no,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,risk,floor_vs_mistral_production,106,4,24,0.4057,0.5943,0.1887,0.0977,0.2797,0.000180,10,0.001260,yes,yes,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,risk,ml_vs_glm_generic_run0,106,19,23,0.6792,0.7170,0.0377,-0.0819,0.1574,0.643969,10,0.643969,no,no,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,risk,ml_vs_glm_production,106,36,17,0.6792,0.5000,-0.1792,-0.3095,-0.0490,0.012660,10,0.063732,yes,no,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,risk,ml_vs_mistral_production,106,27,18,0.6792,0.5943,-0.0849,-0.2079,0.0381,0.232693,10,0.465386,no,no,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,risk,glm_generic_run0_vs_glm_production,106,26,3,0.7170,0.5000,-0.2170,-0.3076,-0.1264,0.000015,10,0.000137,yes,yes,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,risk,glm_generic_run0_vs_mistral_production,106,18,5,0.7170,0.5943,-0.1226,-0.2082,-0.0371,0.010622,10,0.063732,yes,no,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,risk,glm_production_vs_mistral_production,106,6,16,0.5000,0.5943,0.0943,0.0095,0.1792,0.052479,10,0.157436,no,no,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,sentiment,floor_vs_ml,153,15,78,0.3725,0.7843,0.4118,0.3069,0.5167,0.000000,10,0.000000,yes,yes,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,sentiment,floor_vs_llm,153,6,81,0.3725,0.8627,0.4902,0.3994,0.5810,0.000000,10,0.000000,yes,yes,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,sentiment,floor_vs_llm_production,153,7,77,0.3725,0.8301,0.4575,0.3652,0.5499,0.000000,10,0.000000,yes,yes,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,sentiment,floor_vs_mistral_production,153,7,79,0.3725,0.8431,0.4706,0.3781,0.5631,0.000000,10,0.000000,yes,yes,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,sentiment,ml_vs_glm_generic_run0,153,7,19,0.7843,0.8627,0.0784,0.0143,0.1426,0.028959,10,0.173756,yes,no,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,sentiment,ml_vs_glm_production,153,12,19,0.7843,0.8301,0.0458,-0.0252,0.1167,0.281042,10,0.906250,no,no,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,sentiment,ml_vs_mistral_production,153,9,18,0.7843,0.8431,0.0588,-0.0071,0.1247,0.122078,10,0.610391,no,no,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,sentiment,glm_generic_run0_vs_glm_production,153,8,3,0.8627,0.8301,-0.0327,-0.0748,0.0095,0.226562,10,0.906250,no,no,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,sentiment,glm_generic_run0_vs_mistral_production,153,5,2,0.8627,0.8431,-0.0196,-0.0534,0.0141,0.453125,10,0.906250,no,no,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs
+retrospective,sentiment,glm_production_vs_mistral_production,153,3,5,0.8301,0.8431,0.0131,-0.0231,0.0492,0.726562,10,0.906250,no,no,retrospective family: the ten unique comparisons among the five predictors on this task; no primary test was declared before the runs

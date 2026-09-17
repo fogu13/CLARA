@@ -34,6 +34,19 @@ accuracy on valid predictions with a Wilson interval, macro-F1, end-to-end accur
 identical items. Default sources: results/predictions_ml.json, results/predictions_llm.json,
 results/predictions_llm_production.json, results_mistral-small-2603/predictions_llm_production.json,
 results/predictions_llm_taxonomy.json; override with --predictions label=path.
+
+rescore --retrain-ml additionally retrains the TF-IDF + logistic regression baseline on
+the human gold itself, for sentiment and risk only (the fields the committed learned
+model predicts): the texts are joined from the corpus loader by public_signal_id and
+ml_baseline.cv_predict gives an out-of-fold prediction per item, with the folds formed on
+the human gold rather than on the seed labels; --min-per-class (default 5) is the
+smallest class the stratified folds admit, as in the committed run. The rows carry the
+predictor name ml_retrained and a note saying so. ml_baseline (scikit-learn) is imported
+only on that path, so the rest of the kit runs without it.
+
+What each answer means. rescore answers how each committed prediction file agrees with
+a human-adjudicated gold; --retrain-ml answers how a learned model trained on that gold
+performs out of fold; neither answers whether the seed labels were correct.
 """
 from __future__ import annotations
 
@@ -45,6 +58,7 @@ import os
 import random
 import re
 import sys
+from collections import Counter
 from datetime import UTC, datetime
 from itertools import combinations
 
@@ -113,7 +127,7 @@ def production_urgency_rubric() -> str:
         match = re.search(r"^- urgency:.*?(?=^- \w+:|\Z)", prompt, re.S | re.M)
         if match:
             return match.group(0).strip()
-    except Exception:  # noqa: BLE001 — the kit must still draw without the API package
+    except Exception:  # noqa: BLE001  (the kit must still draw without the API package)
         pass
     return ("- urgency: one of low | medium | high | critical, judged by impact and time-sensitivity "
             "(the production rubric could not be loaded; copy it from apps/api/app/services/enrichment.py).")
@@ -384,12 +398,46 @@ def _load_predictions(path: str) -> dict[str, dict]:
     raise SystemExit(f"{path}: unrecognised prediction file shape")
 
 
-def rescore(gold_path: str, *, out_dir: str, predictions: dict[str, str] | None = None) -> dict:
+RETRAIN_FIELDS = ("sentiment", "risk")
+RETRAINED = "ml_retrained"
+MIN_PER_CLASS = 5
+
+
+def _retrain(field: str, gold_items: dict[str, str], texts: dict[str, str], *, min_per_class: int) -> dict:
+    """Out-of-fold predictions of the learned baseline retrained on the human gold for one field.
+
+    Returns the accuracy row pieces and the per-item correctness map. ml_baseline
+    (scikit-learn) is imported here, not at module level, so the kit's other commands
+    never need it.
+    """
+    import ml_baseline  # lazy on purpose: only the retrain path needs scikit-learn
+
+    ids = [signal_id for signal_id in gold_items if texts.get(signal_id)]
+    n_absent = len(gold_items) - len(ids)
+    labels = [gold_items[i] for i in ids]
+    eligible = {label for label, count in Counter(labels).items() if count >= min_per_class}
+    if len(eligible) < 2:
+        return {"n_valid": 0, "n_absent": len(gold_items), "scored": {}, "correct": {}, "folds": 0,
+                "note": f"not retrained: fewer than two classes reach --min-per-class {min_per_class} on the human gold"}
+    kept_labels, preds, k, kept_idx = ml_baseline.cv_predict([texts[i] for i in ids], labels, min_per_class=min_per_class)
+    kept_ids = [ids[i] for i in kept_idx]
+    n_absent += len(ids) - len(kept_ids)  # items of classes too rare for the folds get no prediction
+    correct = {i: t == p for i, t, p in zip(kept_ids, kept_labels, preds)}
+    return {"n_valid": len(kept_ids), "n_absent": n_absent, "scored": M.score(kept_labels, list(preds), CLOSED[field]),
+            "correct": correct, "folds": k,
+            "note": (f"TF-IDF + logistic regression retrained on the human gold: {k} stratified folds formed on "
+                     f"the human gold (not the seed labels), min {min_per_class} items per class; out-of-fold predictions")}
+
+
+def rescore(gold_path: str, *, out_dir: str, predictions: dict[str, str] | None = None,
+            retrain_ml: bool = False, min_per_class: int = MIN_PER_CLASS) -> dict:
     sources = dict(DEFAULT_PREDICTIONS)
     if predictions:
         sources.update(predictions)
     available = {label: _load_predictions(path) for label, path in sources.items() if os.path.exists(path)}
     gold = _read_rating(gold_path)
+    texts = {s.id: s.text for s in load() if s.text} if retrain_ml else {}
+    retrained: dict[str, dict] = {}
     acc_rows: list[dict] = []
     pair_rows: list[dict] = []
     for field in FIELDS:
@@ -398,6 +446,20 @@ def rescore(gold_path: str, *, out_dir: str, predictions: dict[str, str] | None 
             continue
         vocab = CLOSED.get(field)
         correct_by_predictor: dict[str, dict[str, bool]] = {}
+        if retrain_ml and field in RETRAIN_FIELDS:
+            result = _retrain(field, gold_items, texts, min_per_class=min_per_class)
+            retrained[field] = {"n_valid": result["n_valid"], "folds": result["folds"], "note": result["note"]}
+            scored = result["scored"]
+            acc_rows.append({
+                "field": field, "predictor": RETRAINED, "n_gold": len(gold_items), "n_valid": result["n_valid"],
+                "n_invalid": 0, "n_absent": result["n_absent"],
+                "accuracy": scored.get("accuracy", ""), "accuracy_ci_low": scored.get("accuracy_ci_low", ""),
+                "accuracy_ci_high": scored.get("accuracy_ci_high", ""), "f1_macro": scored.get("f1_macro", ""),
+                "accuracy_end_to_end": round(sum(result["correct"].values()) / len(gold_items), 4),
+                "note": result["note"],
+            })
+            if result["correct"]:
+                correct_by_predictor[RETRAINED] = result["correct"]
         for predictor, key in FIELD_SOURCES[field].items():
             preds = available.get(predictor)
             if preds is None:
@@ -424,6 +486,7 @@ def rescore(gold_path: str, *, out_dir: str, predictions: dict[str, str] | None 
                 "accuracy": scored.get("accuracy", ""), "accuracy_ci_low": scored.get("accuracy_ci_low", ""),
                 "accuracy_ci_high": scored.get("accuracy_ci_high", ""), "f1_macro": scored.get("f1_macro", ""),
                 "accuracy_end_to_end": round(correct / len(gold_items), 4),
+                "note": "",
             })
             correct_by_predictor[predictor] = {i: t == p for i, t, p in zip(valid_ids, y_true, y_pred)}
         for first, second in combinations(correct_by_predictor, 2):
@@ -436,7 +499,7 @@ def rescore(gold_path: str, *, out_dir: str, predictions: dict[str, str] | None 
     os.makedirs(out_dir, exist_ok=True)
     for name, rows, cols in (
         ("human_gold_accuracy.csv", acc_rows, ["field", "predictor", "n_gold", "n_valid", "n_invalid", "n_absent", "accuracy",
-                                               "accuracy_ci_low", "accuracy_ci_high", "f1_macro", "accuracy_end_to_end"]),
+                                               "accuracy_ci_low", "accuracy_ci_high", "f1_macro", "accuracy_end_to_end", "note"]),
         ("human_gold_pairs.csv", pair_rows, ["field", "pair", "n_pairs", "b_first_only_correct", "c_second_only_correct",
                                              "p_exact_two_sided"]),
     ):
@@ -448,6 +511,10 @@ def rescore(gold_path: str, *, out_dir: str, predictions: dict[str, str] | None 
                "predictions_scored": {label: os.path.relpath(path, HERE) for label, path in sources.items() if label in available},
                "n_accuracy_rows": len(acc_rows), "n_pair_rows": len(pair_rows),
                "evidence_type": "model predictions (committed files, no rerun) against human-adjudicated labels"}
+    if retrain_ml:
+        summary["ml_retrained"] = {"fields": list(RETRAIN_FIELDS), "min_per_class": min_per_class, "per_field": retrained,
+                                   "evidence_type": "learned baseline retrained on the human gold, scored out of fold; "
+                                                    "folds formed on the human gold, not on the seed labels"}
     with open(os.path.join(out_dir, "human_gold_summary.json"), "w", encoding="utf-8") as fh:
         json.dump(summary, fh, indent=2)
     return summary
@@ -476,6 +543,10 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("gold")
     r.add_argument("--out", default=os.path.join(RESULTS, "human_gold"))
     r.add_argument("--predictions", action="append", default=[], help="label=path (overrides or adds a source)")
+    r.add_argument("--retrain-ml", action="store_true",
+                   help="also retrain TF-IDF + logistic regression on the human gold (sentiment and risk), scored out of fold")
+    r.add_argument("--min-per-class", type=int, default=MIN_PER_CLASS,
+                   help=f"smallest class the retrained model's stratified folds admit (default {MIN_PER_CLASS})")
     args = parser.parse_args(argv)
 
     if args.command == "draw":
@@ -493,8 +564,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"wrote {args.out}: {meta['n']} rows; per field {meta['counts']}")
     elif args.command == "rescore":
         overrides = dict(spec.split("=", 1) for spec in args.predictions)
-        summary = rescore(args.gold, out_dir=args.out, predictions=overrides or None)
+        summary = rescore(args.gold, out_dir=args.out, predictions=overrides or None,
+                          retrain_ml=args.retrain_ml, min_per_class=args.min_per_class)
         print(f"scored {summary['n_accuracy_rows']} predictor/field rows and {summary['n_pair_rows']} pairs -> {args.out}")
+        for field, entry in summary.get("ml_retrained", {}).get("per_field", {}).items():
+            print(f"{RETRAINED} {field}: n={entry['n_valid']} folds={entry['folds']}; {entry['note']}")
     return 0
 
 

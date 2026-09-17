@@ -2,7 +2,7 @@
 Run: python3 thesis/evaluation/test_survey_analysis.py   (exits non-zero on failure)
 
 13 September 2026 review, finding F9: the script issued CONFIRMED from n = 10
-while the pre-registered rule (manuscript §5B.1) issues verdicts only from
+while the pre-registered rule (manuscript §5B.3) issues verdicts only from
 n = 40. The rows below are synthetic and exercise the tiers at n = 9, 10, 39
 and 40, missing answers (each hypothesis at its own usable denominator), a
 fragile interval, a failed corroboration and a corroborating item that did
@@ -33,6 +33,13 @@ def verdicts(data: list[dict]) -> dict[str, str]:
 
 def ns(data: list[dict]) -> dict[str, int]:
     return {hyp: n for hyp, _, n, _ in S.analyse(data)}
+
+
+def test_h6_column_is_the_bound_instrument_wording() -> None:
+    # survey.md Q1e (revision contract of 17 September 2026): the column header must match the form.
+    assert S.COLS["H6"] == ("I'd be more comfortable letting software act on feedback automatically "
+                            "if a person approved each action before it was sent.")
+    assert "riskier" not in S.COLS["H6"]
 
 
 def test_tiers_at_9_10_39_and_40() -> None:

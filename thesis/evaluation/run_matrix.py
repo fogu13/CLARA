@@ -1,6 +1,9 @@
-"""Matched 2 x 2 rerun: {generic prompt, production stage} x {model A, model B}, one day,
-one batch size, one command (§5A.4.2; the "controlled rerun with matched batch size and
-conditions" that §6.4 item 2 says was not run).
+"""Prompt-and-pipeline configuration x model rerun: {generic prompt, production stage} x
+{model A, model B}, one day, one command (§5A.4.2; the rerun Chapter 6 lists as not run).
+The two configurations are not batch-matched by design: the generic prompt scores one
+item per call and the production stage batches items at the requested size, so the
+contrast is the configuration as each is used, not the prompt alone. DESIGN below states
+this and is written into the manifest and printed in the dry run.
 
     python3 thesis/evaluation/run_matrix.py \
         --model glm=GLM_BASE_URL:GLM_API_KEY:glm-5.2 \
@@ -21,6 +24,7 @@ time, so the run is citable as one matched design rather than four dated files.
 
 Cost: four passes over the 188-signal corpus (two per-item passes and two batched
 passes). The reported runs are never overwritten: nothing is written under results/.
+Not executed at the time of writing.
 """
 from __future__ import annotations
 
@@ -34,6 +38,8 @@ import time
 from datetime import UTC, datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+DESIGN = ("prompt-and-pipeline configuration × model, one day: generic prompt per item, "
+          "production stage batched at the requested size")
 
 
 def parse_model(spec: str) -> dict[str, str]:
@@ -100,7 +106,7 @@ def render(steps: list[dict]) -> str:
 def execute(steps: list[dict], *, batch_size: int, out_root: str, models: list[dict[str, str]]) -> int:
     os.makedirs(out_root, exist_ok=True)
     manifest = {
-        "design": "matched 2x2: {generic prompt, production stage} x models, one day, one batch size",
+        "design": DESIGN,
         "started_at": datetime.now(UTC).isoformat(),
         "batch_size": batch_size,
         "models": [{"label": m["label"], "model": m["model"], "base_url_env": m["base_env"]} for m in models],
@@ -143,10 +149,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     models = [parse_model(spec) for spec in args.model]
     if len(models) < 2:
-        raise SystemExit("a matched matrix needs at least two --model entries")
+        raise SystemExit("the matrix needs at least two --model entries")
     if len({m["label"] for m in models}) != len(models):
         raise SystemExit("model labels must be distinct")
     steps = plan(models, batch_size=args.batch_size, out_root=args.out_root)
+    print(f"design: {DESIGN}")
     print(render(steps))
     if not args.execute:
         print("\ndry run: nothing executed (pass --execute to run; credentials are read from the named variables)")
