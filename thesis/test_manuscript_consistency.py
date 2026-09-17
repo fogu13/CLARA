@@ -1,8 +1,9 @@
 """Consistency checks between the manuscript, the claim ledger, the committed
 results files and the code the manuscript describes.
 
-Each check pins one correction from the 12 September 2026 review response so
-that a later edit cannot silently reintroduce the error. Run from the
+Each check pins one correction from the 12 September 2026 review response (and,
+since 17 September 2026, the one-family Holm correction and the deck rebuild of
+that round) so that a later edit cannot silently reintroduce the error. Run from the
 repository root with ``python3 -m pytest thesis/test_manuscript_consistency.py``
 or directly with ``python3 thesis/test_manuscript_consistency.py``.
 """
@@ -90,6 +91,8 @@ def test_ledger_records_the_rebuilt_deck_and_the_fit_check() -> None:
         row = _ledger_row(row_id)
         assert "7b26334" in row and "d3f1ecf" in row, row_id
         assert "check_fit.js" in row and "was run" in row, row_id
+        # 17 Sep 2026: the deck was rebuilt again in 3500165 and the fit check left four pre-existing overflows.
+        assert "3500165" in row and "four pre-existing" in row, row_id
         # The rebuild and the fit check are recorded as done, never as unverified
         # (the rating's provenance, a different matter, is unverified by design).
         assert not re.search(r"(?:fit check|rebuil\w+)[^.;]{0,60}unverified|unverified[^.;]{0,60}(?:fit check|rebuil\w+)", row), row_id
@@ -403,6 +406,45 @@ def test_contract_sentences_name_frozen_terms_fixed_intervals_and_the_outbound_b
     assert '"measurement_replanned"' in _read("apps/api/app/routers/problems.py")  # the audit event the sentence names
     for row_id in ("F1", "F2/F3", "F4", "F7", "F8", "F9"):
         _ledger_row(row_id)
+
+
+# I3 (17 September 2026) — one retrospective Holm family of the ten comparisons per task
+
+
+def _section(text: str, heading_prefix: str) -> str:
+    lines = text.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(heading_prefix))
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("#")), len(lines))
+    return "\n".join(lines[start:end])
+
+
+def test_holm_family_is_one_retrospective_family_of_ten() -> None:
+    import csv
+
+    rows = list(csv.DictReader((ROOT / "thesis" / "evaluation" / "results" / "paired_tests_holm.csv").open(encoding="utf-8")))
+    assert len(rows) == 20 and {row["task"] for row in rows} == {"risk", "sentiment"}
+    for row in rows:
+        assert row["m"] == "10" and row["family"] == "retrospective", row["pair"]
+        assert "retrospective" in row["note"], row["pair"]
+    by_key = {(row["task"], row["pair"]): row for row in rows}
+    assert by_key[("sentiment", "ml_vs_glm_generic_run0")]["holm_p"] == "0.173756"
+    assert by_key[("risk", "ml_vs_glm_production")]["holm_p"] == "0.063732"
+    chapter = _read("thesis/manuscript/05_evaluation_results.md")
+    # The lead is quoted where the sentiment comparisons are read (§5A.3) and in §6.4.
+    assert "0.174" in _section(chapter, "### 5A.3") and "0.174" in _read("thesis/manuscript/06_discussion.md")
+    # §5A.6 carries the one statistical interpretation and the one status change of the family switch.
+    interpretation = _section(chapter, "### 5A.6")
+    assert "0.064" in interpretation and "ten-member" in interpretation
+    assert "m = 10" in chapter
+    # No chapter quotes the superseded two-family sentiment value as current.
+    for path in sorted(MANUSCRIPT.glob("0*.md")):
+        assert "0.087" not in path.read_text(encoding="utf-8"), path.name
+    for relative in ("thesis/defense/make_deck.js", "thesis/board/board_spec.json"):
+        text = _read(relative)
+        assert "0.174" in text and "0.087" not in text, relative
+    for row_id in ("H1", "I3"):
+        row = _ledger_row(row_id)
+        assert "0.174" in row and "dd853aa" in row and "0.087" not in row, row_id
 
 
 if __name__ == "__main__":
