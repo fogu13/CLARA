@@ -1,3 +1,0 @@
-slice,n,accuracy,accuracy_ci_low,accuracy_ci_high,f1_macro
-de,81,0.4198,0.3183,0.5285,0.4216
-en,70,0.3143,0.2176,0.4303,0.2667

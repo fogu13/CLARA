@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="CLARA mark — C closing into a loop">
-  <!-- The C (petrol) -->
-  <path d="M69.28 27.02 A30 30 0 1 0 69.28 72.98" fill="none" stroke="#016f60" stroke-width="10" stroke-linecap="round"/>
-  <!-- The closing piece (amber signal) snapping the loop shut -->
-  <path d="M76.6 36.15 A30 30 0 0 1 76.6 63.85" fill="none" stroke="#e0a24a" stroke-width="10" stroke-linecap="round"/>
-</svg>

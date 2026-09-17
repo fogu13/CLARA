@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="CLARA mark — C with a wedge ready to close">
-  <!-- The C (petrol), squared/engineered caps -->
-  <path d="M75.98 35 A30 30 0 1 0 75.98 65" fill="none" stroke="#016f60" stroke-width="11"/>
-  <!-- The missing wedge, lifted out and about to drop back in -->
-  <path d="M77.8 38.8 A30 30 0 0 1 77.8 61.2" fill="none" stroke="#e0a24a" stroke-width="11" transform="translate(6 0)"/>
-</svg>

@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="CLARA mark — C curling back into itself">
-  <!-- The C whose tail curls inward — the loop feeding back -->
-  <path d="M69.28 27.02 A30 30 0 1 0 64 76 A20 20 0 0 1 53 58" fill="none" stroke="#016f60" stroke-width="10" stroke-linecap="round"/>
-  <!-- Signal returning to the core -->
-  <circle cx="53" cy="58" r="5.5" fill="#e0a24a"/>
-</svg>

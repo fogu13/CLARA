@@ -54,7 +54,7 @@ CLARA_2 (Python/FastAPI) base + Elvis's AI layer + UI ported in.
 
 - Elvis AI layer: `reference/elvis/supabase/functions/_shared/ai.ts`
 - Elvis adaptive taxonomy spec: `reference/elvis/docs/superpowers/specs/2026-06-21-adaptive-taxonomy-design.md`
-- Elvis thesis artifact chapter: `thesis/chapters/ch4_artifact.md`
+- Elvis thesis artifact chapter: thesis manuscript, chapter 4 (private repository)
 - Canonical CLARA roadmap: `docs/roadmap.md`
 - CLARA_2 data model: `docs/data-model.md`
 - Architecture notes: `PLAN.md` (top level)

@@ -10,7 +10,7 @@ Config = {
     "last_synced_at": "...",          # optional incremental cursor (ISO)
 }
 
-GDPR stance (see business-ops/competitive/social-listening-plan.md): reviewer
+GDPR stance (see the social-listening plan, private repository): reviewer
 display names are pseudonymized AT INGESTION — CLARA analyzes themes, never
 people. The plaintext name is never stored.
 """

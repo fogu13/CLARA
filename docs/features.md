@@ -368,6 +368,6 @@ worse outcome than a 404.
 
 ---
 
-_Related reading: `thesis/manuscript/04_artifact.md` (design decisions with costs),
-`appendices/D_traceability_matrix.md` (claim-by-claim evidence status),
-`business-ops/competitive/` (market positioning), `docs/mcp.md`, `DEPLOY.md`._
+_Related reading: the thesis manuscript, chapter 4 (design decisions with costs) and its
+traceability appendix (claim-by-claim evidence status), both in the private repository;
+`docs/mcp.md`, `DEPLOY.md`._

@@ -33,7 +33,7 @@ jobs:
       - name: Install API dependencies
         run: python -m pip install -e "apps/api[dev]"
 
-      - name: Run checks (API lint + tests, thesis checks, manuscript consistency, web lint + build)
+      - name: Run checks (API lint + tests, web lint + build)
         run: npm run check
 
   postgres-parity:

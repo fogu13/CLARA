@@ -5,7 +5,7 @@ import { marked } from "marked";
 import type { Metadata } from "next";
 
 // Legal pages (Impressum, Datenschutzerklärung, AGB), rendered at BUILD time
-// from the reviewed markdown in business-ops/legal/.
+// from the reviewed markdown in apps/web/content/legal/.
 //
 // Publishing is double-gated, fail-closed:
 //  1. NEXT_PUBLIC_LEGAL_PAGES=1 must be set at build time (default: 404).
@@ -31,7 +31,7 @@ async function loadPublishable(slug: string): Promise<string | null> {
   try {
     // Build-time read from the repo checkout (force-static: no runtime fs).
     const raw = await fs.readFile(
-      path.join(process.cwd(), "..", "..", "business-ops", "legal", page.file),
+      path.join(process.cwd(), "content", "legal", page.file),
       "utf8"
     );
     if (raw.includes("DRAFT") || raw.includes("{{")) {

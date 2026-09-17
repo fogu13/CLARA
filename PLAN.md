@@ -39,7 +39,7 @@ These support the roadmap but are not separate product phases unless `docs/roadm
 - `docs/roadmap.md` - canonical product roadmap and phase sequence.
 - `docs/hybrid-architecture.md` - what came from each earlier codebase.
 - `reference/elvis/` - Elvis source kept for porting reference.
-- `thesis/` - academic artifact.
+- thesis: academic artifact, maintained in a private repository since September 2026.
 - `business/` - strategy and commercialization notes.
 
 ## Guardrails
