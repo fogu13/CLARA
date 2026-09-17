@@ -2,7 +2,7 @@
 
 A guide to every folder in `CLARA/`: what it is, why it exists, and what is safe to change.
 
-The confusing thing about this repo is that it holds **five unrelated kinds of material** in one place — a production product, an MSc thesis, a commercial kit, frozen history, and tool exhaust. Once you see which bucket a folder belongs to, the rest follows.
+The confusing thing about this repo is that it holds **three unrelated kinds of material** in one place — a production product, frozen history, and tool exhaust (the MSc thesis and the commercial kit moved to a private repository on 17 September 2026). Once you see which bucket a folder belongs to, the rest follows.
 
 The other useful fact: the repo is roughly **900 MB on disk but only ~12 MB of real content** across 589 tracked files. Almost everything large is regenerable.
 
@@ -25,6 +25,7 @@ CLARA/
 │   │   ├── app/(dashboard)/      13 product screens (signals→insights→actions→learnings)
 │   │   ├── app/(auth)/           sign-in + MFA
 │   │   ├── app/legal|pricing|security|ai-literacy-basics/   public pages, flag-gated
+│   │   ├── content/legal/        the three reviewed legal pages the build renders
 │   │   ├── public/home.html      the marketing landing page (hand-written, not React)
 │   │   └── lib/                  API client, i18n (EN/DE), types
 │   ├── data/                   ⚠ NOT documentation — seed JSON imported by 3 app files
@@ -32,22 +33,7 @@ CLARA/
 │   ├── scripts/live_smoke.py   the 17-check production smoke test
 │   └── .github/workflows/      ci.yml (every PR) · uptime.yml (every 30 min)
 │
-├── ② THE THESIS — MSc deliverable, ~9.7 MB
-│   ├── manuscript/               Ch 1–7 + references + appendices  ← source of truth
-│   ├── evaluation/               runnable harness over 188 real signals
-│   ├── diagrams/                 7 mermaid sources → rendered/ (derivable)
-│   ├── instruments/              interview guide, consent, SUS/TAM (blank, pre-data)
-│   ├── defense/                  defense_deck.pptx + make_deck.js generator
-│   ├── correspondence/           supervisor emails + advisor briefs
-│   ├── research/                 citation provenance log
-│   ├── archive/                  deliberate graveyard (Odradek figure, old drafts)
-│   └── build/                    compiled .docx/.epub — gitignored, see "Gotchas"
-│
-├── ③ THE BUSINESS — commercial kit, ~1.2 MB
-│   ├── business/                 strategy layer: the locked positioning (2 files)
-│   ├── business-ops/             execution kit: 8 playbooks, pitch, competitive, pricing
-│   │   └── legal/              ⚠ BUILD DEPENDENCY — the live site reads 3 of these files
-│   └── design/                   brand source of truth; clara-logo/ is the live mark
+├── ② THE THESIS and ③ THE BUSINESS — moved to a private repository on 17 Sep 2026
 │
 ├── ④ HISTORY — frozen, nothing depends on it
 │   ├── reference/elvis/          snapshot of the predecessor codebase (port reference)
@@ -78,23 +64,9 @@ CLARA/
 | `infra/` | Two docker-compose files so you can run Postgres and Langfuse locally, plus the SQL that enables `vector`/`pg_cron`/`pg_net`. | Yes |
 | `scripts/live_smoke.py` | The 17-check production smoke test. Run by `.github/workflows/uptime.yml` every 30 minutes; opens a GitHub issue on a second consecutive failure. | Yes |
 
-## ② The thesis
+## ② The thesis and ③ the business
 
-`thesis/README.md` is the authoritative guide to this folder — it holds the merge log and the author TODO list. In short:
-
-- **`manuscript/`** is the source of truth. Everything else is derived from it or supports it.
-- **`evaluation/`** is runnable Python, not prose — the harness over the 188 real signals.
-- **`diagrams/rendered/`** is fully derivable: `python3 thesis/diagrams/render.py` regenerates it from the `.mmd` sources.
-- **`build/`** is compiled output from `thesis/build_docx.sh`. It is gitignored (see Gotchas) and goes stale whenever the manuscript changes.
-- **`archive/`** already is the graveyard — the retired Odradek architecture figure and superseded drafts live there on purpose.
-
-## ③ The business
-
-`business/` and `business-ops/` look duplicated but aren't: `business/STRATEGY_SYNTHESIS.md` holds the *locked positioning*, and the business-ops playbooks explicitly cite it as their upstream source. One is the decision, the other is the execution.
-
-⚠️ **`business-ops/legal/` is a build dependency, not a document folder.** `apps/web/app/legal/[slug]/page.tsx:35` reads `impressum.md`, `datenschutzerklaerung.md` and `agb-b2b.md` from it at build time. Renaming or moving those three files breaks the web build. Publishing is fail-closed: the pages 404 unless `NEXT_PUBLIC_LEGAL_PAGES=1`, and they refuse to render if the markdown still contains `DRAFT` or `{{placeholders}}`.
-
-`design/clara-logo/` is the live brand mark. The eight numbered SVGs beside it are exploration history.
+Moved to a private repository on 17 September 2026: the manuscript, evaluation harness, instruments, defense deck, strategy, playbooks, legal kit and brand assets. Nothing in the product imports them any more. The one build dependency that existed, the three reviewed legal pages (`impressum.md`, `datenschutzerklaerung.md`, `agb-b2b.md`), now lives in `apps/web/content/legal/` and is read by `apps/web/app/(public)/legal/[slug]/page.tsx` at build time. Publishing is fail-closed: the pages 404 unless `NEXT_PUBLIC_LEGAL_PAGES=1`, and they refuse to render if the markdown still contains `DRAFT` or `{{placeholders}}`.
 
 ## ④ History
 
@@ -112,7 +84,7 @@ Every dot-directory except `.github/` is created by a tool and is gitignored. `.
 
 ## Gotchas worth knowing
 
-1. **`.gitignore` has a bare `build/` rule**, which silently ignores *any* folder named `build` at any depth — including `thesis/build/`. Your compiled `thesis.docx` and `thesis.epub` are therefore **not in version control**. They rebuild from `thesis/build_docx.sh`, so this is defensible, but don't assume git is backing them up. Anchoring the rule to `/build/` would start tracking them.
+1. **`.gitignore` has a bare `build/` rule**, which silently ignores *any* folder named `build` at any depth. Anchoring the rule to `/build/` would change that.
 2. **Two component directories in the frontend**: `apps/web/app/components/` (18 feature panels) and `apps/web/components/` (ui / layout / auth). No rule is written down for which goes where.
 3. **Two rate limiters**, both live: a per-IP ASGI middleware in `apps/api/app/main.py` and a per-workspace, plan-based dependency in `apps/api/app/rate_limit.py`. They key on different things; neither is dead.
 4. **`apps/api/app/billing.py` is a deliberate stub** — it defines plan limits without calling Stripe. No billing routes exist.

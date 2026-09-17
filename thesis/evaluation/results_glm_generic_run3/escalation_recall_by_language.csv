@@ -1,3 +1,0 @@
-language,n_signals,n_gold_escalate,base_rate,n_gold_escalate_floor,recall_floor,recall_floor_ci_low,recall_floor_ci_high,n_gold_escalate_ml,recall_ml,recall_ml_ci_low,recall_ml_ci_high,n_gold_escalate_llm,recall_llm,recall_llm_ci_low,recall_llm_ci_high
-de,45,8,0.1778,8,0.0,0.0,0.3244,8,0.625,0.3057,0.8632,8,0.75,0.4093,0.9285
-en,59,41,0.6949,41,0.1951,0.1023,0.3401,41,0.9512,0.8386,0.9865,41,0.7805,0.6329,0.88

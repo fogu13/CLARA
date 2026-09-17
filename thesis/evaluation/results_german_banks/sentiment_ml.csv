@@ -1,2 +1,0 @@
-n,accuracy,precision_macro,recall_macro,f1_macro,precision_weighted,recall_weighted,f1_weighted,cv_folds
-215,0.6791,0.5666,0.5592,0.5625,0.6736,0.6791,0.676,5

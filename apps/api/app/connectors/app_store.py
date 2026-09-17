@@ -17,7 +17,7 @@ reviews exist (so first-page emptiness is retried, not trusted); transient
 serves no review entries at all — hence the "de,at,ch" default, so a
 German-language app still gets coverage via AT/CH while DE is dark.
 
-GDPR stance (see business-ops/competitive/social-listening-plan.md): reviewer
+GDPR stance (see the social-listening plan, private repository): reviewer
 names are pseudonymized AT INGESTION — CLARA analyzes themes, never people.
 The plaintext author name is never stored.
 """

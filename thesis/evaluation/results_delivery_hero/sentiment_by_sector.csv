@@ -1,2 +1,0 @@
-slice,n,accuracy,precision_macro,recall_macro,f1_macro,precision_weighted,recall_weighted,f1_weighted
-food_delivery,80,0.375,0.5056,0.4399,0.3727,0.6555,0.375,0.4395

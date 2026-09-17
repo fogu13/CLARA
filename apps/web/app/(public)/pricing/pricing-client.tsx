@@ -2,8 +2,8 @@
 
 // Published pricing — one displayed anchor per tier (the "from €490 /
 // typically €690" double number confused more than it converted; the floor
-// stays a negotiation position, not a public promise). Numbers per
-// business-ops/competitive/pricing-benchmark-2026-08.md. No named competitor
+// stays a negotiation position, not a public promise). Numbers per the
+// August 2026 pricing benchmark (private repository). No named competitor
 // comparisons here: comparative advertising is pending the Fachanwalt review.
 
 import { useI18n } from "@/lib/i18n";
