@@ -1,11 +1,12 @@
-"""Retrospective interrupted-time-series read on real, dated inflow (§3.5.5; §6.5 direction 3).
+"""Retrospective observational read of the shipped estimator on real, dated inflow (§3.5.5; §6.5 item 4).
 
 Runs the artifact's own estimator (apps/api: outcome_engine.its_outcome_for_problem, the
 code path a scheduled checkpoint uses) over a CSV of dated signals around a known
 intervention date, and writes the graded readout the platform would have produced had
-that intervention been a CLARA action dispatched on that date. It is a natural
-experiment on real data, not a CLARA-caused action: attribution is not established by an
-uncontrolled design, and the readout says so.
+that intervention been a CLARA action dispatched on that date. It is a retrospective
+observational read on real data, not a CLARA-caused action: it describes rather than
+attributes, attribution is not established by an uncontrolled design, and the readout
+says so.
 
     python3 thesis/evaluation/retrospective_its.py --csv signals.csv \
         --intervention 2026-05-14 --journey checkout --stage payment \
@@ -121,7 +122,7 @@ def interpret(result: dict, *, grade: str, n_pre: int, n_post: int) -> str:
         f"{result.get('n_post')} post complete days against the estimator's minimum of {MIN_PRE_DAYS} and "
         f"{MIN_POST_DAYS}. The readout is the labelled plain difference of daily means, "
         f"{result.get('delta'):+.4f} signals/day, with no interval (grade {grade}). That refusal is the "
-        "honesty rule of §3.5.5 acting on real inflow, not a null result."
+        "minimum-data rule of §3.5.5 acting on real inflow, not a null result."
     )
 
 
@@ -154,7 +155,7 @@ def readout(signals: list[SignalRecord], *, journey: str, stage: str, interventi
     n_pre = sum(1 for t in stamps if pre_start <= t < intervention)
     n_post = sum(1 for t in stamps if intervention <= t <= end)
     return {
-        "design": "retrospective interrupted time series on real inflow (natural experiment; uncontrolled)",
+        "design": "retrospective observational read: interrupted time series on real inflow (uncontrolled; describes, does not attribute; §6.5 item 4)",
         "estimator": "apps/api/app/services/outcome_engine.its_outcome_for_problem (the scheduled-checkpoint code path)",
         "journey": journey,
         "journey_stage": stage,
