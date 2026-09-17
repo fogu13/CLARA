@@ -54,8 +54,9 @@ from app.rbac import Role, require_role
 from app.services.common import utc_now
 from app.services.context_impact import build_affected_context_explorer
 from app.services.emerging import build_emerging_problem_report
+from app.services.governance import problem_lock
 from app.services.learning_engine import learning_from_problem_conclusion, with_decay
-from app.services.measurement_scheduler import schedule_measurements
+from app.services.measurement_scheduler import replan_after_amendment, schedule_measurements
 from app.services.outcome_engine import (
     ITS_COMPARISON_METHOD,
     detectability_note,
@@ -66,7 +67,9 @@ from app.services.outcome_engine import (
     propose_outcome_contract,
     resolution_score,
 )
+from app.services.outbound import build_outbound_content, outbound_sha256
 from app.services.problems import outcome_contract_changes
+from app.services.workflow import SCORING_TERM_FIELDS
 from app.services.routing import resolve_owner_route
 from app.services.signals import promote_candidate, theme_candidate_id
 from app.services.workflow import (
@@ -153,6 +156,9 @@ def build_outcome_board(
             plans=plans_by_problem.get(problem.problem_id, []),
             measurement_source=snapshot.measurement_source,
             checkpoint_kind=snapshot.checkpoint_kind,
+            plan_id=snapshot.plan_id,
+            execution_id=snapshot.execution_id,
+            evidence_grade=snapshot.evidence_grade,
         )
         if verdict == "loop_closed":
             loop_closed += 1
@@ -376,18 +382,11 @@ def build_router(
             context_store.list_context(),
         )
 
-    @router.patch("/problems/{problem_id}", response_model=ProblemRecord, dependencies=[Depends(require_role(Role.editor))])
-    def update_problem(problem_id: str, update: ProblemUpdateRequest) -> ProblemRecord:
-        problem = require_problem(problem_id)
-        update = strip_redaction_sentinels(update)
-        # The outbound payload carries the problem's title and statement next
-        # to the approved action text. While any action is approved those two
-        # are part of what the reviewers signed off, so they are frozen until
-        # a rejection revokes the approval; other fields stay editable.
-        binding_change = (update.title is not None and update.title != problem.title) or (
-            update.statement is not None and update.statement != problem.statement
-        )
-        if binding_change and any(
+    def _refuse_if_any_action_approved(problem_id: str) -> None:
+        """Guard run under the problem lock, immediately before a governed
+        write, on a fresh read of the approvals."""
+        workflow_store.refresh()
+        if any(
             decision.decision == ApprovalDecisionStatus.approved
             for decision in latest_decisions(workflow_store.list_approvals(), problem_id).values()
         ):
@@ -398,7 +397,27 @@ def build_router(
                     " record a rejection first"
                 ),
             )
-        updated_problem = active_problem_store.update_problem(problem_id, update)
+
+    @router.patch("/problems/{problem_id}", response_model=ProblemRecord, dependencies=[Depends(require_role(Role.editor))])
+    def update_problem(problem_id: str, update: ProblemUpdateRequest) -> ProblemRecord:
+        update = strip_redaction_sentinels(update)
+        # The outbound payload carries the problem's title and statement next
+        # to the approved action text. While any action is approved those two
+        # are part of what the reviewers signed off, so they are frozen until
+        # a rejection revokes the approval; other fields stay editable. The
+        # check and the write run under the problem's governance lock, and
+        # the check is re-run by the store right before the write (inside
+        # the same transaction on Postgres), so an approval recorded after
+        # the check cannot be followed by the edit it should have refused.
+        with problem_lock(problem_id):
+            problem = require_problem(problem_id)
+            binding_change = (update.title is not None and update.title != problem.title) or (
+                update.statement is not None and update.statement != problem.statement
+            )
+            guard = (lambda: _refuse_if_any_action_approved(problem_id)) if binding_change else None
+            if guard is not None:
+                guard()
+            updated_problem = active_problem_store.update_problem(problem_id, update, guard=guard)
         if updated_problem is None:
             raise HTTPException(
                 status_code=409,
@@ -407,12 +426,16 @@ def build_router(
 
         return enrich_problem_for_response(updated_problem)
 
-    @router.patch("/problems/{problem_id}/actions/{action_id}", response_model=ProblemRecord, dependencies=[Depends(require_role(Role.editor))])
-    def update_action_proposal(
-        problem_id: str,
-        action_id: str,
-        update: ActionProposalUpdateRequest,
-    ) -> ProblemRecord:
+    @router.get(
+        "/problems/{problem_id}/actions/{action_id}/outbound-preview",
+        dependencies=[read_dep],
+    )
+    def preview_outbound_content(problem_id: str, action_id: str) -> dict:
+        """The outbound content an approval of this action would sign, with
+        its hash. A client that sends the hash back as
+        ``expected_outbound_sha256`` on the decision is refused (409) when the
+        content changed in between, so a reviewer never signs text they did
+        not read."""
         problem = require_problem(problem_id)
         action = next(
             (proposal for proposal in problem.action_proposals if proposal.action_id == action_id),
@@ -420,23 +443,45 @@ def build_router(
         )
         if action is None:
             raise HTTPException(status_code=404, detail="Action proposal not found")
+        content = build_outbound_content(problem, action)
+        return {"content": content.model_dump(mode="json"), "sha256": outbound_sha256(content)}
 
-        # An approval signs one revision of the action. Editing the approved
-        # revision in place would let a retry dispatch text nobody approved
-        # under the human-review stamp, so the approval must be revoked first
-        # (append-only trail: a rejection, then edit, then re-approve).
-        latest = latest_decisions(workflow_store.list_approvals(), problem_id).get(action_id)
-        if latest is not None and latest.decision == ApprovalDecisionStatus.approved:
-            raise HTTPException(
-                status_code=409,
-                detail="Action is approved; record a rejection first, then edit and re-approve.",
+    @router.patch("/problems/{problem_id}/actions/{action_id}", response_model=ProblemRecord, dependencies=[Depends(require_role(Role.editor))])
+    def update_action_proposal(
+        problem_id: str,
+        action_id: str,
+        update: ActionProposalUpdateRequest,
+    ) -> ProblemRecord:
+        def guard() -> None:
+            # An approval signs one revision of the action. Editing the
+            # approved revision in place would let a retry dispatch text
+            # nobody approved under the human-review stamp, so the approval
+            # must be revoked first (append-only trail: a rejection, then
+            # edit, then re-approve). Checked on a fresh read, under the
+            # problem lock, right before the write.
+            workflow_store.refresh()
+            latest = latest_decisions(workflow_store.list_approvals(), problem_id).get(action_id)
+            if latest is not None and latest.decision == ApprovalDecisionStatus.approved:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Action is approved; record a rejection first, then edit and re-approve.",
+                )
+
+        with problem_lock(problem_id):
+            problem = require_problem(problem_id)
+            action = next(
+                (proposal for proposal in problem.action_proposals if proposal.action_id == action_id),
+                None,
             )
-
-        updated_problem = active_problem_store.update_action_proposal(
-            problem_id,
-            action_id,
-            strip_redaction_sentinels(update),
-        )
+            if action is None:
+                raise HTTPException(status_code=404, detail="Action proposal not found")
+            guard()
+            updated_problem = active_problem_store.update_action_proposal(
+                problem_id,
+                action_id,
+                strip_redaction_sentinels(update),
+                guard=guard,
+            )
         if updated_problem is None:
             raise HTTPException(
                 status_code=409,
@@ -502,7 +547,10 @@ def build_router(
                 status_code=409,
                 detail="Cannot change the contract metric after an outcome was recorded against it",
             )
-        term_fields_set = update.model_fields_set - {"amendment_note"}
+        term_fields_set = {
+            name for name in update.model_fields_set - {"amendment_note"}
+            if getattr(update, name) is not None  # an explicit null changes nothing
+        }
         if not term_fields_set:
             raise HTTPException(status_code=422, detail="no contract term changed")
         if update.comparison_method is None:
@@ -525,6 +573,7 @@ def build_router(
             problem.outcome_contract, updated_problem.outcome_contract
         )
         if changed:
+            _replan_after_amendment(updated_problem, changed, actor=_actor_identifier(user))
             telemetry_store.record(
                 "contract_amended",
                 entity_id=problem_id,
@@ -675,12 +724,17 @@ def build_router(
             )["content_hash"]
         except Exception:  # noqa: BLE001
             logger.warning("Evidence-pack hashing failed for %s", problem_id, exc_info=True)
-        record = workflow_store.record_approval(
-            problem=problem,
-            decision=decision,
-            evidence_pack_hash=pack_hash,
-            four_eyes=workspace_store.get(user.workspace_id).four_eyes_approval,
-        )
+        # Under the problem's governance lock: the decision freezes the
+        # outbound content as it stands, and no governed edit can slip in
+        # between its own check and this record (see services.governance).
+        with problem_lock(problem_id):
+            problem = require_problem(problem_id)
+            record = workflow_store.record_approval(
+                problem=problem,
+                decision=decision,
+                evidence_pack_hash=pack_hash,
+                four_eyes=workspace_store.get(user.workspace_id).four_eyes_approval,
+            )
         # approval-cycle-time denominator + decision mix.
         telemetry_store.record(
             "approval_recorded",
@@ -692,7 +746,11 @@ def build_router(
         # (Jira/Slack) when one is configured; otherwise the draft stands. Push
         # failures are recorded on the execution and never fail the approval.
         if record.decision == ApprovalDecisionStatus.approved:
-            from app.services.action_push import DispatchNotAuthorized, push_approved_action
+            from app.services.action_push import (
+                DispatchClaimed,
+                DispatchNotAuthorized,
+                push_approved_action,
+            )
             from app.services.workflow import find_action
 
             # W4 zero-input closure: upgrade the promotion-default contract to
@@ -735,6 +793,7 @@ def build_router(
                             problem.outcome_contract, upgraded.outcome_contract
                         )
                         if changed:
+                            _replan_after_amendment(upgraded, changed, actor=decision.reviewer)
                             telemetry_store.record(
                                 "contract_amended",
                                 entity_id=problem_id,
@@ -780,6 +839,7 @@ def build_router(
                         disclosure_template=workspace_settings.ai_disclosure_template,
                         owner_routes=workspace_settings.owner_routes,
                         four_eyes=workspace_settings.four_eyes_approval,
+                        on_event=_push_event,
                     )
                     if pushed.status.value in ("pushed", "push_failed"):
                         telemetry_store.record(
@@ -808,6 +868,11 @@ def build_router(
                         entity_id=execution.execution_id,
                         metadata={"problem_id": problem_id, "reason": exc.reason},
                     )
+                except DispatchClaimed as exc:
+                    # Another worker is dispatching this execution right now;
+                    # its outcome (and clock) will be recorded by that worker.
+                    logger.warning("Approval push skipped: %s", exc.detail)
+                    not_scheduled_reason = exc.reason
                 except Exception:  # noqa: BLE001 — approval already recorded; push is best-effort
                     logger.exception("Action push failed unexpectedly for %s", decision.action_id)
 
@@ -830,6 +895,42 @@ def build_router(
                 )
 
         return record
+
+    def _push_event(event_type: str, execution_id: str, metadata: dict) -> None:
+        telemetry_store.record(event_type, entity_id=execution_id, metadata=metadata)
+
+    def _replan_after_amendment(problem: ProblemRecord, changed: dict, *, actor: str | None) -> None:
+        """A pending checkpoint is bound to the terms it was scheduled with.
+        When an amendment touches a scoring term, the problem's live
+        checkpoints are superseded and re-planned under the new revision on
+        the same clock, and the audit trail says so (measurement_replanned);
+        readings already on record are untouched."""
+        if not any(field in changed for field in SCORING_TERM_FIELDS):
+            return
+        revision = problem.outcome_contract.revision
+        try:
+            result = replan_after_amendment(
+                measurement_plan_store,
+                problem=problem,
+                note=f"superseded by contract revision {revision} (amendment)",
+            )
+        except Exception:  # noqa: BLE001 — re-planning is best-effort, the amendment stands
+            logger.exception("Re-planning after amendment failed for %s", problem.problem_id)
+            return
+        if result["superseded"] or result["kinds"]:
+            telemetry_store.record(
+                "measurement_replanned",
+                entity_id=problem.problem_id,
+                metadata={
+                    "problem_id": problem.problem_id,
+                    "revision": revision,
+                    "changed": sorted(changed),
+                    "superseded": result["superseded"],
+                    "kinds": result["kinds"],
+                    "clock": result["clock"],
+                    "actor": actor,
+                },
+            )
 
     def _schedule_after_push(
         *,
@@ -891,10 +992,15 @@ def build_router(
         second approval is refused) and nothing retries. The idempotency scan in
         push_approved_action prevents duplicate external records.
         """
-        from app.services.action_push import DispatchNotAuthorized, push_approved_action
+        from app.services.action_push import (
+            DispatchClaimed,
+            DispatchNotAuthorized,
+            push_approved_action,
+        )
         from app.services.workflow import find_action
 
         problem = require_problem(problem_id)
+        workflow_store.refresh()
         execution = next(
             (
                 item
@@ -930,6 +1036,7 @@ def build_router(
                 disclosure_template=settings.ai_disclosure_template,
                 owner_routes=settings.owner_routes,
                 four_eyes=settings.four_eyes_approval,
+                on_event=_push_event,
             )
         except DispatchNotAuthorized as exc:
             # The approval bound to this execution no longer covers the current
@@ -939,6 +1046,8 @@ def build_router(
                 entity_id=execution_id,
                 metadata={"problem_id": problem_id, "reason": exc.reason},
             )
+            raise HTTPException(status_code=409, detail=f"{exc.reason}: {exc.detail}") from exc
+        except DispatchClaimed as exc:
             raise HTTPException(status_code=409, detail=f"{exc.reason}: {exc.detail}") from exc
         telemetry_store.record(
             "action_push_retried",
@@ -1009,6 +1118,9 @@ def build_router(
             execution=execution,
             approvals=approvals,
             four_eyes=workspace_store.get(user.workspace_id).four_eyes_approval,
+            # The text already left; what must hold is the approval in force
+            # for this execution, not a proof of the content it carried.
+            outbound_binding=False,
         )
         if not authorization.authorized:
             raise HTTPException(
@@ -1145,6 +1257,8 @@ def build_router(
                 "execution_id": None,
                 "clock_origin": None,
                 "clock_origin_at": None,
+                "observation_start": None,
+                "observation_end": None,
             }
         )
         recorded = workflow_store.record_outcome(problem=problem, measurement=measurement)
@@ -1305,22 +1419,42 @@ def build_router(
                 # implementation recorded afterwards cannot relabel it.
                 snapshot.measurement_origin, snapshot.measurement_origin_at = anchor
         if executed_at is not None:
+            # The read-time ITS reproduces the conditions of the recorded
+            # reading: the contract it was scored under (frozen snapshot) and
+            # the clock it was taken on, so a later window amendment or
+            # implementation record cannot move a certified reading's grade
+            # without a new observation.
+            latest_reading = workflow_store.latest_outcome(problem_id)
+            frozen_contract = getattr(latest_reading, "contract_snapshot", None)
+            its_problem = (
+                problem.model_copy(update={"outcome_contract": frozen_contract})
+                if frozen_contract is not None
+                else problem
+            )
+            its_anchor = snapshot.measurement_origin_at or executed_at
             snapshot.its = its_outcome_for_problem(
-                problem,
+                its_problem,
                 signal_store.list_signals(),
-                executed_at=executed_at,
+                executed_at=its_anchor,
                 now=utc_now(),
             )
             if snapshot.its is not None:
-                # Re-grade on the fit actually obtained: an ITS contract whose
-                # series was too sparse for segmented regression is a plain
-                # before/after delta (grade D), not an ITS (grade C).
-                snapshot.evidence_grade = evidence_grade(
-                    comparison_method=(
-                        snapshot.measured_comparison_method or snapshot.comparison_method
-                    ),
-                    measurement_source=snapshot.measurement_source,
+                # The read-time ITS is a LIVE, cumulative estimate over
+                # [anchor, now] on real inflow — identified separately from
+                # the checkpoint reading, which covers its fixed interval. It
+                # is graded on the fit actually obtained: C when the segmented
+                # regression was fitted, D when the series was too sparse and
+                # the engine fell back to the labelled delta. The reading's
+                # own grade (snapshot.evidence_grade) is the grade of its
+                # design and is not moved by the live estimate.
+                snapshot.its["evidence_grade"] = evidence_grade(
+                    comparison_method=ITS_COMPARISON_METHOD,
+                    measurement_source="instrumented",
                     realised_method=snapshot.its.get("method"),
+                )
+                snapshot.its["scope"] = (
+                    "live cumulative read-time estimate over [clock origin, now] on real"
+                    " inflow; not a checkpoint reading"
                 )
         plans = [
             plan
@@ -1334,6 +1468,9 @@ def build_router(
             checkpoint_kind=snapshot.checkpoint_kind,
             measurement_origin=snapshot.measurement_origin,
             measurement_origin_at=snapshot.measurement_origin_at,
+            plan_id=snapshot.plan_id,
+            execution_id=snapshot.execution_id,
+            evidence_grade=snapshot.evidence_grade,
         )
         return snapshot
 

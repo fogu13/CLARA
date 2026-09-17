@@ -13,6 +13,8 @@ from itertools import count
 from typing import Any
 from uuid import uuid4
 
+from fastapi import HTTPException
+
 from app.auth import current_tenant
 from app.domain.models import (
     ApprovalRecord,
@@ -54,7 +56,14 @@ from app.services.taxonomies import (
     load_seed_taxonomies,
     load_seed_terminology,
 )
-from app.services.workflow import WorkflowStore
+from app.services.common import utc_now
+from app.services.governance import advisory_lock_key
+from app.services.workflow import (
+    DISPATCH_CLAIM_TTL_SECONDS,
+    WorkflowStore,
+    find_action,
+    outcome_order_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -174,9 +183,13 @@ CREATE TABLE IF NOT EXISTS clara_measurement_plans (
     note TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Clock origin (approval | dispatch | implementation) and the contract
-    -- revision the checkpoints were scheduled under (migration 016).
+    -- revision the checkpoints were scheduled under (migration 016); the
+    -- frozen scoring terms and the fixed observation interval (migration 017).
     origin TEXT NOT NULL DEFAULT 'approval',
-    contract_revision INTEGER
+    contract_revision INTEGER,
+    contract_snapshot JSONB,
+    observation_start TEXT,
+    observation_end TEXT
 );
 
 CREATE TABLE IF NOT EXISTS clara_connector_configs (
@@ -382,7 +395,10 @@ class PostgresConnectionMixin:
                     """
                     ALTER TABLE clara_measurement_plans
                     ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT 'approval',
-                    ADD COLUMN IF NOT EXISTS contract_revision INTEGER
+                    ADD COLUMN IF NOT EXISTS contract_revision INTEGER,
+                    ADD COLUMN IF NOT EXISTS contract_snapshot JSONB,
+                    ADD COLUMN IF NOT EXISTS observation_start TEXT,
+                    ADD COLUMN IF NOT EXISTS observation_end TEXT
                     """
                 )
                 # Self-heal the tenant-first PK on DBs that predate migration 011.
@@ -647,21 +663,49 @@ class PostgresProblemStore(PostgresConnectionMixin):
             )
         return problem
 
-    def update_problem(self, problem_id: str, update) -> ProblemRecord | None:
-        existing = self.get_problem(problem_id)
-        if existing is None or problem_id in self.seed_problem_ids:
+    def _guarded_write(self, problem_id: str, mutate, guard) -> ProblemRecord | None:
+        """Read, guard and write in ONE transaction under the problem's
+        advisory lock, so an approval insert (which takes the same lock,
+        PostgresWorkflowStore.record_approval) cannot land between the guard
+        and the write on another worker. ``guard`` raises to refuse."""
+        if problem_id in self.seed_problem_ids:
             return None
-        updated = apply_problem_update(existing, update)
-        return self._write_problem(updated)
+        with self._connect() as conn:
+            conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (advisory_lock_key(problem_id),))
+            row = conn.execute(
+                "SELECT payload FROM clara_problems WHERE problem_id = %s FOR UPDATE",
+                (problem_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            existing = ProblemRecord.model_validate(_payload(row["payload"]))
+            if guard is not None:
+                guard()
+            updated = mutate(existing)
+            if updated is None:
+                return None
+            conn.execute(
+                """
+                INSERT INTO clara_problems (problem_id, payload)
+                VALUES (%s, %s)
+                ON CONFLICT (workspace_id, problem_id) DO UPDATE
+                SET payload = excluded.payload, updated_at = now()
+                """,
+                (updated.problem_id, self._jsonb(_model_payload(updated))),
+            )
+        return updated
 
-    def update_action_proposal(self, problem_id: str, action_id: str, update):
-        existing = self.get_problem(problem_id)
-        if existing is None or problem_id in self.seed_problem_ids:
-            return None
-        updated = apply_action_proposal_update(existing, action_id, update)
-        if updated is None:
-            return None
-        return self._write_problem(updated)
+    def update_problem(self, problem_id: str, update, *, guard=None) -> ProblemRecord | None:
+        return self._guarded_write(
+            problem_id, lambda existing: apply_problem_update(existing, update), guard
+        )
+
+    def update_action_proposal(self, problem_id: str, action_id: str, update, *, guard=None):
+        return self._guarded_write(
+            problem_id,
+            lambda existing: apply_action_proposal_update(existing, action_id, update),
+            guard,
+        )
 
     def transition_problem_status(
         self,
@@ -960,6 +1004,51 @@ class PostgresCustomerContextStore(PostgresConnectionMixin, CustomerContextStore
 # collision would silently overwrite another instance's record via ON CONFLICT.
 _WORKFLOW_REFRESH_TTL_SECONDS = 2.0
 
+# The plpgsql measurement tick this code was written against (migration 017
+# installs clara_measurement_function_version() returning it). A database
+# whose function is older, or missing, is reported by GET /ready/details so
+# a deployment cannot silently run the tick with older semantics.
+EXPECTED_MEASUREMENT_FUNCTION_VERSION = 17
+MEASUREMENT_PLAN_COLUMNS = (
+    "origin",
+    "contract_revision",
+    "contract_snapshot",
+    "observation_start",
+    "observation_end",
+)
+
+
+def measurement_schema_state(conn: Any) -> dict[str, Any]:
+    """What the connected database's measurement tick is: the version marker
+    (None when the function does not exist), whether the tick function itself
+    exists (a database that predates 011 has none and the API runs its Python
+    tick), and which plan columns the API-side DDL still has to self-heal."""
+    version_row = conn.execute(
+        "SELECT to_regprocedure('public.clara_measurement_function_version()') IS NOT NULL AS present"
+    ).fetchone()
+    version_present = bool(version_row["present"] if isinstance(version_row, dict) else version_row[0])
+    version = None
+    if version_present:
+        row = conn.execute("SELECT public.clara_measurement_function_version() AS v").fetchone()
+        version = int(row["v"] if isinstance(row, dict) else row[0])
+    tick_row = conn.execute(
+        "SELECT to_regprocedure('public.clara_run_due_measurements(integer, timestamptz)') IS NOT NULL AS present"
+    ).fetchone()
+    tick_present = bool(tick_row["present"] if isinstance(tick_row, dict) else tick_row[0])
+    rows = conn.execute(
+        """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'clara_measurement_plans'
+        """
+    ).fetchall()
+    present = {(r["column_name"] if isinstance(r, dict) else r[0]) for r in rows}
+    return {
+        "function_version": version,
+        "tick_function_present": tick_present,
+        "columns_missing": [c for c in MEASUREMENT_PLAN_COLUMNS if c not in present],
+        "backend_tick": "plpgsql" if tick_present else "python",
+    }
+
 
 class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
     """DB-backed workflow store.
@@ -978,6 +1067,12 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         self._load_records()
 
     # -- reads: refresh, then delegate to the in-memory logic --
+
+    def refresh(self) -> None:
+        """Force a reload: reads normally reuse a snapshot younger than
+        _WORKFLOW_REFRESH_TTL_SECONDS, which is fine for dashboards but not
+        for deciding whether a dispatch is still authorized."""
+        self._load_records(force=True)
 
     def list_approvals(self):
         self._load_records()
@@ -1056,7 +1151,14 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
                 transitions.append(ProblemTransitionRecord.model_validate(payload))
             elif record_type == "outcome":
                 measurement = OutcomeMeasurement.model_validate(payload)
-                outcomes[measurement.problem_id] = measurement
+                # Readings are append-only rows; the latest one per problem is
+                # decided by the observation-interval rule (workflow.
+                # outcome_order_key), not by insertion order alone: a T+7
+                # checkpoint processed after the window read must not
+                # displace it.
+                current = outcomes.get(measurement.problem_id)
+                if current is None or outcome_order_key(measurement) >= outcome_order_key(current):
+                    outcomes[measurement.problem_id] = measurement
             elif record_type == "learning_conclusion":
                 learning_conclusions.append(LearningConclusionRecord.model_validate(payload))
             elif record_type == "closure":
@@ -1091,39 +1193,55 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         record: Any,
         tenant_id: str | None = None,
         retention_expires_at: str | None = None,
+        conn: Any = None,
     ) -> None:
         # Default to the request's tenant (auth ContextVar) so every record type
         # — transitions, approvals, outcomes, executions, drafts — satisfies the
         # FORCEd RLS WITH CHECK; the old 'legacy' default would be rejected.
         tenant_id = tenant_id or current_tenant()
+        if conn is not None:
+            self._write_record(conn, record_type, record_id, problem_id, record, tenant_id, retention_expires_at)
+            return
         with self._connect() as conn:
-            conn.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
-            conn.execute(
-                """
-                INSERT INTO clara_workflow_records (
-                    record_type,
-                    record_id,
-                    problem_id,
-                    tenant_id,
-                    payload,
-                    retention_expires_at
-                )
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (tenant_id, record_type, record_id) DO UPDATE
-                SET problem_id = excluded.problem_id,
-                    payload = excluded.payload,
-                    retention_expires_at = excluded.retention_expires_at,
-                    updated_at = now()
-                """,
-                (
-                    record_type,
-                    record_id,
-                    problem_id,
-                    tenant_id,
-                    self._jsonb(_model_payload(record)),
-                    retention_expires_at,
-                ),
+            self._write_record(conn, record_type, record_id, problem_id, record, tenant_id, retention_expires_at)
+
+    def _write_record(
+        self,
+        conn: Any,
+        record_type: str,
+        record_id: str,
+        problem_id: str,
+        record: Any,
+        tenant_id: str,
+        retention_expires_at: str | None,
+    ) -> None:
+        conn.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
+        conn.execute(
+            """
+            INSERT INTO clara_workflow_records (
+                record_type,
+                record_id,
+                problem_id,
+                tenant_id,
+                payload,
+                retention_expires_at
             )
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (tenant_id, record_type, record_id) DO UPDATE
+            SET problem_id = excluded.problem_id,
+                payload = excluded.payload,
+                retention_expires_at = excluded.retention_expires_at,
+                updated_at = now()
+            """,
+            (
+                record_type,
+                record_id,
+                problem_id,
+                tenant_id,
+                self._jsonb(_model_payload(record)),
+                retention_expires_at,
+            ),
+        )
 
     def record_transition(self, *args: Any, **kwargs: Any):
         self._load_records(force=True)
@@ -1136,33 +1254,60 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
         )
         return transition
 
-    def record_approval(self, *args: Any, **kwargs: Any):
+    def record_approval(self, *, problem, decision, evidence_pack_hash=None, four_eyes=False):
+        """Record the decision and the execution it completes in ONE
+        transaction under the problem's advisory lock (the same key the
+        problem store's guarded writes take). Inside the lock the stored
+        problem is compared with the one the reviewer decided on: a governed
+        edit committed by another worker in between makes the decision a 409
+        instead of an approval that signs text the reviewer never read."""
         self._load_records(force=True)
         before_executions = {execution.execution_id for execution in self._executions}
         before_drafts = {draft.draft_id for draft in self._jira_issue_drafts}
-        approval = WorkflowStore.record_approval(self, *args, **kwargs)
-        self._save_workflow_record(
-            "approval",
-            approval.decision_id,
-            approval.problem_id,
-            approval,
-        )
-        for execution in self._executions:
-            if execution.execution_id not in before_executions:
-                self._save_workflow_record(
-                    "execution",
-                    execution.execution_id,
-                    execution.problem_id,
-                    execution,
-                )
-        for draft in self._jira_issue_drafts:
-            if draft.draft_id not in before_drafts:
-                self._save_workflow_record(
-                    "jira_draft",
-                    draft.draft_id,
-                    draft.problem_id,
-                    draft,
-                )
+        with self._connect() as conn:
+            conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtext(%s))", (advisory_lock_key(problem.problem_id),)
+            )
+            row = conn.execute(
+                "SELECT payload FROM clara_problems WHERE problem_id = %s", (problem.problem_id,)
+            ).fetchone()
+            if row is not None:
+                stored = ProblemRecord.model_validate(_payload(row["payload"]))
+                stored_action = find_action(stored, decision.action_id)
+                given_action = find_action(problem, decision.action_id)
+                if stored_action is not None and given_action is not None:
+                    from app.services.outbound import build_outbound_content
+
+                    if build_outbound_content(stored, stored_action) != build_outbound_content(
+                        problem, given_action
+                    ):
+                        raise HTTPException(
+                            status_code=409,
+                            detail=(
+                                "The problem or action changed while the decision was being "
+                                "recorded; reload and review the current text before deciding."
+                            ),
+                        )
+            approval = WorkflowStore.record_approval(
+                self,
+                problem=problem,
+                decision=decision,
+                evidence_pack_hash=evidence_pack_hash,
+                four_eyes=four_eyes,
+            )
+            self._save_workflow_record(
+                "approval", approval.decision_id, approval.problem_id, approval, conn=conn
+            )
+            for execution in self._executions:
+                if execution.execution_id not in before_executions:
+                    self._save_workflow_record(
+                        "execution", execution.execution_id, execution.problem_id, execution, conn=conn
+                    )
+            for draft in self._jira_issue_drafts:
+                if draft.draft_id not in before_drafts:
+                    self._save_workflow_record(
+                        "jira_draft", draft.draft_id, draft.problem_id, draft, conn=conn
+                    )
         return approval
 
     def add_guardrail_measurement(self, *args: Any, **kwargs: Any):
@@ -1260,6 +1405,50 @@ class PostgresWorkflowStore(PostgresConnectionMixin, WorkflowStore):
             for draft in self._jira_issue_drafts:
                 self._save_workflow_record("jira_draft", draft.draft_id, draft.problem_id, draft)
         return scrubbed
+
+    def claim_dispatch(self, execution_id, *, worker, now=None):
+        """DB-level compare-and-set: ONE conditional UPDATE on the execution
+        row decides the claim, so two workers (or two pods) cannot both win
+        and the in-process lock is no longer the only guard. The row must be
+        dispatchable and carry no live claim (a claim older than
+        DISPATCH_CLAIM_TTL_SECONDS is taken over)."""
+        now = now or utc_now()
+        tenant_id = current_tenant()
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                UPDATE clara_workflow_records
+                SET payload = payload || jsonb_build_object(
+                        'dispatch_claimed_at', %s::text, 'dispatch_claimed_by', %s::text),
+                    updated_at = now()
+                WHERE tenant_id = %s AND record_type = 'execution' AND record_id = %s
+                  AND payload->>'status' IN ('draft_created', 'push_failed')
+                  AND (
+                    NULLIF(payload->>'dispatch_claimed_at', '') IS NULL
+                    OR NULLIF(payload->>'dispatch_claimed_at', '')::timestamptz
+                       <= %s::timestamptz - make_interval(secs => %s)
+                  )
+                RETURNING payload
+                """,
+                (now, worker, tenant_id, execution_id, now, DISPATCH_CLAIM_TTL_SECONDS),
+            ).fetchone()
+        if row is None:
+            return None
+        self._load_records(force=True)
+        return ExecutionRecord.model_validate(_payload(row["payload"]))
+
+    def release_dispatch(self, execution_id) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE clara_workflow_records
+                SET payload = payload - 'dispatch_claimed_at' - 'dispatch_claimed_by',
+                    updated_at = now()
+                WHERE tenant_id = %s AND record_type = 'execution' AND record_id = %s
+                """,
+                (current_tenant(), execution_id),
+            )
+        self._load_records(force=True)
 
 
 def _next_id(records: list[Any], field_name: str, prefix: str) -> int:
@@ -1552,9 +1741,17 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
         kind: str,
         origin: str = "approval",
         contract_revision: int | None = None,
+        contract_snapshot=None,
+        observation_start: str | None = None,
+        observation_end: str | None = None,
     ) -> bool:
         """Insert one checkpoint; False when an equivalent pending plan exists
         (same contract as the SQLite store, so callers report dedup honestly)."""
+        snapshot = (
+            contract_snapshot.model_dump(mode="json")
+            if hasattr(contract_snapshot, "model_dump")
+            else contract_snapshot
+        )
         with self._connect() as conn:
             existing = conn.execute(
                 "SELECT id FROM clara_measurement_plans"
@@ -1565,9 +1762,21 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
                 return False
             conn.execute(
                 "INSERT INTO clara_measurement_plans"
-                " (problem_id, execution_id, executed_at, due_at, kind, origin, contract_revision)"
-                " VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (problem_id, execution_id, executed_at, due_at, kind, origin, contract_revision),
+                " (problem_id, execution_id, executed_at, due_at, kind, origin, contract_revision,"
+                "  contract_snapshot, observation_start, observation_end)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    problem_id,
+                    execution_id,
+                    executed_at,
+                    due_at,
+                    kind,
+                    origin,
+                    contract_revision,
+                    self._jsonb(snapshot) if snapshot is not None else None,
+                    observation_start,
+                    observation_end,
+                ),
             )
         return True
 
@@ -1603,12 +1812,15 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
             "created_at": str(row["created_at"]),
             "origin": row.get("origin") or "approval",
             "contract_revision": row.get("contract_revision"),
+            "contract_snapshot": _payload(row["contract_snapshot"]) if row.get("contract_snapshot") else None,
+            "observation_start": row.get("observation_start"),
+            "observation_end": row.get("observation_end"),
         }
 
     def list_plans(self) -> list[dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM clara_measurement_plans ORDER BY due_at"
+                "SELECT * FROM clara_measurement_plans ORDER BY due_at, id"
             ).fetchall()
         return [self._row_to_plan(row) for row in rows]
 
@@ -1616,7 +1828,7 @@ class PostgresMeasurementPlanStore(PostgresConnectionMixin):
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM clara_measurement_plans"
-                " WHERE status = 'pending' AND due_at <= %s ORDER BY due_at",
+                " WHERE status = 'pending' AND due_at <= %s ORDER BY due_at, id",
                 (now,),
             ).fetchall()
         return [self._row_to_plan(row) for row in rows]

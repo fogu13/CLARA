@@ -713,8 +713,8 @@
           "w": 3060,
           "h": 350,
           "title": "What is still open",
-          "lede": "DP1 demonstrated. Hardening partly measured. One kappa, on attestation. Zero interviews.",
-          "note": "Kappa 0.55 on 40 blind risk items; a second person on the owner's attestation, AI exposure unrecorded. The RQ4 row is what the asks are about"
+          "lede": "DP1 demonstrated. Hardening partly measured. One kappa, provenance unverified. Zero interviews.",
+          "note": "Kappa 0.55 on 40 risk items: second-rating agreement, independent human provenance unverified (an attested second person; the files identify no rater; the 13 Sep review reports an AI task record with identical labels). The RQ4 row is what the asks are about"
         },
         {
           "id": "r5",

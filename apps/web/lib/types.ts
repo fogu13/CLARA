@@ -432,6 +432,27 @@ export type ApprovalDecision = {
   reviewer: string;
   note?: string;
   accept_proposed_contract?: boolean;
+  // Hash of the outbound content the reviewer was shown (outbound-preview);
+  // the API refuses the decision (409) when the content changed since.
+  expected_outbound_sha256?: string | null;
+};
+
+// The reviewed outbound content an approval freezes (title, statement,
+// evidence ids, action text); dispatch sends exactly this.
+export type OutboundContent = {
+  title: string;
+  description: string;
+  priority: number;
+  problem_id: string;
+  insight_title: string;
+  insight_summary: string;
+  insight_severity?: string | null;
+  insight_signal_ids: string[];
+};
+
+export type OutboundPreview = {
+  content: OutboundContent;
+  sha256: string;
 };
 
 export type ApprovalRecord = ApprovalDecision & {
@@ -444,6 +465,8 @@ export type ApprovalRecord = ApprovalDecision & {
   evidence_pack_hash?: string | null;
   // Execution created by this decision (null while four-eyes holds it).
   execution_id?: string | null;
+  outbound_snapshot?: OutboundContent | null;
+  outbound_sha256?: string | null;
 };
 
 export type ExecutionStatus =
@@ -471,6 +494,14 @@ export type ExecutionRecord = {
   reviewed_by?: string | null;
   reviewed_at?: string | null;
   disclosure_applied?: boolean;
+  // Measurement clock origins: the instant the record left CLARA and the
+  // human-attested instant the fix landed (POST .../implementation).
+  dispatched_at?: string | null;
+  implemented_at?: string | null;
+  implementation_note?: string | null;
+  // Live dispatch claim (another worker is pushing this execution).
+  dispatch_claimed_at?: string | null;
+  dispatch_claimed_by?: string | null;
 };
 
 export type ClosureRecordRequest = {
@@ -551,6 +582,13 @@ export type OutcomeSnapshot = {
   measurement_origin?: MeasurementOrigin | null;
   measurement_origin_at?: string | null;
   checkpoint_kind?: string | null;
+  // The plan and execution the latest reading is bound to, the fixed
+  // observation interval it covers and its processing instant.
+  plan_id?: number | null;
+  execution_id?: string | null;
+  observation_start?: string | null;
+  observation_end?: string | null;
+  measured_at?: string | null;
 };
 
 export type MeasurementOrigin = "approval" | "dispatch" | "implementation";
@@ -729,11 +767,57 @@ export type ModelCardMetrics = {
     urgency_accuracy: number;
     urgency_ci95: [number, number];
     tag_f1_fuzzy: number;
+    // English-only grounding heuristic: rate over `hallucination_eligible`
+    // items; null means not evaluated (no eligible item), never 0.
+    hallucination_rate?: number | null;
+    hallucination_eligible?: number;
+    hallucination_excluded?: number;
+    hallucination_unassessed?: number;
+    pii_leak_count?: number;
   };
   by_language?: Record<
     string,
     { n: number; sentiment_accuracy: number | null; urgency_accuracy: number | null }
   >;
+  // Written by `run_live.py --publish` since September 2026; optional so
+  // older snapshots still type-check. `by_split.held_out` is the guardrail
+  // figure; `by_split_ab` is the paired exemplar effect per split.
+  by_split?: Record<string, ModelCardSplitMetrics>;
+  by_split_ab?: Record<string, Record<string, ModelCardPairedEffect>>;
+  ab_scope_note?: string;
+  ab_note?: string;
+  held_out_consultations?: number;
+  config?: {
+    model?: string;
+    temperature?: number;
+    exemplars_enabled?: boolean;
+    exemplar_count?: number;
+    exemplars_sha256?: string | null;
+    golden_set_sha256?: string;
+    held_out_ids_sha256?: string;
+    split_counts?: Record<string, number>;
+    harness_git_commit?: string | null;
+  } | null;
+};
+
+export type ModelCardSplitMetrics = {
+  n: number;
+  sentiment_accuracy: number | null;
+  urgency_accuracy: number | null;
+  tag_exact_accuracy?: number | null;
+  sentiment_ci?: [number, number] | null;
+  urgency_ci?: [number, number] | null;
+};
+
+export type ModelCardPairedEffect = {
+  n: number;
+  off_accuracy: number | null;
+  on_accuracy: number | null;
+  gained: number;
+  lost: number;
+  p_value: number | null;
+  diff: number | null;
+  diff_ci95: [number, number] | null;
 };
 
 // Destinations the API accepts on a route (domain/models.py KNOWN_DESTINATIONS).

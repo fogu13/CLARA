@@ -65,11 +65,30 @@ them were fixed in a second round (commits `d020105`, `a3ff98d`, `318fe58`, `376
 `7b26334`) with a regression test per item (29 new tests in
 `test_dispatch_authorization_gaps.py` and `test_measurement_semantics_gaps.py`, 19 in the
 evaluation tests, 7 in `thesis/test_manuscript_consistency.py`, 3 more Postgres parity tests).
-A third adversarial pass over the second-round fixes was not run: the subagent budget for this
-session was exhausted during round two, and the two interrupted writers' worktrees were
-completed and integrated by hand after their tests were verified. The second-round tests are
-therefore the evidence for the second round; an independent re-probe is listed as a remaining
-action.
+A third adversarial pass was then run over the second-round fixes (three independent verifiers,
+one per area, 50 probes in total). Every second-round guarantee held as worded. The verifiers
+found smaller adjacent gaps, all fixed in a third round with a regression test each:
+decisions are now ordered by append order (numeric id) rather than wall-clock time, so a
+rejection recorded on a worker with a lagging clock still revokes; the pre-dispatch
+authorization checks force a fresh load on the Postgres store instead of reading its 2-second
+cache; a reused legacy record anchors the clock on its own instant; a lower-precedence clock can
+no longer re-open checkpoints already read under a higher one; the read-time ITS reproduces the
+reading's frozen contract and clock and can only lower a grade; the latest implementation record
+governs the anchor; a frozen snapshot's revision outranks a bare revision value; explicit-null
+contract terms are not amendments; same-tick Postgres readings have a deterministic latest;
+duplicate gold ids are dropped at the corpus loader and every scorer; a failed OFF arm still logs
+the held-out consultation; the hallucination guard distinguishes a missing baseline from a
+missing new value and never treats a smaller denominator as a rise; held-out rows print no
+verdict; a missing baseline sidecar is named; and the loop prompt's baseline, guard and target
+wording was tightened.
+
+Known and deliberately left (pre-existing or product calls, all recorded in §4): Postgres
+decision ids are minted per worker and upserted, so two workers deciding in the same window can
+overwrite each other's decision (needs a database sequence or an insert-only constraint); a
+reject-then-re-approve of byte-identical text creates a second external record instead of
+reusing the first; an implementation can be attested on an execution whose push failed (a human
+attestation is accepted by design); legacy readings without a frozen contract are still scored
+under the current terms and cannot be flagged.
 
 ### 1.2 Existing assertions changed (and why)
 
@@ -114,6 +133,8 @@ on the Actions log and the source history only.
   here. `thesis/evaluation/run_eval.py`, `compare_runs.py` and the new
   `equity_gap_bootstrap.py` cannot be executed on real data in this environment; their new logic is
   covered by synthetic plain-assert tests only. No synthetic data was substituted for results.
+- The manuscript compiles: `thesis/build_docx.sh` was run with a pandoc binary installed for the
+  purpose (`pip install pypandoc_binary`); the generated `.docx` is gitignored as before.
 - Exemplars-OFF per-item outputs for earlier runs are not recoverable (`reports/` and
   `history.jsonl` are gitignored and exist in no branch). The per-split paired exemplar effect will
   exist only after the next live run of the updated harness, which is a paid model run and was not
@@ -144,18 +165,22 @@ on the Actions log and the source history only.
    production; apply migration 016 in the Supabase SQL editor after 013 (the API also self-heals
    the two plan columns on boot, but the plpgsql function replacement only lives in the migration).
 5. **Product decisions.** Whether to add a UI control for recording implementation (the endpoint
-   exists); whether `survey_analysis.py` should suppress its support label below n = 40; whether
-   `score_taxonomy` should also go through the prediction validator; whether the web
-   `ModelCardMetrics` type should describe the new optional publish keys.
+   exists) and whether `survey_analysis.py` should suppress its support label below n = 40.
+   (`score_taxonomy` now goes through the validator, and the web `ModelCardMetrics` type describes
+   the new optional publish keys; both done in the second round.)
 6. **Split into PRs if wanted.** The branch holds one commit per area for the first round (C1;
    C2–C4; E2; E1; R1; manuscript; deck) and one per area for the second (dispatch + measurement;
    evaluation harness; loop prompt; manuscript), plus the docs commits. The second-round commits
    depend on the first-round ones of the same area.
-7. **Independent re-probe of the second round.** The first adversarial pass was independent of
-   the writers; the second-round fixes are covered by their own regression tests only. Re-running
-   the probe pass (or the reviewer's own probes) on the final branch is the missing check.
-8. **Deck fit check.** `thesis/defense/defense_deck.pptx` was rebuilt from the corrected source,
-   but `check_fit.js` could not run here (its dependency is not installed); run it once locally.
+7. **Postgres decision-id minting.** `PostgresWorkflowStore` mints `DEC-nnnn` from a counter
+   re-synced from the loaded rows and saves with an upsert, so two workers deciding within the
+   same window can overwrite each other's decision (pre-existing; found by the third-pass
+   verifier). Closing it needs a database sequence for decision ids or an insert-only write with
+   a conflict error, and a migration; not done here.
+8. **Deck fit check: done.** `check_fit.js` was run with pptxgenjs installed in a scratch prefix.
+   The review edits had introduced or worsened eight overflowing text boxes; they were shortened
+   without changing any claim (two at a smaller font) and the binary rebuilt. Five overflows on
+   slides 2, 6, 8 and 24 predate the review and were left as they were.
 9. **Human validation** of the governance behaviour (an approver rejecting, editing and
    re-approving an action; a manual reading after an instrumented one; recording an
    implementation) has not happened and is not claimed.
@@ -191,12 +216,15 @@ Final integrated branch (`claude/relaxed-babbage-of6lum`), run in this environme
 | Check | Result |
 |---|---|
 | `npm run api:lint` | pass |
-| `npm run api:test` | 976 passed, 7 skipped, 0 failed |
-| Postgres parity (`CLARA_TEST_DATABASE_URL`, local PostgreSQL 16, migration 016 applied twice) | 7 passed |
+| `npm run api:test` | 988 passed, 8 skipped, 0 failed |
+| Postgres parity (`CLARA_TEST_DATABASE_URL`, local PostgreSQL 16, migration 016 re-applied after each edit) | 8 passed |
 | `npm run web:lint` | pass (2 pre-existing warnings) |
 | `npm run web:build` | pass |
 | `npm run thesis:test` (4 plain-assert scripts, synthetic data) | pass |
-| `python3 thesis/test_manuscript_consistency.py` | 7 checks pass |
+| `python3 thesis/test_manuscript_consistency.py` | 8 checks pass |
+| `bash thesis/build_docx.sh` with a pandoc binary installed via `pypandoc_binary` | builds `build/thesis.docx` (2.0 MB) |
+| `node thesis/defense/check_fit.js` (pptxgenjs in a scratch prefix) | 5 pre-existing overflows remain; the 8 edit-related ones fixed |
+| `npm run web:lint` / `npm run web:build` after typing the model-card publish keys | pass |
 | Baseline on the reviewed commit | 851 passed |
 
-`npm run api:test` on the final branch: **976 passed, 7 skipped** (the skips are the Postgres parity tests, which need `CLARA_TEST_DATABASE_URL` and passed separately as listed), 0 failed.
+`npm run api:test` on the final branch: **988 passed, 8 skipped, 0 failed** (the skips are the Postgres parity tests, which need `CLARA_TEST_DATABASE_URL` and passed separately as listed).

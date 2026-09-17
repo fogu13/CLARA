@@ -281,6 +281,9 @@ class TestHallucinationDenominator:
         ]
         r = EvalHarness(golden_set=golden).run_enrichment_eval(enrichments=enrichments)
         assert r.hallucination_eligible == 1
+        # Per-item outcome by golden id (run_live aggregates it per split).
+        assert r.hallucination_eligible_ids and len(r.hallucination_eligible_ids) == r.hallucination_eligible
+        assert set(r.hallucination_flagged_ids) <= set(r.hallucination_eligible_ids)
         assert r.hallucination_excluded == 1
         assert r.hallucination_rate == 1.0  # the old n=2 denominator reported 0.5
         row = next(x for x in r.results if x.name == "hallucination_coverage")

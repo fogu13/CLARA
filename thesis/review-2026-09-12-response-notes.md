@@ -10,6 +10,15 @@ statistic (κ = 0.55 unweighted, 0.38–0.72; 0.70 linear-weighted, 0.56–0.82;
 is unchanged and is retained as **cross-model agreement**, and every "human check" phrase is
 replaced. Nothing in this file is applied now; it exists so that the change is mechanical.
 
+**13 September 2026, superseded in part.** The follow-up review of that date names the AI-assistant
+task record ("Fill blind risk labels", id `01a077a7-b101-78c0-accc-97f813223a23`, all 40 rows
+identical to the committed file). Without waiting for the owner's confirmation, the manuscript,
+ledger, deck and board now describe the rating as *second-rating agreement with independent
+human provenance unverified* (`PROVENANCE_kappa.md` §5), so the "human check" search strings
+quoted below no longer occur. The cross-model wording below still states what changes if the
+owner confirms that a model produced the labels; its search strings would need re-anchoring to
+the 13 September sentences before it is applied.
+
 Preconditions if applied:
 
 1. A new commit records the confirmation (date, wording as given) in `PROVENANCE_kappa.md`

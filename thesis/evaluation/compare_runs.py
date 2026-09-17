@@ -54,12 +54,33 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import baseline as bl  # noqa: E402
 import metrics as M  # noqa: E402
-from load_datasets import load  # noqa: E402
+from load_datasets import dedupe_signals, load  # noqa: E402
 from prediction_validation import validate_predictions  # noqa: E402
 
 SENT_LABELS = ["negative", "neutral", "positive"]
 RISK_LABELS = ["low", "medium", "high", "critical"]
 TASKS = ("sentiment", "risk")
+
+# Fixed column sets: every table is written with its header even when no row
+# qualifies, so a stale file from an earlier invocation can never survive a
+# run that produced nothing (13 Sep 2026 review, F5).
+ACC_COLS = [
+    "task", "run", "n", "accuracy", "accuracy_ci_low", "accuracy_ci_high", "f1_macro",
+    "n_expected", "n_valid", "n_invalid", "n_missing", "n_unknown_ids", "n_outside_task",
+    "n_invalid_ids", "n_duplicate_ids", "coverage", "accuracy_end_to_end",
+    "accuracy_end_to_end_ci_low", "accuracy_end_to_end_ci_high", "note",
+]
+PAIR_COLS = [
+    "task", "pair", "n_pairs", "n_dropped", "acc_first", "acc_second",
+    "b_first_only_correct", "c_second_only_correct", "p_exact_two_sided",
+    "p_minority_gains_one", "p_majority_loses_one", "p_one_pair_swaps", "note",
+]
+AGREE_COLS = [
+    "task", "pair", "n_pairs", "n_same_label", "agreement", "agreement_ci_low",
+    "agreement_ci_high", "note",
+]
+NO_VALID_ROW = "no valid prediction for any gold item of this task: quality metrics null, end-to-end accuracy 0"
+NO_PAIR = "no eligible pair: no gold item carries a valid label from both runs"
 
 
 def load_run(path: str) -> dict[str, list[dict]]:
@@ -105,6 +126,7 @@ def parse_runs(args, sigs) -> dict[str, dict[str, list[dict]]]:
 
 
 def compare(sigs, runs: dict[str, dict[str, list[dict]]]):
+    sigs, _ = dedupe_signals(sigs)  # a repeated gold id must never double-score
     rated = [s for s in sigs if s.star_rating is not None and s.text]
     have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
     corpus_ids = [s.id for s in sigs]
@@ -122,7 +144,34 @@ def compare(sigs, runs: dict[str, dict[str, list[dict]]]):
             vs = validate_predictions(run.get(task) or [], expected_ids=[s.id for s in items],
                                       field=task, labels=labels, corpus_ids=corpus_ids)
             scored = [s for s in items if s.id in vs.by_id]
+            counts = {
+                # end-to-end view: every gold item in the denominator,
+                # missing / invalid predictions count as wrong
+                "n_expected": vs.n_expected, "n_valid": vs.n_valid,
+                "n_invalid": vs.n_invalid, "n_missing": vs.n_missing,
+                "n_unknown_ids": vs.n_unknown_ids,
+                "n_outside_task": vs.n_outside_task,
+                "n_invalid_ids": vs.n_invalid_ids,
+                "n_duplicate_ids": vs.n_duplicate_ids,
+                "coverage": vs.coverage,
+            }
             if not scored:
+                # A run that answered no gold item validly is still a row:
+                # its coverage and counts are the finding, its quality metrics
+                # are null (nothing to condition on) and its end-to-end
+                # accuracy is zero over every gold item.
+                e2e_lo, e2e_hi = (M.wilson_interval(0, vs.n_expected)
+                                  if vs.n_expected else (None, None))
+                acc_rows.append({"task": task, "run": name, "n": 0,
+                                 "accuracy": None, "accuracy_ci_low": None,
+                                 "accuracy_ci_high": None, "f1_macro": None,
+                                 **counts,
+                                 "accuracy_end_to_end": 0.0 if vs.n_expected else None,
+                                 "accuracy_end_to_end_ci_low": e2e_lo,
+                                 "accuracy_end_to_end_ci_high": e2e_hi,
+                                 "note": NO_VALID_ROW})
+                correct[name] = {}
+                labelled[name] = {}
                 continue
             y_true = [gold_fn(s) for s in scored]
             y_pred = [vs.by_id[s.id] for s in scored]
@@ -137,24 +186,33 @@ def compare(sigs, runs: dict[str, dict[str, list[dict]]]):
                              "accuracy_ci_low": sc["accuracy_ci_low"],
                              "accuracy_ci_high": sc["accuracy_ci_high"],
                              "f1_macro": sc["f1_macro"],
-                             # end-to-end view: every gold item in the denominator,
-                             # missing / invalid predictions count as wrong
-                             "n_expected": vs.n_expected, "n_valid": vs.n_valid,
-                             "n_invalid": vs.n_invalid, "n_missing": vs.n_missing,
-                             "n_unknown_ids": vs.n_unknown_ids,
-                             "n_outside_task": vs.n_outside_task,
-                             "n_invalid_ids": vs.n_invalid_ids,
-                             "n_duplicate_ids": vs.n_duplicate_ids,
-                             "coverage": vs.coverage,
+                             **counts,
                              "accuracy_end_to_end": e2e_acc,
                              "accuracy_end_to_end_ci_low": e2e_lo,
-                             "accuracy_end_to_end_ci_high": e2e_hi})
+                             "accuracy_end_to_end_ci_high": e2e_hi,
+                             "note": ""})
             correct[name] = {s.id: p == t for s, p, t in zip(scored, y_pred, y_true)}
         names = list(correct)
         for i, a in enumerate(names):
             for b_name in names[i + 1:]:
                 ids = sorted(set(correct[a]) & set(correct[b_name]))
+                pair = f"{a}_vs_{b_name}"
                 if not ids:
+                    # The pair is reported as absent, never silently skipped:
+                    # a paired test needs items both runs labelled validly.
+                    pair_rows.append({
+                        "task": task, "pair": pair, "n_pairs": 0,
+                        "n_dropped": len(items),
+                        "acc_first": None, "acc_second": None,
+                        "b_first_only_correct": None, "c_second_only_correct": None,
+                        "p_exact_two_sided": None, "p_minority_gains_one": None,
+                        "p_majority_loses_one": None, "p_one_pair_swaps": None,
+                        "note": NO_PAIR,
+                    })
+                    agree_rows.append({"task": task, "pair": pair, "n_pairs": 0,
+                                       "n_same_label": None, "agreement": None,
+                                       "agreement_ci_low": None, "agreement_ci_high": None,
+                                       "note": NO_PAIR})
                     continue
                 av = [correct[a][x] for x in ids]
                 bv = [correct[b_name][x] for x in ids]
@@ -162,11 +220,11 @@ def compare(sigs, runs: dict[str, dict[str, list[dict]]]):
                 sens = M.mcnemar_sensitivity(b, c)
                 same = sum(labelled[a][x] == labelled[b_name][x] for x in ids)
                 lo, hi = M.wilson_interval(same, len(ids))
-                agree_rows.append({"task": task, "pair": f"{a}_vs_{b_name}", "n_pairs": len(ids),
+                agree_rows.append({"task": task, "pair": pair, "n_pairs": len(ids),
                                    "n_same_label": same, "agreement": round(same / len(ids), 4),
-                                   "agreement_ci_low": lo, "agreement_ci_high": hi})
+                                   "agreement_ci_low": lo, "agreement_ci_high": hi, "note": ""})
                 pair_rows.append({
-                    "task": task, "pair": f"{a}_vs_{b_name}", "n_pairs": len(ids),
+                    "task": task, "pair": pair, "n_pairs": len(ids),
                     "n_dropped": len(items) - len(ids),
                     "acc_first": round(sum(av) / len(ids), 4),
                     "acc_second": round(sum(bv) / len(ids), 4),
@@ -175,21 +233,24 @@ def compare(sigs, runs: dict[str, dict[str, list[dict]]]):
                     "p_minority_gains_one": sens["p_minority_gains_one"],
                     "p_majority_loses_one": sens["p_majority_loses_one"],
                     "p_one_pair_swaps": sens["p_one_pair_swaps"],
+                    "note": "",
                 })
     return acc_rows, pair_rows, agree_rows
 
 
-def _write(path: str, rows: list[dict]) -> None:
-    if not rows:
-        return
+def _write(path: str, rows: list[dict], columns: list[str] | None = None) -> None:
+    """Always write the table: the header alone when nothing qualified, so
+    the file on disk describes THIS invocation and never a previous one."""
+    fieldnames = columns or (list(rows[0].keys()) if rows else ["note"])
     with open(path, "w", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+        w = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
 
 
 def _print(rows: list[dict]) -> None:
     if not rows:
+        print("  (no rows)")
         return
     cols = list(rows[0].keys())
     widths = {c: max(len(c), *(len(str(r[c])) for r in rows)) for c in cols}
@@ -207,9 +268,9 @@ def main(argv: list[str] | None = None) -> int:
     runs = parse_runs(ns.runs, sigs)
     acc_rows, pair_rows, agree_rows = compare(sigs, runs)
     os.makedirs(ns.out_dir, exist_ok=True)
-    _write(os.path.join(ns.out_dir, "compare_runs_accuracy.csv"), acc_rows)
-    _write(os.path.join(ns.out_dir, "compare_runs_pairs.csv"), pair_rows)
-    _write(os.path.join(ns.out_dir, "compare_runs_agreement.csv"), agree_rows)
+    _write(os.path.join(ns.out_dir, "compare_runs_accuracy.csv"), acc_rows, ACC_COLS)
+    _write(os.path.join(ns.out_dir, "compare_runs_pairs.csv"), pair_rows, PAIR_COLS)
+    _write(os.path.join(ns.out_dir, "compare_runs_agreement.csv"), agree_rows, AGREE_COLS)
     print(f"corpus: {len(sigs)} signals; runs: {', '.join(runs)}")
     print("\n== accuracy (95 % Wilson) ==")
     _print(acc_rows)

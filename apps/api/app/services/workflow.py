@@ -4,7 +4,7 @@ import json
 import sqlite3
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from datetime import datetime
+from datetime import UTC, datetime
 from itertools import count
 from pathlib import Path
 from uuid import uuid4
@@ -26,6 +26,7 @@ from app.domain.models import (
     LearningConclusionRecord,
     GuardrailMeasurement,
     LearningConclusionRequest,
+    OutboundContent,
     OutcomeContract,
     OutcomeMeasurement,
     OutcomeSnapshot,
@@ -38,6 +39,11 @@ from app.domain.models import (
 )
 from app.services.common import SerializedConnection, action_snapshot, utc_now  # re-exported for importers, SerializedConnection
 from app.services import outcome_engine
+from app.services.outbound import build_outbound_content, outbound_changes, outbound_sha256
+
+# A dispatch claim older than this is treated as abandoned (a worker that died
+# mid-push) and may be taken over by the next dispatcher.
+DISPATCH_CLAIM_TTL_SECONDS = 300
 
 
 UNRESOLVED_GOVERNANCE_STATUSES = {"fail", "review_required"}
@@ -291,14 +297,23 @@ class DispatchAuthorization:
     decision_ids: list[str] = dataclass_field(default_factory=list)
     changed_fields: list[str] = dataclass_field(default_factory=list)
     execution_ids: list[str] = dataclass_field(default_factory=list)
+    # The reviewed outbound content the completing approval froze: dispatch
+    # sends exactly this, never a payload rebuilt from the current problem.
+    outbound: OutboundContent | None = None
 
 
-def decision_order(approval: ApprovalRecord) -> tuple[str, int, str]:
-    """Sort key for the append-only approvals: created_at, then the NUMERIC
-    decision suffix (as strings ``DEC-10000`` sorts before ``DEC-9999``)."""
+def decision_order(approval: ApprovalRecord) -> tuple[int, str, str]:
+    """Sort key for the append-only approvals: the NUMERIC decision suffix
+    (append order — ids are minted from a counter, and as strings
+    ``DEC-10000`` would sort before ``DEC-9999``), then created_at.
+
+    Append order comes first because created_at is each process's wall
+    clock: a rejection recorded on a worker whose clock runs behind, or a
+    whole-second stamp (``...:00Z`` sorts after ``...:00.500000Z``), would
+    otherwise sort before the approval it revokes and never take effect."""
     _prefix, _, suffix = approval.decision_id.rpartition("-")
     number = int(suffix) if suffix.isdigit() else -1
-    return (approval.created_at, number, approval.decision_id)
+    return (number, approval.created_at, approval.decision_id)
 
 
 def latest_decisions(
@@ -338,15 +353,18 @@ def authorize_dispatch(
     execution: ExecutionRecord,
     approvals: list[ApprovalRecord],
     four_eyes: bool,
+    outbound_binding: bool = True,
 ) -> DispatchAuthorization:
     """Decide whether `execution` may be dispatched with the CURRENT `action`.
 
-    An approval signs one revision of one action (its `action_snapshot`).
-    Dispatch — the first push or a retry — must send exactly that revision,
-    under the decision(s) still in force, for the execution those decisions
-    created. Pure: no store access, no side effects. Rules are evaluated in
-    order over the append-only approvals of this action, ordered by
-    created_at then the numeric decision suffix (``decision_order``):
+    An approval signs one revision of one action (its `action_snapshot`) and,
+    since the 13 September 2026 review, the reviewed outbound content
+    (`outbound_snapshot`: title, statement, evidence, action text). Dispatch —
+    the first push or a retry — must send exactly that content, under the
+    decision(s) still in force, for the execution those decisions created.
+    Pure: no store access, no side effects. Rules are evaluated in order over
+    the append-only approvals of this action, in append order (numeric
+    decision suffix, then created_at — ``decision_order``):
 
     1. approval_missing              no decision at all
     2. approval_revoked              latest decision is not `approved`
@@ -355,11 +373,24 @@ def authorize_dispatch(
     4. execution_superseded          this execution is not the one the current
                                      approval run created (legacy rows without
                                      execution_id fall back to created_at)
-    5. approval_unverifiable         an approval in the run has no snapshot
+    5. approval_unverifiable         an approval in the run has no action
+                                     snapshot, or (``outbound_binding``) no
+                                     outbound snapshot — approvals recorded
+                                     before the binding existed cannot prove
+                                     what content they signed; record a fresh
+                                     approval
     6. action_changed_since_approval current action differs from the approved
                                      snapshot on a dispatch-relevant field
-    7. approval_revision_mismatch    four-eyes reviewers signed different revisions
-    8. destination_changed           execution.destination != approved destination
+    7. problem_changed_since_approval the current outbound content (problem
+                                     title, statement, severity, evidence ids)
+                                     differs from what the run signed
+    8. approval_revision_mismatch    four-eyes reviewers signed different revisions
+                                     (action fields or outbound content)
+    9. destination_changed           execution.destination != approved destination
+
+    ``outbound_binding=False`` skips rules 5b and 7: a human attestation that
+    the fix landed (the implementation record) needs the approval in force
+    and this execution, not proof of the text that already left.
     """
     relevant = sorted(
         (
@@ -444,6 +475,25 @@ def authorize_dispatch(
             changed_fields=changed,
         )
 
+    outbound = completing.outbound_snapshot
+    if outbound_binding:
+        if outbound is None:
+            return _refused(
+                "approval_unverifiable",
+                f"Approval {completing.decision_id} carries no outbound-content snapshot "
+                "(recorded before dispatch was bound to the reviewed content), so the text it "
+                "signed cannot be verified; record a fresh approval.",
+            )
+        drifted = outbound_changes(outbound, build_outbound_content(problem, action))
+        if drifted:
+            return _refused(
+                "problem_changed_since_approval",
+                f"The outbound content of action {action.action_id} changed since approval "
+                f"{completing.decision_id} (fields: {', '.join(drifted)}); record a rejection, "
+                "then re-approve the current text.",
+                changed_fields=drifted,
+            )
+
     if four_eyes:
         for approval in run[:-1]:
             assert approval.action_snapshot is not None  # guarded above
@@ -451,6 +501,15 @@ def authorize_dispatch(
             mismatch = [
                 name for name in DISPATCH_SNAPSHOT_FIELDS if other_fields[name] != approved_fields[name]
             ]
+            if not mismatch and outbound_binding:
+                if approval.outbound_snapshot is None:
+                    return _refused(
+                        "approval_unverifiable",
+                        f"Approval {approval.decision_id} carries no outbound-content snapshot, "
+                        "so the four-eyes run cannot prove both reviewers signed the same text; "
+                        "record a fresh approval.",
+                    )
+                mismatch = outbound_changes(approval.outbound_snapshot, outbound)
             if mismatch:
                 return _refused(
                     "approval_revision_mismatch",
@@ -475,7 +534,28 @@ def authorize_dispatch(
         decision_ids=decision_ids,
         changed_fields=[],
         execution_ids=bound_execution_ids or [execution.execution_id],
+        outbound=outbound,
     )
+
+
+def assert_expected_outbound(
+    problem: ProblemRecord, action: ActionProposal, decision: ApprovalDecision
+) -> OutboundContent:
+    """The outbound content this decision signs; 409 when the reviewer asked
+    to sign a specific content hash (what the UI displayed) and the current
+    content hashes differently — the reviewer would be signing text they
+    never read."""
+    content = build_outbound_content(problem, action)
+    expected = decision.expected_outbound_sha256
+    if expected and expected != outbound_sha256(content):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The action's outbound content changed since it was displayed; reload and "
+                "review the current text before deciding."
+            ),
+        )
+    return content
 
 
 def _parse_measured_at(value: str) -> datetime | None:
@@ -485,16 +565,52 @@ def _parse_measured_at(value: str) -> datetime | None:
         return None
 
 
+CHECKPOINT_RANK = {"t7": 0, "window": 1, "followup": 2}
+
+
+def outcome_order_key(measurement: OutcomeMeasurement) -> tuple:
+    """The deterministic order of readings of one problem: the later
+    observation interval wins (its end, falling back to measured_at for
+    manual and legacy readings), then the processing instant, then the
+    closing-ness of the checkpoint, then the plan id — so two readings
+    written by one tick with the same measured_at still have one "latest",
+    and a reading that covers an earlier interval never displaces a later
+    one even when it was processed afterwards."""
+    end = _parse_measured_at(measurement.observation_end or "") if measurement.observation_end else None
+    measured = _parse_measured_at(measurement.measured_at)
+    epoch = datetime.min.replace(tzinfo=UTC)
+    return (
+        (end or measured or epoch),
+        (measured or epoch),
+        CHECKPOINT_RANK.get(measurement.checkpoint_kind or "", -1),
+        measurement.plan_id or 0,
+    )
+
+
 def assert_measurement_not_stale(
     existing_measured_at: str | None,
     incoming_measured_at: str,
+    *,
+    existing_observation_end: str | None = None,
+    incoming_observation_end: str | None = None,
 ) -> None:
     """Reject a measurement older than the recorded one: a late backfill must
     not regress latest_value and flip outcome status / the learning gate.
     Equal timestamps stay allowed (corrections supersede by insertion order);
-    unparseable timestamps don't block the write."""
+    unparseable timestamps don't block the write. When both readings carry a
+    fixed observation interval, the interval end decides (a T+7 checkpoint
+    processed after the window checkpoint must not displace the window read,
+    whatever the processing order)."""
     if existing_measured_at is None:
         return
+    if existing_observation_end and incoming_observation_end:
+        existing_end = _parse_measured_at(existing_observation_end)
+        incoming_end = _parse_measured_at(incoming_observation_end)
+        if existing_end is not None and incoming_end is not None and incoming_end < existing_end:
+            raise HTTPException(
+                status_code=409,
+                detail="A reading covering a later observation interval already exists for this problem",
+            )
     existing = _parse_measured_at(existing_measured_at)
     incoming = _parse_measured_at(incoming_measured_at)
     if existing is None or incoming is None:
@@ -595,7 +711,13 @@ def build_outcome_snapshot(
     scored_under = frozen if frozen is not None else contract
     latest_value = None if measurement is None else measurement.observed_value
     measurement_source = None if measurement is None else measurement.measurement_source
-    measured_under = None if measurement is None else measurement.contract_revision
+    measured_under = None
+    if measurement is not None:
+        # The frozen snapshot is the revision the reading was scored under; a
+        # bare contract_revision (pre-provenance rows could carry a client
+        # value) only stands in when no snapshot was frozen.
+        snapshot_rev = getattr(measurement.contract_snapshot, "revision", None)
+        measured_under = snapshot_rev if snapshot_rev is not None else measurement.contract_revision
     if measured_under is None and frozen is not None:
         measured_under = frozen.revision
     return OutcomeSnapshot(
@@ -627,6 +749,11 @@ def build_outcome_snapshot(
         measurement_origin=None if measurement is None else measurement.clock_origin,
         measurement_origin_at=None if measurement is None else measurement.clock_origin_at,
         checkpoint_kind=None if measurement is None else measurement.checkpoint_kind,
+        plan_id=None if measurement is None else measurement.plan_id,
+        execution_id=None if measurement is None else measurement.execution_id,
+        observation_start=None if measurement is None else measurement.observation_start,
+        observation_end=None if measurement is None else measurement.observation_end,
+        measured_at=None if measurement is None else measurement.measured_at,
     )
 
 
@@ -732,7 +859,36 @@ def build_jira_issue_draft(
     )
 
 
+# Executions that may be dispatched: local drafts and failed pushes.
+DISPATCHABLE_STATUSES = frozenset({ExecutionStatus.draft_created, ExecutionStatus.push_failed})
+_CLAIM_GUARD = __import__("threading").Lock()
+
+
+def claim_expired(claimed_at: str | None, *, now: str, ttl_seconds: int = DISPATCH_CLAIM_TTL_SECONDS) -> bool:
+    """A claim is live while younger than the TTL; an unparseable stamp counts as expired."""
+    if not claimed_at:
+        return True
+    started = _parse_measured_at(claimed_at)
+    current = _parse_measured_at(now)
+    if started is None or current is None:
+        return True
+    return (current - started).total_seconds() >= ttl_seconds
+
+
+def dispatch_claimable(execution: ExecutionRecord, *, now: str) -> bool:
+    return execution.status in DISPATCHABLE_STATUSES and claim_expired(
+        execution.dispatch_claimed_at, now=now
+    )
+
+
 class WorkflowStore:
+    def refresh(self) -> None:
+        """Drop any cached view so the next read is fresh. The in-memory store
+        has no cache; the Postgres store overrides this to force a reload —
+        authorization must never be decided on a snapshot another worker has
+        already made stale."""
+        return None
+
     def __init__(self) -> None:
         self._approval_ids = count(1)
         self._execution_ids = count(1)
@@ -813,7 +969,14 @@ class WorkflowStore:
     ) -> ExecutionRecord:
         for index, execution in enumerate(self._executions):
             if execution.execution_id == execution_id:
-                update: dict = {"status": status, "external_ref": external_ref, "detail": detail}
+                # A status write ends the dispatch attempt that held the claim.
+                update: dict = {
+                    "status": status,
+                    "external_ref": external_ref,
+                    "detail": detail,
+                    "dispatch_claimed_at": None,
+                    "dispatch_claimed_by": None,
+                }
                 if disclosure_applied is not None:
                     update["disclosure_applied"] = disclosure_applied
                 if dispatched_at is not None:
@@ -828,6 +991,41 @@ class WorkflowStore:
                 self._executions[index] = updated
                 return updated
         raise HTTPException(status_code=404, detail="Execution not found")
+
+    def claim_dispatch(
+        self, execution_id: str, *, worker: str, now: str | None = None
+    ) -> ExecutionRecord | None:
+        """Compare-and-set claim on a dispatchable execution.
+
+        Returns the claimed record, or None when the execution is not
+        dispatchable (already pushed, blocked, missing) or another worker
+        holds a live claim. An expired claim (older than
+        DISPATCH_CLAIM_TTL_SECONDS) is taken over. The Postgres store performs
+        the same test-and-set as one UPDATE, so two workers cannot both win.
+        """
+        now = now or utc_now()
+        with _CLAIM_GUARD:
+            for index, execution in enumerate(self._executions):
+                if execution.execution_id != execution_id:
+                    continue
+                if not dispatch_claimable(execution, now=now):
+                    return None
+                claimed = execution.model_copy(
+                    update={"dispatch_claimed_at": now, "dispatch_claimed_by": worker}
+                )
+                self._executions[index] = claimed
+                return claimed
+        return None
+
+    def release_dispatch(self, execution_id: str) -> None:
+        """Drop a claim without changing the status (an attempt that ended
+        before any status write)."""
+        with _CLAIM_GUARD:
+            for index, execution in enumerate(self._executions):
+                if execution.execution_id == execution_id and execution.dispatch_claimed_at:
+                    self._executions[index] = execution.model_copy(
+                        update={"dispatch_claimed_at": None, "dispatch_claimed_by": None}
+                    )
 
     def list_jira_issue_drafts(self) -> list[JiraIssueDraft]:
         return self._jira_issue_drafts
@@ -902,6 +1100,7 @@ class WorkflowStore:
             action=action,
             approved_action_ids=approved_action_ids,
         )
+        outbound = assert_expected_outbound(problem, action, decision)
 
         record = ApprovalRecord(
             decision_id=f"DEC-{next(self._approval_ids):04d}",
@@ -914,6 +1113,8 @@ class WorkflowStore:
             action_snapshot=action_snapshot(action),
             action_diff=action_diff(action),
             evidence_pack_hash=evidence_pack_hash,
+            outbound_snapshot=outbound,
+            outbound_sha256=outbound_sha256(outbound),
         )
         self._approvals.append(record)
 
@@ -965,6 +1166,8 @@ class WorkflowStore:
         assert_measurement_not_stale(
             existing.measured_at if existing is not None else None,
             measurement.measured_at,
+            existing_observation_end=existing.observation_end if existing is not None else None,
+            incoming_observation_end=measurement.observation_end,
         )
         measurement = stamp_contract_provenance(problem, measurement)
         self._outcomes[problem.problem_id] = measurement
@@ -1182,6 +1385,10 @@ class WorkflowStore:
 
 
 class SQLiteWorkflowStore:
+    def refresh(self) -> None:
+        """No cache: every read goes to the database."""
+        return None
+
     def __init__(self, path: Path) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -1290,6 +1497,10 @@ class SQLiteWorkflowStore:
         self._ensure_column("approvals", "action_diff", "TEXT NOT NULL DEFAULT '[]'")
         self._ensure_column("approvals", "evidence_pack_hash", "TEXT")
         self._ensure_column("approvals", "execution_id", "TEXT")
+        self._ensure_column("approvals", "outbound_snapshot", "TEXT")
+        self._ensure_column("approvals", "outbound_sha256", "TEXT")
+        self._ensure_column("executions", "dispatch_claimed_at", "TEXT")
+        self._ensure_column("executions", "dispatch_claimed_by", "TEXT")
         self._ensure_column("outcomes", "measurement_source", "TEXT NOT NULL DEFAULT 'manual'")
         self._ensure_column("learning_conclusions", "tenant_id", "TEXT NOT NULL DEFAULT 'legacy'")
         self._ensure_column("learning_conclusions", "retention_expires_at", "TEXT NOT NULL DEFAULT ''")
@@ -1309,6 +1520,8 @@ class SQLiteWorkflowStore:
         self._ensure_column("outcomes", "execution_id", "TEXT")
         self._ensure_column("outcomes", "clock_origin", "TEXT")
         self._ensure_column("outcomes", "clock_origin_at", "TEXT")
+        self._ensure_column("outcomes", "observation_start", "TEXT")
+        self._ensure_column("outcomes", "observation_end", "TEXT")
         # Idempotent backfill for the JWT-tenant migration: header-era rows were
         # tagged with client strings ('demo_tenant'/...); the tenant key is now
         # str(workspace_id) and local dev is the default workspace ('1'). Closure
@@ -1389,7 +1602,11 @@ class SQLiteWorkflowStore:
         except ValueError as exc:
             raise HTTPException(status_code=404, detail="Execution not found") from exc
 
-        assignments = "status = ?, external_ref = ?, detail = ?"
+        # A status write ends the dispatch attempt that held the claim.
+        assignments = (
+            "status = ?, external_ref = ?, detail = ?,"
+            " dispatch_claimed_at = NULL, dispatch_claimed_by = NULL"
+        )
         values: list = [status.value, external_ref, detail]
         if disclosure_applied is not None:
             assignments += ", disclosure_applied = ?"
@@ -1416,6 +1633,59 @@ class SQLiteWorkflowStore:
             "SELECT * FROM executions WHERE id = ?", (row_id,)
         ).fetchone()
         return self._execution_from_row(row)
+
+    def claim_dispatch(
+        self, execution_id: str, *, worker: str, now: str | None = None
+    ) -> ExecutionRecord | None:
+        """Compare-and-set claim (see WorkflowStore.claim_dispatch): one UPDATE
+        whose WHERE clause carries the whole test, so two threads on the same
+        file cannot both win."""
+        now = now or utc_now()
+        try:
+            row_id = int(execution_id.removeprefix("EXE-"))
+        except ValueError:
+            return None
+        row = self._connection.execute(
+            "SELECT status, dispatch_claimed_at FROM executions WHERE id = ?", (row_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        if row["status"] not in {status.value for status in DISPATCHABLE_STATUSES}:
+            return None
+        if not claim_expired(row["dispatch_claimed_at"], now=now):
+            return None
+        cursor = self._connection.execute(
+            "UPDATE executions SET dispatch_claimed_at = ?, dispatch_claimed_by = ?"
+            " WHERE id = ? AND status IN (?, ?)"
+            " AND (dispatch_claimed_at IS NULL OR dispatch_claimed_at = ?)",
+            (
+                now,
+                worker,
+                row_id,
+                ExecutionStatus.draft_created.value,
+                ExecutionStatus.push_failed.value,
+                row["dispatch_claimed_at"],
+            ),
+        )
+        self._connection.commit()
+        if cursor.rowcount == 0:
+            return None
+        claimed = self._connection.execute(
+            "SELECT * FROM executions WHERE id = ?", (row_id,)
+        ).fetchone()
+        return self._execution_from_row(claimed)
+
+    def release_dispatch(self, execution_id: str) -> None:
+        try:
+            row_id = int(execution_id.removeprefix("EXE-"))
+        except ValueError:
+            return
+        self._connection.execute(
+            "UPDATE executions SET dispatch_claimed_at = NULL, dispatch_claimed_by = NULL"
+            " WHERE id = ?",
+            (row_id,),
+        )
+        self._connection.commit()
 
     def list_executions(self) -> list[ExecutionRecord]:
         rows = self._connection.execute("SELECT * FROM executions ORDER BY id").fetchall()
@@ -1502,6 +1772,7 @@ class SQLiteWorkflowStore:
             action=action,
             approved_action_ids=approved_action_ids,
         )
+        outbound = assert_expected_outbound(problem, action, decision)
 
         created_at = utc_now()
         cursor = self._connection.execute(
@@ -1515,9 +1786,11 @@ class SQLiteWorkflowStore:
                 created_at,
                 action_snapshot,
                 action_diff,
-                evidence_pack_hash
+                evidence_pack_hash,
+                outbound_snapshot,
+                outbound_sha256
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 problem.problem_id,
@@ -1529,6 +1802,8 @@ class SQLiteWorkflowStore:
                 json.dumps(action_snapshot(action).model_dump(mode="json", by_alias=True)),
                 json.dumps([change.model_dump(mode="json") for change in action_diff(action)]),
                 evidence_pack_hash,
+                json.dumps(outbound.model_dump(mode="json")),
+                outbound_sha256(outbound),
             ),
         )
         approval_id = cursor.lastrowid
@@ -1622,12 +1897,16 @@ class SQLiteWorkflowStore:
             raise HTTPException(status_code=422, detail="Metric does not match the outcome contract")
 
         existing_row = self._connection.execute(
-            "SELECT measured_at FROM outcomes WHERE problem_id = ?",
+            "SELECT measured_at, observation_end FROM outcomes WHERE problem_id = ?",
             (measurement.problem_id,),
         ).fetchone()
         assert_measurement_not_stale(
             existing_row["measured_at"] if existing_row is not None else None,
             measurement.measured_at,
+            existing_observation_end=(
+                existing_row["observation_end"] if existing_row is not None else None
+            ),
+            incoming_observation_end=measurement.observation_end,
         )
         measurement = stamp_contract_provenance(problem, measurement)
         self._connection.execute(
@@ -1635,8 +1914,9 @@ class SQLiteWorkflowStore:
             INSERT INTO outcomes (problem_id, metric, observed_value, measured_at, notes,
                                   measurement_source, contract_revision, contract_json,
                                   checkpoint_kind, plan_id, execution_id,
-                                  clock_origin, clock_origin_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  clock_origin, clock_origin_at,
+                                  observation_start, observation_end)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(problem_id) DO UPDATE SET
                 metric = excluded.metric,
                 observed_value = excluded.observed_value,
@@ -1649,7 +1929,9 @@ class SQLiteWorkflowStore:
                 plan_id = excluded.plan_id,
                 execution_id = excluded.execution_id,
                 clock_origin = excluded.clock_origin,
-                clock_origin_at = excluded.clock_origin_at
+                clock_origin_at = excluded.clock_origin_at,
+                observation_start = excluded.observation_start,
+                observation_end = excluded.observation_end
             """,
             (
                 measurement.problem_id,
@@ -1669,6 +1951,8 @@ class SQLiteWorkflowStore:
                 measurement.execution_id,
                 measurement.clock_origin,
                 measurement.clock_origin_at,
+                measurement.observation_start,
+                measurement.observation_end,
             ),
         )
         self._connection.commit()
@@ -1977,6 +2261,12 @@ class SQLiteWorkflowStore:
             action_diff=[ActionProposalChange.model_validate(item) for item in json.loads(diff_payload or "[]")],
             evidence_pack_hash=row["evidence_pack_hash"] if "evidence_pack_hash" in row.keys() else None,
             execution_id=row["execution_id"] if "execution_id" in row.keys() else None,
+            outbound_snapshot=(
+                OutboundContent.model_validate(json.loads(row["outbound_snapshot"]))
+                if "outbound_snapshot" in row.keys() and row["outbound_snapshot"]
+                else None
+            ),
+            outbound_sha256=row["outbound_sha256"] if "outbound_sha256" in row.keys() else None,
         )
 
     @staticmethod
@@ -1999,6 +2289,8 @@ class SQLiteWorkflowStore:
             dispatched_at=row["dispatched_at"],
             implemented_at=row["implemented_at"],
             implementation_note=row["implementation_note"],
+            dispatch_claimed_at=row["dispatch_claimed_at"] if "dispatch_claimed_at" in row.keys() else None,
+            dispatch_claimed_by=row["dispatch_claimed_by"] if "dispatch_claimed_by" in row.keys() else None,
         )
 
     @staticmethod
@@ -2025,6 +2317,8 @@ class SQLiteWorkflowStore:
             execution_id=_col("execution_id"),
             clock_origin=_col("clock_origin"),
             clock_origin_at=_col("clock_origin_at"),
+            observation_start=_col("observation_start"),
+            observation_end=_col("observation_end"),
         )
 
     @staticmethod

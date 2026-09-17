@@ -116,8 +116,15 @@ def main() -> int:
         f"got {status}" + (" — AUTH APPEARS DISABLED" if status == 200 else ""),
     )
 
-    status, _, _ = fetch(f"{api}/health")
+    status, _, body_bytes = fetch(f"{api}/health")
     check("liveness probe (/health -> 200)", status == 200, f"got {status}")
+    try:
+        served = json.loads(body_bytes).get("version") or "unknown build (image built without GIT_COMMIT, or a build older than the version field)"
+    except (json.JSONDecodeError, AttributeError):
+        served = "unknown build (non-JSON /health body)"
+    # The served build identity is printed on every run: a FastAPI-shaped 404
+    # on a newer route proves version lag only once the commit is known.
+    record("INFO", "served API build", str(served))
     status, _, body_bytes = fetch(f"{api}/ready")
     try:
         ready = json.loads(body_bytes)
@@ -126,8 +133,13 @@ def main() -> int:
     check(
         "readiness probe (/ready -> 200, status ok: DB round-trip + AI residency)",
         status == 200 and ready.get("status") == "ok",
-        f"got {status} {ready}",
+        f"got {status} {ready}" + (" — route missing: the image predates 2 Sep 2026 (commit 01ced20); rebuild" if status == 404 else ""),
     )
+    schema = ready.get("measurement_schema")
+    if schema is not None:
+        # Reported, never a failure: a pending migration is a release step, not an outage.
+        record("INFO" if schema == "compatible" else "WARN", "measurement schema", str(schema)
+               + ("" if schema == "compatible" else " — apply the pending migration (DEPLOY.md release step)"))
 
     status, _, _ = fetch(f"{api}/model-card/metrics")
     check(

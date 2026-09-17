@@ -10,6 +10,66 @@ from app.domain.models import SystemConfig, WorkspaceSettings
 from app.rate_limit import rate_limiter
 from app.rbac import Role, can_admin, require_role
 from app.routers.problems import build_outcome_board, to_summary
+from app.services.postgres import EXPECTED_MEASUREMENT_FUNCTION_VERSION
+
+
+def build_identity() -> str | None:
+    """The commit the running build was made from: CLARA_BUILD_COMMIT (set by
+    the Dockerfile from its GIT_COMMIT build arg), else CLARA_VERSION, else
+    None — never invented from the checkout the process happens to run in."""
+    import os
+
+    return os.getenv("CLARA_BUILD_COMMIT") or os.getenv("CLARA_VERSION") or None
+
+
+def measurement_compatibility(database: object) -> dict[str, object]:
+    """Fold the database's measurement state into one verdict.
+
+    compatible    the plpgsql tick is at the version this code expects and the
+                  plan columns exist (or the backend runs the Python tick)
+    fallback      no plpgsql tick at all: the API runs its Python tick, which
+                  has the same semantics — safe, but pg_cron does nothing
+    incompatible  a plpgsql tick exists at another (older) version, or plan
+                  columns are missing: checkpoints could be read with older
+                  semantics — apply the pending migration
+    unknown       the database probe failed or answered nothing
+    """
+    verdict: dict[str, object] = {
+        "state": "unknown",
+        "expected_function_version": EXPECTED_MEASUREMENT_FUNCTION_VERSION,
+        "found_function_version": None,
+        "columns_missing": [],
+        "backend_tick": None,
+        "action": "check DATABASE_URL and the database (the readiness probe failed)",
+    }
+    if not isinstance(database, dict) or not database.get("ok"):
+        return verdict
+    measurement = database.get("measurement")
+    if not isinstance(measurement, dict):
+        return verdict
+    found = measurement.get("function_version")
+    missing = list(measurement.get("columns_missing") or [])
+    backend_tick = measurement.get("backend_tick")
+    if backend_tick == "python" and database.get("backend") != "postgres":
+        state = "compatible"
+    elif backend_tick == "python":
+        state = "fallback"
+    elif found == EXPECTED_MEASUREMENT_FUNCTION_VERSION and not missing:
+        state = "compatible"
+    else:
+        state = "incompatible"
+    verdict.update(
+        state=state,
+        found_function_version=found,
+        columns_missing=missing,
+        backend_tick=backend_tick,
+        action=(
+            None
+            if state == "compatible"
+            else "apply apps/api/migrations/017_measurement_intervals.sql (see DEPLOY.md release step)"
+        ),
+    )
+    return verdict
 
 
 def build_router(
@@ -29,10 +89,14 @@ def build_router(
     read_dep = Depends(require_role(Role.viewer))
 
     @router.get("/health")
-    def health() -> dict[str, str]:
+    def health() -> dict[str, str | None]:
         """Shallow liveness probe: the process is up. Cheap by design (Caddy,
-        Docker HEALTHCHECK and the uptime workflow hit it every few seconds)."""
-        return {"status": "ok"}
+        Docker HEALTHCHECK and the uptime workflow hit it every few seconds).
+        Carries the build identity (CLARA_BUILD_COMMIT, baked into the image
+        by the Dockerfile) so a smoke run can say WHICH build answered — a
+        FastAPI-shaped 404 on a newer route proves version lag only when the
+        served commit is known."""
+        return {"status": "ok", "version": build_identity()}
 
     def _readiness_report() -> tuple[bool, dict[str, object]]:
         checks: dict[str, object] = {}
@@ -43,11 +107,13 @@ def build_router(
             except Exception as exc:  # noqa: BLE001 — the probe must answer, not crash
                 healthy = False
                 checks["database"] = {"ok": False, "error": type(exc).__name__}
+        checks["measurement"] = measurement_compatibility(checks.get("database"))
         checks["ai_residency"] = {
             "chat": ai.provider_residency(ai.effective_base_url()),
             "embeddings": ai.provider_residency(ai.effective_embed_base_url()),
             "eu_only_enforced": ai.eu_only_enforced(),
         }
+        checks["build"] = {"version": build_identity()}
         return healthy, checks
 
     @router.get("/ready")
@@ -55,17 +121,26 @@ def build_router(
         """Readiness: can this instance serve requests? Runs the persistence
         probe (SELECT 1 against Postgres, or the SQLite file) and answers 503
         when it fails, so a load balancer stops routing to a broken instance.
-        Unauthenticated, therefore minimal: status only — backend type, error
-        classes and the residency posture are on /ready/details for signed-in
-        users."""
-        healthy, _checks = _readiness_report()
+        Unauthenticated, therefore minimal: status, the build identity and one
+        word for the measurement schema (compatible | fallback | incompatible
+        | unknown) — a schema mismatch is reported, never used to take the
+        instance out of rotation; backend type, error classes, versions and
+        the residency posture are on /ready/details for signed-in users."""
+        healthy, checks = _readiness_report()
         if not healthy:
             response.status_code = 503
-        return {"status": "ok" if healthy else "degraded"}
+        measurement = checks.get("measurement") or {}
+        return {
+            "status": "ok" if healthy else "degraded",
+            "version": build_identity(),
+            "measurement_schema": measurement.get("state", "unknown"),
+        }
 
     @router.get("/ready/details", dependencies=[read_dep])
     def ready_details(response: Response) -> dict[str, object]:
-        """The full readiness report: database probe result and the AI
+        """The full readiness report: database probe result, the measurement
+        schema/function compatibility (expected vs found function version,
+        missing plan columns, which tick runs), the build identity and the AI
         residency classification of the configured providers."""
         healthy, checks = _readiness_report()
         if not healthy:

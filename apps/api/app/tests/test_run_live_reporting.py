@@ -148,6 +148,67 @@ class TestConfig:
         assert base == hashlib.sha256(canonical.encode()).hexdigest()
 
 
+class TestInputFingerprint:
+    """13 Sep 2026 review, F6: the fingerprint covers the EFFECTIVE inputs."""
+
+    def test_prompt_edit_changes_only_the_experimental_block(self, monkeypatch) -> None:
+        import app.services.enrichment as enrichment
+
+        before = rl._run_config(EXEMPLARS)
+        monkeypatch.setattr(enrichment, "SYSTEM_PROMPT", enrichment.SYSTEM_PROMPT + "\nAlways label urgency critical.")
+        after = rl._run_config(EXEMPLARS)
+        changed = rl.inputs_changed(before, after)
+        assert changed == {"experimental": ["system_prompt_sha256"]}, changed
+        # The flat compatibility keys the join reads are untouched by a prompt edit.
+        assert before["golden_set_sha256"] == after["golden_set_sha256"]
+        assert before["held_out_ids_sha256"] == after["held_out_ids_sha256"]
+
+    def test_flags_and_exemplar_order_are_fingerprinted(self, monkeypatch) -> None:
+        base = rl._run_config(EXEMPLARS)
+        monkeypatch.setenv("ENRICH_TAG_CANON", "0")
+        canon_off = rl._run_config(EXEMPLARS)
+        assert rl.inputs_changed(base, canon_off) == {"experimental": ["tag_canon_enabled"]}
+        monkeypatch.delenv("ENRICH_TAG_CANON")
+        monkeypatch.setenv("ENRICH_ROUTING_CLOSED_SET", "1")
+        assert rl.inputs_changed(base, rl._run_config(EXEMPLARS)) == {"experimental": ["routing_closed_set_enabled"]}
+        monkeypatch.delenv("ENRICH_ROUTING_CLOSED_SET")
+        reordered = rl._run_config(list(reversed(EXEMPLARS)))
+        changed = rl.inputs_changed(base, reordered)
+        # The model reads the few-shot block in order: the ordered hash and the
+        # prompt hash change, the order-free exemplar hash does not.
+        assert set(changed["experimental"]) == {"exemplars_ordered_sha256", "system_prompt_sha256"}, changed
+        assert reordered["exemplars_sha256"] == base["exemplars_sha256"]
+        monkeypatch.setenv("AI_TEMPERATURE", "0.7")
+        assert rl.inputs_changed(base, rl._run_config(EXEMPLARS)) == {"experimental": ["temperature"]}
+
+    def test_nuisance_block_names_dataset_and_source_identity(self, monkeypatch) -> None:
+        cfg = rl._run_config(EXEMPLARS)
+        nuisance = cfg["inputs"]["nuisance"]
+        assert set(nuisance) == {"golden_set_sha256", "held_out_ids_sha256", "split_counts",
+                                 "harness_git_commit", "harness_git_dirty", "harness_source_sha256", "python_version"}
+        assert len(nuisance["harness_source_sha256"]) == 64
+        experimental = cfg["inputs"]["experimental"]
+        assert set(experimental) == {"model", "temperature", "batch_size", "system_prompt_sha256", "tool_schema_sha256",
+                                     "exemplars_enabled", "exemplar_count", "exemplars_sha256", "exemplars_ordered_sha256",
+                                     "fewshot_enabled", "tag_canon_enabled", "routing_closed_set_enabled"}
+        assert experimental["batch_size"] == 25 and len(experimental["tool_schema_sha256"]) == 64
+        # A source edit changes the nuisance block (the checkout is not what a
+        # baseline was produced with), not the experimental one.
+        monkeypatch.setattr(rl, "_harness_source_sha256", lambda: "0" * 64)
+        assert rl.inputs_changed(cfg, rl._run_config(EXEMPLARS)) == {"nuisance": ["harness_source_sha256"]}
+        # Older reports without the block are reported as unknown, never as equal.
+        assert rl.inputs_changed({"golden_set_sha256": "x"}, cfg) == {"unknown": ["inputs"]}
+
+    def test_no_secret_or_prompt_text_reaches_the_manifest(self, monkeypatch) -> None:
+        monkeypatch.setenv("AI_API_KEY", "sk-live-SECRET-VALUE")
+        import app.services.enrichment as enrichment
+
+        blob = json.dumps(rl._run_config(EXEMPLARS))
+        assert "SECRET-VALUE" not in blob and "api_key" not in blob.lower()
+        assert enrichment.SYSTEM_PROMPT[:40] not in blob  # hashes only, never the text
+        assert EXEMPLARS[0]["text"] not in blob
+
+
 class TestPrintedReport:
     def test_failure_table_withholds_held_out_by_default(self, scored_pair, capsys) -> None:
         # Make the ON arm fail on one optimisation item and one held-out item
@@ -389,8 +450,10 @@ class TestCompareReports:
         new["enrichment_on"]["hallucination_rate"] = 0.05
         new["enrichment_on"]["pii_leak_count"] = 1
         g = rl.compare_reports(baseline, new)["guards"]
-        assert g["hallucination"] == {"baseline": 0.02, "new": 0.05, "status": "rose",
-                                      "baseline_eligible": 72, "new_eligible": 72}
+        assert {k: v for k, v in g["hallucination"].items() if k != "by_split"} == {
+            "baseline": 0.02, "new": 0.05, "status": "rose",
+            "baseline_eligible": 72, "new_eligible": 72,
+            "limit": 0.05, "limit_ok": True}
         assert g["pii"] == {"baseline": 0, "new": 1, "status": "leak"}
         new["enrichment_on"]["hallucination_rate"] = 0.02
         new["enrichment_on"]["pii_leak_count"] = 0
@@ -398,10 +461,82 @@ class TestCompareReports:
         assert g["hallucination"]["status"] == "ok" and g["pii"]["status"] == "ok"
         new["enrichment_on"]["hallucination_rate"] = None
         g = rl.compare_reports(baseline, new)["guards"]
-        assert g["hallucination"]["status"] == "not_evaluated" and g["hallucination"]["new"] is None
+        assert g["hallucination"]["status"] == "new_not_evaluated" and g["hallucination"]["new"] is None
+        assert g["hallucination"]["limit_ok"] is None
+        # A baseline that was never evaluated is named as such and the new run
+        # is held to the ceiling instead of passing by default.
         baseline["enrichment_on"]["hallucination_rate"] = None
         new["enrichment_on"]["hallucination_rate"] = 0.0
-        assert rl.compare_reports(baseline, new)["guards"]["hallucination"]["status"] == "not_evaluated"
+        g = rl.compare_reports(baseline, new)["guards"]["hallucination"]
+        assert g["status"] == "baseline_not_evaluated" and g["limit_ok"] is True and g["limit"] == 0.05
+        new["enrichment_on"]["hallucination_rate"] = 0.5
+        g = rl.compare_reports(baseline, new)["guards"]["hallucination"]
+        assert g["status"] == "baseline_not_evaluated" and g["limit_ok"] is False
+
+    def test_guard_scope_names_the_held_out_split_as_a_safety_validation_set(self, regression) -> None:
+        """13 Sep 2026 review, F7: the veto pools both splits, so a rise that
+        comes from held-out items alone still vetoes — and the report says
+        which split the flagged items came from instead of calling the split
+        untouched."""
+        baseline, new = regression
+        baseline["enrichment_on"].update({
+            "hallucination_rate": 0.0, "hallucination_eligible": 72,
+            "hallucination_by_split": {"optimization": {"eligible": 50, "flagged": 0}, "held_out": {"eligible": 22, "flagged": 0}},
+        })
+        new["enrichment_on"].update({
+            "hallucination_rate": round(2 / 72, 4), "hallucination_eligible": 72,
+            "hallucination_by_split": {"optimization": {"eligible": 50, "flagged": 0}, "held_out": {"eligible": 22, "flagged": 2}},
+        })
+        g = rl.compare_reports(baseline, new)["guards"]
+        assert g["hallucination"]["status"] == "rose"
+        assert g["scope"] == rl.GUARD_SCOPE and "safety-validation set used in selection" in g["scope"]
+        assert g["held_out_contributes"] is True
+        assert g["hallucination"]["by_split"]["new"]["held_out"] == {"eligible": 22, "flagged": 2}
+        assert g["hallucination"]["by_split"]["baseline"]["held_out"]["flagged"] == 0
+        # Printed next to the guards.
+        new["vs_baseline"] = rl.compare_reports(baseline, new)
+        new["_report_path"] = "<test>"
+        import io
+        from contextlib import redirect_stdout
+
+        out = io.StringIO()
+        with redirect_stdout(out):
+            rl._print_report(new)
+        assert "guard scope: pooled over the optimisation and held-out splits" in out.getvalue()
+        assert "held-out 2 flagged of 22 eligible" in out.getvalue()
+
+    def test_rose_needs_more_flagged_items_not_a_smaller_denominator(self, regression) -> None:
+        """2 of 60 -> 2 of 59 (one more unassessed item) is not a rise; 2 of 60
+        -> 3 of 60 is."""
+        baseline, new = regression
+        baseline["enrichment_on"].update({"hallucination_rate": round(2 / 60, 4), "hallucination_eligible": 60})
+        new["enrichment_on"].update({"hallucination_rate": round(2 / 59, 4), "hallucination_eligible": 59})
+        assert rl.compare_reports(baseline, new)["guards"]["hallucination"]["status"] == "ok"
+        new["enrichment_on"].update({"hallucination_rate": round(3 / 60, 4), "hallucination_eligible": 60})
+        assert rl.compare_reports(baseline, new)["guards"]["hallucination"]["status"] == "rose"
+
+    def test_missing_baseline_sidecar_is_named_not_silent(self, regression) -> None:
+        baseline, new = regression
+        b_main, _ = rl.split_held_out(baseline)
+        n_main, n_side = rl.split_held_out(new)
+        vs = rl.compare_reports(b_main, {**n_main, "_held_out": n_side})
+        assert vs["baseline"]["held_out_from_sidecar"] is False
+        assert "sidecar missing" in vs["held_out_note"]
+        full = rl.compare_reports(baseline, new)  # unsplit reports: every row joins
+        assert "held_out_note" not in full and full["baseline"]["n_only_in_new"] == 0
+
+    def test_held_out_rows_print_no_verdict_label(self, regression, capsys) -> None:
+        baseline, new = regression
+        new["vs_baseline"] = rl.compare_reports(baseline, new)
+        new["_report_path"] = "<test>"
+        rl._print_report(new)
+        out = capsys.readouterr().out
+        # The vs_baseline block prints "baseline X -> new Y"; the by_split_ab
+        # block below it prints "off X -> on Y" and carries no verdict anyway.
+        held_out_lines = [line for line in out.splitlines()
+                          if line.strip().startswith("held_out") and "baseline " in line]
+        assert held_out_lines and all("aggregate only" in line for line in held_out_lines)
+        assert all("SIGNIFICANT" not in line for line in held_out_lines)
 
     def test_printed_report_shows_vs_baseline(self, regression, capsys) -> None:
         baseline, new = regression
@@ -487,6 +622,34 @@ class TestMainEndToEnd:
         assert published["overall"]["hallucination_eligible"] == 72
         assert published["overall"]["hallucination_excluded"] == 28
         assert published["config"]["golden_set_sha256"] == second["config"]["golden_set_sha256"]
+
+    def test_off_arm_failure_after_the_on_arm_scored_is_a_logged_consultation(self, env, monkeypatch, capsys) -> None:
+        """G2: the ON arm scored the golden set (held-out included) before the
+        OFF arm failed; the look is on record as an eval_failed row and counts
+        towards held_out_consultations, though no report is written."""
+        good = _fake_enrich(set())
+        calls = {"n": 0}
+
+        def flaky(signals, exemplars=None, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                # The class run_live itself catches (another test may reload
+                # app.services.ai, which would make a fresh import a different
+                # class and the exception uncaught).
+                raise rl.AIProviderError("gateway down")
+            return good(signals, exemplars=exemplars, **kwargs)
+
+        monkeypatch.setattr(rl, "enrich_signals", flaky)
+        assert rl.main([]) == 2
+        assert not list((env / "reports").glob("report_*.json")) if (env / "reports").exists() else True
+        rows = [json.loads(line) for line in (env / "history.jsonl").read_text().splitlines()]
+        assert rows[-1]["kind"] == "eval_failed" and rows[-1]["held_out_scored"] is True
+        assert rows[-1]["held_out_revealed"] is False and "gateway down" in rows[-1]["reason"]
+        assert rl._held_out_consultations(env / "history.jsonl") == 2
+        monkeypatch.setattr(rl, "enrich_signals", good)
+        assert rl.main([]) == 0
+        rows = [json.loads(line) for line in (env / "history.jsonl").read_text().splitlines()]
+        assert rows[-1]["kind"] == "eval" and rows[-1]["held_out_consultations"] == 2
 
     def test_baseline_with_other_golden_set_is_refused_before_scoring(self, env, monkeypatch, capsys) -> None:
         calls = {"n": 0}

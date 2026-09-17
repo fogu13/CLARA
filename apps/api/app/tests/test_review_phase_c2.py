@@ -13,8 +13,12 @@ class TestEvidenceGrade:
         assert evidence_grade(comparison_method="its_segmented_regression", measurement_source="manual") == "E"
 
     def test_instrumented_designs(self) -> None:
-        assert evidence_grade(comparison_method="randomized_holdout", measurement_source="instrumented") == "A"
-        assert evidence_grade(comparison_method="its_segmented_regression", measurement_source="instrumented") == "C"
+        # Realised designs only (13 Sep 2026 review, F4): CLARA produces no
+        # holdout, so a contracted A design is graded on the data it has, an
+        # uncontrolled before/after; an ITS is C only once the fit exists.
+        assert evidence_grade(comparison_method="randomized_holdout", measurement_source="instrumented") == "D"
+        assert evidence_grade(comparison_method="its_segmented_regression", measurement_source="instrumented") == "D"
+        assert evidence_grade(comparison_method="its_segmented_regression", measurement_source="instrumented", realised_method="its") == "C"
         assert evidence_grade(comparison_method="before_after", measurement_source="instrumented") == "D"
         assert evidence_grade(comparison_method="pre_post_signal_rate", measurement_source="instrumented") == "D"
 

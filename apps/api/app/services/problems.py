@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Callable
 
 from app.domain.models import (
     OUTCOME_CONTRACT_TERM_FIELDS,
@@ -165,10 +166,17 @@ class ProblemStore:
         self,
         problem_id: str,
         update: ProblemUpdateRequest,
+        *,
+        guard: Callable[[], None] | None = None,
     ) -> ProblemRecord | None:
+        """``guard`` runs immediately before the write (raise to refuse): the
+        router's approval check, executed inside the per-problem governance
+        lock so it cannot pass before an approval and persist after it."""
         existing = self._draft_problems.get(problem_id)
         if existing is None:
             return None
+        if guard is not None:
+            guard()
 
         updated_problem = apply_problem_update(existing, update)
         self._draft_problems[problem_id] = updated_problem
@@ -179,10 +187,14 @@ class ProblemStore:
         problem_id: str,
         action_id: str,
         update: ActionProposalUpdateRequest,
+        *,
+        guard: Callable[[], None] | None = None,
     ) -> ProblemRecord | None:
         existing = self._draft_problems.get(problem_id)
         if existing is None:
             return None
+        if guard is not None:
+            guard()
 
         updated_problem = apply_action_proposal_update(existing, action_id, update)
         if updated_problem is None:
@@ -306,10 +318,14 @@ class SQLiteProblemStore:
         self,
         problem_id: str,
         update: ProblemUpdateRequest,
+        *,
+        guard: Callable[[], None] | None = None,
     ) -> ProblemRecord | None:
         existing = self.get_problem(problem_id)
         if existing is None or problem_id in self.seed_problems:
             return None
+        if guard is not None:
+            guard()
 
         updated_problem = apply_problem_update(existing, update)
         payload = json.dumps(updated_problem.model_dump(mode="json", by_alias=True))
@@ -329,10 +345,14 @@ class SQLiteProblemStore:
         problem_id: str,
         action_id: str,
         update: ActionProposalUpdateRequest,
+        *,
+        guard: Callable[[], None] | None = None,
     ) -> ProblemRecord | None:
         existing = self.get_problem(problem_id)
         if existing is None or problem_id in self.seed_problems:
             return None
+        if guard is not None:
+            guard()
 
         updated_problem = apply_action_proposal_update(existing, action_id, update)
         if updated_problem is None:

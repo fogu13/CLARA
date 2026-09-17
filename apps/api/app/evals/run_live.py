@@ -331,29 +331,150 @@ def _exemplars_sha256(exemplars: list[dict] | None) -> str | None:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+# Source files whose content decides what a run measures (the fingerprint
+# hashes them so a dirty checkout is identified, not only its last commit).
+HARNESS_SOURCE_FILES = (
+    "app/services/enrichment.py",
+    "app/services/exemplar_store.py",
+    "app/services/tag_canon.py",
+    "app/evals/harness.py",
+    "app/evals/run_live.py",
+)
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _sha256_json(value: Any) -> str:
+    return _sha256_text(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str))
+
+
+def _git_dirty() -> bool | None:
+    """Whether the checkout has uncommitted changes under apps/api (None if
+    git is unavailable)."""
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain", "--", "."], cwd=EVALS_DIR.parent.parent,
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return bool(proc.stdout.strip())
+
+
+def _harness_source_sha256() -> str | None:
+    """One hash over the source files that decide what a run measures."""
+    root = EVALS_DIR.parent.parent  # apps/api
+    parts = []
+    for relative in HARNESS_SOURCE_FILES:
+        path = root / relative
+        if not path.exists():
+            return None
+        parts.append(f"{relative}\n{path.read_text(encoding='utf-8')}")
+    return _sha256_text("\n".join(parts))
+
+
+def _flag(name: str, default: str) -> bool:
+    return os.getenv(name, default).lower() not in ("0", "false", "no", "")
+
+
+def run_inputs(exemplars: list[dict] | None, golden: list[dict] | None = None) -> dict[str, Any]:
+    """Every input that decides what a run measures, split into the knobs the
+    loop turns (``experimental``: what an accepted change is allowed to
+    differ in) and the conditions it does not (``nuisance``: what must NOT
+    differ between two runs that are compared). Hashes only — no prompt
+    text, no exemplar text and no secret reaches the report.
+    """
+    from app.services.enrichment import DEFAULT_BATCH_SIZE, build_system_prompt
+
+    golden = golden if golden is not None else load_golden_set()
+    held_out_ids = sorted(str(g["id"]) for g in golden if g.get("split") == "held_out")
+    system_prompt, tool, _vocabulary = build_system_prompt(exemplars=exemplars or None)
+    return {
+        "experimental": {
+            "model": AI_MODEL,
+            "temperature": os.environ.get("AI_TEMPERATURE"),
+            "batch_size": DEFAULT_BATCH_SIZE,
+            # The effective system prompt as sent (base prompt + few-shot
+            # block in order + injection guard) and the tool schema.
+            "system_prompt_sha256": _sha256_text(system_prompt),
+            "tool_schema_sha256": _sha256_json(tool),
+            "exemplars_enabled": bool(exemplars),
+            "exemplar_count": len(exemplars) if exemplars else 0,
+            # Order-free (a label edit changes it) and ordered (a reorder of
+            # the few-shot block changes it: the model reads them in order).
+            "exemplars_sha256": _exemplars_sha256(exemplars),
+            "exemplars_ordered_sha256": _sha256_json(list(exemplars)) if exemplars else None,
+            "fewshot_enabled": _flag("ENRICH_FEWSHOT", "1"),
+            "tag_canon_enabled": _flag("ENRICH_TAG_CANON", "1"),
+            "routing_closed_set_enabled": _flag("ENRICH_ROUTING_CLOSED_SET", "0"),
+        },
+        "nuisance": {
+            "golden_set_sha256": (
+                hashlib.sha256(GOLDEN_SET_PATH.read_bytes()).hexdigest()
+                if GOLDEN_SET_PATH.exists() else None
+            ),
+            "held_out_ids_sha256": _sha256_lines(held_out_ids),
+            "split_counts": dict(Counter(g.get("split") or "unsplit" for g in golden)),
+            "harness_git_commit": _git_commit(),
+            "harness_git_dirty": _git_dirty(),
+            "harness_source_sha256": _harness_source_sha256(),
+            "python_version": sys.version.split()[0],
+        },
+    }
+
+
 def _run_config(exemplars: list[dict] | None, golden: list[dict] | None = None) -> dict[str, Any]:
     """Provenance of one run: what was scored, with what, on which items.
 
-    The hashes let two reports be compared for identical inputs (golden set
-    bytes, held-out id list, full exemplar objects) without diffing the files.
+    The flat keys are kept for older readers (compare_reports joins on
+    golden_set_sha256 / held_out_ids_sha256); ``inputs`` carries the full
+    fingerprint of the effective inputs (13 Sep 2026 review, F6): the prompt
+    as sent, the tool schema, the exemplars in order, the enrichment flags,
+    the batch size, the dataset/split hashes and the source identity of the
+    checkout, split into experimental knobs and nuisance conditions.
     An empty exemplar list counts as disabled (see _exemplars).
     """
     golden = golden if golden is not None else load_golden_set()
-    held_out_ids = sorted(str(g["id"]) for g in golden if g.get("split") == "held_out")
+    inputs = run_inputs(exemplars, golden)
     return {
         "model": AI_MODEL,
         "temperature": os.environ.get("AI_TEMPERATURE"),
         "exemplars_enabled": bool(exemplars),
         "exemplar_count": len(exemplars) if exemplars else 0,
         "exemplars_sha256": _exemplars_sha256(exemplars),
-        "golden_set_sha256": (
-            hashlib.sha256(GOLDEN_SET_PATH.read_bytes()).hexdigest()
-            if GOLDEN_SET_PATH.exists() else None
-        ),
-        "held_out_ids_sha256": _sha256_lines(held_out_ids),
-        "split_counts": dict(Counter(g.get("split") or "unsplit" for g in golden)),
-        "harness_git_commit": _git_commit(),
+        "golden_set_sha256": inputs["nuisance"]["golden_set_sha256"],
+        "held_out_ids_sha256": inputs["nuisance"]["held_out_ids_sha256"],
+        "split_counts": inputs["nuisance"]["split_counts"],
+        "harness_git_commit": inputs["nuisance"]["harness_git_commit"],
+        "inputs": inputs,
     }
+
+
+def inputs_changed(baseline_config: dict[str, Any] | None, new_config: dict[str, Any] | None) -> dict[str, list[str]]:
+    """Which fingerprint keys differ between two runs, by group; an older
+    report without ``inputs`` yields {"unknown": ["inputs"]}."""
+    b = (baseline_config or {}).get("inputs") or {}
+    n = (new_config or {}).get("inputs") or {}
+    if not b or not n:
+        return {"unknown": ["inputs"]}
+    changed: dict[str, list[str]] = {}
+    for group in ("experimental", "nuisance"):
+        keys = sorted(set(b.get(group, {})) | set(n.get(group, {})))
+        diff = [k for k in keys if b.get(group, {}).get(k) != n.get(group, {}).get(k)]
+        if diff:
+            changed[group] = diff
+    return changed
+
+
+def _append_ledger_row(history_path: Path, row: dict[str, Any]) -> None:
+    """Append one JSON row to the machine-local ledger (creating the file)."""
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(history_path, "a") as fh:
+        fh.write(json.dumps(row) + "\n")
 
 
 def _held_out_consultations(history_path: Path) -> int:
@@ -383,7 +504,9 @@ def _held_out_consultations(history_path: Path) -> int:
                 row = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if isinstance(row, dict) and row.get("kind") == "eval":
+            if isinstance(row, dict) and row.get("kind") in ("eval", "eval_failed"):
+                # eval_failed: the ON arm scored the golden set (held-out
+                # included) before a later step failed; the look happened.
                 prior += 1
     return prior + 1
 
@@ -472,17 +595,34 @@ def _per_item_rows(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return rows
 
 
+HALLUCINATION_LIMIT = 0.05  # LOOP_PROMPT target: hallucination_rate <= 0.05 when evaluated
+GUARD_SCOPE = (
+    "pooled over the optimisation and held-out splits: the held-out split is a "
+    "safety-validation set used in selection through the veto, not an untouched test set; "
+    "the accuracy decision reads the optimisation split only"
+)
+
+
 def _guards(baseline: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
     """Safety guards between two runs. `null` means not evaluated, never 0."""
     b_on = baseline.get("enrichment_on") or {}
     n_on = new.get("enrichment_on") or {}
     b_h, n_h = b_on.get("hallucination_rate"), n_on.get("hallucination_rate")
-    if b_h is None or n_h is None:
-        h_status = "not_evaluated"
-    elif n_h > b_h:
-        h_status = "rose"
+    b_el, n_el = b_on.get("hallucination_eligible"), n_on.get("hallucination_eligible")
+    # Statuses are explicit about WHICH side is missing: a baseline that was
+    # never evaluated must not read as a pass for a new run that flags items.
+    # "rose" needs both the rate and the flagged COUNT to go up, so a shifted
+    # denominator (one more unassessed item) alone cannot trip it.
+    if n_h is None:
+        h_status = "new_not_evaluated"
+    elif b_h is None:
+        h_status = "baseline_not_evaluated"
     else:
-        h_status = "ok"
+        b_flagged = round(b_h * (b_el or 0)) if b_el else None
+        n_flagged = round(n_h * (n_el or 0)) if n_el else None
+        count_rose = (b_flagged is None or n_flagged is None) or n_flagged > b_flagged
+        h_status = "rose" if (n_h > b_h and count_rose) else "ok"
+    h_limit_ok = None if n_h is None else bool(n_h <= HALLUCINATION_LIMIT)
     b_p, n_p = b_on.get("pii_leak_count"), n_on.get("pii_leak_count")
     if n_p is None:
         p_status = "not_evaluated"
@@ -490,13 +630,28 @@ def _guards(baseline: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
         p_status = "leak"
     else:
         p_status = "ok"
+    b_split = b_on.get("hallucination_by_split") or {}
+    n_split = n_on.get("hallucination_by_split") or {}
+    held_out_flagged = (b_split.get("held_out") or {}).get("flagged", 0) + (n_split.get("held_out") or {}).get("flagged", 0)
     return {
         "hallucination": {
             "baseline": b_h, "new": n_h, "status": h_status,
-            "baseline_eligible": b_on.get("hallucination_eligible"),
-            "new_eligible": n_on.get("hallucination_eligible"),
+            "baseline_eligible": b_el,
+            "new_eligible": n_el,
+            # The hard ceiling from the loop targets, checked on the NEW run
+            # whenever it was evaluated (null = not assessable, never 0).
+            "limit": HALLUCINATION_LIMIT, "limit_ok": h_limit_ok,
+            # Per-split provenance of the pooled figures (counts only).
+            "by_split": {"baseline": b_split, "new": n_split},
         },
         "pii": {"baseline": b_p, "new": n_p, "status": p_status},
+        # The guards are pooled over every scored item, so the held-out split
+        # takes part in selection through the safety veto: it is a safety-
+        # validation set used in selection, not an untouched test set. The
+        # accuracy decision (vs_baseline.optimization) never reads it.
+        "scope": GUARD_SCOPE,
+        "held_out_contributes": held_out_flagged > 0 or (b_split.get("held_out") or {}).get("eligible", 0) > 0
+        or (n_split.get("held_out") or {}).get("eligible", 0) > 0,
     }
 
 
@@ -543,12 +698,22 @@ def compare_reports(baseline: dict[str, Any], new: dict[str, Any]) -> dict[str, 
         "n_only_in_baseline": len(b_rows) - len(shared),
         "held_out_from_sidecar": bool((baseline.get("_held_out") or {}).get("per_item")),
     }
+    if out["baseline"]["n_only_in_new"] and not out["baseline"]["held_out_from_sidecar"]:
+        # Rows the new run scored that the baseline could not supply (its
+        # sidecar is missing): say so instead of silently reporting a partial
+        # or absent held-out aggregate — the final held-out declaration
+        # quotes this block.
+        out["held_out_note"] = (
+            "baseline sidecar missing: the held-out aggregate could not be joined; "
+            "re-run with a baseline report whose .held_out.json sidecar exists"
+        )
     return out
 
 
 def _vs_baseline_splits(vs: dict[str, Any]) -> dict[str, Any]:
-    """The split entries of a vs_baseline block (drops `guards` / `baseline`)."""
-    return {k: v for k, v in vs.items() if k not in ("guards", "baseline")}
+    """The split entries of a vs_baseline block (drops `guards`, `baseline`
+    and any note)."""
+    return {k: v for k, v in vs.items() if k not in ("guards", "baseline") and isinstance(v, dict)}
 
 
 # --------------------------------------------------------------------------- #
@@ -763,7 +928,11 @@ def _print_report(
         for split, metrics in _vs_baseline_splits(vs).items():
             for metric, m in metrics.items():
                 lo, hi = m["diff_ci95"] if m["diff_ci95"] else (float("nan"), float("nan"))
-                if m["p_value"] < 0.05 and m["gained"] > m["lost"]:
+                if split != "optimization":
+                    # Held-out (or unsplit) rows are an aggregate on record,
+                    # never a verdict: no GAIN/LOSS label to act on.
+                    sig = "aggregate only (not a decision)"
+                elif m["p_value"] < 0.05 and m["gained"] > m["lost"]:
                     sig = "SIGNIFICANT GAIN"
                 elif m["p_value"] < 0.05 and m["lost"] > m["gained"]:
                     sig = "SIGNIFICANT LOSS"
@@ -781,6 +950,11 @@ def _print_report(
 
         print(f"  guards: hallucination {fmt(h.get('baseline'))} -> {fmt(h.get('new'))} "
               f"[{h.get('status')}]   pii {pii.get('baseline')} -> {pii.get('new')} [{pii.get('status')}]")
+        if g.get("scope"):
+            by_split = (h.get("by_split") or {}).get("new") or {}
+            held = by_split.get("held_out") or {}
+            print(f"  guard scope: {g['scope']}"
+                  f" (new run: held-out {held.get('flagged', 0)} flagged of {held.get('eligible', 0)} eligible)")
 
     if ab is None or off is None:
         print("\n[exemplar A/B — not run]")
@@ -864,6 +1038,20 @@ def _print_report(
     print(f"\nreport: {report['_report_path']}")
 
 
+def _hallucination_by_split(scored: dict) -> dict[str, dict[str, int]]:
+    """Eligible and flagged counts per split (counts only: no held-out id
+    reaches the main report)."""
+    r = scored["result"]
+    golden = load_golden_set()
+    split_of = {str(g["id"]): (g.get("split") or "unsplit") for g in golden}
+    out: dict[str, dict[str, int]] = {}
+    for gid in getattr(r, "hallucination_eligible_ids", []) or []:
+        out.setdefault(split_of.get(gid, "unsplit"), {"eligible": 0, "flagged": 0})["eligible"] += 1
+    for gid in getattr(r, "hallucination_flagged_ids", []) or []:
+        out.setdefault(split_of.get(gid, "unsplit"), {"eligible": 0, "flagged": 0})["flagged"] += 1
+    return out
+
+
 def _enr_dict(scored: dict, vectors: dict) -> dict[str, Any]:
     r = scored["result"]
     return {
@@ -878,6 +1066,9 @@ def _enr_dict(scored: dict, vectors: dict) -> dict[str, Any]:
         "hallucination_eligible": r.hallucination_eligible,
         "hallucination_excluded": r.hallucination_excluded,
         "hallucination_unassessed": getattr(r, "hallucination_unassessed", 0),
+        # Which split the eligible / flagged items came from: the guard pools
+        # both splits, so the held-out split takes part in the safety veto.
+        "hallucination_by_split": _hallucination_by_split(scored),
         "pii_leak_count": r.pii_leak_count,
         "enrich_latency_ms": scored["elapsed_ms"],
     }
@@ -979,7 +1170,10 @@ def published_snapshot(report: dict[str, Any], held_out_consultations: int) -> d
                 "strata; by_split.held_out is the locked guardrail figure. "
                 "by_split_ab is the paired exemplar effect per split; "
                 "held_out_consultations is the machine-local count of runs "
-                "that scored the held-out split."
+                "that scored the held-out split. The hallucination and PII "
+                "guards pool both splits, so the held-out split is a "
+                "safety-validation set used in selection through the veto, "
+                "not an untouched test set."
             ),
         },
         "overall": {
@@ -1047,6 +1241,11 @@ def ledger_row(
         "held_out_ids_sha256": cfg.get("held_out_ids_sha256"),
         "exemplars_sha256": cfg.get("exemplars_sha256"),
         "harness_git_commit": cfg.get("harness_git_commit"),
+        # The full fingerprint of the effective inputs; a reject row written
+        # by the operator must copy this block so a rejected candidate is
+        # as identifiable as an accepted one.
+        "inputs": cfg.get("inputs"),
+        "guards_scope": (vs.get("guards") or {}).get("scope"),
         # The held-out split was scored by this run; the running count is the
         # number of looks taken on this machine (history.jsonl is gitignored).
         "held_out_scored": True,
@@ -1085,6 +1284,7 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             print(f"--baseline-report {args.baseline_report}: {exc}", file=sys.stderr)
             return 2
+    scored_on = None
     try:
         scored_on = _score_enrichment(exemplars=exemplars)
         # No OFF arm when exemplars are disabled (or empty): it would be the
@@ -1093,6 +1293,20 @@ def main(argv: list[str] | None = None) -> int:
     except AIProviderError as exc:
         print(f"LLM enrichment call failed: {exc}", file=sys.stderr)
         print("Check AI_BASE_URL / AI_API_KEY / AI_MODEL and that the endpoint is reachable.", file=sys.stderr)
+        if scored_on is not None:
+            # The ON arm already scored the whole golden set: that look at the
+            # held-out split happened and must be on record even though no
+            # report is written.
+            _append_ledger_row(HISTORY_PATH, {
+                "kind": "eval_failed",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "model": AI_MODEL,
+                "held_out_scored": True,
+                "held_out_revealed": False,
+                "reason": f"OFF arm failed: {exc}"[:300],
+                # The failed candidate is identified like any other run.
+                "config": _run_config(exemplars),
+            })
         return 2
 
     # Synthesis structural + influence probe (best-effort; enrichment is the priority).
@@ -1144,8 +1358,7 @@ def main(argv: list[str] | None = None) -> int:
 
     ledger = ledger_row(main_report, held_out_consultations=held_out_consultations,
                         held_out_revealed=reveal_held_out)
-    with open(HISTORY_PATH, "a") as fh:
-        fh.write(json.dumps(ledger) + "\n")
+    _append_ledger_row(HISTORY_PATH, ledger)
 
     _print_report(main_report, reveal_held_out=reveal_held_out, held_out=sidecar)
     return 0

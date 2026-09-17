@@ -176,10 +176,45 @@ def _with_routing(stages: list[str]) -> tuple[str, dict[str, Any]]:
     return prompt, tool
 
 
+def build_system_prompt(
+    *,
+    exemplars: list[dict[str, Any]] | None = None,
+    journey_stage_inventory: list[str] | None = None,
+    vocabulary: list[str] | None = None,
+) -> tuple[str, dict[str, Any], list[str]]:
+    """The exact system prompt and tool schema one enrichment call sends.
+
+    Pure: the same inputs give the same text, so the evaluation runner can
+    fingerprint the EFFECTIVE prompt (base prompt, routing inventory,
+    vocabulary, few-shot block in order, injection guard) instead of its
+    parts. Returns (system_prompt, tool_schema, cleaned_vocabulary).
+    """
+    system_prompt, tool = SYSTEM_PROMPT, ENRICHMENT_TOOL
+    if journey_stage_inventory and routing_closed_set_enabled():
+        system_prompt, tool = _with_routing(sorted(set(journey_stage_inventory)))
+    clean_vocabulary: list[str] = []
+    for term in vocabulary or []:
+        cleaned = _clean_tag(term)
+        if cleaned and cleaned not in clean_vocabulary:
+            clean_vocabulary.append(cleaned)
+    system_prompt = _with_vocabulary(system_prompt, clean_vocabulary[:80])
+
+    # Few-shot examples belong in the SYSTEM turn: in the user turn an injected
+    # feedback item could "continue" them. The user turn carries data only.
+    fewshot = format_fewshot(exemplars) if exemplars else ""
+    if fewshot:
+        system_prompt = system_prompt + "\n\nWorked examples:\n" + fewshot
+    system_prompt = system_prompt + INJECTION_GUARD
+    return system_prompt, tool, clean_vocabulary
+
+
+DEFAULT_BATCH_SIZE = 25
+
+
 def enrich_signals(
     signals: list[dict[str, Any]],
     *,
-    batch_size: int = 25,
+    batch_size: int = DEFAULT_BATCH_SIZE,
     exemplars: list[dict[str, Any]] | None = None,
     journey_stage_inventory: list[str] | None = None,
     vocabulary: list[str] | None = None,
@@ -204,22 +239,11 @@ def enrich_signals(
     if not signals:
         return []
 
-    system_prompt, tool = SYSTEM_PROMPT, ENRICHMENT_TOOL
-    if journey_stage_inventory and routing_closed_set_enabled():
-        system_prompt, tool = _with_routing(sorted(set(journey_stage_inventory)))
-    clean_vocabulary = []
-    for term in vocabulary or []:
-        cleaned = _clean_tag(term)
-        if cleaned and cleaned not in clean_vocabulary:
-            clean_vocabulary.append(cleaned)
-    system_prompt = _with_vocabulary(system_prompt, clean_vocabulary[:80])
-
-    # Few-shot examples belong in the SYSTEM turn: in the user turn an injected
-    # feedback item could "continue" them. The user turn carries data only.
-    fewshot = format_fewshot(exemplars) if exemplars else ""
-    if fewshot:
-        system_prompt = system_prompt + "\n\nWorked examples:\n" + fewshot
-    system_prompt = system_prompt + INJECTION_GUARD
+    system_prompt, tool, clean_vocabulary = build_system_prompt(
+        exemplars=exemplars,
+        journey_stage_inventory=journey_stage_inventory,
+        vocabulary=vocabulary,
+    )
     all_enrichments: list[dict[str, Any]] = []
 
     # Lexical tag canonicalization (ENRICH_TAG_CANON=0 disables): exemplar

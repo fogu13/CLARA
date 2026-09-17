@@ -726,17 +726,25 @@ def create_app(
 
     def _readiness() -> dict[str, object]:
         """Persistence probe for GET /ready: one trivial query against the
-        configured backend. Raises on failure; the route turns that into 503."""
+        configured backend, plus the measurement-schema compatibility check
+        (routers.system.measurement_compatibility). Raises on failure; the
+        route turns that into 503."""
         if _pg_url:
-            from app.services.postgres import PostgresConnectionMixin
+            from app.services.postgres import PostgresConnectionMixin, measurement_schema_state
 
             probe = PostgresConnectionMixin.__new__(PostgresConnectionMixin)
             probe.url = _pg_url
             with probe._connect() as conn:
                 conn.execute("SELECT 1").fetchone()
-            return {"ok": True, "backend": "postgres"}
+                measurement = measurement_schema_state(conn)
+            return {"ok": True, "backend": "postgres", "measurement": measurement}
         signal_store.list_signals()  # SQLite/in-memory: the store answers
-        return {"ok": True, "backend": "sqlite" if isinstance(signal_store, SQLiteSignalStore) else "memory"}
+        return {
+            "ok": True,
+            "backend": "sqlite" if isinstance(signal_store, SQLiteSignalStore) else "memory",
+            # The Python tick is the only tick on SQLite: always the code's own version.
+            "measurement": {"function_version": None, "columns_missing": [], "backend_tick": "python"},
+        }
 
     def require_candidate(candidate_id: str) -> ProblemCandidate:
         candidate = next(

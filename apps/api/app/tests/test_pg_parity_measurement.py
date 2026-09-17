@@ -51,6 +51,8 @@ OUTCOME_KEYS = {
     "contract_snapshot",
     "clock_origin",
     "clock_origin_at",
+    "observation_start",
+    "observation_end",
 }
 
 
@@ -163,19 +165,26 @@ def test_supersede_pending_by_origin(stores) -> None:
     assert stores["plans"].supersede_pending(problem.problem_id, note="lower clocks", origins={"approval", "dispatch"}) == 2
     by_origin = {plan["origin"]: plan["status"] for plan in stores["plans"].list_plans()}
     assert by_origin == {"approval": "superseded", "dispatch": "superseded", "implementation": "pending"}
-    # schedule_measurements applies the precedence itself: a dispatch clock
-    # supersedes approval plans and leaves the implementation plan alone.
+    # schedule_measurements applies the precedence itself. While an
+    # implementation-clock plan governs the problem, a dispatch clock opens
+    # nothing (a lower clock never re-opens checkpoints under a higher one);
+    # once that plan is gone, the dispatch clock supersedes approval plans.
     assert stores["plans"].schedule(
         problem_id=problem.problem_id, execution_id="EXE-0002", executed_at=_iso(DISPATCHED_AT),
         due_at=_iso(NOW + timedelta(days=2)), kind="t7", origin="approval",
     )
+    blocked = schedule_measurements(
+        stores["plans"], problem=problem, execution_id="EXE-0003", executed_at=_iso(DISPATCHED_AT), origin="dispatch"
+    )
+    assert blocked == []
+    assert stores["plans"].supersede_pending(problem.problem_id, note="gone", origins={"implementation"}) == 1
     kinds = schedule_measurements(
         stores["plans"], problem=problem, execution_id="EXE-0003", executed_at=_iso(DISPATCHED_AT), origin="dispatch"
     )
     assert set(kinds) == {"t7", "window", "followup"}
     statuses = {(plan["origin"], plan["kind"], plan["status"]) for plan in stores["plans"].list_plans()}
     assert ("approval", "t7", "superseded") in statuses
-    assert ("implementation", "implementation", "pending") in statuses
+    assert ("implementation", "implementation", "superseded") in statuses
     assert ("dispatch", "t7", "pending") in statuses
 
 
@@ -205,7 +214,9 @@ def test_plpgsql_tick_binds_reading_and_certifies_like_sqlite(stores) -> None:
     assert window_payload["clock_origin_at"] == _iso(DISPATCHED_AT)
     assert window_payload["contract_revision"] == problem.outcome_contract.revision
     assert window_payload["contract_snapshot"]["success_threshold"] == problem.outcome_contract.success_threshold
-    assert "since dispatch (" in window_payload["notes"]
+    assert "clock from dispatch" in window_payload["notes"] and "in the fixed interval" in window_payload["notes"]
+    assert window_payload["observation_start"] == _iso(DISPATCHED_AT)
+    assert window_payload["observation_end"] == _iso(DISPATCHED_AT + timedelta(days=problem.outcome_contract.measurement_window_days))
     window_plan = next(p for p in stores["plans"].list_plans() if p["kind"] == "window")
     assert window_payload["plan_id"] == window_plan["id"]
     assert window_plan["status"] == "done"
@@ -303,8 +314,11 @@ def test_python_tick_writes_the_same_payload_keys_as_plpgsql(stores) -> None:
     assert by_kind["t7"]["clock_origin_at"] == by_kind["window"]["clock_origin_at"] == _iso(DISPATCHED_AT)
     assert by_kind["t7"]["contract_revision"] == by_kind["window"]["contract_revision"]
     assert set(by_kind["t7"]["contract_snapshot"]) == set(by_kind["window"]["contract_snapshot"])
-    assert "since dispatch (" in by_kind["t7"]["notes"]
-    assert "since dispatch (" in by_kind["window"]["notes"]
+    assert "clock from dispatch" in by_kind["t7"]["notes"] and "in the fixed interval" in by_kind["t7"]["notes"]
+    assert "clock from dispatch" in by_kind["window"]["notes"] and "in the fixed interval" in by_kind["window"]["notes"]
+    # Both ticks record the same fixed interval for the same plan kinds.
+    assert by_kind["t7"]["observation_end"] == _iso(DISPATCHED_AT + timedelta(days=7))
+    assert by_kind["window"]["observation_end"] == _iso(DISPATCHED_AT + timedelta(days=problem.outcome_contract.measurement_window_days))
     plans = {plan["kind"]: plan for plan in stores["plans"].list_plans()}
     assert by_kind["t7"]["plan_id"] == plans["t7"]["id"]
     assert by_kind["window"]["plan_id"] == plans["window"]["id"]
@@ -327,13 +341,17 @@ def test_plpgsql_followup_window_derives_from_due_at(stores) -> None:
     result = stores["plans"].run_due(_iso(NOW))
     assert result["measured"] == 3
     followup = next(p for p in _outcome_payloads(problem.problem_id) if p["checkpoint_kind"] == "followup")
-    # [T+28, now] holds exactly the post-signal (20 days ago); the amended
-    # window [T+60, now] lies in the future and would have read nothing.
+    # The plan's fixed interval [T+28, T+58] holds exactly the post-signal (20
+    # days ago); an amendment made behind the API (no re-planning) neither
+    # moves the interval nor the terms: the reading is scored under the
+    # frozen revision 1 with the 28-day window it was scheduled with.
     assert "1 matching signals" in followup["notes"]
-    assert "in the month after the measurement window closed" in followup["notes"]
-    assert float(followup["observed_value"]) == pytest.approx(1 / 31, abs=1e-4)
-    assert followup["contract_revision"] == 2
-    assert followup["contract_snapshot"]["measurement_window_days"] == 60
+    assert "in the fixed interval" in followup["notes"]
+    assert float(followup["observed_value"]) == pytest.approx(1 / 30, abs=1e-4)
+    assert followup["contract_revision"] == 1
+    assert followup["contract_snapshot"]["measurement_window_days"] == 28
+    assert followup["observation_start"] == _iso(executed + timedelta(days=28))
+    assert followup["observation_end"] == _iso(executed + timedelta(days=58))
 
 
 def test_plpgsql_reads_a_missing_contract_revision_as_one(stores) -> None:
@@ -359,3 +377,28 @@ def test_plpgsql_reads_a_missing_contract_revision_as_one(stores) -> None:
     snapshot = stores["fresh_workflows"]().outcome_snapshot(stores["problems"].get_problem(problem.problem_id))
     assert snapshot.measured_under_revision == 1
     assert snapshot.contract_amended_after_measurement is False
+
+
+def test_same_tick_readings_have_a_deterministic_latest(stores) -> None:
+    """Three checkpoints due in one tick share measured_at and created_at; the
+    record id suffix is the plan id, so the API's latest reading is the last
+    checkpoint processed (due order), not a random draw."""
+    problem = stores["problem"]
+    executed = NOW - timedelta(days=59)
+    schedule_measurements(
+        stores["plans"], problem=problem, execution_id="EXE-0001", executed_at=_iso(executed), origin="dispatch"
+    )
+    for _ in range(3):
+        stores["plans"].run_due(_iso(NOW))
+    payloads = _outcome_payloads(problem.problem_id)
+    assert len(payloads) == 3
+    rows = _rows(
+        "SELECT record_id FROM clara_workflow_records WHERE record_type = 'outcome' AND problem_id = %s ORDER BY record_id",
+        (problem.problem_id,),
+    )
+    suffixes = [r["record_id"].rsplit(":", 1)[1] for r in rows]
+    assert all(len(sfx) == 12 and sfx.isdigit() for sfx in suffixes), suffixes
+    workflows = stores["fresh_workflows"]()  # a store that loads after the tick
+    latest = workflows.latest_outcome(problem.problem_id)
+    assert latest is not None and latest.checkpoint_kind == "followup"
+    assert workflows.outcome_snapshot(problem).checkpoint_kind == "followup"

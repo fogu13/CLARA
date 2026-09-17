@@ -27,6 +27,12 @@ RUN pip install --upgrade pip && pip install -e "."
 # App code, then drop privileges. /app/.data is the SQLite fallback path when
 # DATABASE_URL is unset; production sets DATABASE_URL and never writes here.
 COPY . .
+# Build identity: GET /health and /ready report it, so a smoke run can say
+# which commit answered. Pass it at build time:
+#   docker compose build --build-arg GIT_COMMIT=$(git -C repo rev-parse --short HEAD)
+# (DEPLOY.md release step). Unset = "unknown build", never a guessed commit.
+ARG GIT_COMMIT=""
+ENV CLARA_BUILD_COMMIT=${GIT_COMMIT}
 RUN useradd --system --uid 10001 --create-home clara \
     && mkdir -p /app/.data \
     && chown -R clara:clara /app

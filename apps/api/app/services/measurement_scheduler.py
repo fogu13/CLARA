@@ -32,7 +32,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from app.domain.models import OutcomeMeasurement, ProblemRecord
+import json
+
+from app.domain.models import OutcomeContract, OutcomeMeasurement, ProblemRecord
 from app.services.common import utc_now, SerializedConnection
 
 logger = logging.getLogger(__name__)
@@ -152,13 +154,20 @@ class SQLiteMeasurementPlanStore:
                 note TEXT,
                 created_at TEXT NOT NULL,
                 origin TEXT NOT NULL DEFAULT 'approval',
-                contract_revision INTEGER
+                contract_revision INTEGER,
+                contract_json TEXT,
+                observation_start TEXT,
+                observation_end TEXT
             )
             """
         )
-        # Databases created before the origin/revision columns existed.
+        # Databases created before the origin/revision columns existed, and
+        # before the frozen terms / observation interval (13 Sep 2026 review).
         self._ensure_column("origin", "TEXT NOT NULL DEFAULT 'approval'")
         self._ensure_column("contract_revision", "INTEGER")
+        self._ensure_column("contract_json", "TEXT")
+        self._ensure_column("observation_start", "TEXT")
+        self._ensure_column("observation_end", "TEXT")
         self._connection.commit()
 
     def _ensure_column(self, column: str, definition: str) -> None:
@@ -181,11 +190,17 @@ class SQLiteMeasurementPlanStore:
         kind: str,
         origin: str = DEFAULT_PLAN_ORIGIN,
         contract_revision: int | None = None,
+        contract_snapshot: OutcomeContract | dict[str, Any] | None = None,
+        observation_start: str | None = None,
+        observation_end: str | None = None,
     ) -> bool:
         """Insert one checkpoint; False when an equivalent pending plan exists.
 
         One pending plan per problem+kind — re-approving (or approving a second
         action on the same problem) must not double-schedule or restart the clock.
+        ``contract_snapshot`` freezes the scoring terms the checkpoint will be
+        read under; ``observation_start``/``observation_end`` fix the interval
+        it reads, whenever the worker gets to it.
         """
         existing = self._connection.execute(
             "SELECT id FROM measurement_plans WHERE problem_id = ? AND kind = ?"
@@ -197,8 +212,8 @@ class SQLiteMeasurementPlanStore:
         self._connection.execute(
             "INSERT INTO measurement_plans"
             " (problem_id, execution_id, executed_at, due_at, kind, created_at,"
-            "  origin, contract_revision)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "  origin, contract_revision, contract_json, observation_start, observation_end)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 problem_id,
                 execution_id,
@@ -208,6 +223,9 @@ class SQLiteMeasurementPlanStore:
                 utc_now(),
                 origin,
                 contract_revision,
+                contract_snapshot_json(contract_snapshot),
+                observation_start,
+                observation_end,
             ),
         )
         self._connection.commit()
@@ -234,19 +252,26 @@ class SQLiteMeasurementPlanStore:
         self._connection.commit()
         return cursor.rowcount
 
+    @staticmethod
+    def _plan(row: Any) -> dict[str, Any]:
+        plan = dict(row)
+        raw = plan.pop("contract_json", None)
+        plan["contract_snapshot"] = json.loads(raw) if raw else None
+        return plan
+
     def list_plans(self) -> list[dict[str, Any]]:
         rows = self._connection.execute(
-            "SELECT * FROM measurement_plans ORDER BY due_at"
+            "SELECT * FROM measurement_plans ORDER BY due_at, id"
         ).fetchall()
-        return [dict(row) for row in rows]
+        return [self._plan(row) for row in rows]
 
     def due(self, now: str) -> list[dict[str, Any]]:
         rows = self._connection.execute(
             "SELECT * FROM measurement_plans WHERE status = 'pending' AND due_at <= ?"
-            " ORDER BY due_at",
+            " ORDER BY due_at, id",
             (now,),
         ).fetchall()
-        return [dict(row) for row in rows]
+        return [self._plan(row) for row in rows]
 
     def mark(self, plan_id: int, *, status: str, note: str | None = None) -> None:
         self._connection.execute(
@@ -271,7 +296,8 @@ def schedule_measurements(
     push, the human-recorded implementation instant, or — only when the draft
     is the deliverable — the approval. ``contract_revision`` records which
     contract terms the checkpoints were scheduled under (defaults to the
-    problem's current revision).
+    problem's current revision). Returns the kinds actually inserted: nothing
+    when a higher-ranked clock already governs the problem.
     """
     if origin not in PLAN_ORIGINS:
         raise ValueError(f"Unknown measurement origin: {origin!r}")
@@ -280,6 +306,18 @@ def schedule_measurements(
     # Origin precedence: live plans on a lower-ranked clock give way (a real
     # push after a draft-only approval moves the clock to the dispatch); a
     # same-or-higher clock keeps its plans and the insert below dedupes.
+    higher = {name for name, rank in ORIGIN_RANK.items() if rank > ORIGIN_RANK[origin]}
+    if higher and any(
+        str(plan.get("problem_id")) == problem.problem_id
+        and (plan.get("origin") or DEFAULT_PLAN_ORIGIN) in higher
+        and plan.get("status") in ("pending", "manual_required", "done", "blocked")
+        for plan in plan_store.list_plans()
+    ):
+        # A higher-ranked clock already governs this problem (live or already
+        # read): a lower clock must not re-open its checkpoints, or a later
+        # draft-only approval would certify the loop on the approval clock
+        # after the real dispatch was measured.
+        return []
     lower = {name for name, rank in ORIGIN_RANK.items() if rank < ORIGIN_RANK[origin]}
     if lower:
         plan_store.supersede_pending(
@@ -299,6 +337,7 @@ def schedule_measurements(
     scheduled: list[str] = []
     for kind, days in checkpoints.items():
         due_at = (executed + timedelta(days=days)).isoformat().replace("+00:00", "Z")
+        start, end = observation_interval(kind, executed_at=executed_at, due_at=due_at)
         inserted = plan_store.schedule(
             problem_id=problem.problem_id,
             execution_id=execution_id,
@@ -307,6 +346,12 @@ def schedule_measurements(
             kind=kind,
             origin=origin,
             contract_revision=contract_revision,
+            # The terms the checkpoint will be scored under and the interval it
+            # reads are fixed now; neither moves with a later amendment or a
+            # late worker (13 Sep 2026 review, F2/F3).
+            contract_snapshot=problem.outcome_contract,
+            observation_start=start,
+            observation_end=end,
         )
         # Stores return False when the checkpoint already exists (a second approved
         # action on the same problem); only report what was really scheduled so
@@ -314,6 +359,105 @@ def schedule_measurements(
         if inserted is not False:
             scheduled.append(kind)
     return scheduled
+
+
+def contract_snapshot_json(contract: OutcomeContract | dict[str, Any] | None) -> str | None:
+    if contract is None:
+        return None
+    payload = contract.model_dump(mode="json") if isinstance(contract, OutcomeContract) else dict(contract)
+    return json.dumps(payload, sort_keys=True)
+
+
+def observation_interval(kind: str, *, executed_at: str, due_at: str) -> tuple[str, str]:
+    """The inclusive interval a checkpoint reads: from the clock origin to its
+    due instant for the T+7 and window reads; the month before the due
+    instant for the keep-listening follow-up (``followup_window_start``)."""
+    if kind == "followup":
+        return followup_window_start(due_at), due_at
+    return executed_at, due_at
+
+
+def plan_observation_interval(plan: dict[str, Any]) -> tuple[str, str | None, bool]:
+    """(start, end, fixed) for a plan row: the stored interval when the plan
+    carries one; else the legacy bounds (the follow-up's own month, or
+    ``executed_at`` open-ended), flagged fixed=False."""
+    start = plan.get("observation_start")
+    end = plan.get("observation_end")
+    if start and end:
+        return str(start), str(end), True
+    if plan["kind"] == "followup":
+        return followup_window_start(plan["due_at"]), plan["due_at"], False
+    return plan["executed_at"], None, False
+
+
+def plan_scoring_terms(
+    plan: dict[str, Any], problem: ProblemRecord
+) -> tuple[OutcomeContract | None, str | None]:
+    """The contract terms a due checkpoint is scored under.
+
+    A plan scheduled since the 13 Sep 2026 review carries a frozen
+    ``contract_snapshot``: those terms, whatever the contract says now (an
+    amendment re-plans pending checkpoints explicitly, see
+    ``replan_after_amendment``). A legacy plan without one is scored under
+    the current contract only when the link is deterministic: the revision
+    recorded on the plan (revision 1 for rows that predate revisions) equals
+    the problem's current revision, so no amendment happened in between.
+    Otherwise (None, reason): the checkpoint is blocked rather than scored
+    under terms it was not scheduled with.
+    """
+    snapshot = plan.get("contract_snapshot")
+    if snapshot:
+        contract = snapshot if isinstance(snapshot, OutcomeContract) else OutcomeContract.model_validate(snapshot)
+        return contract, None
+    scheduled_under = plan.get("contract_revision") or 1
+    current = problem.outcome_contract.revision
+    if scheduled_under == current:
+        return problem.outcome_contract, None
+    return None, (
+        f"contract amended after scheduling (revision {scheduled_under} -> {current}) and the"
+        " plan carries no frozen terms; amend the contract again to re-plan its checkpoints"
+    )
+
+
+def replan_after_amendment(
+    plan_store: SQLiteMeasurementPlanStore,
+    *,
+    problem: ProblemRecord,
+    note: str,
+) -> dict[str, Any]:
+    """Explicit supersession and re-planning after a contract amendment.
+
+    Every live checkpoint (pending or manual_required) of the problem is
+    marked superseded with ``note`` and re-scheduled under the amended terms
+    from the SAME clock (origin, execution, instant): the reading a pending
+    checkpoint will produce must be scored under terms a human chose for it,
+    never under terms that changed underneath it. Done plans and their
+    readings are untouched. Returns {superseded, kinds, clock}.
+    """
+    live = [
+        plan
+        for plan in plan_store.list_plans()
+        if str(plan.get("problem_id")) == problem.problem_id
+        and plan.get("status") in ("pending", "manual_required")
+    ]
+    if not live:
+        return {"superseded": 0, "kinds": [], "clock": None}
+    # Live plans share one clock (origin precedence keeps a single origin
+    # live); take the highest-ranked one defensively.
+    anchor = max(live, key=lambda plan: ORIGIN_RANK.get(plan.get("origin") or DEFAULT_PLAN_ORIGIN, 0))
+    superseded = plan_store.supersede_pending(problem.problem_id, note=note)
+    kinds = schedule_measurements(
+        plan_store,
+        problem=problem,
+        execution_id=str(anchor["execution_id"]),
+        executed_at=str(anchor["executed_at"]),
+        origin=anchor.get("origin") or DEFAULT_PLAN_ORIGIN,
+    )
+    return {
+        "superseded": superseded,
+        "kinds": kinds,
+        "clock": {"origin": anchor.get("origin") or DEFAULT_PLAN_ORIGIN, "executed_at": anchor["executed_at"], "execution_id": anchor["execution_id"]},
+    }
 
 
 def followup_window_start(due_at: str, gap_days: int = FOLLOWUP_GAP_DAYS) -> str:
@@ -371,8 +515,13 @@ def measure_guardrails(
     executed_at: str,
     now: str,
     workflow_store: Any,
+    until: str | None = None,
 ) -> int:
-    """Record one readout per declared guardrail metric. Returns records written."""
+    """Record one readout per declared guardrail metric. Returns records written.
+
+    The post period is ``[executed_at, until]`` — the checkpoint's fixed
+    observation end when the caller has one — so a late worker reads the same
+    period as a punctual one; ``now`` stays the readout's processing stamp."""
     from app.services.signals import UNKNOWN_IDENTITY_VALUES
 
     written = 0
@@ -396,7 +545,7 @@ def measure_guardrails(
         # an "unknown_customer" row cannot prove a repeat complainer.
         start = _parse_ts(executed_at)
         pre_start = start - timedelta(days=GUARDRAIL_BASELINE_DAYS)
-        end = _parse_ts(now)
+        end = _parse_ts(until or now)
 
         def _matches(sig: Any) -> bool:
             return signal_matches_scope(
@@ -480,6 +629,24 @@ def run_due_measurements(
             skipped += 1
             continue
 
+        # The terms this checkpoint is scored under: frozen on the plan, or
+        # deterministically the current ones; never terms that changed
+        # underneath a pending checkpoint.
+        contract, blocked_reason = plan_scoring_terms(plan, problem)
+        if contract is None:
+            plan_store.mark(plan["id"], status="blocked", note=blocked_reason)
+            telemetry.record(
+                "measurement_blocked",
+                entity_id=problem.problem_id,
+                metadata={"kind": plan["kind"], "plan_id": plan["id"], "reason": blocked_reason},
+            )
+            skipped += 1
+            continue
+        # The interval this checkpoint reads: fixed at scheduling; a late
+        # worker reads the same interval as a punctual one.
+        obs_start, obs_end, fixed_interval = plan_observation_interval(plan)
+        until = obs_end or now
+
         signals = signal_store.list_signals()
         try:
             measure_guardrails(
@@ -488,11 +655,12 @@ def run_due_measurements(
                 executed_at=plan["executed_at"],
                 now=now,
                 workflow_store=workflow_store,
+                until=obs_end if fixed_interval else None,
             )
         except Exception:  # noqa: BLE001 — guardrails must not stall the loop
             logger.exception("Guardrail measurement failed for %s", problem.problem_id)
 
-        metric = problem.outcome_contract.primary_metric
+        metric = contract.primary_metric
         if not metric.startswith(SIGNAL_METRIC_PREFIX):
             # CLARA cannot observe this metric — surface a human task, never invent data.
             plan_store.mark(
@@ -509,17 +677,21 @@ def run_due_measurements(
             continue
 
         journey, _, stage = metric.removeprefix(SIGNAL_METRIC_PREFIX).partition("/")
-        since = plan["executed_at"]
+        since = obs_start
         origin = plan.get("origin") or DEFAULT_PLAN_ORIGIN
         span_note = f"since {origin} ({str(plan['executed_at'])[:10]})"
-        if plan["kind"] == "followup":
-            since = followup_window_start(plan["due_at"])
+        if fixed_interval:
+            span_note = (
+                f"in the fixed interval {str(obs_start)[:10]}..{str(obs_end)[:10]}"
+                f" (clock from {origin} {str(plan['executed_at'])[:10]})"
+            )
+        elif plan["kind"] == "followup":
             span_note = (
                 "in the month after the measurement window closed (keep-listening read;"
                 f" clock from {origin} {str(plan['executed_at'])[:10]})"
             )
         if _norm_stage(journey) == THEME_JOURNEY:
-            pending_enrichment = unenriched_in_window(signals, since=since, until=now)
+            pending_enrichment = unenriched_in_window(signals, since=since, until=until)
             if pending_enrichment:
                 # Stay pending (re-tried next tick) and say why: the readout
                 # would be silently incomplete until triage tags the new inflow.
@@ -538,7 +710,7 @@ def run_due_measurements(
             journey=journey.replace("_", " "),
             journey_stage=stage.replace("_", " "),
             since=since,
-            until=now,
+            until=until,
         )
         measurement = OutcomeMeasurement(
             problem_id=problem.problem_id,
@@ -552,16 +724,20 @@ def run_due_measurements(
             ),
             # Bind the observation to the checkpoint that produced it and to
             # the contract terms it was scored under (mirrored by the plpgsql
-            # tick in migration 016).
+            # tick in migration 017).
             checkpoint_kind=plan["kind"],
             plan_id=plan["id"],
             execution_id=plan.get("execution_id"),
-            contract_revision=problem.outcome_contract.revision,
-            contract_snapshot=problem.outcome_contract,
+            contract_revision=contract.revision,
+            contract_snapshot=contract,
             # The clock this reading was taken on, so a later anchor (an
             # implementation recorded afterwards) cannot relabel it.
             clock_origin=origin,
             clock_origin_at=plan["executed_at"],
+            # The interval it covers (fixed at scheduling; legacy plans read
+            # up to the processing instant and say so through a None end).
+            observation_start=obs_start,
+            observation_end=obs_end if fixed_interval else None,
         )
         try:
             workflow_store.record_outcome(problem=problem, measurement=measurement)
@@ -594,6 +770,8 @@ def run_due_measurements(
 
         # Loop verdict on the closing checkpoints only — the T+7 early read is
         # too soon to declare either way (detectability_note explains why).
+        # Scored under the terms the reading was taken under (its frozen
+        # snapshot), which outcome_snapshot honours.
         if plan["kind"] in LOOP_CHECKPOINT_KINDS:
             try:
                 status = workflow_store.outcome_snapshot(problem).status
@@ -615,8 +793,11 @@ def run_due_measurements(
                         "kind": plan["kind"],
                         "metric": metric,
                         "observed_value": rate,
-                        "baseline": problem.outcome_contract.baseline,
-                        "success_threshold": problem.outcome_contract.success_threshold,
+                        "baseline": contract.baseline,
+                        "success_threshold": contract.success_threshold,
+                        "contract_revision": contract.revision,
+                        "observation_start": obs_start,
+                        "observation_end": obs_end if fixed_interval else None,
                         "real_data_source": True,
                     },
                 )
@@ -657,7 +838,12 @@ def measure_guardrails_for_processed(
             continue
         try:
             written += measure_guardrails(
-                problem, signals, executed_at=str(executed_at), now=now, workflow_store=workflow_store
+                problem,
+                signals,
+                executed_at=str(executed_at),
+                now=now,
+                workflow_store=workflow_store,
+                until=plan.get("observation_end") or None,
             )
         except Exception:  # noqa: BLE001 — guardrails must not stall the loop
             logger.exception("Guardrail measurement failed for %s", problem.problem_id)

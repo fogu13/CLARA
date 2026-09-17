@@ -230,6 +230,8 @@ def test_walker_every_get_endpoint_is_person_free_for_editor(wc) -> None:
 
     path_values = {
         "problem_id": PROBLEM_ID,
+        # The outbound-preview route (13 Sep 2026, F1) is keyed by action.
+        "action_id": client.get(f"/problems/{PROBLEM_ID}", headers=editor).json()["action_proposals"][0]["action_id"],
         "rule_id": client.get("/policy-rules", headers=editor).json()[0]["rule_id"],
         "customer_id": "CUST-0001",  # admin-only route; editor gets 403
         "entity": "problems",  # admin-only route; editor gets 403

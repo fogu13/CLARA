@@ -42,7 +42,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from load_datasets import load
+from load_datasets import dedupe_signals, load
 import baseline as bl
 import metrics as M
 import ml_baseline as ml
@@ -210,6 +210,7 @@ def score_taxonomy(sigs, summary):
     in-vocabulary rate — if the model ignores the inventory, the comparison is
     void and the reader has to be able to see that.
     """
+    sigs, _ = dedupe_signals(sigs)  # a repeated gold id must never double-score
     cache = os.path.join(RESULTS, "predictions_llm_taxonomy.json")
     if not os.path.exists(cache):
         summary["taxonomy_path"] = ("not run — `python3 predict_llm.py --constrained`"
@@ -289,6 +290,7 @@ def equity_slices(sigs, summary, llm_maps=None, ml_risk=None):
     fintech). Any per-language claim has to be read against them, so the
     harness emits them rather than leaving it to prose.
     """
+    sigs, _ = dedupe_signals(sigs)  # a repeated gold id must never double-score
     esc = lambda x: x in ("high", "critical")
     have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
     llm_maps = llm_maps or {}
@@ -316,6 +318,15 @@ def equity_slices(sigs, summary, llm_maps=None, ml_risk=None):
         for name, fn in predictors.items():
             scored = [s for s in gold if name not in scored_by or scored_by[name](s)]
             if not scored:
+                # A predictor that answered no gold-escalate item of this
+                # stratum validly is still reported: coverage 0, the
+                # coverage-conditioned recall null (nothing to condition on)
+                # and the end-to-end recall 0 (every item a miss). It cannot
+                # enter a Fisher test (no hits, no misses to test).
+                row[f"n_gold_escalate_{name}"] = 0
+                row[f"recall_{name}"] = None
+                row[f"recall_{name}_ci_low"], row[f"recall_{name}_ci_high"] = None, None
+                row[f"recall_{name}_end_to_end"] = 0.0
                 continue
             k = sum(1 for s in scored if fn(s))
             lo, hi = M.wilson_interval(k, len(scored))
@@ -350,6 +361,14 @@ def equity_slices(sigs, summary, llm_maps=None, ml_risk=None):
         for i, la in enumerate(langs):
             for lb in langs[i + 1:]:
                 if (name, la) not in hits or (name, lb) not in hits:
+                    # One stratum has no validly answered gold-escalate item:
+                    # the pair is reported as absent, not silently dropped.
+                    fisher.append({
+                        "predictor": name, "language_a": la, "language_b": lb,
+                        "hits_a": None, "misses_a": None, "hits_b": None, "misses_b": None,
+                        "recall_a": None, "recall_b": None, "p_fisher_two_sided": None,
+                        "note": "no test: a stratum has no validly answered gold-escalate item",
+                    })
                     continue
                 a, b = hits[(name, la)]
                 c, d = hits[(name, lb)]
@@ -358,6 +377,7 @@ def equity_slices(sigs, summary, llm_maps=None, ml_risk=None):
                     "hits_a": a, "misses_a": b, "hits_b": c, "misses_b": d,
                     "recall_a": round(a / (a + b), 4), "recall_b": round(c / (c + d), 4),
                     "p_fisher_two_sided": round(M.fisher_exact(a, b, c, d), 6),
+                    "note": "",
                 })
     summary["escalation_recall_fisher"] = fisher
     if fisher:
@@ -495,6 +515,7 @@ def score_llm(sigs, summary, *, key="llm", cache="predictions_llm.json", label="
     mixed items is reported next to the primary one, so the reader can see
     how much of the result rests on the mapping rule.
     """
+    sigs, _ = dedupe_signals(sigs)  # a repeated gold id must never double-score
     path = os.path.join(RESULTS, cache)
     if not os.path.exists(path):
         summary[f"{key}_path"] = f"not run (no {cache}; {label})"
@@ -595,6 +616,7 @@ def significance(sigs, summary, ml_preds, llm_maps=None):
     corpus this size several "significant" gaps rest on one item; the table has
     to show that rather than leave it to a reader's arithmetic.
     """
+    sigs, _ = dedupe_signals(sigs)  # a repeated gold id must never double-score
     rated = [s for s in sigs if s.star_rating is not None and s.text]
     have = [s for s in sigs if s.risk in RISK_LABELS and s.text]
     llm_maps = llm_maps or {}

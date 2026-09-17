@@ -45,7 +45,8 @@ import type {
   TaxonomyType,
   TerminologyDictionaryEntry,
   WorkflowState,
-  WorkspaceSettings
+  WorkspaceSettings,
+  OutboundPreview
 } from "./types";
 import { cookieAuthEnabled } from "./auth-client";
 
@@ -219,6 +220,28 @@ export async function getProblem(problemId: string): Promise<ProblemRecord> {
   return requestJson<ProblemRecord>(`${apiBaseUrl()}/problems/${problemId}`);
 }
 
+// The outbound content an approval would sign, with its hash; send the hash
+// back as expected_outbound_sha256 so the API refuses a decision on text that
+// changed after it was displayed.
+export async function getOutboundPreview(problemId: string, actionId: string): Promise<OutboundPreview> {
+  return requestJson<OutboundPreview>(
+    `${apiBaseUrl()}/problems/${problemId}/actions/${actionId}/outbound-preview`
+  );
+}
+
+// Human attestation that the approved action's fix landed; restarts the
+// measurement clock from implemented_at (a created ticket never counts).
+export async function recordImplementation(
+  problemId: string,
+  executionId: string,
+  request: { implemented_at: string; note?: string | null }
+): Promise<ExecutionRecord> {
+  return requestJson<ExecutionRecord>(
+    `${apiBaseUrl()}/problems/${problemId}/executions/${executionId}/implementation`,
+    { method: "POST", body: JSON.stringify(request) }
+  );
+}
+
 // Re-run the destination push for an execution whose push failed (idempotent
 // on the connector side; the approval itself is never repeated).
 export async function retryExecution(problemId: string, executionId: string): Promise<ExecutionRecord> {
@@ -349,6 +372,11 @@ export type MeasurementPlan = {
   // What executed_at is: approval (draft only) | dispatch | implementation.
   origin?: "approval" | "dispatch" | "implementation" | null;
   contract_revision?: number | null;
+  // The scoring terms frozen at scheduling and the fixed interval the
+  // checkpoint reads, whenever the worker gets to it.
+  contract_snapshot?: Record<string, unknown> | null;
+  observation_start?: string | null;
+  observation_end?: string | null;
 };
 
 export type AskAnswer = {

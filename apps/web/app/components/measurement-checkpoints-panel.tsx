@@ -115,6 +115,16 @@ export function MeasurementCheckpointsPanel() {
                     >
                       {originLabel(plan.origin, t)}
                     </span>
+                    {plan.observation_start && plan.observation_end ? (
+                      <span className="ml-2 text-[10px] text-muted-foreground">
+                        {t.learnings.reads
+                          .replace("{start}", plan.observation_start.slice(0, 10))
+                          .replace("{end}", plan.observation_end.slice(0, 10))}
+                        {plan.contract_snapshot && typeof plan.contract_snapshot.revision === "number"
+                          ? ` · ${t.learnings.contractRevision.replace("{n}", String(plan.contract_snapshot.revision))}`
+                          : ""}
+                      </span>
+                    ) : null}
                     {plan.note ? (
                       <p className="mt-0.5 text-xs text-muted-foreground">{plan.note}</p>
                     ) : null}

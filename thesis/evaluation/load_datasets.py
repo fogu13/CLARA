@@ -70,6 +70,20 @@ def _int_or_none(s: str) -> Optional[int]:
     return int(s) if s.isdigit() else None
 
 
+def dedupe_signals(signals: list) -> tuple[list, int]:
+    """Keep the first record per id. A gold id must be unique: every scorer
+    joins predictions by id, so a repeated gold id would score one prediction
+    against two gold rows and push n_correct past n_expected."""
+    seen: set[str] = set()
+    kept = []
+    for signal in signals:
+        if signal.id in seen:
+            continue
+        seen.add(signal.id)
+        kept.append(signal)
+    return kept, len(signals) - len(kept)
+
+
 def load() -> list[Signal]:
     selected = os.environ.get("THESIS_DATASETS", "").strip()
     if selected:
@@ -114,6 +128,10 @@ def load() -> list[Signal]:
     if n_empty_ids:
         print(f"warning: dropped {n_empty_ids} gold record(s) with an empty public_signal_id",
               file=sys.stderr)
+    out, n_dup = dedupe_signals(out)
+    if n_dup:
+        print(f"warning: dropped {n_dup} gold record(s) whose public_signal_id repeats an "
+              "earlier record (first occurrence kept)", file=sys.stderr)
     return out
 
 
