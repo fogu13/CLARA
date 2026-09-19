@@ -74,3 +74,33 @@ The full list of items that need the author after the 5 September 2026 revision 
 - `evaluation/predict_embedding.py` — an embedding-classifier baseline (sentence embeddings + logistic regression, out-of-fold) scored by `compare_runs.py`; needs an embedding endpoint or a local sentence-transformers model.
 
 Each has a plain-assert test on synthetic data in `npm run thesis:test`.
+
+## Jev predictor added 19 September 2026 (no results claimed; the run needs a vendor key and a laptop with a path to the vendor)
+
+Jev is TypeSafe's "System One" decision model: it answers typed questions (a Choice over a label set, a Score over ordered levels, a Noul yes/no probability) with a probability per answer and no text. That matches the harness's closed-set tasks, and the probabilities let one run answer two questions the generation-based predictors cannot: is the confidence calibrated, and what does abstention below a threshold cost in coverage. The manuscript does not mention Jev and must not until a run exists, has been scored by the harness and has been read by a person. The pre-registered reading and the decision rule for any product use are in `docs/engineering/jev-experiment.md`.
+
+- `evaluation/predict_jev.py` — one request per signal with every question in it (sentiment and risk as Choice, risk as a Score and the escalation boundary as a Noul for the calibration read, journey stage and owner as Choice over the gold inventory). Writes `predictions_jev.json` in the `compare_runs.py` shape, `predictions_jev_taxonomy.json` in the closed-set routing shape, a sidecar `jev_probabilities.json` with every distribution, the gold the harness knows, language, latency and token usage, and a meta file with the exact question texts, the served model string, counts and a cost estimate. `--golden` scores the product's 100-item golden set (sentiment with `mixed`, urgency, category). `--materialise <sidecar> --abstain-threshold t` re-cuts the label files at a confidence threshold without a call; a Choice below the threshold becomes `null`, which `compare_runs.py` counts as invalid (wrong end-to-end, absent from the coverage-conditioned view). A failed request leaves the item missing; a run answering fewer than half of the items is not written.
+- `evaluation/calibration.py` — from the sidecar alone: accuracy with Wilson intervals, the majority-class floor, expected calibration error with its reliability bins, Brier score, log loss, the coverage-against-accuracy curve over thresholds, and the escalation boundary (recall and precision at 0.5, Brier, ECE) from the Noul and from P(high) + P(critical) of the risk Choice; each per task and per language stratum with at least five items.
+
+Runbook (from the repository root, on a machine that can reach `api.typesafe.ai`; the sandbox used for development cannot, so the pipeline was tested with the fake client only):
+
+```
+export THESIS_DATA_DIR=/path/to/Thesis_ChatGPT           # the frozen 188-signal corpus
+export THESIS_RESULTS_DIR=thesis/evaluation/results_jev  # never the reported folder
+export TYPESAFE_API_KEY=...                              # from the vendor console; never commit it
+python3 thesis/evaluation/predict_jev.py                 # 188 requests; about two minutes; about one cent at the published input price
+python3 thesis/evaluation/compare_runs.py --out-dir "$THESIS_RESULTS_DIR" floor \
+    ml=thesis/evaluation/results/predictions_ml.json \
+    glm_generic=thesis/evaluation/results/predictions_llm.json \
+    glm_production=thesis/evaluation/results/predictions_llm_production.json \
+    mistral_production=thesis/evaluation/results_mistral-small-2603/predictions_llm_production.json \
+    jev="$THESIS_RESULTS_DIR/predictions_jev.json"
+python3 thesis/evaluation/calibration.py --sidecar "$THESIS_RESULTS_DIR/jev_probabilities.json" --out "$THESIS_RESULTS_DIR"
+python3 thesis/evaluation/predict_jev.py --materialise "$THESIS_RESULTS_DIR/jev_probabilities.json" \
+    --abstain-threshold 0.7 --out "$THESIS_RESULTS_DIR/abstain_0.7"   # then compare_runs.py on that file
+python3 thesis/evaluation/predict_jev.py --golden --split held_out    # the product golden set, 30 held-out items
+```
+
+The routing figures to read against are in `evaluation/results/summary.json` (`journey_stage_llm_closed_set`, `owner_llm_closed_set`: accuracy 0.588 and 0.401 over 27 and 51 classes, majority floors 0.198 and 0.154); `jev_calibration.csv` carries the same floor for the Jev run. The corpus is public, paraphrased and de-identified and the golden set is synthetic; the endpoint is hosted in the United States only, so nothing from a customer workspace may be sent to it and the product's EU residency gate is not touched by this tooling. A self-hosted stand-in (`jev-local`, an interface-compatible open-weights server) can be pointed at with `TYPESAFE_BASE_URL=http://127.0.0.1:8000`, but its answers are those of a different model and must be labelled as such.
+
+Both modules have plain-assert tests on synthetic data in `npm run thesis:test` (`test_predict_jev.py` runs the real HTTP client against a fake opener and the pipeline against a fake model; `test_calibration.py` checks the metrics on hand-made values).
